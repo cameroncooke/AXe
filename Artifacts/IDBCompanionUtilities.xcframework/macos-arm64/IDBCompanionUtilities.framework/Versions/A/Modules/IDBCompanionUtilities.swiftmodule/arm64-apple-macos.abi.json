@@ -1,0 +1,2323 @@
+{
+  "ABIRoot": {
+    "kind": "Root",
+    "name": "IDBCompanionUtilities",
+    "printedName": "IDBCompanionUtilities",
+    "children": [
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "CodeLocation",
+        "printedName": "CodeLocation",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "function",
+            "printedName": "function",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "Swift.String?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "String",
+                    "printedName": "Swift.String",
+                    "usr": "s:SS"
+                  }
+                ],
+                "usr": "s:Sq"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV8functionSSSgvp",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV8functionSSSgvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 0,
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Optional",
+                    "printedName": "Swift.String?",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "String",
+                        "printedName": "Swift.String",
+                        "usr": "s:SS"
+                      }
+                    ],
+                    "usr": "s:Sq"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV8functionSSSgvg",
+                "mangledName": "$s21IDBCompanionUtilities12CodeLocationV8functionSSSgvg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "file",
+            "printedName": "file",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "usr": "s:SS"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV4fileSSvp",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV4fileSSvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 1,
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "String",
+                    "printedName": "Swift.String",
+                    "usr": "s:SS"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV4fileSSvg",
+                "mangledName": "$s21IDBCompanionUtilities12CodeLocationV4fileSSvg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "line",
+            "printedName": "line",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV4lineSivp",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV4lineSivp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 2,
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Int",
+                    "printedName": "Swift.Int",
+                    "usr": "s:Si"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV4lineSivg",
+                "mangledName": "$s21IDBCompanionUtilities12CodeLocationV4lineSivg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "column",
+            "printedName": "column",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV6columnSivp",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV6columnSivp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 3,
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Int",
+                    "printedName": "Swift.Int",
+                    "usr": "s:Si"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV6columnSivg",
+                "mangledName": "$s21IDBCompanionUtilities12CodeLocationV6columnSivg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "description",
+            "printedName": "description",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "usr": "s:SS"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV11descriptionSSvp",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV11descriptionSSvp",
+            "moduleName": "IDBCompanionUtilities",
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "String",
+                    "printedName": "Swift.String",
+                    "usr": "s:SS"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV11descriptionSSvg",
+                "mangledName": "$s21IDBCompanionUtilities12CodeLocationV11descriptionSSvg",
+                "moduleName": "IDBCompanionUtilities",
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init(function:file:line:column:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "CodeLocation",
+                "printedName": "IDBCompanionUtilities.CodeLocation",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "Swift.String?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "String",
+                    "printedName": "Swift.String",
+                    "usr": "s:SS"
+                  }
+                ],
+                "usr": "s:Sq"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "usr": "s:SS"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities12CodeLocationV8function4file4line6columnACSSSg_SSS2itcfc",
+            "mangledName": "$s21IDBCompanionUtilities12CodeLocationV8function4file4line6columnACSSSg_SSS2itcfc",
+            "moduleName": "IDBCompanionUtilities",
+            "implicit": true,
+            "init_kind": "Designated"
+          }
+        ],
+        "declKind": "Struct",
+        "usr": "s:21IDBCompanionUtilities12CodeLocationV",
+        "mangledName": "$s21IDBCompanionUtilities12CodeLocationV",
+        "moduleName": "IDBCompanionUtilities",
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "CustomStringConvertible",
+            "printedName": "CustomStringConvertible",
+            "usr": "s:s23CustomStringConvertibleP",
+            "mangledName": "$ss23CustomStringConvertibleP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "FBTeardownContextError",
+        "printedName": "FBTeardownContextError",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "emptyContext",
+            "printedName": "emptyContext",
+            "children": [
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "(IDBCompanionUtilities.FBTeardownContextError.Type) -> IDBCompanionUtilities.FBTeardownContextError",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBTeardownContextError",
+                    "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                    "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Metatype",
+                    "printedName": "IDBCompanionUtilities.FBTeardownContextError.Type",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "FBTeardownContextError",
+                        "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                        "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "declKind": "EnumElement",
+            "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO05emptyD0yA2CmF",
+            "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO05emptyD0yA2CmF",
+            "moduleName": "IDBCompanionUtilities",
+            "fixedbinaryorder": 0
+          },
+          {
+            "kind": "Var",
+            "name": "cleanupAlreadyPerformed",
+            "printedName": "cleanupAlreadyPerformed",
+            "children": [
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "(IDBCompanionUtilities.FBTeardownContextError.Type) -> IDBCompanionUtilities.FBTeardownContextError",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBTeardownContextError",
+                    "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                    "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Metatype",
+                    "printedName": "IDBCompanionUtilities.FBTeardownContextError.Type",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "FBTeardownContextError",
+                        "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                        "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "declKind": "EnumElement",
+            "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO23cleanupAlreadyPerformedyA2CmF",
+            "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO23cleanupAlreadyPerformedyA2CmF",
+            "moduleName": "IDBCompanionUtilities",
+            "fixedbinaryorder": 1
+          },
+          {
+            "kind": "Function",
+            "name": "==",
+            "printedName": "==(_:_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Bool",
+                "printedName": "Swift.Bool",
+                "usr": "s:Sb"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBTeardownContextError",
+                "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBTeardownContextError",
+                "printedName": "IDBCompanionUtilities.FBTeardownContextError",
+                "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO2eeoiySbAC_ACtFZ",
+            "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO2eeoiySbAC_ACtFZ",
+            "moduleName": "IDBCompanionUtilities",
+            "static": true,
+            "implicit": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Var",
+            "name": "hashValue",
+            "printedName": "hashValue",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO9hashValueSivp",
+            "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO9hashValueSivp",
+            "moduleName": "IDBCompanionUtilities",
+            "implicit": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Int",
+                    "printedName": "Swift.Int",
+                    "usr": "s:Si"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO9hashValueSivg",
+                "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO9hashValueSivg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Function",
+            "name": "hash",
+            "printedName": "hash(into:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Hasher",
+                "printedName": "Swift.Hasher",
+                "paramValueOwnership": "InOut",
+                "usr": "s:s6HasherV"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO4hash4intoys6HasherVz_tF",
+            "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO4hash4intoys6HasherVz_tF",
+            "moduleName": "IDBCompanionUtilities",
+            "implicit": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Enum",
+        "usr": "s:21IDBCompanionUtilities22FBTeardownContextErrorO",
+        "mangledName": "$s21IDBCompanionUtilities22FBTeardownContextErrorO",
+        "moduleName": "IDBCompanionUtilities",
+        "isEnumExhaustive": true,
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Equatable",
+            "printedName": "Equatable",
+            "usr": "s:SQ",
+            "mangledName": "$sSQ"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Hashable",
+            "printedName": "Hashable",
+            "usr": "s:SH",
+            "mangledName": "$sSH"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Error",
+            "printedName": "Error",
+            "usr": "s:s5ErrorP",
+            "mangledName": "$ss5ErrorP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "BitwiseCopyable",
+            "printedName": "BitwiseCopyable",
+            "usr": "s:s15BitwiseCopyableP",
+            "mangledName": "$ss15BitwiseCopyableP"
+          }
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "FBTeardownContext",
+        "printedName": "FBTeardownContext",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "current",
+            "printedName": "current",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "FBTeardownContext",
+                "printedName": "IDBCompanionUtilities.FBTeardownContext",
+                "usr": "s:21IDBCompanionUtilities17FBTeardownContextC"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities17FBTeardownContextC7currentACvpZ",
+            "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC7currentACvpZ",
+            "moduleName": "IDBCompanionUtilities",
+            "static": true,
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "Custom",
+              "RawDocComment"
+            ],
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBTeardownContext",
+                    "printedName": "IDBCompanionUtilities.FBTeardownContext",
+                    "usr": "s:21IDBCompanionUtilities17FBTeardownContextC"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities17FBTeardownContextC7currentACvgZ",
+                "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC7currentACvgZ",
+                "moduleName": "IDBCompanionUtilities",
+                "static": true,
+                "declAttributes": [
+                  "Final"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Function",
+            "name": "withAutocleanup",
+            "printedName": "withAutocleanup(function:file:line:column:operation:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "hasDefaultArg": true,
+                "usr": "s:SS"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "hasDefaultArg": true,
+                "usr": "s:SS"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "hasDefaultArg": true,
+                "usr": "s:Si"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "hasDefaultArg": true,
+                "usr": "s:Si"
+              },
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "() async throws -> τ_0_0",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ],
+                "typeAttributes": [
+                  "noescape"
+                ]
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities17FBTeardownContextC15withAutocleanup8function4file4line6column9operationxSS_SSS2ixyYaYbKXEtYaKlFZ",
+            "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC15withAutocleanup8function4file4line6column9operationxSS_SSS2ixyYaYbKXEtYaKlFZ",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0>",
+            "sugared_genericSig": "<T>",
+            "static": true,
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "addCleanup",
+            "printedName": "addCleanup(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "() async throws -> ()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ]
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities17FBTeardownContextC10addCleanupyyyyYaKcKF",
+            "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC10addCleanupyyyyYaKcKF",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "performCleanup",
+            "printedName": "performCleanup()",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities17FBTeardownContextC14performCleanupyyYaKF",
+            "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC14performCleanupyyYaKF",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Class",
+        "usr": "s:21IDBCompanionUtilities17FBTeardownContextC",
+        "mangledName": "$s21IDBCompanionUtilities17FBTeardownContextC",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "Final",
+          "AccessControl",
+          "RawDocComment"
+        ],
+        "hasMissingDesignatedInitializers": true,
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "Atomic",
+        "printedName": "Atomic",
+        "children": [
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init(wrappedValue:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Atomic",
+                "printedName": "IDBCompanionUtilities.Atomic<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "s:21IDBCompanionUtilities6AtomicC"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities6AtomicC12wrappedValueACyxGx_tcfc",
+            "mangledName": "$s21IDBCompanionUtilities6AtomicC12wrappedValueACyxGx_tcfc",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0>",
+            "sugared_genericSig": "<Value>",
+            "declAttributes": [
+              "AccessControl"
+            ],
+            "init_kind": "Designated"
+          },
+          {
+            "kind": "Var",
+            "name": "wrappedValue",
+            "printedName": "wrappedValue",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities6AtomicC12wrappedValuexvp",
+            "mangledName": "$s21IDBCompanionUtilities6AtomicC12wrappedValuexvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities6AtomicC12wrappedValuexvg",
+                "mangledName": "$s21IDBCompanionUtilities6AtomicC12wrappedValuexvg",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0>",
+                "sugared_genericSig": "<Value>",
+                "declAttributes": [
+                  "Final"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Function",
+            "name": "set",
+            "printedName": "set(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities6AtomicC3setyyxF",
+            "mangledName": "$s21IDBCompanionUtilities6AtomicC3setyyxF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0>",
+            "sugared_genericSig": "<Value>",
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "sync",
+            "printedName": "sync(execute:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_1_0"
+              },
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "(inout τ_0_0) throws -> τ_1_0",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_1_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "typeAttributes": [
+                  "noescape"
+                ]
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities6AtomicC4sync7executeqd__qd__xzKXE_tKlF",
+            "mangledName": "$s21IDBCompanionUtilities6AtomicC4sync7executeqd__qd__xzKXE_tKlF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_1_0>",
+            "sugared_genericSig": "<Value, R>",
+            "declAttributes": [
+              "Final",
+              "Rethrows",
+              "AccessControl"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Class",
+        "usr": "s:21IDBCompanionUtilities6AtomicC",
+        "mangledName": "$s21IDBCompanionUtilities6AtomicC",
+        "moduleName": "IDBCompanionUtilities",
+        "genericSig": "<τ_0_0>",
+        "sugared_genericSig": "<Value>",
+        "declAttributes": [
+          "Final",
+          "AccessControl",
+          "PropertyWrapper"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "TaskTimeoutError",
+        "printedName": "TaskTimeoutError",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "location",
+            "printedName": "location",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "CodeLocation",
+                "printedName": "IDBCompanionUtilities.CodeLocation",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV8locationAA12CodeLocationVvp",
+            "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV8locationAA12CodeLocationVvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 0,
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "CodeLocation",
+                    "printedName": "IDBCompanionUtilities.CodeLocation",
+                    "usr": "s:21IDBCompanionUtilities12CodeLocationV"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV8locationAA12CodeLocationVvg",
+                "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV8locationAA12CodeLocationVvg",
+                "moduleName": "IDBCompanionUtilities",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "errorDescription",
+            "printedName": "errorDescription",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "Swift.String?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "String",
+                    "printedName": "Swift.String",
+                    "usr": "s:SS"
+                  }
+                ],
+                "usr": "s:Sq"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV16errorDescriptionSSSgvp",
+            "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV16errorDescriptionSSSgvp",
+            "moduleName": "IDBCompanionUtilities",
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Optional",
+                    "printedName": "Swift.String?",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "String",
+                        "printedName": "Swift.String",
+                        "usr": "s:SS"
+                      }
+                    ],
+                    "usr": "s:Sq"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV16errorDescriptionSSSgvg",
+                "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV16errorDescriptionSSSgvg",
+                "moduleName": "IDBCompanionUtilities",
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init(location:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "TaskTimeoutError",
+                "printedName": "IDBCompanionUtilities.TaskTimeoutError",
+                "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "CodeLocation",
+                "printedName": "IDBCompanionUtilities.CodeLocation",
+                "usr": "s:21IDBCompanionUtilities12CodeLocationV"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV8locationAcA12CodeLocationV_tcfc",
+            "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV8locationAcA12CodeLocationV_tcfc",
+            "moduleName": "IDBCompanionUtilities",
+            "implicit": true,
+            "init_kind": "Designated"
+          }
+        ],
+        "declKind": "Struct",
+        "usr": "s:21IDBCompanionUtilities16TaskTimeoutErrorV",
+        "mangledName": "$s21IDBCompanionUtilities16TaskTimeoutErrorV",
+        "moduleName": "IDBCompanionUtilities",
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Error",
+            "printedName": "Error",
+            "usr": "s:s5ErrorP",
+            "mangledName": "$ss5ErrorP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "LocalizedError",
+            "printedName": "LocalizedError",
+            "usr": "s:10Foundation14LocalizedErrorP",
+            "mangledName": "$s10Foundation14LocalizedErrorP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "AsyncStreamWriter",
+        "printedName": "AsyncStreamWriter",
+        "children": [
+          {
+            "kind": "AssociatedType",
+            "name": "Value",
+            "printedName": "Value",
+            "declKind": "AssociatedType",
+            "usr": "s:21IDBCompanionUtilities17AsyncStreamWriterP5ValueQa",
+            "mangledName": "$s21IDBCompanionUtilities17AsyncStreamWriterP5ValueQa",
+            "moduleName": "IDBCompanionUtilities",
+            "protocolReq": true
+          },
+          {
+            "kind": "Function",
+            "name": "send",
+            "printedName": "send(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "DependentMember",
+                "printedName": "τ_0_0.Value"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities17AsyncStreamWriterP4sendyy5ValueQzYaKF",
+            "mangledName": "$s21IDBCompanionUtilities17AsyncStreamWriterP4sendyy5ValueQzYaKF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0 where τ_0_0 : IDBCompanionUtilities.AsyncStreamWriter>",
+            "sugared_genericSig": "<Self where Self : IDBCompanionUtilities.AsyncStreamWriter>",
+            "protocolReq": true,
+            "throwing": true,
+            "reqNewWitnessTableEntry": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Protocol",
+        "usr": "s:21IDBCompanionUtilities17AsyncStreamWriterP",
+        "mangledName": "$s21IDBCompanionUtilities17AsyncStreamWriterP",
+        "moduleName": "IDBCompanionUtilities",
+        "genericSig": "<τ_0_0.Value : Swift.Sendable>",
+        "sugared_genericSig": "<Self.Value : Swift.Sendable>",
+        "declAttributes": [
+          "AccessControl"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          }
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "FIFOStreamWriter",
+        "printedName": "FIFOStreamWriter",
+        "children": [
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init(stream:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "FIFOStreamWriter",
+                "printedName": "IDBCompanionUtilities.FIFOStreamWriter<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "s:21IDBCompanionUtilities16FIFOStreamWriterC"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities16FIFOStreamWriterC6streamACyxGx_tcfc",
+            "mangledName": "$s21IDBCompanionUtilities16FIFOStreamWriterC6streamACyxGx_tcfc",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0 where τ_0_0 : IDBCompanionUtilities.AsyncStreamWriter>",
+            "sugared_genericSig": "<StreamWriter where StreamWriter : IDBCompanionUtilities.AsyncStreamWriter>",
+            "declAttributes": [
+              "AccessControl"
+            ],
+            "init_kind": "Designated"
+          },
+          {
+            "kind": "Function",
+            "name": "send",
+            "printedName": "send(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "DependentMember",
+                "printedName": "τ_0_0.Value"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities16FIFOStreamWriterC4sendyy5ValueQzKF",
+            "mangledName": "$s21IDBCompanionUtilities16FIFOStreamWriterC4sendyy5ValueQzKF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0 where τ_0_0 : IDBCompanionUtilities.AsyncStreamWriter>",
+            "sugared_genericSig": "<StreamWriter where StreamWriter : IDBCompanionUtilities.AsyncStreamWriter>",
+            "declAttributes": [
+              "Final",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Class",
+        "usr": "s:21IDBCompanionUtilities16FIFOStreamWriterC",
+        "mangledName": "$s21IDBCompanionUtilities16FIFOStreamWriterC",
+        "moduleName": "IDBCompanionUtilities",
+        "genericSig": "<τ_0_0 where τ_0_0 : IDBCompanionUtilities.AsyncStreamWriter>",
+        "sugared_genericSig": "<StreamWriter where StreamWriter : IDBCompanionUtilities.AsyncStreamWriter>",
+        "declAttributes": [
+          "Final",
+          "AccessControl",
+          "RawDocComment"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "TaskSelectState",
+        "printedName": "TaskSelectState",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "complete",
+            "printedName": "complete",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Bool",
+                "printedName": "Swift.Bool",
+                "usr": "s:Sb"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities15TaskSelectStateV8completeSbvp",
+            "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV8completeSbvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasInitialValue",
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 0,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Bool",
+                    "printedName": "Swift.Bool",
+                    "usr": "s:Sb"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV8completeSbvg",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV8completeSbvg",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              },
+              {
+                "kind": "Accessor",
+                "name": "Set",
+                "printedName": "Set()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Bool",
+                    "printedName": "Swift.Bool",
+                    "usr": "s:Sb"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV8completeSbvs",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV8completeSbvs",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "set"
+              },
+              {
+                "kind": "Accessor",
+                "name": "Modify",
+                "printedName": "Modify()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV8completeSbvM",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV8completeSbvM",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "_modify"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "tasks",
+            "printedName": "tasks",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Array",
+                    "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "Task",
+                        "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                        "children": [
+                          {
+                            "kind": "TypeNominal",
+                            "name": "GenericTypeParam",
+                            "printedName": "τ_0_0"
+                          },
+                          {
+                            "kind": "TypeNominal",
+                            "name": "GenericTypeParam",
+                            "printedName": "τ_0_1"
+                          }
+                        ],
+                        "usr": "s:ScT"
+                      }
+                    ],
+                    "usr": "s:Sa"
+                  }
+                ],
+                "usr": "s:Sq"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvp",
+            "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvp",
+            "moduleName": "IDBCompanionUtilities",
+            "declAttributes": [
+              "HasInitialValue",
+              "HasStorage"
+            ],
+            "fixedbinaryorder": 1,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Optional",
+                    "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]?",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "Array",
+                        "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]",
+                        "children": [
+                          {
+                            "kind": "TypeNominal",
+                            "name": "Task",
+                            "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                            "children": [
+                              {
+                                "kind": "TypeNominal",
+                                "name": "GenericTypeParam",
+                                "printedName": "τ_0_0"
+                              },
+                              {
+                                "kind": "TypeNominal",
+                                "name": "GenericTypeParam",
+                                "printedName": "τ_0_1"
+                              }
+                            ],
+                            "usr": "s:ScT"
+                          }
+                        ],
+                        "usr": "s:Sa"
+                      }
+                    ],
+                    "usr": "s:Sq"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvg",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvg",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "get"
+              },
+              {
+                "kind": "Accessor",
+                "name": "Set",
+                "printedName": "Set()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Optional",
+                    "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]?",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "Array",
+                        "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]",
+                        "children": [
+                          {
+                            "kind": "TypeNominal",
+                            "name": "Task",
+                            "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                            "children": [
+                              {
+                                "kind": "TypeNominal",
+                                "name": "GenericTypeParam",
+                                "printedName": "τ_0_0"
+                              },
+                              {
+                                "kind": "TypeNominal",
+                                "name": "GenericTypeParam",
+                                "printedName": "τ_0_1"
+                              }
+                            ],
+                            "usr": "s:ScT"
+                          }
+                        ],
+                        "usr": "s:Sa"
+                      }
+                    ],
+                    "usr": "s:Sq"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvs",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvs",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "set"
+              },
+              {
+                "kind": "Accessor",
+                "name": "Modify",
+                "printedName": "Modify()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvM",
+                "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV5tasksSayScTyxq_GGSgvM",
+                "moduleName": "IDBCompanionUtilities",
+                "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+                "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+                "implicit": true,
+                "declAttributes": [
+                  "Transparent"
+                ],
+                "accessorKind": "_modify"
+              }
+            ]
+          },
+          {
+            "kind": "Function",
+            "name": "add",
+            "printedName": "add(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Task",
+                    "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_0"
+                      },
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_1"
+                      }
+                    ],
+                    "usr": "s:ScT"
+                  }
+                ],
+                "usr": "s:Sq"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Task",
+                "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:ScT"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities15TaskSelectStateV3addyScTyxq_GSgAEF",
+            "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV3addyScTyxq_GSgAEF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+            "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+            "declAttributes": [
+              "Mutating"
+            ],
+            "funcSelfKind": "Mutating"
+          },
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init(complete:tasks:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "TaskSelectState",
+                "printedName": "IDBCompanionUtilities.TaskSelectState<τ_0_0, τ_0_1>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Bool",
+                "printedName": "Swift.Bool",
+                "hasDefaultArg": true,
+                "usr": "s:Sb"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Optional",
+                "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]?",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Array",
+                    "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "Task",
+                        "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                        "children": [
+                          {
+                            "kind": "TypeNominal",
+                            "name": "GenericTypeParam",
+                            "printedName": "τ_0_0"
+                          },
+                          {
+                            "kind": "TypeNominal",
+                            "name": "GenericTypeParam",
+                            "printedName": "τ_0_1"
+                          }
+                        ],
+                        "usr": "s:ScT"
+                      }
+                    ],
+                    "usr": "s:Sa"
+                  }
+                ],
+                "hasDefaultArg": true,
+                "usr": "s:Sq"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities15TaskSelectStateV8complete5tasksACyxq_GSb_SayScTyxq_GGSgtcfc",
+            "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV8complete5tasksACyxq_GSb_SayScTyxq_GGSgtcfc",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+            "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+            "implicit": true,
+            "init_kind": "Designated"
+          },
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init()",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "TaskSelectState",
+                "printedName": "IDBCompanionUtilities.TaskSelectState<τ_0_0, τ_0_1>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:21IDBCompanionUtilities15TaskSelectStateV"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities15TaskSelectStateVACyxq_Gycfc",
+            "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateVACyxq_Gycfc",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+            "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+            "implicit": true,
+            "init_kind": "Designated"
+          }
+        ],
+        "declKind": "Struct",
+        "usr": "s:21IDBCompanionUtilities15TaskSelectStateV",
+        "mangledName": "$s21IDBCompanionUtilities15TaskSelectStateV",
+        "moduleName": "IDBCompanionUtilities",
+        "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+        "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Darwin",
+        "printedName": "Darwin",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "IDBCompanionUtilities"
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "FBMutex",
+        "printedName": "FBMutex",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "underlyingMutex",
+            "printedName": "underlyingMutex",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "_opaque_pthread_mutex_t",
+                "printedName": "DarwinFoundation._opaque_pthread_mutex_t",
+                "usr": "c:@S@_opaque_pthread_mutex_t"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:21IDBCompanionUtilities7FBMutexC15underlyingMutex33_299C0334912B347BC4ACF2FE7802A124LLSo23_opaque_pthread_mutex_tVvp",
+            "mangledName": "$s21IDBCompanionUtilities7FBMutexC15underlyingMutex33_299C0334912B347BC4ACF2FE7802A124LLSo23_opaque_pthread_mutex_tVvp",
+            "moduleName": "IDBCompanionUtilities",
+            "isInternal": true,
+            "declAttributes": [
+              "HasInitialValue",
+              "Final",
+              "HasStorage",
+              "AccessControl"
+            ],
+            "fixedbinaryorder": 0,
+            "hasStorage": true
+          },
+          {
+            "kind": "Constructor",
+            "name": "init",
+            "printedName": "init()",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "FBMutex",
+                "printedName": "IDBCompanionUtilities.FBMutex",
+                "usr": "s:21IDBCompanionUtilities7FBMutexC"
+              }
+            ],
+            "declKind": "Constructor",
+            "usr": "s:21IDBCompanionUtilities7FBMutexCACycfc",
+            "mangledName": "$s21IDBCompanionUtilities7FBMutexCACycfc",
+            "moduleName": "IDBCompanionUtilities",
+            "init_kind": "Designated"
+          },
+          {
+            "kind": "Function",
+            "name": "sync",
+            "printedName": "sync(execute:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              },
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "() throws -> τ_0_0",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ],
+                "typeAttributes": [
+                  "noescape"
+                ]
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:21IDBCompanionUtilities7FBMutexC4sync7executexxyKXE_tKlF",
+            "mangledName": "$s21IDBCompanionUtilities7FBMutexC4sync7executexxyKXE_tKlF",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0>",
+            "sugared_genericSig": "<R>",
+            "declAttributes": [
+              "Final",
+              "Rethrows"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Class",
+        "usr": "s:21IDBCompanionUtilities7FBMutexC",
+        "mangledName": "$s21IDBCompanionUtilities7FBMutexC",
+        "moduleName": "IDBCompanionUtilities",
+        "declAttributes": [
+          "Final",
+          "RawDocComment"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          }
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "Task",
+        "printedName": "Task",
+        "children": [
+          {
+            "kind": "Function",
+            "name": "timeout",
+            "printedName": "timeout(nanoseconds:function:file:line:column:job:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "UInt64",
+                "printedName": "Swift.UInt64",
+                "usr": "s:s6UInt64V"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "hasDefaultArg": true,
+                "usr": "s:SS"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "String",
+                "printedName": "Swift.String",
+                "hasDefaultArg": true,
+                "usr": "s:SS"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "hasDefaultArg": true,
+                "usr": "s:Si"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "hasDefaultArg": true,
+                "usr": "s:Si"
+              },
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "() async throws -> τ_0_0",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Void",
+                    "printedName": "()"
+                  }
+                ]
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:ScT21IDBCompanionUtilitiess5Error_pRs_rlE7timeout11nanoseconds8function4file4line6column3jobxs6UInt64V_S2SS2ixyYaYbKctYaKFZ",
+            "mangledName": "$sScT21IDBCompanionUtilitiess5Error_pRs_rlE7timeout11nanoseconds8function4file4line6column3jobxs6UInt64V_S2SS2ixyYaYbKctYaKFZ",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 == any Swift.Error>",
+            "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure == any Swift.Error>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "isFromExtension": true,
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "select",
+            "printedName": "select(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Task",
+                "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:ScT"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_1_0"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:ScT21IDBCompanionUtilitiesE6selectyScTyxq_Gqd__Yas8SendableRd__STRd__AC7ElementRtd__lFZ",
+            "mangledName": "$sScT21IDBCompanionUtilitiesE6selectyScTyxq_Gqd__Yas8SendableRd__STRd__AC7ElementRtd__lFZ",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1, τ_1_0 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error, τ_1_0 : Swift.Sendable, τ_1_0 : Swift.Sequence, τ_1_0.Element == _Concurrency.Task<τ_0_0, τ_0_1>>",
+            "sugared_genericSig": "<Success, Failure, Tasks where Success : Swift.Sendable, Failure : Swift.Error, Tasks : Swift.Sendable, Tasks : Swift.Sequence, Tasks.Element == _Concurrency.Task<Success, Failure>>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "isFromExtension": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "select",
+            "printedName": "select(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Task",
+                "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:ScT"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[_Concurrency.Task<τ_0_0, τ_0_1>]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Task",
+                    "printedName": "_Concurrency.Task<τ_0_0, τ_0_1>",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_0"
+                      },
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_1"
+                      }
+                    ],
+                    "usr": "s:ScT"
+                  }
+                ],
+                "usr": "s:Sa"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:ScT21IDBCompanionUtilitiesE6selectyScTyxq_GACd_tYaFZ",
+            "mangledName": "$sScT21IDBCompanionUtilitiesE6selectyScTyxq_GACd_tYaFZ",
+            "moduleName": "IDBCompanionUtilities",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+            "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "isFromExtension": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Struct",
+        "usr": "s:ScT",
+        "mangledName": "$sScT",
+        "moduleName": "_Concurrency",
+        "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Sendable, τ_0_1 : Swift.Error>",
+        "sugared_genericSig": "<Success, Failure where Success : Swift.Sendable, Failure : Swift.Error>",
+        "intro_Macosx": "10.15",
+        "intro_iOS": "13.0",
+        "intro_tvOS": "13.0",
+        "intro_watchOS": "6.0",
+        "declAttributes": [
+          "Frozen",
+          "Available",
+          "Available",
+          "Available",
+          "Available"
+        ],
+        "isExternal": true,
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Equatable",
+            "printedName": "Equatable",
+            "usr": "s:SQ",
+            "mangledName": "$sSQ"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Hashable",
+            "printedName": "Hashable",
+            "usr": "s:SH",
+            "mangledName": "$sSH"
+          }
+        ]
+      }
+    ],
+    "json_format_version": 8
+  },
+  "ConstValues": [
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/IDBCompanionUtilities\/FBTeardownContext.swift",
+      "kind": "Array",
+      "offset": 440,
+      "length": 2,
+      "value": "[]"
+    },
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/IDBCompanionUtilities\/FBTeardownContext.swift",
+      "kind": "BooleanLiteral",
+      "offset": 476,
+      "length": 5,
+      "value": "false"
+    },
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/IDBCompanionUtilities\/FIFOStreamWriter.swift",
+      "kind": "IntegerLiteral",
+      "offset": 613,
+      "length": 1,
+      "value": "0"
+    },
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/IDBCompanionUtilities\/TaskSelect.swift",
+      "kind": "BooleanLiteral",
+      "offset": 297,
+      "length": 5,
+      "value": "false"
+    },
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/IDBCompanionUtilities\/TaskSelect.swift",
+      "kind": "Array",
+      "offset": 344,
+      "length": 2,
+      "value": "[]"
+    }
+  ]
+}

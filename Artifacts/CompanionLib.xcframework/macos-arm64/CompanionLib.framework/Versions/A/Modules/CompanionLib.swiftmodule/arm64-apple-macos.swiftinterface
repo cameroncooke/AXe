@@ -1,0 +1,28 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.1 effective-5.10 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)
+// swift-module-flags: -target arm64-apple-macos11.0 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -Onone -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -module-name CompanionLib
+// swift-module-flags-ignorable: -no-verify-emitted-module-interface -interface-compiler-version 6.1
+@_exported import CompanionLib
+import FBControlCore
+import Foundation
+import IDBCompanionUtilities
+import Swift
+import _Concurrency
+import _StringProcessing
+import _SwiftConcurrencyShims
+public enum BridgeFuture {
+  public static func values<T>(_ futures: FBControlCore.FBFuture<T>...) async throws -> [T] where T : AnyObject
+  public static func values<T>(_ futures: [FBControlCore.FBFuture<T>]) async throws -> [T] where T : AnyObject
+  public static func value<T>(_ future: FBControlCore.FBFuture<T>) async throws -> T where T : AnyObject
+  public static func value<T>(_ future: FBControlCore.FBFuture<Foundation.NSArray>) async throws -> [T]
+  public static func value<T, U>(_ future: FBControlCore.FBFuture<Foundation.NSDictionary>) async throws -> [T : U] where T : Swift.Hashable
+  public static func await(_ future: FBControlCore.FBFuture<Foundation.NSNull>) async throws
+  public static func await(_ future: FBControlCore.FBFuture<Swift.AnyObject>) async throws
+  public static func convertToFuture<T>(_ mutableFuture: FBControlCore.FBMutableFuture<T>) -> FBControlCore.FBFuture<T> where T : AnyObject
+  public static func value<T>(_ futureContext: FBControlCore.FBFutureContext<T>) async throws -> T where T : AnyObject
+  public static func values<T, U>(_ futureContext: FBControlCore.FBFutureContext<T>) async throws -> [U] where T : AnyObject
+}
+public enum BridgeQueues {
+  public static let futureSerialFullfillmentQueue: Dispatch.DispatchQueue
+  public static let miscEventReaderQueue: Dispatch.DispatchQueue
+}

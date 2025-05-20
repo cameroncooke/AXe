@@ -1,0 +1,906 @@
+{
+  "ABIRoot": {
+    "kind": "Root",
+    "name": "CompanionLib",
+    "printedName": "CompanionLib",
+    "children": [
+      {
+        "kind": "Import",
+        "name": "FBControlCore",
+        "printedName": "FBControlCore",
+        "declKind": "Import",
+        "moduleName": "CompanionLib",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "CompanionLib"
+      },
+      {
+        "kind": "Import",
+        "name": "IDBCompanionUtilities",
+        "printedName": "IDBCompanionUtilities",
+        "declKind": "Import",
+        "moduleName": "CompanionLib"
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "FBFutureError",
+        "printedName": "FBFutureError",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "continuationFullfilledWithoutValues",
+            "printedName": "continuationFullfilledWithoutValues",
+            "children": [
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "(CompanionLib.FBFutureError.Type) -> CompanionLib.FBFutureError",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBFutureError",
+                    "printedName": "CompanionLib.FBFutureError",
+                    "usr": "s:12CompanionLib13FBFutureErrorO"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Metatype",
+                    "printedName": "CompanionLib.FBFutureError.Type",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "FBFutureError",
+                        "printedName": "CompanionLib.FBFutureError",
+                        "usr": "s:12CompanionLib13FBFutureErrorO"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "declKind": "EnumElement",
+            "usr": "s:12CompanionLib13FBFutureErrorO35continuationFullfilledWithoutValuesyA2CmF",
+            "mangledName": "$s12CompanionLib13FBFutureErrorO35continuationFullfilledWithoutValuesyA2CmF",
+            "moduleName": "CompanionLib",
+            "declAttributes": [
+              "RawDocComment"
+            ],
+            "fixedbinaryorder": 0
+          },
+          {
+            "kind": "Var",
+            "name": "taskGroupReceivedNilResultInternalError",
+            "printedName": "taskGroupReceivedNilResultInternalError",
+            "children": [
+              {
+                "kind": "TypeFunc",
+                "name": "Function",
+                "printedName": "(CompanionLib.FBFutureError.Type) -> CompanionLib.FBFutureError",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBFutureError",
+                    "printedName": "CompanionLib.FBFutureError",
+                    "usr": "s:12CompanionLib13FBFutureErrorO"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Metatype",
+                    "printedName": "CompanionLib.FBFutureError.Type",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "FBFutureError",
+                        "printedName": "CompanionLib.FBFutureError",
+                        "usr": "s:12CompanionLib13FBFutureErrorO"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "declKind": "EnumElement",
+            "usr": "s:12CompanionLib13FBFutureErrorO034taskGroupReceivedNilResultInternalD0yA2CmF",
+            "mangledName": "$s12CompanionLib13FBFutureErrorO034taskGroupReceivedNilResultInternalD0yA2CmF",
+            "moduleName": "CompanionLib",
+            "declAttributes": [
+              "RawDocComment"
+            ],
+            "fixedbinaryorder": 1
+          },
+          {
+            "kind": "Function",
+            "name": "==",
+            "printedName": "==(_:_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Bool",
+                "printedName": "Swift.Bool",
+                "usr": "s:Sb"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFutureError",
+                "printedName": "CompanionLib.FBFutureError",
+                "usr": "s:12CompanionLib13FBFutureErrorO"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFutureError",
+                "printedName": "CompanionLib.FBFutureError",
+                "usr": "s:12CompanionLib13FBFutureErrorO"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib13FBFutureErrorO2eeoiySbAC_ACtFZ",
+            "mangledName": "$s12CompanionLib13FBFutureErrorO2eeoiySbAC_ACtFZ",
+            "moduleName": "CompanionLib",
+            "static": true,
+            "implicit": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Var",
+            "name": "hashValue",
+            "printedName": "hashValue",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Int",
+                "printedName": "Swift.Int",
+                "usr": "s:Si"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:12CompanionLib13FBFutureErrorO9hashValueSivp",
+            "mangledName": "$s12CompanionLib13FBFutureErrorO9hashValueSivp",
+            "moduleName": "CompanionLib",
+            "implicit": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "Int",
+                    "printedName": "Swift.Int",
+                    "usr": "s:Si"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:12CompanionLib13FBFutureErrorO9hashValueSivg",
+                "mangledName": "$s12CompanionLib13FBFutureErrorO9hashValueSivg",
+                "moduleName": "CompanionLib",
+                "implicit": true,
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Function",
+            "name": "hash",
+            "printedName": "hash(into:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Hasher",
+                "printedName": "Swift.Hasher",
+                "paramValueOwnership": "InOut",
+                "usr": "s:s6HasherV"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib13FBFutureErrorO4hash4intoys6HasherVz_tF",
+            "mangledName": "$s12CompanionLib13FBFutureErrorO4hash4intoys6HasherVz_tF",
+            "moduleName": "CompanionLib",
+            "implicit": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Enum",
+        "usr": "s:12CompanionLib13FBFutureErrorO",
+        "mangledName": "$s12CompanionLib13FBFutureErrorO",
+        "moduleName": "CompanionLib",
+        "isEnumExhaustive": true,
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Equatable",
+            "printedName": "Equatable",
+            "usr": "s:SQ",
+            "mangledName": "$sSQ"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Hashable",
+            "printedName": "Hashable",
+            "usr": "s:SH",
+            "mangledName": "$sSH"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Error",
+            "printedName": "Error",
+            "usr": "s:s5ErrorP",
+            "mangledName": "$ss5ErrorP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Sendable",
+            "printedName": "Sendable",
+            "usr": "s:s8SendableP",
+            "mangledName": "$ss8SendableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "BitwiseCopyable",
+            "printedName": "BitwiseCopyable",
+            "usr": "s:s15BitwiseCopyableP",
+            "mangledName": "$ss15BitwiseCopyableP"
+          }
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "BridgeFuture",
+        "printedName": "BridgeFuture",
+        "children": [
+          {
+            "kind": "Function",
+            "name": "values",
+            "printedName": "values(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[τ_0_0]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "s:Sa"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[FBControlCore.FBFuture<τ_0_0>]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBFuture",
+                    "printedName": "FBControlCore.FBFuture<τ_0_0>",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_0"
+                      }
+                    ],
+                    "usr": "c:objc(cs)FBFuture"
+                  }
+                ],
+                "usr": "s:Sa"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO6valuesySayxGSo8FBFutureCyxGd_tYaKRlzClFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO6valuesySayxGSo8FBFutureCyxGd_tYaKRlzClFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "values",
+            "printedName": "values(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[τ_0_0]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "s:Sa"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[FBControlCore.FBFuture<τ_0_0>]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "FBFuture",
+                    "printedName": "FBControlCore.FBFuture<τ_0_0>",
+                    "children": [
+                      {
+                        "kind": "TypeNominal",
+                        "name": "GenericTypeParam",
+                        "printedName": "τ_0_0"
+                      }
+                    ],
+                    "usr": "c:objc(cs)FBFuture"
+                  }
+                ],
+                "usr": "s:Sa"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO6valuesySayxGSaySo8FBFutureCyxGGYaKRlzClFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO6valuesySayxGSaySo8FBFutureCyxGGYaKRlzClFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "value",
+            "printedName": "value(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5valueyxSo8FBFutureCyxGYaKRlzClFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5valueyxSo8FBFutureCyxGYaKRlzClFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "value",
+            "printedName": "value(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[τ_0_0]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "s:Sa"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<Foundation.NSArray>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "NSArray",
+                    "printedName": "Foundation.NSArray",
+                    "usr": "c:objc(cs)NSArray"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5valueySayxGSo8FBFutureCySo7NSArrayCGYaKlFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5valueySayxGSo8FBFutureCySo7NSArrayCGYaKlFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0>",
+            "sugared_genericSig": "<T>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "value",
+            "printedName": "value(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Dictionary",
+                "printedName": "[τ_0_0 : τ_0_1]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  },
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:SD"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<Foundation.NSDictionary>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "NSDictionary",
+                    "printedName": "Foundation.NSDictionary",
+                    "usr": "c:objc(cs)NSDictionary"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5valueySDyxq_GSo8FBFutureCySo12NSDictionaryCGYaKSHRzr0_lFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5valueySDyxq_GSo8FBFutureCySo12NSDictionaryCGYaKSHRzr0_lFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : Swift.Hashable>",
+            "sugared_genericSig": "<T, U where T : Swift.Hashable>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "await",
+            "printedName": "await(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<Foundation.NSNull>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "NSNull",
+                    "printedName": "Foundation.NSNull",
+                    "usr": "c:objc(cs)NSNull"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5awaityySo8FBFutureCySo6NSNullCGYaKFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5awaityySo8FBFutureCySo6NSNullCGYaKFZ",
+            "moduleName": "CompanionLib",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "await",
+            "printedName": "await(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Void",
+                "printedName": "()"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<AnyObject>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "ProtocolComposition",
+                    "printedName": "AnyObject"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5awaityySo8FBFutureCyyXlGYaKFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5awaityySo8FBFutureCyyXlGYaKFZ",
+            "moduleName": "CompanionLib",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "convertToFuture",
+            "printedName": "convertToFuture(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "FBFuture",
+                "printedName": "FBControlCore.FBFuture<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFuture"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBMutableFuture",
+                "printedName": "FBControlCore.FBMutableFuture<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "c:objc(cs)FBMutableFuture"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO09convertToD0ySo8FBFutureCyxGSo09FBMutableD0CyxGRlzClFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO09convertToD0ySo8FBFutureCyxGSo09FBMutableD0CyxGRlzClFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "value",
+            "printedName": "value(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "GenericTypeParam",
+                "printedName": "τ_0_0"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFutureContext",
+                "printedName": "FBControlCore.FBFutureContext<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFutureContext"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO5valueyxSo15FBFutureContextCyxGYaKRlzClFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO5valueyxSo15FBFutureContextCyxGYaKRlzClFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          },
+          {
+            "kind": "Function",
+            "name": "values",
+            "printedName": "values(_:)",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "Array",
+                "printedName": "[τ_0_1]",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_1"
+                  }
+                ],
+                "usr": "s:Sa"
+              },
+              {
+                "kind": "TypeNominal",
+                "name": "FBFutureContext",
+                "printedName": "FBControlCore.FBFutureContext<τ_0_0>",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "GenericTypeParam",
+                    "printedName": "τ_0_0"
+                  }
+                ],
+                "usr": "c:objc(cs)FBFutureContext"
+              }
+            ],
+            "declKind": "Func",
+            "usr": "s:12CompanionLib12BridgeFutureO6valuesySayq_GSo15FBFutureContextCyxGYaKRlzCr0_lFZ",
+            "mangledName": "$s12CompanionLib12BridgeFutureO6valuesySayq_GSo15FBFutureContextCyxGYaKRlzCr0_lFZ",
+            "moduleName": "CompanionLib",
+            "genericSig": "<τ_0_0, τ_0_1 where τ_0_0 : AnyObject>",
+            "sugared_genericSig": "<T, U where T : AnyObject>",
+            "static": true,
+            "declAttributes": [
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "throwing": true,
+            "funcSelfKind": "NonMutating"
+          }
+        ],
+        "declKind": "Enum",
+        "usr": "s:12CompanionLib12BridgeFutureO",
+        "mangledName": "$s12CompanionLib12BridgeFutureO",
+        "moduleName": "CompanionLib",
+        "declAttributes": [
+          "AccessControl",
+          "RawDocComment"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          }
+        ]
+      },
+      {
+        "kind": "Import",
+        "name": "Foundation",
+        "printedName": "Foundation",
+        "declKind": "Import",
+        "moduleName": "CompanionLib",
+        "declAttributes": [
+          "RawDocComment"
+        ]
+      },
+      {
+        "kind": "TypeDecl",
+        "name": "BridgeQueues",
+        "printedName": "BridgeQueues",
+        "children": [
+          {
+            "kind": "Var",
+            "name": "futureSerialFullfillmentQueue",
+            "printedName": "futureSerialFullfillmentQueue",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "DispatchQueue",
+                "printedName": "Dispatch.DispatchQueue",
+                "usr": "c:objc(cs)OS_dispatch_queue"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:12CompanionLib12BridgeQueuesO29futureSerialFullfillmentQueueSo17OS_dispatch_queueCvpZ",
+            "mangledName": "$s12CompanionLib12BridgeQueuesO29futureSerialFullfillmentQueueSo17OS_dispatch_queueCvpZ",
+            "moduleName": "CompanionLib",
+            "static": true,
+            "declAttributes": [
+              "HasInitialValue",
+              "HasStorage",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "DispatchQueue",
+                    "printedName": "Dispatch.DispatchQueue",
+                    "usr": "c:objc(cs)OS_dispatch_queue"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:12CompanionLib12BridgeQueuesO29futureSerialFullfillmentQueueSo17OS_dispatch_queueCvgZ",
+                "mangledName": "$s12CompanionLib12BridgeQueuesO29futureSerialFullfillmentQueueSo17OS_dispatch_queueCvgZ",
+                "moduleName": "CompanionLib",
+                "static": true,
+                "implicit": true,
+                "accessorKind": "get"
+              }
+            ]
+          },
+          {
+            "kind": "Var",
+            "name": "miscEventReaderQueue",
+            "printedName": "miscEventReaderQueue",
+            "children": [
+              {
+                "kind": "TypeNominal",
+                "name": "DispatchQueue",
+                "printedName": "Dispatch.DispatchQueue",
+                "usr": "c:objc(cs)OS_dispatch_queue"
+              }
+            ],
+            "declKind": "Var",
+            "usr": "s:12CompanionLib12BridgeQueuesO20miscEventReaderQueueSo17OS_dispatch_queueCvpZ",
+            "mangledName": "$s12CompanionLib12BridgeQueuesO20miscEventReaderQueueSo17OS_dispatch_queueCvpZ",
+            "moduleName": "CompanionLib",
+            "static": true,
+            "declAttributes": [
+              "HasInitialValue",
+              "HasStorage",
+              "AccessControl",
+              "RawDocComment"
+            ],
+            "isLet": true,
+            "hasStorage": true,
+            "accessors": [
+              {
+                "kind": "Accessor",
+                "name": "Get",
+                "printedName": "Get()",
+                "children": [
+                  {
+                    "kind": "TypeNominal",
+                    "name": "DispatchQueue",
+                    "printedName": "Dispatch.DispatchQueue",
+                    "usr": "c:objc(cs)OS_dispatch_queue"
+                  }
+                ],
+                "declKind": "Accessor",
+                "usr": "s:12CompanionLib12BridgeQueuesO20miscEventReaderQueueSo17OS_dispatch_queueCvgZ",
+                "mangledName": "$s12CompanionLib12BridgeQueuesO20miscEventReaderQueueSo17OS_dispatch_queueCvgZ",
+                "moduleName": "CompanionLib",
+                "static": true,
+                "implicit": true,
+                "accessorKind": "get"
+              }
+            ]
+          }
+        ],
+        "declKind": "Enum",
+        "usr": "s:12CompanionLib12BridgeQueuesO",
+        "mangledName": "$s12CompanionLib12BridgeQueuesO",
+        "moduleName": "CompanionLib",
+        "declAttributes": [
+          "AccessControl",
+          "RawDocComment"
+        ],
+        "conformances": [
+          {
+            "kind": "Conformance",
+            "name": "Copyable",
+            "printedName": "Copyable",
+            "usr": "s:s8CopyableP",
+            "mangledName": "$ss8CopyableP"
+          },
+          {
+            "kind": "Conformance",
+            "name": "Escapable",
+            "printedName": "Escapable",
+            "usr": "s:s9EscapableP",
+            "mangledName": "$ss9EscapableP"
+          }
+        ]
+      }
+    ],
+    "json_format_version": 8
+  },
+  "ConstValues": [
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/CompanionLib\/BridgeFuture\/BridgeQueues.swift",
+      "kind": "StringLiteral",
+      "offset": 485,
+      "length": 35,
+      "value": "\"com.facebook.fbfuture.fullfilment\""
+    },
+    {
+      "filePath": "\/Volumes\/Developer\/AXe\/idb_checkout\/CompanionLib\/BridgeFuture\/BridgeQueues.swift",
+      "kind": "StringLiteral",
+      "offset": 1011,
+      "length": 35,
+      "value": "\"com.facebook.miscellaneous.reader\""
+    }
+  ]
+}

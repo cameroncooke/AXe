@@ -1,0 +1,14 @@
+# This package build directory
+/.build
+
+# IDB build directory
+/idb_build
+
+# IDB repo checkout directory
+/idb_checkout
+
+# Xcode user data
+xcuserdata/
+/.vscode
+
+.DS_Store

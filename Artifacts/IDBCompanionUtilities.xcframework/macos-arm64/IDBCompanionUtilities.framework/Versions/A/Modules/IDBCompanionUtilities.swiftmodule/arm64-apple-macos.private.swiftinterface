@@ -1,0 +1,45 @@
+// swift-interface-format-version: 1.0
+// swift-compiler-version: Apple Swift version 6.1 effective-5.10 (swiftlang-6.1.0.110.21 clang-1700.0.13.3)
+// swift-module-flags: -target arm64-apple-macos11.0 -enable-objc-interop -enable-library-evolution -swift-version 5 -enforce-exclusivity=checked -Onone -enable-experimental-feature DebugDescriptionMacro -enable-bare-slash-regex -module-name IDBCompanionUtilities
+// swift-module-flags-ignorable: -no-verify-emitted-module-interface -interface-compiler-version 6.1
+import Darwin
+import Foundation
+import Swift
+import _Concurrency
+import _StringProcessing
+import _SwiftConcurrencyShims
+@_hasMissingDesignatedInitializers final public class FBTeardownContext : Swift.Sendable {
+  public static let $current: _Concurrency.TaskLocal<IDBCompanionUtilities.FBTeardownContext>
+  public static var current: IDBCompanionUtilities.FBTeardownContext {
+    get
+  }
+  public static func withAutocleanup<T>(function: Swift.String = #function, file: Swift.String = #file, line: Swift.Int = #line, column: Swift.Int = #column, operation: @Sendable () async throws -> T) async throws -> T
+  final public func addCleanup(_ cleanup: @escaping () async throws -> Swift.Void) throws
+  final public func performCleanup() async throws
+  @objc deinit
+}
+@propertyWrapper final public class Atomic<Value> : @unchecked Swift.Sendable {
+  public init(wrappedValue: Value)
+  final public var wrappedValue: Value {
+    get
+  }
+  final public func set(_ newValue: Value)
+  final public func sync<R>(execute work: (inout Value) throws -> R) rethrows -> R
+  @objc deinit
+}
+extension _Concurrency.Task where Failure == any Swift.Error {
+  public static func timeout(nanoseconds: Swift.UInt64, function: Swift.String = #function, file: Swift.String = #file, line: Swift.Int = #line, column: Swift.Int = #column, job: @escaping @Sendable () async throws -> Success) async throws -> Success
+}
+public protocol AsyncStreamWriter {
+  associatedtype Value : Swift.Sendable
+  func send(_ value: Self.Value) async throws
+}
+final public class FIFOStreamWriter<StreamWriter> : @unchecked Swift.Sendable where StreamWriter : IDBCompanionUtilities.AsyncStreamWriter {
+  public init(stream: StreamWriter)
+  final public func send(_ value: StreamWriter.Value) throws
+  @objc deinit
+}
+extension _Concurrency.Task {
+  public static func select<Tasks>(_ tasks: Tasks) async -> _Concurrency.Task<Success, Failure> where Tasks : Swift.Sendable, Tasks : Swift.Sequence, Tasks.Element == _Concurrency.Task<Success, Failure>
+  public static func select(_ tasks: _Concurrency.Task<Success, Failure>...) async -> _Concurrency.Task<Success, Failure>
+}

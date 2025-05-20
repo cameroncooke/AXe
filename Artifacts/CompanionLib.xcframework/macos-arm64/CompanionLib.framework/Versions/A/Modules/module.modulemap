@@ -1,0 +1,11 @@
+framework module CompanionLib {
+  umbrella header "CompanionLib.h"
+  export *
+
+  module * { export * }
+}
+
+module CompanionLib.Swift {
+  header "idb-Swift.h"
+  requires objc
+}
