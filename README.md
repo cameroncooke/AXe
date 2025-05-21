@@ -1,4 +1,4 @@
-## AXe
+<img src="banner.png" alt="AXe" width="600"/>
 
 AXe is a CLI tool for interacting with Simulators and Devices using Apple's Accessibility APIs.
 
