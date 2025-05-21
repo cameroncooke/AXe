@@ -13,7 +13,7 @@ fi
 
 IDB_DIRECTORY=idb_checkout
 BUILD_DIRECTORY=idb_build
-OUTPUT_DIRECTORY=Frameworks
+OUTPUT_DIRECTORY=Artifacts
 
 function ensure_idb_repo() {
   if [ ! -d $IDB_DIRECTORY ]; then
@@ -146,6 +146,20 @@ function all_frameworks_build() {
   ls -la "$OUTPUT_DIRECTORY"
 }
 
+function swift_build_cli() {
+  echo "Building AXe CLI..."
+
+  if swift build --configuration release; then
+    echo "AXe CLI build completed"
+    echo "Copying to Axe executable to $OUTPUT_DIRECTORY/ directory..."
+    cp .build/release/AXe $OUTPUT_DIRECTORY/
+  else
+    echo "Error: Failed to build AXe CLI"
+    exit 1
+  fi
+}
+
 ensure_idb_repo
 cleanup_output_directory
 all_frameworks_build
+swift_build_cli
