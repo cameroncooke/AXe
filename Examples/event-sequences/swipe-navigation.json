@@ -1,0 +1,97 @@
+{
+  "metadata": {
+    "name": "Swipe Navigation",
+    "description": "Navigate through screens using swipe gestures",
+    "version": "1.0",
+    "author": "AXe Team",
+    "tags": ["navigation", "swipe", "gesture"]
+  },
+  "settings": {
+    "default_delay": 0.8,
+    "stop_on_error": false,
+    "max_execution_time": 45.0,
+    "validate_before_execution": true
+  },
+  "events": [
+    {
+      "type": "swipe",
+      "parameters": {
+        "start_x": 350,
+        "start_y": 400,
+        "end_x": 50,
+        "end_y": 400,
+        "duration": 0.5,
+        "delta": 50
+      },
+      "id": "swipe_left_1",
+      "description": "Swipe left to next screen"
+    },
+    {
+      "type": "delay",
+      "parameters": {
+        "duration": 1.0
+      },
+      "id": "wait_transition_1",
+      "description": "Wait for screen transition"
+    },
+    {
+      "type": "swipe",
+      "parameters": {
+        "start_x": 350,
+        "start_y": 400,
+        "end_x": 50,
+        "end_y": 400,
+        "duration": 0.5,
+        "delta": 50
+      },
+      "id": "swipe_left_2",
+      "description": "Swipe left to next screen"
+    },
+    {
+      "type": "delay",
+      "parameters": {
+        "duration": 1.0
+      },
+      "id": "wait_transition_2",
+      "description": "Wait for screen transition"
+    },
+    {
+      "type": "swipe",
+      "parameters": {
+        "start_x": 200,
+        "start_y": 600,
+        "end_x": 200,
+        "end_y": 200,
+        "duration": 0.8,
+        "delta": 40
+      },
+      "id": "swipe_up",
+      "description": "Swipe up to scroll content"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 200,
+        "y": 350
+      },
+      "pre_delay": 0.5,
+      "id": "tap_item",
+      "description": "Tap on an item"
+    },
+    {
+      "type": "swipe",
+      "parameters": {
+        "start_x": 50,
+        "start_y": 400,
+        "end_x": 350,
+        "end_y": 400,
+        "duration": 0.5,
+        "delta": 50
+      },
+      "pre_delay": 2.0,
+      "id": "swipe_right_back",
+      "description": "Swipe right to go back"
+    }
+  ]
+}
+

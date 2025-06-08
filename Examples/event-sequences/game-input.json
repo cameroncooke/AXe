@@ -1,0 +1,106 @@
+{
+  "metadata": {
+    "name": "Game Input Sequence",
+    "description": "Complex game input with multiple touch points and key combinations",
+    "version": "1.0",
+    "author": "AXe Team",
+    "tags": ["game", "input", "complex", "touch"]
+  },
+  "settings": {
+    "default_delay": 0.1,
+    "stop_on_error": true,
+    "max_execution_time": 120.0,
+    "validate_before_execution": true
+  },
+  "events": [
+    {
+      "type": "touch",
+      "parameters": {
+        "x": 100,
+        "y": 500,
+        "duration": 0.5
+      },
+      "id": "hold_move_button",
+      "description": "Hold movement button"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 300,
+        "y": 200
+      },
+      "id": "tap_jump",
+      "description": "Quick jump tap"
+    },
+    {
+      "type": "key_sequence",
+      "parameters": {
+        "keycodes": [4, 22, 8, 21], 
+        "delay": 0.05
+      },
+      "id": "cheat_code",
+      "description": "Enter cheat code sequence"
+    },
+    {
+      "type": "swipe",
+      "parameters": {
+        "start_x": 200,
+        "start_y": 300,
+        "end_x": 250,
+        "end_y": 250,
+        "duration": 0.3,
+        "delta": 20
+      },
+      "id": "aim_gesture",
+      "description": "Aim gesture"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 350,
+        "y": 450
+      },
+      "id": "fire_button",
+      "description": "Fire button"
+    },
+    {
+      "type": "gesture",
+      "parameters": {
+        "start_x": 150,
+        "start_y": 400,
+        "end_x": 250,
+        "end_y": 300,
+        "duration": 0.4,
+        "delta": 25
+      },
+      "id": "special_move",
+      "description": "Special move gesture"
+    },
+    {
+      "type": "key",
+      "parameters": {
+        "keycode": 44,
+        "duration": 1.0
+      },
+      "id": "pause_game",
+      "description": "Hold space to pause"
+    },
+    {
+      "type": "delay",
+      "parameters": {
+        "duration": 0.5
+      },
+      "id": "pause_delay",
+      "description": "Brief pause"
+    },
+    {
+      "type": "key",
+      "parameters": {
+        "keycode": 44
+      },
+      "id": "resume_game",
+      "description": "Resume game"
+    }
+  ]
+}
+

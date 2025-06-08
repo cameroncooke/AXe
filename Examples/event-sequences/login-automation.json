@@ -1,0 +1,73 @@
+{
+  "metadata": {
+    "name": "Login Automation",
+    "description": "Automated login sequence with username, password, and submit",
+    "version": "1.0",
+    "author": "AXe Team",
+    "tags": ["automation", "login", "form"]
+  },
+  "settings": {
+    "default_delay": 0.3,
+    "stop_on_error": true,
+    "max_execution_time": 60.0,
+    "validate_before_execution": true
+  },
+  "events": [
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 200,
+        "y": 300
+      },
+      "pre_delay": 1.0,
+      "id": "tap_username_field",
+      "description": "Tap on username field"
+    },
+    {
+      "type": "type",
+      "parameters": {
+        "text": "testuser@example.com"
+      },
+      "post_delay": 0.5,
+      "id": "enter_username",
+      "description": "Type username"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 200,
+        "y": 400
+      },
+      "id": "tap_password_field",
+      "description": "Tap on password field"
+    },
+    {
+      "type": "type",
+      "parameters": {
+        "text": "SecurePassword123"
+      },
+      "post_delay": 0.5,
+      "id": "enter_password",
+      "description": "Type password"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 200,
+        "y": 500
+      },
+      "pre_delay": 0.5,
+      "id": "tap_login_button",
+      "description": "Tap login button"
+    },
+    {
+      "type": "delay",
+      "parameters": {
+        "duration": 2.0
+      },
+      "id": "wait_for_login",
+      "description": "Wait for login to complete"
+    }
+  ]
+}
+

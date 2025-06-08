@@ -1,0 +1,55 @@
+{
+  "metadata": {
+    "name": "Composite Navigation Example",
+    "description": "Quick navigation to Tap Test with 3 taps - demonstrates composite mode performance",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 10.0,
+    "stopOnError": true
+  },
+  "events": [
+    {
+      "id": "tap-tap-test-button",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 0.5,
+      "description": "Tap 'Tap Test' button in main menu"
+    },
+    {
+      "id": "tap-center-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 400
+      },
+      "delayAfter": 0.3,
+      "description": "First tap in center area"
+    },
+    {
+      "id": "tap-upper-left",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 200
+      },
+      "delayAfter": 0.3,
+      "description": "Tap upper left area"
+    },
+    {
+      "id": "tap-lower-right",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 600
+      },
+      "delayAfter": 0.2,
+      "description": "Tap lower right area"
+    }
+  ]
+}
+

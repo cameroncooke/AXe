@@ -1,0 +1,56 @@
+{
+  "metadata": {
+    "name": "Composite Text Input Example",
+    "description": "Navigate to text input and type a message - fast composite execution",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 15.0,
+    "stopOnError": true
+  },
+  "events": [
+    {
+      "id": "tap-text-input-button",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 450
+      },
+      "delayAfter": 0.8,
+      "description": "Tap 'Text Input' button in main menu"
+    },
+    {
+      "id": "tap-text-field",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 0.3,
+      "description": "Tap text field to focus"
+    },
+    {
+      "id": "type-hello",
+      "type": "type",
+      "text": "Hello from AXe!",
+      "delayAfter": 0.5,
+      "description": "Type greeting message"
+    },
+    {
+      "id": "key-return",
+      "type": "key",
+      "keyCode": 40,
+      "delayAfter": 0.3,
+      "description": "Press return key"
+    },
+    {
+      "id": "type-composite",
+      "type": "type",
+      "text": "Composite mode is fast! ⚡",
+      "delayAfter": 0.2,
+      "description": "Type performance message"
+    }
+  ]
+}
+

@@ -1,0 +1,154 @@
+{
+  "metadata": {
+    "name": "Typing Animation Example",
+    "description": "See text appear character by character with sequential mode precision",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 30.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-text-input",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 450
+      },
+      "delayAfter": 2.0,
+      "description": "Navigate to Text Input screen"
+    },
+    {
+      "id": "focus-text-field",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 1.0,
+      "description": "Focus the text field"
+    },
+    {
+      "id": "type-h",
+      "type": "type",
+      "text": "H",
+      "delayAfter": 0.8,
+      "description": "Type 'H'"
+    },
+    {
+      "id": "type-e",
+      "type": "type",
+      "text": "e",
+      "delayAfter": 0.6,
+      "description": "Type 'e'"
+    },
+    {
+      "id": "type-l1",
+      "type": "type",
+      "text": "l",
+      "delayAfter": 0.4,
+      "description": "Type first 'l'"
+    },
+    {
+      "id": "type-l2",
+      "type": "type",
+      "text": "l",
+      "delayAfter": 0.4,
+      "description": "Type second 'l'"
+    },
+    {
+      "id": "type-o",
+      "type": "type",
+      "text": "o",
+      "delayAfter": 1.0,
+      "description": "Type 'o'"
+    },
+    {
+      "id": "type-space",
+      "type": "type",
+      "text": " ",
+      "delayAfter": 0.8,
+      "description": "Type space"
+    },
+    {
+      "id": "type-f",
+      "type": "type",
+      "text": "f",
+      "delayAfter": 0.5,
+      "description": "Type 'f'"
+    },
+    {
+      "id": "type-r",
+      "type": "type",
+      "text": "r",
+      "delayAfter": 0.3,
+      "description": "Type 'r'"
+    },
+    {
+      "id": "type-o2",
+      "type": "type",
+      "text": "o",
+      "delayAfter": 0.3,
+      "description": "Type 'o'"
+    },
+    {
+      "id": "type-m",
+      "type": "type",
+      "text": "m",
+      "delayAfter": 0.8,
+      "description": "Type 'm'"
+    },
+    {
+      "id": "type-space2",
+      "type": "type",
+      "text": " ",
+      "delayAfter": 0.8,
+      "description": "Type space"
+    },
+    {
+      "id": "type-a",
+      "type": "type",
+      "text": "A",
+      "delayAfter": 0.5,
+      "description": "Type 'A'"
+    },
+    {
+      "id": "type-x",
+      "type": "type",
+      "text": "X",
+      "delayAfter": 0.5,
+      "description": "Type 'X'"
+    },
+    {
+      "id": "type-e2",
+      "type": "type",
+      "text": "e",
+      "delayAfter": 1.0,
+      "description": "Type 'e'"
+    },
+    {
+      "id": "type-exclamation",
+      "type": "type",
+      "text": "!",
+      "delayAfter": 1.5,
+      "description": "Type '!' - complete message"
+    },
+    {
+      "id": "add-newline",
+      "type": "key",
+      "keyCode": 40,
+      "delayAfter": 1.0,
+      "description": "Press return key"
+    },
+    {
+      "id": "type-sequential",
+      "type": "type",
+      "text": "Sequential mode rocks! 🚀",
+      "delayAfter": 0.5,
+      "description": "Type final message"
+    }
+  ]
+}
+

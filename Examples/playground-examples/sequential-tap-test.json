@@ -1,0 +1,115 @@
+{
+  "metadata": {
+    "name": "Sequential Tap Test Example",
+    "description": "Navigate to Tap Test with precise timing - demonstrates sequential mode control",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 30.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-tap-test",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 1.0,
+      "description": "Navigate to Tap Test screen"
+    },
+    {
+      "id": "tap-sequence-start",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 200
+      },
+      "delayAfter": 1.5,
+      "description": "Start tap sequence - top left"
+    },
+    {
+      "id": "tap-sequence-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 200
+      },
+      "delayAfter": 1.5,
+      "description": "Top right tap"
+    },
+    {
+      "id": "tap-sequence-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 600
+      },
+      "delayAfter": 1.5,
+      "description": "Bottom right tap"
+    },
+    {
+      "id": "tap-sequence-4",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 600
+      },
+      "delayAfter": 1.5,
+      "description": "Bottom left tap"
+    },
+    {
+      "id": "tap-center-finale",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 400
+      },
+      "delayAfter": 2.0,
+      "description": "Final center tap"
+    },
+    {
+      "id": "rapid-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 150,
+        "y": 350
+      },
+      "delayAfter": 0.2,
+      "description": "Rapid tap 1"
+    },
+    {
+      "id": "rapid-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 250,
+        "y": 350
+      },
+      "delayAfter": 0.2,
+      "description": "Rapid tap 2"
+    },
+    {
+      "id": "rapid-tap-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 0.2,
+      "description": "Rapid tap 3"
+    },
+    {
+      "id": "rapid-tap-4",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 450
+      },
+      "delayAfter": 1.0,
+      "description": "Rapid tap 4 - end sequence"
+    }
+  ]
+}
+

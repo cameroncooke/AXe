@@ -1,0 +1,115 @@
+{
+  "metadata": {
+    "name": "Real-time Tap Visualization",
+    "description": "Watch taps appear in real-time with sequential mode timing control",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 25.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-tap-test",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 2.0,
+      "description": "Navigate to Tap Test screen"
+    },
+    {
+      "id": "slow-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 200
+      },
+      "delayAfter": 3.0,
+      "description": "Slow tap 1 - watch indicator appear"
+    },
+    {
+      "id": "slow-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 150,
+        "y": 300
+      },
+      "delayAfter": 3.0,
+      "description": "Slow tap 2 - different color"
+    },
+    {
+      "id": "slow-tap-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 250,
+        "y": 300
+      },
+      "delayAfter": 3.0,
+      "description": "Slow tap 3 - another color"
+    },
+    {
+      "id": "medium-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 400
+      },
+      "delayAfter": 1.5,
+      "description": "Medium speed tap 1"
+    },
+    {
+      "id": "medium-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 400
+      },
+      "delayAfter": 1.5,
+      "description": "Medium speed tap 2"
+    },
+    {
+      "id": "fast-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 120,
+        "y": 500
+      },
+      "delayAfter": 0.5,
+      "description": "Fast tap 1"
+    },
+    {
+      "id": "fast-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 180,
+        "y": 500
+      },
+      "delayAfter": 0.5,
+      "description": "Fast tap 2"
+    },
+    {
+      "id": "fast-tap-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 220,
+        "y": 500
+      },
+      "delayAfter": 0.5,
+      "description": "Fast tap 3"
+    },
+    {
+      "id": "fast-tap-4",
+      "type": "tap",
+      "coordinates": {
+        "x": 280,
+        "y": 500
+      },
+      "delayAfter": 2.0,
+      "description": "Fast tap 4 - end sequence"
+    }
+  ]
+}
+
