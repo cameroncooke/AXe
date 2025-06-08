@@ -193,21 +193,28 @@ Valid buttons: `home`, `lock`, `volumeUp`, `volumeDown`, `siri`
 
 ## Execution Modes
 
-### Batch Mode (Default)
+### Composite Mode (Default)
 All events are combined into a single composite operation and executed together. This is more efficient but provides less granular control.
 
 ```bash
-axe stream --file sequence.json --mode batch --udid UDID
+axe stream --file sequence.json --mode composite --udid UDID
 ```
 
-### Streaming Mode
+### Sequential Mode
 Events are executed sequentially with real-time timing. This provides more control and better error handling for individual events.
 
 ```bash
-axe stream --file sequence.json --mode streaming --udid UDID
+axe stream --file sequence.json --mode sequential --udid UDID
 ```
 
 ## Timing Control
+
+### Batch Mode
+Events are executed in configurable batches, providing a balance between performance and control.
+
+```bash
+axe stream --file sequence.json --mode batch --batch-size 5 --udid UDID
+```
 
 ### Event-Level Timing
 - `pre_delay`: Delay before executing the event

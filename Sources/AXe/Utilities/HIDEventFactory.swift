@@ -273,39 +273,53 @@ extension HIDEventFactory {
     
     /// Execution modes for event sequences
     enum ExecutionMode {
-        case batch      // Execute all events as a single composite event
-        case streaming  // Execute events sequentially with real-time timing
+        case composite  // Single composite FBSimulatorHIDEvent (single IPC call)
+        case sequential // Individual events executed one by one (multiple IPC calls)
+        case batch      // Events executed in configurable batches (multiple IPC calls)
     }
     
     /// Prepare events for the specified execution mode
     static func prepareEvents(
         from sequence: EventSequence,
-        mode: ExecutionMode
+        mode: ExecutionMode,
+        batchSize: Int = 10
     ) throws -> EventExecutionPlan {
         
         switch mode {
-        case .batch:
+        case .composite:
             let compositeEvent = try createCompositeHIDEvent(from: sequence)
-            return .batch(compositeEvent)
+            return .composite(compositeEvent)
             
-        case .streaming:
+        case .sequential:
             let individualEvents = try createHIDEvents(from: sequence)
-            return .streaming(individualEvents)
+            return .sequential(individualEvents)
+            
+        case .batch:
+            let individualEvents = try createHIDEvents(from: sequence)
+            let batches = individualEvents.chunked(into: batchSize).map { batch in
+                batch.count == 1 ? batch[0] : FBSimulatorHIDEvent(events: Array(batch))
+            }
+            return .batch(batches)
         }
     }
 }
 
 /// Represents a plan for executing HID events
 enum EventExecutionPlan {
-    case batch(FBSimulatorHIDEvent)
-    case streaming([FBSimulatorHIDEvent])
+    case composite(FBSimulatorHIDEvent)
+    case sequential([FBSimulatorHIDEvent])
+    case batch([FBSimulatorHIDEvent])
     
     /// Get the total estimated execution time
     func estimatedExecutionTime() -> TimeInterval {
         switch self {
-        case .batch(let event):
+        case .composite(let event):
             return estimateEventDuration(event)
-        case .streaming(let events):
+        case .sequential(let events):
+            return events.reduce(0) { total, event in
+                total + estimateEventDuration(event)
+            }
+        case .batch(let events):
             return events.reduce(0) { total, event in
                 total + estimateEventDuration(event)
             }
@@ -422,3 +436,14 @@ struct EventSequenceSummary {
     }
 }
 
+
+// MARK: - Array Extension for Batching
+
+extension Array {
+    /// Split array into chunks of specified size
+    func chunked(into size: Int) -> [[Element]] {
+        return stride(from: 0, to: count, by: size).map {
+            Array(self[$0..<Swift.min($0 + size, count)])
+        }
+    }
+}

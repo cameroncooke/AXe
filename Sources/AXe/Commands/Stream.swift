@@ -15,8 +15,9 @@ struct Stream: AsyncParsableCommand {
         3. From stdin: echo '{"events": [...]}' | axe stream --stdin --udid UDID
         
         Execution Modes:
-        • Batch mode (default): All events executed as a single composite operation
-        • Streaming mode: Events executed sequentially with real-time timing
+        • Composite mode (default): All events executed as a single composite operation
+        • Sequential mode: Events executed sequentially with real-time timing
+        • Batch mode: Events executed in batches with real-time timing
         
         Event Types Supported:
         • tap: Tap at coordinates
@@ -46,7 +47,7 @@ struct Stream: AsyncParsableCommand {
         }' --udid SIMULATOR_UDID
         
         Complex automation:
-        axe stream --file automation.json --mode streaming --udid SIMULATOR_UDID
+        axe stream --file automation.json --mode sequential --udid SIMULATOR_UDID
         
         Generate example:
         axe stream --example > example.json
@@ -66,8 +67,11 @@ struct Stream: AsyncParsableCommand {
     
     // MARK: - Execution Options
     
-    @Option(name: .customLong("mode"), help: "Execution mode: 'batch' (default) or 'streaming'.")
-    var executionMode: ExecutionModeOption = .batch
+    @Option(name: .customLong("mode"), help: "Execution mode: 'composite' (default), 'sequential', or 'batch'.")
+    var executionMode: ExecutionModeOption = .composite
+    
+    @Option(name: .customLong("batch-size"), help: "Number of events per batch (only used in batch mode, default: 10).")
+    var batchSize: Int = 10
     
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
@@ -189,18 +193,13 @@ struct Stream: AsyncParsableCommand {
         }
         
         // Prepare execution plan
-        logger.info().log("Preparing execution plan...")
-        let executionPlan: EventExecutionPlan
-        do {
-            executionPlan = try HIDEventFactory.prepareEvents(
-                from: sequence,
-                mode: executionMode.hidEventFactoryMode
-            )
-            logger.info().log("Execution plan prepared")
-        } catch {
-            logger.error().log("Failed to prepare execution plan: \\(error.localizedDescription)")
-            throw CLIError(errorDescription: "Execution plan error: \\(error.localizedDescription)")
-        }
+        logger.info().log("Creating execution plan for \\(executionMode.rawValue) mode...")
+        let executionPlan = try HIDEventFactory.prepareEvents(
+            from: sequence,
+            mode: executionMode.hidEventFactoryMode,
+            batchSize: batchSize
+        )
+        logger.info().log("Execution plan created")
         
         // Show execution plan if dry-run
         if dryRun {
@@ -225,11 +224,14 @@ struct Stream: AsyncParsableCommand {
         
         do {
             switch executionPlan {
-            case .batch(let compositeEvent):
-                try await executeBatchMode(compositeEvent, logger: logger)
+            case .composite(let compositeEvent):
+                try await executeCompositeMode(compositeEvent, logger: logger)
                 
-            case .streaming(let events):
-                try await executeStreamingMode(events, sequence: sequence, logger: logger)
+            case .sequential(let events):
+                try await executeSequentialMode(events, sequence: sequence, logger: logger)
+                
+            case .batch(let batches):
+                try await executeBatchMode(batches, sequence: sequence, logger: logger)
             }
             
             let duration = Date().timeIntervalSince(startTime)
@@ -244,9 +246,9 @@ struct Stream: AsyncParsableCommand {
     
     // MARK: - Execution Methods
     
-    private func executeBatchMode(_ event: FBSimulatorHIDEvent, logger: AxeLogger) async throws {
+    private func executeCompositeMode(_ event: FBSimulatorHIDEvent, logger: AxeLogger) async throws {
         if verbose {
-            print("🚀 Executing batch mode...")
+            print("🚀 Executing composite mode (single IPC call)...")
         }
         
         try await HIDInteractor.performHIDEvent(
@@ -256,17 +258,17 @@ struct Stream: AsyncParsableCommand {
         )
         
         if verbose {
-            print("✅ Batch execution completed")
+            print("✅ Composite execution completed")
         }
     }
     
-    private func executeStreamingMode(
+    private func executeSequentialMode(
         _ events: [FBSimulatorHIDEvent],
         sequence: EventSequence,
         logger: AxeLogger
     ) async throws {
         if verbose {
-            print("🚀 Executing streaming mode (\\(events.count) events)...")
+            print("🚀 Executing sequential mode (\\(events.count) individual events)...")
         }
         
         let stopOnError = sequence.settings?.stopOnError ?? true
@@ -300,7 +302,51 @@ struct Stream: AsyncParsableCommand {
         }
         
         if verbose {
-            print("✅ Streaming execution completed (\\(executedCount)/\\(events.count) events)")
+            print("✅ Sequential execution completed (\\(executedCount)/\\(events.count) events)")
+        }
+    }
+    
+    private func executeBatchMode(
+        _ batches: [FBSimulatorHIDEvent],
+        sequence: EventSequence,
+        logger: AxeLogger
+    ) async throws {
+        if verbose {
+            print("🚀 Executing batch mode (\\(batches.count) batches)...")
+        }
+        
+        let stopOnError = sequence.settings?.stopOnError ?? true
+        var executedCount = 0
+        
+        for (index, batch) in batches.enumerated() {
+            do {
+                if verbose {
+                    print("  Executing batch \\(index + 1)/\\(batches.count)...")
+                }
+                
+                try await HIDInteractor.performHIDEvent(
+                    batch,
+                    for: simulatorUDID,
+                    logger: logger
+                )
+                
+                executedCount += 1
+                
+            } catch {
+                logger.error().log("Batch \\(index + 1) failed: \\(error.localizedDescription)")
+                
+                if stopOnError {
+                    throw CLIError(errorDescription: "Batch \\(index + 1) failed: \\(error.localizedDescription)")
+                } else {
+                    if verbose {
+                        print("  ⚠️ Batch \\(index + 1) failed, continuing...")
+                    }
+                }
+            }
+        }
+        
+        if verbose {
+            print("✅ Batch execution completed (\\(executedCount)/\\(batches.count) batches)")
         }
     }
 }
@@ -308,15 +354,18 @@ struct Stream: AsyncParsableCommand {
 // MARK: - Execution Mode Option
 
 enum ExecutionModeOption: String, ExpressibleByArgument, CaseIterable {
+    case composite = "composite"
+    case sequential = "sequential"
     case batch = "batch"
-    case streaming = "streaming"
     
     var hidEventFactoryMode: HIDEventFactory.ExecutionMode {
         switch self {
+        case .composite:
+            return .composite
+        case .sequential:
+            return .sequential
         case .batch:
             return .batch
-        case .streaming:
-            return .streaming
         }
     }
     
@@ -354,4 +403,3 @@ extension Stream {
         }
     }
 }
-
