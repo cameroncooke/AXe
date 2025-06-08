@@ -1,0 +1,315 @@
+{
+  "metadata": {
+    "name": "Gesture Choreography Example",
+    "description": "Complex multi-touch gestures with precise timing - sequential mode showcase",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 45.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-swipe-test",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "delayAfter": 2.0,
+      "description": "Navigate to Swipe Test for choreography"
+    },
+    {
+      "id": "intro-tap",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 1.5,
+      "description": "Introduction tap - center stage"
+    },
+    {
+      "id": "star-pattern-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 150
+      },
+      "duration": 1.0,
+      "delayAfter": 0.5,
+      "description": "Star pattern - north point"
+    },
+    {
+      "id": "star-pattern-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 320,
+        "y": 220
+      },
+      "duration": 1.0,
+      "delayAfter": 0.5,
+      "description": "Star pattern - northeast point"
+    },
+    {
+      "id": "star-pattern-3",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 320,
+        "y": 380
+      },
+      "duration": 1.0,
+      "delayAfter": 0.5,
+      "description": "Star pattern - southeast point"
+    },
+    {
+      "id": "star-pattern-4",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 450
+      },
+      "duration": 1.0,
+      "delayAfter": 0.5,
+      "description": "Star pattern - south point"
+    },
+    {
+      "id": "star-pattern-5",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 80,
+        "y": 380
+      },
+      "duration": 1.0,
+      "delayAfter": 0.5,
+      "description": "Star pattern - southwest point"
+    },
+    {
+      "id": "star-pattern-6",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 80,
+        "y": 220
+      },
+      "duration": 1.0,
+      "delayAfter": 2.0,
+      "description": "Star pattern - northwest point (complete)"
+    },
+    {
+      "id": "spiral-start",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 220,
+        "y": 300
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - start outward"
+    },
+    {
+      "id": "spiral-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 220,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 220,
+        "y": 280
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - turn up"
+    },
+    {
+      "id": "spiral-3",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 220,
+        "y": 280
+      },
+      "endCoordinates": {
+        "x": 180,
+        "y": 280
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - turn left"
+    },
+    {
+      "id": "spiral-4",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 180,
+        "y": 280
+      },
+      "endCoordinates": {
+        "x": 180,
+        "y": 320
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - turn down"
+    },
+    {
+      "id": "spiral-5",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 180,
+        "y": 320
+      },
+      "endCoordinates": {
+        "x": 240,
+        "y": 320
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - extend right"
+    },
+    {
+      "id": "spiral-6",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 240,
+        "y": 320
+      },
+      "endCoordinates": {
+        "x": 240,
+        "y": 260
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - extend up"
+    },
+    {
+      "id": "spiral-7",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 240,
+        "y": 260
+      },
+      "endCoordinates": {
+        "x": 160,
+        "y": 260
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Spiral - extend left"
+    },
+    {
+      "id": "spiral-8",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 160,
+        "y": 260
+      },
+      "endCoordinates": {
+        "x": 160,
+        "y": 340
+      },
+      "duration": 0.3,
+      "delayAfter": 2.0,
+      "description": "Spiral - complete outward motion"
+    },
+    {
+      "id": "figure-eight-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 250
+      },
+      "endCoordinates": {
+        "x": 150,
+        "y": 300
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Figure 8 - left curve start"
+    },
+    {
+      "id": "figure-eight-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 150,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Figure 8 - left curve end"
+    },
+    {
+      "id": "figure-eight-3",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "endCoordinates": {
+        "x": 250,
+        "y": 300
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Figure 8 - right curve start"
+    },
+    {
+      "id": "figure-eight-4",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 250,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 250
+      },
+      "duration": 0.5,
+      "delayAfter": 1.5,
+      "description": "Figure 8 - complete the eight"
+    },
+    {
+      "id": "finale-tap",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 0.5,
+      "description": "Finale tap - choreography complete!"
+    }
+  ]
+}
+
