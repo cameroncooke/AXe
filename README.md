@@ -24,6 +24,7 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
   - [**Text Input**](#text-input)
   - [**Hardware Buttons**](#hardware-buttons-1)
   - [**Keyboard Control**](#keyboard-control)
+  - [**Video Streaming**](#video-streaming)
   - [**Accessibility \& Info**](#accessibility--info)
 - [Architecture](#architecture)
   - [Why AXe?](#why-axe)
@@ -60,6 +61,12 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Duration Control**: Precise timing for gestures and button presses
 - **Sequence Timing**: Custom delays between key sequences
 - **Complex Automation**: Multi-step workflows with precise timing
+
+### Video Streaming
+- **Screenshot-based Streaming**: Capture simulator video at 1-30 FPS
+- **Multiple Output Formats**: MJPEG, raw JPEG, ffmpeg-compatible, BGRA
+- **Configurable Quality**: Adjust JPEG quality and scale factor
+- **Real-time Performance**: Efficient frame timing for smooth playback
 
 ### Accessibility
 - **UI Description**: Extract accessibility information from any point or full screen
@@ -200,6 +207,29 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
 
 # Key sequences
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
+```
+
+### **Video Streaming**
+
+```bash
+# Stream video from simulator (screenshot-based)
+# Stream MJPEG at 10 FPS
+axe stream-video --udid SIMULATOR_UDID --fps 10 --format mjpeg > stream.mjpeg
+
+# Pipe to ffmpeg for H264 encoding
+axe stream-video --udid SIMULATOR_UDID --fps 30 --format ffmpeg | \
+  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
+
+# View in real-time with ffplay
+axe stream-video --udid SIMULATOR_UDID --fps 15 --format ffmpeg | \
+  ffplay -f image2pipe -framerate 15 -i -
+
+# Stream with reduced quality and scale for bandwidth optimization
+axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --format mjpeg > stream.mjpeg
+
+# Legacy BGRA format (raw pixel data)
+axe stream-video --udid SIMULATOR_UDID --format bgra | \
+  ffmpeg -f rawvideo -pixel_format bgra -video_size 393x852 -i - output.mp4
 ```
 
 ### **Accessibility & Info**

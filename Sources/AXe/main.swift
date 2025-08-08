@@ -23,7 +23,8 @@ struct Axe: AsyncParsableCommand {
             Key.self, 
             KeySequence.self, 
             Touch.self,
-            Gesture.self
+            Gesture.self,
+            StreamVideo.self
         ]
     )
 }

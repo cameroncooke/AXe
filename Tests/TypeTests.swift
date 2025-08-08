@@ -188,8 +188,11 @@ struct TypeTests {
         let textToType = "Text from stdin"
         
         // Act - Use echo to pipe text to stdin
+        guard let udid = defaultSimulatorUDID else {
+            throw TestError.commandError("No simulator UDID specified in SIMULATOR_UDID environment variable")
+        }
         let axePath = try TestHelpers.getAxePath()
-        let command = "echo '\(textToType)' | \(axePath) type --stdin --udid \(defaultSimulatorUDID!)"
+        let command = "echo '\(textToType)' | \(axePath) type --stdin --udid \(udid)"
         let result = try await CommandRunner.run(command)
         #expect(result.exitCode == 0, "Command should succeed")
         try await Task.sleep(nanoseconds: 1_000_000_000)

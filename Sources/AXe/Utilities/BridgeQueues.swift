@@ -25,4 +25,7 @@ public enum BridgeQueues {
   /// ```
   ///
   public static let miscEventReaderQueue = DispatchQueue(label: "com.axe.miscellaneous.reader", qos: .userInitiated, attributes: .concurrent)
+  
+  /// Dedicated serial queue for video streaming operations to prevent race conditions
+  public static let videoStreamQueue = DispatchQueue(label: "com.axe.video.stream", qos: .userInitiated)
 } 

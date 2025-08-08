@@ -177,7 +177,9 @@ struct TestHelpers {
     }
     
     static func getUIState(simulatorUDID: String? = nil) async throws -> UIElement {
-        let udid = simulatorUDID ?? defaultSimulatorUDID
+        guard let udid = simulatorUDID ?? defaultSimulatorUDID else {
+            throw TestError.commandError("No simulator UDID specified")
+        }
         let result = try await runAxeCommand("describe-ui", simulatorUDID: udid)
         
         // Check if the command failed
