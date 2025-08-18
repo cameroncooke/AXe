@@ -1,0 +1,54 @@
+{
+  "metadata": {
+    "name": "Simple Tap Sequence",
+    "description": "A basic sequence of taps with delays",
+    "version": "1.0",
+    "author": "AXe Team",
+    "tags": ["simple", "tap", "demo"]
+  },
+  "settings": {
+    "default_delay": 0.5,
+    "stop_on_error": true,
+    "max_execution_time": 30.0,
+    "validate_before_execution": true
+  },
+  "events": [
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 100,
+        "y": 200
+      },
+      "id": "first_tap",
+      "description": "Tap on the first button"
+    },
+    {
+      "type": "delay",
+      "parameters": {
+        "duration": 1.0
+      },
+      "id": "wait_for_animation",
+      "description": "Wait for button animation"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 300,
+        "y": 200
+      },
+      "id": "second_tap",
+      "description": "Tap on the second button"
+    },
+    {
+      "type": "tap",
+      "parameters": {
+        "x": 200,
+        "y": 400
+      },
+      "post_delay": 0.5,
+      "id": "final_tap",
+      "description": "Tap on the submit button"
+    }
+  ]
+}
+

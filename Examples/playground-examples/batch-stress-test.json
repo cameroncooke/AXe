@@ -1,0 +1,340 @@
+{
+  "metadata": {
+    "name": "Batch Stress Test Example",
+    "description": "High-volume event sequence for performance testing - demonstrates batch mode scalability",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 120.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-tap-test",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 1.0,
+      "description": "Navigate to Tap Test for stress testing"
+    },
+    {
+      "id": "stress-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 200
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 1"
+    },
+    {
+      "id": "stress-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 120,
+        "y": 220
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 2"
+    },
+    {
+      "id": "stress-tap-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 140,
+        "y": 240
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 3"
+    },
+    {
+      "id": "stress-tap-4",
+      "type": "tap",
+      "coordinates": {
+        "x": 160,
+        "y": 260
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 4"
+    },
+    {
+      "id": "stress-tap-5",
+      "type": "tap",
+      "coordinates": {
+        "x": 180,
+        "y": 280
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 5"
+    },
+    {
+      "id": "stress-tap-6",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 300
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 6"
+    },
+    {
+      "id": "stress-tap-7",
+      "type": "tap",
+      "coordinates": {
+        "x": 220,
+        "y": 320
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 7"
+    },
+    {
+      "id": "stress-tap-8",
+      "type": "tap",
+      "coordinates": {
+        "x": 240,
+        "y": 340
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 8"
+    },
+    {
+      "id": "stress-tap-9",
+      "type": "tap",
+      "coordinates": {
+        "x": 260,
+        "y": 360
+      },
+      "delayAfter": 0.1,
+      "description": "Stress tap 9"
+    },
+    {
+      "id": "stress-tap-10",
+      "type": "tap",
+      "coordinates": {
+        "x": 280,
+        "y": 380
+      },
+      "delayAfter": 0.5,
+      "description": "Stress tap 10 - end first batch"
+    },
+    {
+      "id": "rapid-swipe-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 50,
+        "y": 200
+      },
+      "endCoordinates": {
+        "x": 350,
+        "y": 200
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Rapid swipe 1"
+    },
+    {
+      "id": "rapid-swipe-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 350,
+        "y": 250
+      },
+      "endCoordinates": {
+        "x": 50,
+        "y": 250
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Rapid swipe 2"
+    },
+    {
+      "id": "rapid-swipe-3",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 50,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 350,
+        "y": 300
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Rapid swipe 3"
+    },
+    {
+      "id": "rapid-swipe-4",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 350,
+        "y": 350
+      },
+      "endCoordinates": {
+        "x": 50,
+        "y": 350
+      },
+      "duration": 0.3,
+      "delayAfter": 0.1,
+      "description": "Rapid swipe 4"
+    },
+    {
+      "id": "rapid-swipe-5",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 50,
+        "y": 400
+      },
+      "endCoordinates": {
+        "x": 350,
+        "y": 400
+      },
+      "duration": 0.3,
+      "delayAfter": 0.5,
+      "description": "Rapid swipe 5 - end swipe batch"
+    },
+    {
+      "id": "multi-tap-1",
+      "type": "tap",
+      "coordinates": {
+        "x": 100,
+        "y": 150
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 1"
+    },
+    {
+      "id": "multi-tap-2",
+      "type": "tap",
+      "coordinates": {
+        "x": 150,
+        "y": 150
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 2"
+    },
+    {
+      "id": "multi-tap-3",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 150
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 3"
+    },
+    {
+      "id": "multi-tap-4",
+      "type": "tap",
+      "coordinates": {
+        "x": 250,
+        "y": 150
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 4"
+    },
+    {
+      "id": "multi-tap-5",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 150
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 5"
+    },
+    {
+      "id": "multi-tap-6",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 200
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 6"
+    },
+    {
+      "id": "multi-tap-7",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 250
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 7"
+    },
+    {
+      "id": "multi-tap-8",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 300
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 8"
+    },
+    {
+      "id": "multi-tap-9",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 350
+      },
+      "delayAfter": 0.05,
+      "description": "Multi-tap 9"
+    },
+    {
+      "id": "multi-tap-10",
+      "type": "tap",
+      "coordinates": {
+        "x": 300,
+        "y": 400
+      },
+      "delayAfter": 1.0,
+      "description": "Multi-tap 10 - end rapid sequence"
+    },
+    {
+      "id": "final-pattern-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 200
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 500
+      },
+      "duration": 1.0,
+      "delayAfter": 0.3,
+      "description": "Final pattern swipe 1"
+    },
+    {
+      "id": "final-pattern-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 100,
+        "y": 350
+      },
+      "endCoordinates": {
+        "x": 300,
+        "y": 350
+      },
+      "duration": 1.0,
+      "delayAfter": 0.3,
+      "description": "Final pattern swipe 2"
+    },
+    {
+      "id": "final-center-tap",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "delayAfter": 0.5,
+      "description": "Final center tap - stress test complete"
+    }
+  ]
+}
+

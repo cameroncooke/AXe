@@ -1,0 +1,175 @@
+{
+  "metadata": {
+    "name": "Sequential Swipe Patterns Example",
+    "description": "Complex swipe patterns with precise timing - demonstrates sequential mode precision",
+    "version": "1.0",
+    "author": "AXe Examples"
+  },
+  "settings": {
+    "maxExecutionTime": 45.0,
+    "stopOnError": false
+  },
+  "events": [
+    {
+      "id": "navigate-to-swipe-test",
+      "type": "tap",
+      "coordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "delayAfter": 1.5,
+      "description": "Navigate to Swipe Test screen"
+    },
+    {
+      "id": "horizontal-swipe-right",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 50,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 350,
+        "y": 300
+      },
+      "duration": 1.0,
+      "delayAfter": 2.0,
+      "description": "Horizontal swipe left to right"
+    },
+    {
+      "id": "horizontal-swipe-left",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 350,
+        "y": 400
+      },
+      "endCoordinates": {
+        "x": 50,
+        "y": 400
+      },
+      "duration": 1.0,
+      "delayAfter": 2.0,
+      "description": "Horizontal swipe right to left"
+    },
+    {
+      "id": "vertical-swipe-up",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 600
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 200
+      },
+      "duration": 1.2,
+      "delayAfter": 2.0,
+      "description": "Vertical swipe bottom to top"
+    },
+    {
+      "id": "vertical-swipe-down",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 300,
+        "y": 200
+      },
+      "endCoordinates": {
+        "x": 300,
+        "y": 600
+      },
+      "duration": 1.2,
+      "delayAfter": 2.0,
+      "description": "Vertical swipe top to bottom"
+    },
+    {
+      "id": "diagonal-swipe-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 100,
+        "y": 200
+      },
+      "endCoordinates": {
+        "x": 300,
+        "y": 500
+      },
+      "duration": 1.5,
+      "delayAfter": 2.0,
+      "description": "Diagonal swipe top-left to bottom-right"
+    },
+    {
+      "id": "diagonal-swipe-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 300,
+        "y": 200
+      },
+      "endCoordinates": {
+        "x": 100,
+        "y": 500
+      },
+      "duration": 1.5,
+      "delayAfter": 2.0,
+      "description": "Diagonal swipe top-right to bottom-left"
+    },
+    {
+      "id": "circular-swipe-1",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 250
+      },
+      "endCoordinates": {
+        "x": 250,
+        "y": 300
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Circular motion part 1"
+    },
+    {
+      "id": "circular-swipe-2",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 250,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Circular motion part 2"
+    },
+    {
+      "id": "circular-swipe-3",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 200,
+        "y": 350
+      },
+      "endCoordinates": {
+        "x": 150,
+        "y": 300
+      },
+      "duration": 0.5,
+      "delayAfter": 0.1,
+      "description": "Circular motion part 3"
+    },
+    {
+      "id": "circular-swipe-4",
+      "type": "swipe",
+      "startCoordinates": {
+        "x": 150,
+        "y": 300
+      },
+      "endCoordinates": {
+        "x": 200,
+        "y": 250
+      },
+      "duration": 0.5,
+      "delayAfter": 3.0,
+      "description": "Circular motion part 4 - complete circle"
+    }
+  ]
+}
+
