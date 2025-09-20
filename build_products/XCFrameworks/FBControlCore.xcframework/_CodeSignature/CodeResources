@@ -6,7 +6,7 @@
 	<dict>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/FBControlCore</key>
 		<data>
-		WpwePYxOm8qOvAmmp5pwp1E3V0k=
+		E0ZEyrjJbDVpU+Uvp5T6eS1FEAg=
 		</data>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/Headers/FBAccessibilityCommands.h</key>
 		<data>
@@ -390,15 +390,15 @@
 		</data>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/Resources/libMaculator.dylib</key>
 		<data>
-		llg0VwCCPyT/qg62hhNtnhqbdZk=
+		437GRWtEfZz0cA3h1tdVcREke5Q=
 		</data>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/Resources/libShimulator.dylib</key>
 		<data>
-		VVO9QwR1VlY7Zrda8+GZIaOKXb4=
+		oJrqrXzMaHxCjUb1YtkvslgXazo=
 		</data>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/_CodeSignature/CodeResources</key>
 		<data>
-		5P/hCnnGhjcCWYpX6Y7+UaU843k=
+		UMQ428fAAG+YYBY2lbu0hcv8oa4=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -427,7 +427,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			g5zguLGuxJ99e/XnFd1d0AaAaNrw+SKheucNDupcTUY=
+			NSrcjkBIIig75XKTGzb8Gm1QI+/tXIIziYIaahbY8oQ=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/Headers/FBAccessibilityCommands.h</key>
@@ -1099,21 +1099,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			h9F+x6i5Ds72Rmw87Uk+1ojARvf6oBmaMHipeLiqbNQ=
+			MKxI2rgKEcdxst/GI0LFhWa0h2M+an5GXd98a1d5j3Q=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/Resources/libShimulator.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			RsFfHfUVFsW1IiGf+LTEkdf6KRfEmMkDAAVS5Shcap0=
+			eLiCkvo97ye/GC0zUJ5EC8yCSdvtwilis/z8SWHnFTs=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/A/_CodeSignature/CodeResources</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			p/hM6IyImXBL/YIXAylDZWDj6OxuhRsyS9Z8sD4jU/M=
+			+MpB+vBJOMERApBzX1p8VfpRYIzWjzKH8hC5IeC44Aw=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBControlCore.framework/Versions/Current</key>

@@ -209,28 +209,21 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
 ```
 
-### **Video Streaming**
+### **Video Recording**
 
 ```bash
-# Stream video from simulator (screenshot-based)
-# Stream MJPEG at 10 FPS
-axe stream-video --udid SIMULATOR_UDID --fps 10 --format mjpeg > stream.mjpeg
+# Record the simulator to an MP4 file (QuickTime compatible)
+axe stream-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
 
-# Pipe to ffmpeg for H264 encoding
-axe stream-video --udid SIMULATOR_UDID --fps 30 --format ffmpeg | \
-  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
+# Let AXe pick a timestamped filename in the current directory
+axe stream-video --udid SIMULATOR_UDID --fps 20
 
-# View in real-time with ffplay
-axe stream-video --udid SIMULATOR_UDID --fps 15 --format ffmpeg | \
-  ffplay -f image2pipe -framerate 15 -i -
-
-# Stream with reduced quality and scale for bandwidth optimization
-axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --format mjpeg > stream.mjpeg
-
-# Legacy BGRA format (raw pixel data)
-axe stream-video --udid SIMULATOR_UDID --format bgra | \
-  ffmpeg -f rawvideo -pixel_format bgra -video_size 393x852 -i - output.mp4
+# Tweak quality/scale to reduce file size
+axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --output low-bandwidth.mp4
 ```
+
+> [!TIP]
+> Press `Ctrl+C` to stop recording. AXe finalises the MP4 before exiting and prints the file path to stdout.
 
 ### **Accessibility & Info**
 

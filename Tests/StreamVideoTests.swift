@@ -3,205 +3,143 @@ import Foundation
 
 @Suite("Stream Video Command Tests")
 struct StreamVideoTests {
-    @Test("Stream video outputs MJPEG data with HTTP headers")
-    func streamVideoMJPEG() async throws {
-        // Act - Stream for 3 seconds to ensure we capture frames
-        let result = try await streamVideoForDuration(format: "mjpeg", duration: 3.0)
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(!result.output.isEmpty, "Should have output messages")
-        #expect(result.output.contains("Starting screenshot-based video stream"), "Should show startup message")
-        #expect(result.output.contains("Format: mjpeg"), "Should show format")
-        // For now, just check that the command runs without crashing
-        // Data capture in tests seems to have issues with streaming output
+    @Test("Stream video records an MP4 file with default options")
+    func streamVideoDefaultRecording() async throws {
+        let result = try await recordVideo(duration: 3.0)
+        defer { try? FileManager.default.removeItem(at: result.outputURL) }
+
+        #expect(result.exitCode == 0, "Command should exit successfully")
+        #expect(result.fileSize > 150_000, "Recorded file should be non-trivial in size (got: \(result.fileSize))")
+        #expect(result.stderr.contains("Recording simulator"), "Should log recording start")
+        #expect(result.stdout.trimmingCharacters(in: .whitespacesAndNewlines) == result.outputURL.path, "stdout should contain the output path")
     }
-    
-    @Test("Stream video outputs raw JPEG data for ffmpeg format")
-    func streamVideoFFmpeg() async throws {
-        // Act
-        let result = try await streamVideoForDuration(format: "ffmpeg", duration: 2.0)
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(result.output.contains("Format: ffmpeg"), "Should show format")
-        // Data capture validation removed due to test infrastructure limitations
+
+    @Test("Stream video honours FPS and scale settings")
+    func streamVideoCustomOptions() async throws {
+        let result = try await recordVideo(fps: 5, scale: 0.5, duration: 2.0)
+        defer { try? FileManager.default.removeItem(at: result.outputURL) }
+
+        #expect(result.exitCode == 0)
+        #expect(result.fileSize > 50_000, "Scaled recording should still produce data")
+        #expect(result.stderr.contains("Press Ctrl+C"), "Should log usage guidance")
     }
-    
-    @Test("Stream video outputs raw JPEG with length prefix for raw format")
-    func streamVideoRaw() async throws {
-        // Act
-        let result = try await streamVideoForDuration(format: "raw", duration: 2.0)
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(result.output.contains("Format: raw"), "Should show format")
-        // Data capture validation removed due to test infrastructure limitations
+
+    @Test("Stream video uses provided directory without deleting its contents")
+    func streamVideoOutputDirectory() async throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("axe-output-dir-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        let sentinel = tempDir.appendingPathComponent("sentinel.txt")
+        try "sentinel".write(to: sentinel, atomically: true, encoding: .utf8)
+
+        let result = try await recordVideo(duration: 1.0, outputPath: tempDir.path)
+
+        #expect(FileManager.default.fileExists(atPath: sentinel.path), "Sentinel file should remain intact")
+        #expect(result.exitCode == 0, "Recording should succeed")
+        #expect(result.fileSize > 0, "Recording should produce a non-empty file")
+        #expect(result.outputURL.path.hasPrefix(tempDir.path), "Output should be created inside the provided directory")
+        #expect(FileManager.default.fileExists(atPath: result.outputURL.path), "Recorded file should exist")
+
+        try? FileManager.default.removeItem(at: tempDir)
     }
-    
-    @Test("Stream video with custom FPS")
-    func streamVideoWithFPS() async throws {
-        // Act
-        let result = try await streamVideoForDuration(format: "mjpeg", fps: 5, duration: 2.0)
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(result.output.contains("FPS: 5"), "Should show custom FPS")
-        // Frame capture progress may appear depending on timing
-    }
-    
-    @Test("Stream video with quality and scale settings")
-    func streamVideoWithQualityAndScale() async throws {
-        // Act
-        let result = try await streamVideoForDuration(
-            format: "mjpeg",
-            fps: 5,
-            quality: 50,
-            scale: 0.5,
-            duration: 1.0
-        )
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(result.output.contains("Quality: 50"), "Should show quality setting")
-        #expect(result.output.contains("Scale: 0.5"), "Should show scale setting")
-    }
-    
-    @Test("Stream BGRA video outputs raw pixel data")
-    func streamVideoBGRA() async throws {
-        // Act - Stream for 1 second
-        let result = try await streamVideoForDuration(format: "bgra", duration: 2.0)
-        
-        // Assert - SIGTERM (15) is expected since we're terminating the process
-        #expect(result.exitCode == 15 || result.exitCode == 0, "Command should exit with SIGTERM or success")
-        #expect(!result.output.isEmpty, "Should have output messages")
-        #expect(result.output.contains("Starting BGRA video stream"), "Should show BGRA startup message")
-        #expect(result.output.contains("Format: bgra"), "Should show format")
-        // BGRA data capture validation removed due to FBSimulatorControl streaming issues
-    }
-    
-    @Test("Stream video can be cancelled gracefully")
-    func streamVideoCancellation() async throws {
-        // Act - Start streaming and cancel quickly
-        let task = Task {
-            try await streamVideoForDuration(format: "mjpeg", fps: 30, duration: 60.0)
-        }
-        
-        // Wait a bit then cancel
-        try await Task.sleep(nanoseconds: 500_000_000) // 0.5 seconds
-        task.cancel()
-        
-        // Wait for task to complete
-        let _ = await task.result
-        
-        // Test passes if no crash occurs
-    }
-    
-    @Test("Stream video validates format parameter")
-    func streamVideoInvalidFormat() async throws {
-        // Build command with invalid format
+
+    @Test("Stream video validates FPS input")
+    func streamVideoInvalidFPS() async throws {
         guard let udid = defaultSimulatorUDID else {
             throw TestError.commandError("No simulator UDID specified")
         }
-        
         let axePath = try TestHelpers.getAxePath()
-        let fullCommand = "\(axePath) stream-video --format h264 --udid \(udid)"
-        
+
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", fullCommand]
-        
+        process.executableURL = URL(fileURLWithPath: axePath)
+        process.arguments = [
+            "stream-video",
+            "--udid", udid,
+            "--fps", "40"
+        ]
         let errorPipe = Pipe()
         process.standardError = errorPipe
         process.standardOutput = Pipe()
-        
+
         try process.run()
         process.waitUntilExit()
-        
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-        
-        // Should exit with error
-        #expect(process.terminationStatus != 0, "Invalid format should cause error")
-        #expect(errorOutput.contains("Invalid format"), "Should show format error")
+
+        let errorOutput = String(data: errorPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+
+        #expect(process.terminationStatus != 0, "Invalid FPS should fail")
+        #expect(errorOutput.contains("FPS must be between 1 and 30"), "Should surface validation message")
     }
-    
-    // MARK: - Helper Methods
-    
-    private func streamVideoForDuration(
-        format: String = "mjpeg",
+
+    // MARK: - Helpers
+
+    private struct RecordingResult {
+        let outputURL: URL
+        let stdout: String
+        let stderr: String
+        let fileSize: Int
+        let exitCode: Int32
+    }
+
+    private func recordVideo(
         fps: Int = 10,
         quality: Int = 80,
         scale: Double = 1.0,
-        duration: TimeInterval = 2.0
-    ) async throws -> (output: String, data: Data, dataString: String, dataSize: Int, exitCode: Int32) {
-        // Build command
-        var command = "stream-video --format \(format)"
-        command += " --fps \(fps)"
-        command += " --quality \(quality) --scale \(scale)"
-        
-        // Run command directly with timeout since stream-video outputs to stdout
-        // and TestHelpers.runAxeCommand doesn't separate stdout/stderr
+        duration: TimeInterval = 2.0,
+        outputPath: String? = nil
+    ) async throws -> RecordingResult {
         guard let udid = defaultSimulatorUDID else {
             throw TestError.commandError("No simulator UDID specified in SIMULATOR_UDID environment variable")
         }
-        
         let axePath = try TestHelpers.getAxePath()
-        let fullCommand = "\(axePath) \(command) --udid \(udid)"
-        
+
+        let defaultOutputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("axe-video-test-\(UUID().uuidString).mp4")
+        let configuredOutputPath = outputPath ?? defaultOutputURL.path
+
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", fullCommand]
-        
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-        
-        // Set up to read data continuously
-        var outputData = Data()
-        let outputHandle = outputPipe.fileHandleForReading
-        outputHandle.readabilityHandler = { handle in
-            let availableData = handle.availableData
-            if !availableData.isEmpty {
-                outputData.append(availableData)
-            }
-        }
-        
+        process.executableURL = URL(fileURLWithPath: axePath)
+        process.arguments = [
+            "stream-video",
+            "--udid", udid,
+            "--fps", "\(fps)",
+            "--quality", "\(quality)",
+            "--scale", "\(scale)",
+            "--output", configuredOutputPath
+        ]
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
         try process.run()
-        
-        // Let it run for duration
+
         try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
-        
-        // Terminate the process
-        process.terminate()
-        
-        // Stop reading
-        outputHandle.readabilityHandler = nil
-        
-        // Wait for process to exit
+
+        process.interrupt() // send SIGINT to trigger graceful shutdown
         process.waitUntilExit()
-        
-        // Read any remaining data
-        let remainingData = outputHandle.readDataToEndOfFile()
-        if !remainingData.isEmpty {
-            outputData.append(remainingData)
+
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+
+        let resolvedOutputPath = String(data: stdoutData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let resolvedURL = resolvedOutputPath.isEmpty ? defaultOutputURL : URL(fileURLWithPath: resolvedOutputPath)
+
+        var fileSize = 0
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedURL.path),
+           let sizeNumber = attributes[.size] as? NSNumber {
+            fileSize = sizeNumber.intValue
         }
-        
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
-        let dataString = String(data: outputData, encoding: .utf8) ?? ""
-        
-        // Debug output
-        if outputData.count == 0 && !errorOutput.isEmpty {
-            print("DEBUG: No data received. Error output: \(errorOutput)")
+
+        if outputPath == nil {
+            try? FileManager.default.removeItem(at: resolvedURL)
         }
-        
-        return (
-            output: errorOutput,
-            data: outputData,
-            dataString: dataString,
-            dataSize: outputData.count,
+
+        return RecordingResult(
+            outputURL: resolvedURL,
+            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
+            stderr: String(data: stderrData, encoding: .utf8) ?? "",
+            fileSize: fileSize,
             exitCode: process.terminationStatus
         )
     }

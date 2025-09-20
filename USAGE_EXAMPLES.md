@@ -206,51 +206,37 @@ axe gesture scroll-down --post-delay 1.0 --udid SIMULATOR_UDID         # Scroll 
 axe key-sequence --keycodes 43,43,40 --delay 1.0 --udid SIMULATOR_UDID # Tab navigation
 ```
 
-### **Video Streaming**
+### **Video Recording**
 
 ```bash
-# Stream video from simulator using screenshot-based capture
+# Record to an MP4 (QuickTime compatible) in the current directory
+axe stream-video --udid SIMULATOR_UDID --fps 15
 
-# Basic MJPEG streaming at 10 FPS
-axe stream-video --udid SIMULATOR_UDID --fps 10 --format mjpeg > recording.mjpeg
+# Choose a custom destination
+axe stream-video --udid SIMULATOR_UDID --fps 20 --output recordings/run.mp4
 
-# Real-time H264 encoding with ffmpeg (recommended)
-axe stream-video --udid SIMULATOR_UDID --fps 30 --format ffmpeg | \
-  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
+# Reduce bandwidth/size by lowering quality and scale
+axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 55 --scale 0.6 --output recordings/light.mp4
 
-# View stream in real-time with ffplay
-axe stream-video --udid SIMULATOR_UDID --fps 15 --format ffmpeg | \
-  ffplay -f image2pipe -framerate 15 -i -
-
-# Stream with reduced bandwidth (lower quality and resolution)
-axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --format mjpeg > low-bandwidth.mjpeg
-
-# Raw JPEG stream for custom processing
-axe stream-video --udid SIMULATOR_UDID --fps 5 --format raw | custom-video-processor
-
-# Legacy BGRA format (raw pixel data)
-axe stream-video --udid SIMULATOR_UDID --format bgra | \
-  ffmpeg -f rawvideo -pixel_format bgra -video_size 393x852 -framerate 10 -i - output.mp4
-
-# Automated recording script
-#!/bin/bash
-UDID=$(axe list-simulators | grep "Booted" | head -1 | grep -o '[A-F0-9-]\{36\}')
+# Simple automation-friendly script
+UDID=$(axe list-simulators | awk '/Booted/{print $NF; exit}')
 OUTPUT="recording_$(date +%Y%m%d_%H%M%S).mp4"
 
-# Start recording
-axe stream-video --udid "$UDID" --fps 30 --format ffmpeg | \
-  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset fast "$OUTPUT" &
+axe stream-video --udid "$UDID" --fps 25 --output "$OUTPUT" &
 RECORD_PID=$!
 
-# Run your automation
+# ...run automation commands here...
 axe tap -x 100 -y 200 --udid "$UDID"
 axe gesture scroll-down --udid "$UDID"
-# ... more commands ...
 
-# Stop recording
 sleep 2
-kill $RECORD_PID
+kill -INT $RECORD_PID
+wait $RECORD_PID
+printf 'Saved recording to %s\n' "$OUTPUT"
 ```
+
+> [!NOTE]
+> `kill -INT` sends the same signal as pressing `Ctrl+C`, giving AXe time to finalise the MP4 before the process exits.
 
 ## Shell Escaping Solutions
 

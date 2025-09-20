@@ -3,35 +3,34 @@ import Foundation
 
 @Suite("Stream Video Cancellation Tests")
 struct StreamVideoDebugTests {
-    @Test("Stream video command runs without hanging")
+    @Test("Stream video command can be cancelled without hanging")
     func streamVideoBasicExecution() async throws {
-        // This test just verifies the command can be executed and terminated
-        // without hanging indefinitely
-        
         guard let udid = defaultSimulatorUDID else {
             throw TestError.commandError("No simulator UDID specified")
         }
-        
-        // No need to launch app - stream-video captures the simulator screen directly
-        
-        // Create a task to run the command
-        let commandTask = Task {
-            try await TestHelpers.runAxeCommand(
-                "stream-video --format bgra --fps 1",
-                simulatorUDID: udid
-            )
-        }
-        
-        // Wait a bit
+
+        let axePath = try TestHelpers.getAxePath()
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("axe-video-debug-\(UUID().uuidString).mp4")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: axePath)
+        process.arguments = [
+            "stream-video",
+            "--udid", udid,
+            "--fps", "5",
+            "--output", tempURL.path
+        ]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        try process.run()
         try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
-        
-        // Cancel the task
-        commandTask.cancel()
-        
-        // Give it time to clean up
-        try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
-        
-        // If we get here without hanging, the test passes
-        #expect(commandTask.isCancelled, "Command task should be cancelled")
+
+        process.interrupt()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus == 0, "Command should exit cleanly after cancellation")
     }
 }
