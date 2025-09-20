@@ -6,15 +6,15 @@
 	<dict>
 		<key>Resources/Info.plist</key>
 		<data>
-		15vTSxHOo5N1VhAPaf2inNvAZYE=
+		uW0CzMM+9QXjwwHv6KgZAt2MWH8=
 		</data>
 		<key>Resources/libMaculator.dylib</key>
 		<data>
-		o1iLuJaDPC1dVZUP0i97QvuPx70=
+		437GRWtEfZz0cA3h1tdVcREke5Q=
 		</data>
 		<key>Resources/libShimulator.dylib</key>
 		<data>
-		PN+AeyDZLMPzr91nuEr56aDJb1I=
+		oJrqrXzMaHxCjUb1YtkvslgXazo=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -681,21 +681,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			V8+waBLV0e6fb4LK9L0SU7iCbYIWTSZziaT6/C3/CSI=
+			TjrTB50k18ztG8B3gx+xvBmWg/U06qk9BOBQB4t6Ecc=
 			</data>
 		</dict>
 		<key>Resources/libMaculator.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			85Y8tjkauYiPMzC0EJrfF8Ck0haQ889DAZKDmEMKAAM=
+			MKxI2rgKEcdxst/GI0LFhWa0h2M+an5GXd98a1d5j3Q=
 			</data>
 		</dict>
 		<key>Resources/libShimulator.dylib</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			obQ1QpuZSjNXCby2/1uUi6yduyfDnkec++09vUsuVBY=
+			eLiCkvo97ye/GC0zUJ5EC8yCSdvtwilis/z8SWHnFTs=
 			</data>
 		</dict>
 	</dict>

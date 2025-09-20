@@ -24,6 +24,7 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
   - [**Text Input**](#text-input)
   - [**Hardware Buttons**](#hardware-buttons-1)
   - [**Keyboard Control**](#keyboard-control)
+  - [**Video Streaming**](#video-streaming)
   - [**Accessibility \& Info**](#accessibility--info)
 - [Architecture](#architecture)
   - [Why AXe?](#why-axe)
@@ -60,6 +61,12 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Duration Control**: Precise timing for gestures and button presses
 - **Sequence Timing**: Custom delays between key sequences
 - **Complex Automation**: Multi-step workflows with precise timing
+
+### Video Streaming
+- **Screenshot-based Streaming**: Capture simulator video at 1-30 FPS
+- **Multiple Output Formats**: MJPEG, raw JPEG, ffmpeg-compatible, BGRA
+- **Configurable Quality**: Adjust JPEG quality and scale factor
+- **Real-time Performance**: Efficient frame timing for smooth playback
 
 ### Accessibility
 - **UI Description**: Extract accessibility information from any point or full screen
@@ -201,6 +208,22 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
 # Key sequences
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
 ```
+
+### **Video Recording**
+
+```bash
+# Record the simulator to an MP4 file (QuickTime compatible)
+axe stream-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
+
+# Let AXe pick a timestamped filename in the current directory
+axe stream-video --udid SIMULATOR_UDID --fps 20
+
+# Tweak quality/scale to reduce file size
+axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --output low-bandwidth.mp4
+```
+
+> [!TIP]
+> Press `Ctrl+C` to stop recording. AXe finalises the MP4 before exiting and prints the file path to stdout.
 
 ### **Accessibility & Info**
 

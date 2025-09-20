@@ -206,6 +206,38 @@ axe gesture scroll-down --post-delay 1.0 --udid SIMULATOR_UDID         # Scroll 
 axe key-sequence --keycodes 43,43,40 --delay 1.0 --udid SIMULATOR_UDID # Tab navigation
 ```
 
+### **Video Recording**
+
+```bash
+# Record to an MP4 (QuickTime compatible) in the current directory
+axe stream-video --udid SIMULATOR_UDID --fps 15
+
+# Choose a custom destination
+axe stream-video --udid SIMULATOR_UDID --fps 20 --output recordings/run.mp4
+
+# Reduce bandwidth/size by lowering quality and scale
+axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 55 --scale 0.6 --output recordings/light.mp4
+
+# Simple automation-friendly script
+UDID=$(axe list-simulators | awk '/Booted/{print $NF; exit}')
+OUTPUT="recording_$(date +%Y%m%d_%H%M%S).mp4"
+
+axe stream-video --udid "$UDID" --fps 25 --output "$OUTPUT" &
+RECORD_PID=$!
+
+# ...run automation commands here...
+axe tap -x 100 -y 200 --udid "$UDID"
+axe gesture scroll-down --udid "$UDID"
+
+sleep 2
+kill -INT $RECORD_PID
+wait $RECORD_PID
+printf 'Saved recording to %s\n' "$OUTPUT"
+```
+
+> [!NOTE]
+> `kill -INT` sends the same signal as pressing `Ctrl+C`, giving AXe time to finalise the MP4 before the process exits.
+
 ## Shell Escaping Solutions
 
 ### ❌ Problematic Examples:
