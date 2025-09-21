@@ -6,7 +6,7 @@
 	<dict>
 		<key>Resources/Info.plist</key>
 		<data>
-		sobts05k6KJREjLrQt/W9OoNhbs=
+		uyyXCEyvmw/PBV2rTlYwaTqqAXg=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -29,14 +29,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			4h4u/Kg6eUAeBTcvhM/PKc1ON9zb0/NcizPgZg6uw8I=
+			pvK8LbQDkPOu3DP9lkcOinHnPUIBK6OI6cDmiBMsPw4=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorAccessibilityCommands.h</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			0kyvHN7AmPgsUa/IZ+KOUdjcbwp0uyswmpI7ReUalxQ=
+			MkxR1k3+0WF2RduGU6b0jI2WV6TMiE1iSgzyJOESQAY=
+			</data>
+		</dict>
+		<key>Headers/FBSimulatorApplicationCommands.h</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ATwEmA1iM2IZVKD3YLDk8UJPQkfXW/J+HN24rO2szTg=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorBootConfiguration.h</key>
@@ -71,7 +78,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			yUnJSWeWmNOrD0U1Kxahc8UffGR/qrjkvKl7g773Svs=
+			/8wLBaLJ4IQLwdwRdEevy7JSofEYxVcDx4J/QmxHwk4=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorControlConfiguration.h</key>
@@ -85,7 +92,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			FtPKL12fM6v3Bziqy+eSQ+6rQNEiifs39KXZ4xEzSVs=
+			nCnxwe8mXMm+fKYiZRVYciqFTNBFzLp+SSu4KkABXJw=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorError.h</key>
@@ -99,21 +106,21 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			5fZKBM7JVHsLbrBJCIWitLVX9nJNThcMT86XWarMkEw=
+			McGB+nO70ppuHaQqEy9HGpDgP0VD68JXYDNgqoF0xDg=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorHIDEvent.h</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			nO3psx7e3vXe6Ez+xMDMx6Jpym7rNwQE7e50ZSb6pFw=
+			WdtrAXT9cbFAdAVWV7GrErqpxY3QauF71S3lV9oDJYk=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorIndigoHID.h</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			4n8vMpkzzjzQykk5pzKb+ioKmrFLncLaFRqk9SiaLI0=
+			blDh0xMMiY79SVtpL/i+lOY4O62/1NFi+vI+mYRFf2w=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorKeychainCommands.h</key>
@@ -197,7 +204,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			gKig1affgRO+liy4tFc6UxbrSVBWItErWBPqTfZgAAQ=
+			+C5uQ0TtflEP9hNHlaqKW+e+qRLCX59H+fYIFDe/zlI=
 			</data>
 		</dict>
 	</dict>
