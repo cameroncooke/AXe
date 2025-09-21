@@ -19,8 +19,8 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-15
-    
+    runs-on: macos-26
+
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
       archive_sha256: ${{ steps.create_archive.outputs.sha256 }}
@@ -34,16 +34,16 @@ jobs:
       with:
         fetch-depth: 0
         token: ${{ secrets.GITHUB_TOKEN }}
-      
+
     - name: Setup Xcode
       uses: maxim-lobanov/setup-xcode@v1
       with:
-        xcode-version: '16.3'
-        
+        xcode-version: latest-stable
+
     - name: Install dependencies
       run: |
         brew install jq
-        
+
     - name: Extract version from tag
       id: version
       run: |
@@ -61,7 +61,7 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           echo "Using tag from release event: $TAG"
         fi
-        
+
         VERSION=${TAG#v}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "tag=$TAG" >> $GITHUB_OUTPUT
@@ -79,16 +79,16 @@ jobs:
       id: idb_check
       run: |
         set -e
-        
+
         # Get latest remote commit
         REMOTE_COMMIT=$(git ls-remote https://github.com/facebook/idb.git HEAD | cut -f1)
         echo "Latest IDB commit on remote: $REMOTE_COMMIT"
-        
+
         if [ -d "idb_checkout" ] && [ -d "idb_checkout/.git" ]; then
           # We have a cached repo, check if it's up to date
           LOCAL_COMMIT=$(git -C idb_checkout rev-parse HEAD)
           echo "Cached IDB commit: $LOCAL_COMMIT"
-          
+
           if [ "$LOCAL_COMMIT" = "$REMOTE_COMMIT" ]; then
             echo "✅ Cached IDB repository is up to date"
             echo "needs_setup=false" >> $GITHUB_OUTPUT
@@ -101,7 +101,7 @@ jobs:
           echo "📥 No cached IDB repository found, needs setup"
           echo "needs_setup=true" >> $GITHUB_OUTPUT
         fi
-        
+
         # Always output the remote commit for cache keys
         echo "idb_commit=$REMOTE_COMMIT" >> $GITHUB_OUTPUT
 
@@ -138,32 +138,32 @@ jobs:
         DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
       run: |
         set -e
-        if [ -z "$DEVELOPER_ID_APPLICATION_P12" ]; then 
+        if [ -z "$DEVELOPER_ID_APPLICATION_P12" ]; then
           echo "⚠️ No certificate provided - builds will be unsigned"
           exit 0
         fi
-        
+
         echo "🔐 Setting up code signing certificate..."
         KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
         KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
-        
+
         # Create and configure keychain
         security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
         security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
         security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-        
+
         # Import certificate
         echo "$DEVELOPER_ID_APPLICATION_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-        if [ -z "$DEVELOPER_ID_APPLICATION_PASSWORD" ]; then 
+        if [ -z "$DEVELOPER_ID_APPLICATION_PASSWORD" ]; then
           security import "$RUNNER_TEMP/certificate.p12" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
         else
           security import "$RUNNER_TEMP/certificate.p12" -P "$DEVELOPER_ID_APPLICATION_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
         fi
-        
+
         # Configure keychain
         security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
         security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-        
+
         echo "✅ Code signing certificate imported successfully"
 
     - name: Setup - Prepare notarization API key
@@ -171,12 +171,12 @@ jobs:
         NOTARIZE_APP_STORE_CONNECT_API_KEY: ${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY }}
       run: |
         set -e
-        if [ -z "$NOTARIZE_APP_STORE_CONNECT_API_KEY" ]; then 
+        if [ -z "$NOTARIZE_APP_STORE_CONNECT_API_KEY" ]; then
           echo "❌ ERROR: Notarization API key is required but not provided"
           echo "Please set NOTARIZE_APP_STORE_CONNECT_API_KEY secret in repository settings"
           exit 1
         fi
-        
+
         echo "🔑 Setting up notarization API key..."
         mkdir -p keys
         echo "$NOTARIZE_APP_STORE_CONNECT_API_KEY" | base64 --decode > keys/AuthKey_${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}.p8
@@ -190,7 +190,7 @@ jobs:
       if: steps.idb_check.outputs.needs_setup == 'true'
       run: scripts/build.sh xcframeworks
 
-    - name: Sign - XCFramework bundles  
+    - name: Sign - XCFramework bundles
       if: steps.idb_check.outputs.needs_setup == 'true'
       run: scripts/build.sh sign-xcframeworks
 
@@ -198,23 +198,23 @@ jobs:
       if: steps.idb_check.outputs.needs_setup == 'true'
       run: |
         set -e
-        
+
         echo "🔄 Committing updated XCFrameworks to repository..."
-        
+
         # Configure git
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        
+
         # Add the XCFrameworks directory
         git add build_products/XCFrameworks/
-        
+
         # Check if there are changes to commit
         if git diff --staged --quiet; then
           echo "ℹ️ No changes to XCFrameworks detected, skipping commit"
         else
           git commit -m "Update XCFrameworks to IDB commit ${{ steps.idb_check.outputs.idb_commit }}"
-          
-          # Push to the main branch 
+
+          # Push to the main branch
           git push origin HEAD:main
           echo "✅ XCFrameworks committed and pushed successfully"
         fi
@@ -276,19 +276,19 @@ jobs:
       run: |
         ARCHIVE_NAME="${{ env.ARCHIVE_NAME }}-${{ steps.version.outputs.tag }}.tar.gz"
         echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
-        
+
         PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
         if [ -f "$PACKAGE_PATH" ]; then
           echo "📦 Creating release archive from: $PACKAGE_PATH"
-          
+
           # Extract the package to create the tar.gz
           TEMP_EXTRACT="$RUNNER_TEMP/extract"
           mkdir -p "$TEMP_EXTRACT"
           unzip -q "$PACKAGE_PATH" -d "$TEMP_EXTRACT"
-          
+
           # Create tar.gz from extracted contents
           tar -czf "$ARCHIVE_NAME" -C "$TEMP_EXTRACT" .
-          
+
           # Calculate SHA256
           SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
           echo "sha256=$SHA256" >> $GITHUB_OUTPUT
@@ -304,10 +304,10 @@ jobs:
       run: |
         ASSET_NAME="${{ steps.create_archive.outputs.archive_name }}"
         echo "🗑️ Checking for existing asset: $ASSET_NAME"
-        
+
         # Get the release ID
         RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }} --jq '.id')
-        
+
         # Try to delete existing asset with same name
         gh api repos/${{ github.repository }}/releases/$RELEASE_ID/assets --jq '.[] | select(.name == "'"$ASSET_NAME"'") | .id' | while read asset_id; do
           if [ -n "$asset_id" ]; then
@@ -340,7 +340,7 @@ jobs:
 
     - name: Update Homebrew tap
       if: |
-        (github.event_name == 'release' && !github.event.release.prerelease) || 
+        (github.event_name == 'release' && !github.event.release.prerelease) ||
         (github.event_name == 'workflow_dispatch')
       env:
         HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
@@ -350,16 +350,16 @@ jobs:
           echo "⚠️ Homebrew tap update skipped - no token provided"
           exit 0
         fi
-        
+
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
           echo "🍺 Updating Homebrew tap (manual trigger)..."
         else
           echo "🍺 Updating Homebrew tap (release event)..."
         fi
-        
+
         git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/cameroncooke/homebrew-axe.git tap-repo
         cd tap-repo
-        
+
         FORMULA_FILE="Formula/axe.rb"
         URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_archive.outputs.archive_name }}"
         SHA256="${{ steps.create_archive.outputs.sha256 }}"
@@ -390,4 +390,4 @@ jobs:
         echo "🧹 Cleaning up sensitive files..."
         rm -rf keys/
         rm -f "$RUNNER_TEMP"/*.p12
-        echo "✅ Cleanup completed" 
+        echo "✅ Cleanup completed"
