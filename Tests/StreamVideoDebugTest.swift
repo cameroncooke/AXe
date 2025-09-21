@@ -17,7 +17,7 @@ struct StreamVideoDebugTests {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: axePath)
         process.arguments = [
-            "stream-video",
+            "record-video",
             "--udid", udid,
             "--fps", "5",
             "--output", tempURL.path

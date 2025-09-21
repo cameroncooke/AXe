@@ -210,19 +210,20 @@ axe key-sequence --keycodes 43,43,40 --delay 1.0 --udid SIMULATOR_UDID # Tab nav
 
 ```bash
 # Record to an MP4 (QuickTime compatible) in the current directory
-axe stream-video --udid SIMULATOR_UDID --fps 15
+axe record-video --udid SIMULATOR_UDID --fps 15
 
 # Choose a custom destination
-axe stream-video --udid SIMULATOR_UDID --fps 20 --output recordings/run.mp4
+# --output automatically records using h264
+axe record-video --udid SIMULATOR_UDID --fps 20 --output recordings/run.mp4
 
 # Reduce bandwidth/size by lowering quality and scale
-axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 55 --scale 0.6 --output recordings/light.mp4
+axe record-video --udid SIMULATOR_UDID --fps 10 --quality 55 --scale 0.6 --output recordings/light.mp4
 
 # Simple automation-friendly script
 UDID=$(axe list-simulators | awk '/Booted/{print $NF; exit}')
 OUTPUT="recording_$(date +%Y%m%d_%H%M%S).mp4"
 
-axe stream-video --udid "$UDID" --fps 25 --output "$OUTPUT" &
+axe record-video --udid "$UDID" --fps 25 --output "$OUTPUT" &
 RECORD_PID=$!
 
 # ...run automation commands here...

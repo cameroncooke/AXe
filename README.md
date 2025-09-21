@@ -65,6 +65,7 @@ AXe provides complete iOS Simulator automation capabilities:
 ### Video Streaming
 - **Screenshot-based Streaming**: Capture simulator video at 1-30 FPS
 - **Multiple Output Formats**: MJPEG, raw JPEG, ffmpeg-compatible, BGRA
+- **H.264 Recording**: Use the `record-video` command to write MP4 files with hardware-friendly encoding
 - **Configurable Quality**: Adjust JPEG quality and scale factor
 - **Real-time Performance**: Efficient frame timing for smooth playback
 
@@ -209,17 +210,38 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
 ```
 
+### **Video Streaming**
+
+```bash
+# Stream MJPEG frames over stdout (default format)
+axe stream-video --udid SIMULATOR_UDID --fps 10 --format mjpeg > stream.mjpeg
+
+# Pipe JPEG frames directly into ffmpeg
+axe stream-video --udid SIMULATOR_UDID --fps 30 --format ffmpeg | \
+  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
+
+# Stream raw JPEG frames with length prefixes for custom servers
+axe stream-video --udid SIMULATOR_UDID --fps 12 --format raw | custom-stream-consumer
+
+# Legacy BGRA stream for backward compatibility
+axe stream-video --udid SIMULATOR_UDID --format bgra | \
+  ffmpeg -f rawvideo -pixel_format bgra -video_size 393x852 -i - output.mp4
+
+# Record directly to MP4 using the dedicated recorder
+axe record-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
+```
+
 ### **Video Recording**
 
 ```bash
 # Record the simulator to an MP4 file (QuickTime compatible)
-axe stream-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
+axe record-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
 
 # Let AXe pick a timestamped filename in the current directory
-axe stream-video --udid SIMULATOR_UDID --fps 20
+axe record-video --udid SIMULATOR_UDID --fps 20
 
 # Tweak quality/scale to reduce file size
-axe stream-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --output low-bandwidth.mp4
+axe record-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --output low-bandwidth.mp4
 ```
 
 > [!TIP]
