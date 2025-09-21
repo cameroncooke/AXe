@@ -2,7 +2,7 @@
 
 AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple's Accessibility APIs and HID (Human Interface Device) functionality.
 
-[![CI](https://github.com/cameroncooke/AXe/actions/workflows/build-and-release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/build-and-release.yml)
+[![CI](https://github.com/cameroncooke/AXe/actions/workflows/release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/release.yml)
 [![Licence: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ![AxeDemo](https://github.com/user-attachments/assets/9eafa5d5-3cef-4e39-82c5-7b9d41fe4548)

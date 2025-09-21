@@ -102,10 +102,10 @@ function framework_build() {
   print_info "Project: ${project_file}"
   
   invoke_xcodebuild \
-    -quiet \
     -project "${project_file}" \
     -scheme "${scheme_name}" \
     -sdk "${FRAMEWORK_SDK}" \
+    -destination "generic/platform=macOS" \
     -configuration "${FRAMEWORK_CONFIGURATION}" \
     -derivedDataPath "${DERIVED_DATA_PATH}" \
     build \

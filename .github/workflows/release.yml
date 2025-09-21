@@ -1,8 +1,9 @@
-name: CI
+name: Release
 
 on:
-  release:
-    types: [created, edited]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       tag:
@@ -19,7 +20,7 @@ permissions:
 
 jobs:
   build-and-release:
-    runs-on: macos-26
+    runs-on: macos-latest
 
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
@@ -48,18 +49,15 @@ jobs:
       id: version
       run: |
         if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          # Manual trigger - use provided tag or latest tag
           if [ -n "${{ github.event.inputs.tag }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
           else
-            # Get the latest tag
             TAG=$(git describe --tags --abbrev=0)
           fi
           echo "Using tag from manual trigger: $TAG"
         else
-          # Release event - use the release tag
           TAG=${GITHUB_REF#refs/tags/}
-          echo "Using tag from release event: $TAG"
+          echo "Using tag from push event: $TAG"
         fi
 
         VERSION=${TAG#v}
@@ -298,38 +296,6 @@ jobs:
           exit 1
         fi
 
-    - name: Delete existing release asset (if re-running)
-      if: github.event_name == 'release'
-      continue-on-error: true
-      run: |
-        ASSET_NAME="${{ steps.create_archive.outputs.archive_name }}"
-        echo "🗑️ Checking for existing asset: $ASSET_NAME"
-
-        # Get the release ID
-        RELEASE_ID=$(gh api repos/${{ github.repository }}/releases/tags/${{ steps.version.outputs.tag }} --jq '.id')
-
-        # Try to delete existing asset with same name
-        gh api repos/${{ github.repository }}/releases/$RELEASE_ID/assets --jq '.[] | select(.name == "'"$ASSET_NAME"'") | .id' | while read asset_id; do
-          if [ -n "$asset_id" ]; then
-            echo "🗑️ Deleting existing asset ID: $asset_id"
-            gh api --method DELETE repos/${{ github.repository }}/releases/assets/$asset_id
-            echo "✅ Existing asset deleted"
-          fi
-        done
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-    - name: Upload release asset
-      if: github.event_name == 'release'
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ github.event.release.upload_url }}
-        asset_path: ${{ steps.create_archive.outputs.archive_name }}
-        asset_name: ${{ steps.create_archive.outputs.archive_name }}
-        asset_content_type: application/gzip
-
     - name: Upload build artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
@@ -338,9 +304,48 @@ jobs:
         path: ${{ steps.create_archive.outputs.archive_name }}
         retention-days: 30
 
+    - name: Read tag release notes
+      if: github.event_name == 'push'
+      id: release_notes
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        git fetch --tags --force
+        NOTES=$(git tag -l --format='%(contents)' "$TAG")
+        printf '%s\n' "$NOTES" > release-notes.md
+        echo "file=release-notes.md" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub release
+      if: github.event_name == 'push'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        TITLE="Release $TAG"
+        NOTES_FILE="${{ steps.release_notes.outputs.file }}"
+        VERSION="${{ steps.version.outputs.version }}"
+
+        if [[ "$VERSION" == *"-"* ]]; then
+          PRERELEASE_FLAG="--prerelease"
+        else
+          PRERELEASE_FLAG=""
+        fi
+
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "🗑️ Existing release found for $TAG. Deleting..."
+          gh release delete "$TAG" --yes
+        fi
+
+        gh release create "$TAG" \
+          --title "$TITLE" \
+          --notes-file "$NOTES_FILE" \
+          $PRERELEASE_FLAG \
+          "${{ steps.create_archive.outputs.archive_name }}"
+
+        echo "✅ Release $TAG created."
+
     - name: Update Homebrew tap
       if: |
-        (github.event_name == 'release' && !github.event.release.prerelease) ||
+        (github.event_name == 'push' && !contains(steps.version.outputs.version, '-')) ||
         (github.event_name == 'workflow_dispatch')
       env:
         HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
