@@ -54,33 +54,22 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark HID Manipulation
 
 /**
- Sends a Keyboard Event.
+ Sends the event payload
 
- @param direction the direction of the event.
- @param keycode the Key Code to send. The keycodes are 'Hardware Independent' as described in <HIToolbox/Events.h>.
+ @param data the payload data
  @return A future that resolves when the event has been sent.
  */
-- (FBFuture<NSNull *> *)sendKeyboardEventWithDirection:(FBSimulatorHIDDirection)direction keyCode:(unsigned int)keycode;
+- (FBFuture<NSNull *> *)sendEvent:(NSData *)data;
 
 /**
- Sends a Button Event.
-
- @param direction the direction of the event.
- @param button the button.
- @return A future that resolves when the event has been sent.
+ Sends the event payload, synchronously.
+ This should only be used when the caller can guarantee that all calls to this API are performed from the same queue.
+ 
+ @param data the payload data
+ @param completionQueue the queue to call back on
+ @param completion the completion block to invoke
  */
-- (FBFuture<NSNull *> *)sendButtonEventWithDirection:(FBSimulatorHIDDirection)direction button:(FBSimulatorHIDButton)button;
-
-/**
- Sends a Tap Event
- Will Perform the Touch Down, followed by the Touch Up
-
- @param type the event type.
- @param x the X-Coordinate
- @param y the Y-Coordinate
- @return A future that resolves when the event has been sent.
- */
-- (FBFuture<NSNull *> *)sendTouchWithType:(FBSimulatorHIDDirection)type x:(double)x y:(double)y;
+- (void)sendIndigoMessageData:(NSData *)data completionQueue:(dispatch_queue_t)completionQueue completion:(void (^)(NSError * _Nullable))completion;
 
 #pragma mark Properties
 
@@ -88,6 +77,21 @@ NS_ASSUME_NONNULL_BEGIN
  The Queue on which messages are sent to the HID Server.
  */
 @property (nonatomic, strong, readonly) dispatch_queue_t queue;
+
+/**
+ The Indigo event translator.
+ */
+@property (nonatomic, strong, readonly) FBSimulatorIndigoHID *indigo;
+
+/**
+ The dimensions of the main screen.
+ */
+@property (nonatomic, assign, readonly) CGSize mainScreenSize;
+
+/**
+ The scale of the main screen.
+ */
+@property (nonatomic, assign, readonly) float mainScreenScale;
 
 @end
 
