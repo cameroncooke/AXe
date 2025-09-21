@@ -22,9 +22,10 @@ NOTARIZATION_ISSUER_ID="${NOTARIZATION_ISSUER_ID:-69a6de8e-e388-47e3-e053-5b8c7c
 
 # --- Helper Functions ---
 
-if hash xcpretty 2>/dev/null; then
-  HAS_XCPRETTY=true
-fi
+# Temporarily disable xcpretty to see actual errors in CI
+# if hash xcpretty 2>/dev/null; then
+#   HAS_XCPRETTY=true
+# fi
 
 # Function to print a section header with emoji
 function print_section() {
@@ -72,7 +73,7 @@ function invoke_xcodebuild() {
     NSUnbufferedIO=YES xcodebuild $arguments | xcpretty -c
     exit_code=${PIPESTATUS[0]}
   else
-    xcodebuild $arguments
+    xcodebuild $arguments 2>&1
     exit_code=$?
   fi
   
