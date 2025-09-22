@@ -6,7 +6,7 @@
 	<dict>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/FBSimulatorControl</key>
 		<data>
-		UlX/RwTGgZLHyKsoHgcPcNL1rUA=
+		vUbrbiFYHB9vB2LKXrL7q8jtuLQ=
 		</data>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBFramebuffer.h</key>
 		<data>
@@ -23,10 +23,6 @@
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorAccessibilityCommands.h</key>
 		<data>
 		HbIL2CIiOlwtqF9i688bTkcN9iU=
-		</data>
-		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorApplicationCommands.h</key>
-		<data>
-		2yE7/TJEVFgVPEa5Fi0jjXBuIME=
 		</data>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorBootConfiguration.h</key>
 		<data>
@@ -46,7 +42,7 @@
 		</data>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorControl.h</key>
 		<data>
-		ujkOcqU5sAgGMcIJRHMBDDNEf0c=
+		uOuuE8q0wFrXC/jomh3roUf4xS0=
 		</data>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorControlConfiguration.h</key>
 		<data>
@@ -122,7 +118,7 @@
 		</data>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/_CodeSignature/CodeResources</key>
 		<data>
-		KoC4EEq/GQaNP6IzW1nmgs24eu0=
+		C1tlIwIjYpXscf539N7sRlETi2c=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -161,7 +157,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			PHg6TLZ0FkgGl+mcoY+U1ruH+3gFuZSnPdRfS5Uu0lM=
+			YP5GPe6MfgugYPjmOsDBr+vcYpCsfdoPqJFg5Ml3URw=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBFramebuffer.h</key>
@@ -190,13 +186,6 @@
 			<key>hash2</key>
 			<data>
 			MkxR1k3+0WF2RduGU6b0jI2WV6TMiE1iSgzyJOESQAY=
-			</data>
-		</dict>
-		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorApplicationCommands.h</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			ATwEmA1iM2IZVKD3YLDk8UJPQkfXW/J+HN24rO2szTg=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorBootConfiguration.h</key>
@@ -231,7 +220,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			/8wLBaLJ4IQLwdwRdEevy7JSofEYxVcDx4J/QmxHwk4=
+			yUnJSWeWmNOrD0U1Kxahc8UffGR/qrjkvKl7g773Svs=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/A/Headers/FBSimulatorControlConfiguration.h</key>
@@ -364,7 +353,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			o6vCwadUpaKl9Z75cuVZZWxToJSuQWrtuGGCA7Tdyew=
+			J+JuN7p27/GXtTeHMol9yyuhUaqFAsoLDYYpuSnJ8A0=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/FBSimulatorControl.framework/Versions/Current</key>

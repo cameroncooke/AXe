@@ -39,13 +39,6 @@
 			MkxR1k3+0WF2RduGU6b0jI2WV6TMiE1iSgzyJOESQAY=
 			</data>
 		</dict>
-		<key>Headers/FBSimulatorApplicationCommands.h</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			ATwEmA1iM2IZVKD3YLDk8UJPQkfXW/J+HN24rO2szTg=
-			</data>
-		</dict>
 		<key>Headers/FBSimulatorBootConfiguration.h</key>
 		<dict>
 			<key>hash2</key>
@@ -78,7 +71,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			/8wLBaLJ4IQLwdwRdEevy7JSofEYxVcDx4J/QmxHwk4=
+			yUnJSWeWmNOrD0U1Kxahc8UffGR/qrjkvKl7g773Svs=
 			</data>
 		</dict>
 		<key>Headers/FBSimulatorControlConfiguration.h</key>

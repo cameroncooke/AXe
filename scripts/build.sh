@@ -6,6 +6,7 @@ set -o pipefail
 
 # Environment and Configuration
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
+IDB_GIT_REF="${IDB_GIT_REF:-76639e4d0e1741adf391cab36f19fbc59378153e}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
@@ -67,7 +68,7 @@ function print_warning() {
 function invoke_xcodebuild() {
   local arguments=$@
   print_info "Executing: xcodebuild ${arguments[*]}"
-  
+
   local exit_code
   if [[ -n $HAS_XCPRETTY ]]; then
     NSUnbufferedIO=YES xcodebuild $arguments | xcpretty -c
@@ -76,17 +77,20 @@ function invoke_xcodebuild() {
     xcodebuild $arguments 2>&1
     exit_code=$?
   fi
-  
+
   return $exit_code
 }
 
 function clone_idb_repo() {
   if [ ! -d $IDB_CHECKOUT_DIR ]; then
     print_info "Creating $IDB_DIRECTORY directory and cloning idb repository..."
-    git clone --depth 1 https://github.com/facebook/idb.git $IDB_CHECKOUT_DIR
-    print_success "idb repository cloned successfully."
+    git clone https://github.com/facebook/idb.git $IDB_CHECKOUT_DIR
+    (cd $IDB_CHECKOUT_DIR && git checkout "$IDB_GIT_REF")
+    print_success "idb repository cloned at $IDB_GIT_REF."
   else
-    print_warning "$IDB_CHECKOUT_DIR directory already exists."
+    print_info "Updating idb repository to $IDB_GIT_REF..."
+    (cd $IDB_CHECKOUT_DIR && git fetch --all --tags --prune && git reset --hard "$IDB_GIT_REF")
+    print_success "idb repository updated to $IDB_GIT_REF."
   fi
 }
 
@@ -101,7 +105,7 @@ function framework_build() {
 
   print_subsection "🔨" "Building framework: ${scheme_name}"
   print_info "Project: ${project_file}"
-  
+
   invoke_xcodebuild \
     -project "${project_file}" \
     -scheme "${scheme_name}" \
@@ -118,7 +122,7 @@ function framework_build() {
     GCC_TREAT_WARNINGS_AS_ERRORS=NO \
     SWIFT_TREAT_WARNINGS_AS_ERRORS=NO
   local build_exit_code=$?
-  
+
   if [ $build_exit_code -eq 0 ]; then
     print_success "Framework ${scheme_name} built successfully!"
   else
@@ -173,7 +177,7 @@ function create_xcframework() {
     -framework "${signed_framework_path}" \
     -output "${xcframework_path}"
   local xcframework_exit_code=$?
-  
+
   if [ $xcframework_exit_code -eq 0 ]; then
     print_success "XCFramework ${scheme_name}.xcframework created at ${xcframework_path}"
   else
@@ -202,13 +206,13 @@ function resign_framework() {
   local output_base_dir="$1"
   local framework_name="$2"
   local framework_path="${output_base_dir}/Frameworks/${framework_name}"
-  
+
   if [ -d "$framework_path" ]; then
     print_info "Resigning framework: ${framework_name}"
-    
+
     # First, sign all dynamic libraries and binaries inside the framework
     print_info "Signing embedded binaries in ${framework_name}..."
-    
+
     # Find and sign all .dylib files recursively
     find "$framework_path" -name "*.dylib" -type f | while read -r dylib_path; do
       print_info "  Signing dylib: $(basename "$dylib_path")"
@@ -218,17 +222,17 @@ function resign_framework() {
         --timestamp \
         --verbose \
         "$dylib_path"
-      
+
       if [ $? -ne 0 ]; then
         echo "❌ Error: Failed to sign dylib: $dylib_path"
         exit 1
       fi
     done
-    
+
     # Remove any existing signature from the main framework binary first
     print_info "Removing existing signature from ${framework_name}..."
     codesign --remove-signature "$framework_path" 2>/dev/null || true
-    
+
     # Sign the main framework bundle with specific notarization-compatible options
     print_info "Signing main framework bundle: ${framework_name}"
     codesign --force \
@@ -238,17 +242,17 @@ function resign_framework() {
       --timestamp \
       --verbose \
       "$framework_path"
-    
+
     if [ $? -eq 0 ]; then
       print_success "Framework ${framework_name} resigned successfully"
-      
+
       # Verify the signature with strictest verification
       print_info "Performing strict verification for ${framework_name}..."
       codesign -vvv --strict "$framework_path"
-      
+
       if [ $? -eq 0 ]; then
         print_success "Signature verification passed for ${framework_name}"
-        
+
         # Display signature details
         print_info "Signature details for ${framework_name}:"
         codesign -dv "$framework_path" 2>&1 | grep -E "(Identifier|TeamIdentifier|Authority|Timestamp)" || true
@@ -272,10 +276,10 @@ function resign_xcframework() {
   local output_base_dir="$1"
   local xcframework_name="$2"
   local xcframework_path="${output_base_dir}/XCFrameworks/${xcframework_name}"
-  
+
   if [ -d "$xcframework_path" ]; then
     print_info "Resigning XCFramework: ${xcframework_name}"
-    
+
     # Sign XCFramework with Developer ID and runtime hardening
     codesign --force \
       --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
@@ -283,17 +287,17 @@ function resign_xcframework() {
       --deep \
       --timestamp \
       "$xcframework_path"
-    
+
     if [ $? -eq 0 ]; then
       print_success "XCFramework ${xcframework_name} resigned successfully"
-      
+
       # Verify the signature with strictest verification and deep checking
       print_info "Performing strict verification for XCFramework ${xcframework_name}..."
       codesign -vvv --deep "$xcframework_path"
-      
+
       if [ $? -eq 0 ]; then
         print_success "XCFramework signature verification passed for ${xcframework_name}"
-        
+
         # Display signature details
         print_info "XCFramework signature details for ${xcframework_name}:"
         codesign -dv --deep "$xcframework_path" 2>&1 | grep -E "(Identifier|TeamIdentifier|Authority)" || true
@@ -320,38 +324,38 @@ function build_axe_executable() {
 
   print_subsection "⚡" "Building AXe executable"
   print_info "Using Swift Package Manager to build AXe..."
-  
+
   # Clean any existing build products to ensure fresh build
   print_info "Cleaning previous build products..."
   swift package clean
-  
+
   # Build using Swift Package Manager (rely on environment variables for cache control)
   swift build --configuration ${build_config}
   local build_exit_code=$?
-  
+
   if [ $build_exit_code -eq 0 ]; then
     print_success "AXe executable built successfully!"
-    
+
     # Copy executable to build products directory
     print_info "Installing executable to ${executable_dest}"
     cp "${executable_source}" "${executable_dest}"
     print_success "AXe executable installed to ${executable_dest}"
-    
+
     # Configure rpath for organized framework loading
     print_info "Configuring executable rpath for organized framework loading..."
-    
+
     # Remove any existing rpaths first
     install_name_tool -delete_rpath "@executable_path/Frameworks" "${executable_dest}" 2>/dev/null || true
     install_name_tool -delete_rpath "@loader_path/Frameworks" "${executable_dest}" 2>/dev/null || true
-    
+
     # Add primary rpath: look for frameworks in Frameworks/ subdirectory relative to executable
     install_name_tool -add_rpath "@executable_path/Frameworks" "${executable_dest}"
     print_success "Added rpath: @executable_path/Frameworks"
-    
+
     # Add fallback rpath: look for frameworks in Frameworks/ relative to current library
     install_name_tool -add_rpath "@loader_path/Frameworks" "${executable_dest}"
     print_success "Added rpath: @loader_path/Frameworks"
-    
+
     # Verify rpath configuration
     print_info "Verifying rpath configuration..."
     local rpath_output=$(otool -l "${executable_dest}" | grep -A2 LC_RPATH | grep path | awk '{print $2}')
@@ -363,7 +367,7 @@ function build_axe_executable() {
     else
       print_warning "No rpath entries found in executable"
     fi
-    
+
     print_success "Executable rpath configured for organized framework deployment"
   else
     echo "❌ Error: AXe executable build failed with exit code ${build_exit_code}"
@@ -376,10 +380,10 @@ function build_axe_executable() {
 function sign_axe_executable() {
   local output_base_dir="$1"
   local executable_path="${output_base_dir}/axe"
-  
+
   if [ -f "$executable_path" ]; then
     print_info "Signing AXe executable: ${executable_path}"
-    
+
     # Sign with Developer ID and runtime hardening
     codesign --force \
       --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
@@ -387,17 +391,17 @@ function sign_axe_executable() {
       --entitlements entitlements.plist \
       --timestamp \
       "$executable_path"
-    
+
     if [ $? -eq 0 ]; then
       print_success "AXe executable signed successfully"
-      
+
       # Verify the signature with strictest verification
       print_info "Performing strict verification for AXe executable..."
       codesign -vvv "$executable_path"
-      
+
       if [ $? -eq 0 ]; then
         print_success "AXe executable signature verification passed"
-        
+
         # Display signature details
         print_info "AXe executable signature details:"
         codesign -dv "$executable_path" 2>&1 | grep -E "(Identifier|TeamIdentifier|Authority)" || true
@@ -424,22 +428,22 @@ function package_for_notarization() {
 
   print_subsection "📦" "Creating notarization package" >&2
   print_info "Package name: ${package_name}" >&2
-  
+
   # Create temporary package directory
   rm -rf "${package_dir}" "${package_zip}"
   mkdir -p "${package_dir}"
-  
+
   # Copy executable to package directory
   print_info "Copying executable to package..." >&2
   cp "${output_base_dir}/axe" "${package_dir}/"
-  
+
   # Create zip package (redirect zip output to stderr)
   print_info "Creating zip package: ${package_zip}" >&2
   (cd "${output_base_dir}" && zip -r "${package_name}.zip" "${package_name}/") >&2
-  
+
   # Clean up temporary directory
   rm -rf "${package_dir}"
-  
+
   if [ -f "${package_zip}" ]; then
     print_success "Notarization package created: ${package_zip}" >&2
     # Store the clean absolute path
@@ -456,22 +460,22 @@ function package_for_notarization() {
 # $1: Package zip path
 function notarize_package() {
   local package_zip="$1"
-  
+
   print_subsection "🍎" "Submitting for Apple notarization"
-  
+
   # Check if API key exists
   if [ ! -f "${NOTARIZATION_API_KEY_PATH}" ]; then
     echo "❌ Error: Notarization API key not found at ${NOTARIZATION_API_KEY_PATH}"
     print_info "Please ensure the API key file exists or set NOTARIZATION_API_KEY_PATH environment variable"
     exit 1
   fi
-  
+
   print_info "API Key: ${NOTARIZATION_API_KEY_PATH}"
   print_info "Key ID: ${NOTARIZATION_KEY_ID}"
   print_info "Issuer ID: ${NOTARIZATION_ISSUER_ID}"
   print_info "Package: ${package_zip}"
   print_info "Temporary directory: ${TEMP_DIR}"
-  
+
   # Submit for notarization
   print_info "Submitting package for notarization..."
   local submit_output=$(xcrun notarytool submit "${package_zip}" \
@@ -480,39 +484,39 @@ function notarize_package() {
     --issuer "${NOTARIZATION_ISSUER_ID}" \
     --wait 2>&1)
   local submit_exit_code=$?
-  
+
   echo "${submit_output}"
-  
+
   if [ $submit_exit_code -eq 0 ] && echo "${submit_output}" | grep -q "status: Accepted"; then
     # Extract submission ID from output
     local submission_id=$(echo "${submit_output}" | grep "id:" | head -1 | awk '{print $2}')
     print_success "Notarization completed successfully!"
     print_info "Submission ID: ${submission_id}"
-    
+
     # Extract notarized executable from package and replace original
     print_info "Extracting notarized executable to replace original..."
     local temp_extract_dir="${BUILD_OUTPUT_DIR}/temp_notarized"
     rm -rf "${temp_extract_dir}"
     mkdir -p "${temp_extract_dir}"
-    
+
     # Extract the notarized package
     unzip -q "${package_zip}" -d "${temp_extract_dir}"
-    
+
     # Find the extracted executable
     local extracted_executable=$(find "${temp_extract_dir}" -name "axe" -type f | head -1)
-    
+
     if [ -f "${extracted_executable}" ]; then
       # Replace the original executable with the notarized one
       cp "${extracted_executable}" "${BUILD_OUTPUT_DIR}/axe"
       print_success "Original executable replaced with notarized version"
-      
+
       # Verify notarization status using spctl
       print_info "Verifying notarization with spctl assessment..."
       spctl -a -v "${BUILD_OUTPUT_DIR}/axe" 2>&1 | grep -q "accepted" || {
         print_info "Note: spctl shows 'not an app' for command-line tools - this is expected"
         print_info "Notarized command-line tools are validated differently by macOS"
       }
-      
+
       # Check if the executable has the notarization signature
       print_info "Checking code signature details..."
       local sig_info=$(codesign -dv "${BUILD_OUTPUT_DIR}/axe" 2>&1)
@@ -521,21 +525,21 @@ function notarize_package() {
       else
         print_warning "Runtime hardening not detected in signature"
       fi
-      
+
       print_success "Notarized executable is ready for distribution"
-      
+
       # Ensure Frameworks directory exists for final package
       print_info "Preparing Frameworks directory for final package..."
       if [ ! -d "${BUILD_OUTPUT_DIR}/Frameworks" ]; then
         print_info "Frameworks directory not found, recreating from XCFrameworks..."
         mkdir -p "${BUILD_OUTPUT_DIR}/Frameworks"
-        
+
         # Extract frameworks from XCFrameworks for deployment
         for xcframework in "${BUILD_OUTPUT_DIR}/XCFrameworks"/*.xcframework; do
           if [ -d "$xcframework" ]; then
             local framework_name=$(basename "$xcframework" .xcframework)
             print_info "Extracting ${framework_name}.framework from XCFramework..."
-            
+
             # Find the macOS framework inside the XCFramework
             local macos_framework=$(find "$xcframework" -name "${framework_name}.framework" -path "*/macos-*" | head -1)
             if [ -d "$macos_framework" ]; then
@@ -550,16 +554,16 @@ function notarize_package() {
       else
         print_info "Frameworks directory already exists"
       fi
-      
+
       # Create final deployment package in temporary directory
       print_info "Creating final deployment package..."
       local final_package_name="AXe-Final-$(date +%Y%m%d-%H%M%S)"
       local final_package_dir="${TEMP_DIR}/${final_package_name}"
       local final_package_zip="${TEMP_DIR}/${final_package_name}.zip"
-      
+
       # Create final package directory
       mkdir -p "${final_package_dir}"
-      
+
       # Copy notarized executable and frameworks to final package
       cp "${BUILD_OUTPUT_DIR}/axe" "${final_package_dir}/"
       if [ -d "${BUILD_OUTPUT_DIR}/Frameworks" ]; then
@@ -568,37 +572,37 @@ function notarize_package() {
       else
         print_info "No Frameworks directory found - creating executable-only package"
       fi
-      
+
       # Create final zip package
       print_info "Creating final package: ${final_package_zip}"
       (cd "${TEMP_DIR}" && zip -r "${final_package_name}.zip" "${final_package_name}/")
-      
+
       # Clean up temporary package directory
       rm -rf "${final_package_dir}"
-      
+
       if [ -f "${final_package_zip}" ]; then
         print_success "Final deployment package created: ${final_package_zip}"
-        
+
         # Clean up build artifacts (axe executable and Frameworks, keep XCFrameworks)
         print_info "Cleaning up build artifacts..."
         rm -f "${BUILD_OUTPUT_DIR}/axe"
         rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
         print_success "Cleaned up axe executable and Frameworks directory"
         print_info "Preserved XCFrameworks directory for Swift package builds"
-        
+
         # Output the final package path
         echo ""
         echo "📦 Final Package Location:"
         echo "${final_package_zip}"
         echo ""
-        
+
         # Update the global PACKAGE_ZIP variable
         PACKAGE_ZIP="${final_package_zip}"
       else
         echo "❌ Error: Failed to create final deployment package"
         exit 1
       fi
-      
+
       # Clean up temporary extraction directory and original notarization package
       rm -rf "${temp_extract_dir}"
       rm -f "${package_zip}"
@@ -609,14 +613,14 @@ function notarize_package() {
     fi
   else
     echo "❌ Error: Notarization failed"
-    
+
     # Extract submission ID for log fetching
     local submission_id=$(echo "${submit_output}" | grep "id:" | head -1 | awk '{print $2}')
-    
+
     if [ -n "${submission_id}" ]; then
       print_info "Submission ID: ${submission_id}"
       print_info "Fetching notarization log for detailed error information..."
-      
+
       # Fetch the notary log using notarytool
       echo ""
       echo "📋 Notarization Log:"
@@ -630,7 +634,7 @@ function notarize_package() {
     else
       print_info "Could not extract submission ID from notarization output"
     fi
-    
+
     exit 1
   fi
 }
@@ -644,43 +648,43 @@ cat <<EOF
 Commands:
   help
     Print this usage information.
-  
+
   setup
     Clone the IDB repository and set up directories.
-  
+
   clean
     Clean previous build products and derived data.
-  
+
   frameworks
     Build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
-  
+
   install
     Install built frameworks to the Frameworks directory.
-  
+
   strip
     Strip nested frameworks from the built frameworks.
-  
+
   sign-frameworks
     Code sign all frameworks with Developer ID.
-  
+
   xcframeworks
     Create XCFrameworks from the built frameworks.
-  
+
   sign-xcframeworks
     Code sign all XCFrameworks with Developer ID.
-  
+
   executable
     Build the AXe executable using Swift Package Manager.
-  
+
   sign-executable
     Code sign the AXe executable with Developer ID.
-  
+
   package
     Create a notarization package (zip file).
-  
+
   notarize
     Submit package for Apple notarization and replace original executable.
-  
+
   build (default)
     Run all steps from setup through notarization.
 
@@ -729,7 +733,7 @@ function cmd_frameworks() {
 
 function cmd_install() {
   print_section "📦" "Installing Frameworks"
-  install_framework "FBControlCore" "${BUILD_OUTPUT_DIR}"  
+  install_framework "FBControlCore" "${BUILD_OUTPUT_DIR}"
   install_framework "XCTestBootstrap" "${BUILD_OUTPUT_DIR}"
   install_framework "FBSimulatorControl" "${BUILD_OUTPUT_DIR}"
   install_framework "FBDeviceControl" "${BUILD_OUTPUT_DIR}"
@@ -804,7 +808,7 @@ function cmd_notarize() {
 
 function cmd_build() {
   print_section "🚀" "IDB Framework Builder for AXe Project"
-  
+
   print_info "IDB Checkout Directory: ${IDB_CHECKOUT_DIR}"
   print_info "Build Output Directory: ${BUILD_OUTPUT_DIR}"
   print_info "Derived Data Path: ${DERIVED_DATA_PATH}"
@@ -878,4 +882,4 @@ case $COMMAND in
     exit 1;;
 esac
 
-exit 0 
+exit 0

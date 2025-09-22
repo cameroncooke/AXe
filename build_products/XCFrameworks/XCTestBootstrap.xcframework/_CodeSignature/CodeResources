@@ -130,7 +130,7 @@
 		</data>
 		<key>macos-arm64_x86_64/XCTestBootstrap.framework/Versions/A/XCTestBootstrap</key>
 		<data>
-		2xWxpnlp4/AN8gQlGEPJD4Dz0H4=
+		pRnGd1PqUdGa5WQbjy0IPfxbfXA=
 		</data>
 		<key>macos-arm64_x86_64/XCTestBootstrap.framework/Versions/A/_CodeSignature/CodeResources</key>
 		<data>
@@ -385,7 +385,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			Ggcld4iRhP8DPxiN3u0VDa3QBt+6yCDkwF7VxUfrM8U=
+			ljNrHRmMN41hBasNv6pdRGE1JTOGkY53yEgURAHwV90=
 			</data>
 		</dict>
 		<key>macos-arm64_x86_64/XCTestBootstrap.framework/Versions/A/_CodeSignature/CodeResources</key>
