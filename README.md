@@ -123,6 +123,8 @@ UDID="B34FF305-5EA8-412B-943F-1D0371CA17FF"
 
 # Basic interactions
 axe tap -x 100 -y 200 --udid $UDID
+axe tap --id "Safari" --udid $UDID
+axe tap --label "Safari" --udid $UDID
 axe type 'Hello World!' --udid $UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
 axe button home --udid $UDID
@@ -144,6 +146,10 @@ axe gesture scroll-down --pre-delay 0.5 --post-delay 1.0 --udid $UDID
 # Tap at coordinates
 axe tap -x 100 -y 200 --udid SIMULATOR_UDID
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
+
+# Tap by accessibility element (uses describe-ui accessibility tree)
+axe tap --id "Safari" --udid SIMULATOR_UDID
+axe tap --label "Safari" --udid SIMULATOR_UDID
 
 # Swipe gestures
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
