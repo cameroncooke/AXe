@@ -41,6 +41,10 @@ axe type --file input.txt --udid SIMULATOR_UDID
 # Simple tap
 axe tap -x 100 -y 200 --udid SIMULATOR_UDID
 
+# Tap by accessibility element (uses describe-ui accessibility tree)
+axe tap --id "Safari" --udid SIMULATOR_UDID
+axe tap --label "Safari" --udid SIMULATOR_UDID
+
 # Tap with timing controls
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 

@@ -37,6 +37,10 @@ struct DescribeUI: AsyncParsableCommand {
         }
         
         // Fetch accessibility information
-        try await AccessibilityFetcher.fetchAccessibilityInfo(for: simulatorUDID, logger: logger)
+        let jsonData = try await AccessibilityFetcher.fetchAccessibilityInfoJSONData(for: simulatorUDID, logger: logger)
+        guard let jsonString = String(data: jsonData, encoding: .utf8) else {
+            throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.")
+        }
+        print(jsonString)
     }
 } 

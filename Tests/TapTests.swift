@@ -19,6 +19,40 @@ struct TapTests {
         #expect(tapCountElement?.label == "Tap Count: 1", "Tap count should be 1")
         #expect(tapLocationElement?.label == "Tap Location: (200, 400)", "Tap location should be (200, 400)")
     }
+
+    @Test("Tap by AXUniqueId navigates back to home")
+    func tapByIDNavigatesBack() async throws {
+        // Arrange
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        
+        // Act
+        try await TestHelpers.runAxeCommand("tap --id BackButton", simulatorUDID: defaultSimulatorUDID)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        // Assert
+        let uiState = try await TestHelpers.getUIState()
+        let homeMarker = UIStateParser.findElementContainingLabel(in: uiState, containing: "Touch & Gestures")
+        let tapTestMarker = UIStateParser.findElementContainingLabel(in: uiState, containing: "Tap Count:")
+        #expect(homeMarker != nil)
+        #expect(tapTestMarker == nil)
+    }
+    
+    @Test("Tap by AXLabel navigates back to home")
+    func tapByLabelNavigatesBack() async throws {
+        // Arrange
+        try await TestHelpers.launchPlaygroundApp(to: "tap-test")
+        
+        // Act
+        try await TestHelpers.runAxeCommand("tap --label 'AXe Playground'", simulatorUDID: defaultSimulatorUDID)
+        try await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        // Assert
+        let uiState = try await TestHelpers.getUIState()
+        let homeMarker = UIStateParser.findElementContainingLabel(in: uiState, containing: "Touch & Gestures")
+        let tapTestMarker = UIStateParser.findElementContainingLabel(in: uiState, containing: "Tap Count:")
+        #expect(homeMarker != nil)
+        #expect(tapTestMarker == nil)
+    }
     
     @Test("Multiple taps register correct count")
     func multipleTaps() async throws {
