@@ -1,0 +1,32 @@
+--- a/FBControlCore/Tasks/FBProcess.h
++++ b/FBControlCore/Tasks/FBProcess.h
+@@ -6,12 +6,21 @@
+  */
+ 
+ #import <Foundation/Foundation.h>
++#import <TargetConditionals.h>
+ 
+ #import <FBControlCore/FBFuture.h>
+ #import <FBControlCore/FBiOSTargetOperation.h>
+ 
+ NS_ASSUME_NONNULL_BEGIN
+ 
++#if !defined(FBCC_RUNTIME_RENAME_FBPROCESS)
++#if TARGET_OS_OSX
++#define FBCC_RUNTIME_RENAME_FBPROCESS __attribute__((objc_runtime_name("AXEFBProcess")))
++#else
++#define FBCC_RUNTIME_RENAME_FBPROCESS
++#endif
++#endif
++
+ static const size_t FBProcessOutputErrorMessageLength = 200;
+ 
+ @class FBProcessSpawnConfiguration;
+@@ -19,6 +28,7 @@ static const size_t FBProcessOutputErrorMessageLength = 200;
+ /**
+  A representation of a process that has been launched.
+  */
++FBCC_RUNTIME_RENAME_FBPROCESS
+ @interface FBProcess <StdInType : id, StdOutType : id, StdErrType : id> : NSObject
+ 
+ #pragma mark Properties
