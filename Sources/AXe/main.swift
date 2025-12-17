@@ -14,18 +14,19 @@ struct Axe: AsyncParsableCommand {
         abstract: "A utility to interact with iOS Simulators and extract accessibility information.",
         version: VERSION,
         subcommands: [
-            DescribeUI.self, 
-            ListSimulators.self, 
-            Tap.self, 
-            Type.self, 
-            Swipe.self, 
-            Button.self, 
-            Key.self, 
-            KeySequence.self, 
+            DescribeUI.self,
+            ListSimulators.self,
+            Tap.self,
+            Type.self,
+            Swipe.self,
+            Button.self,
+            Key.self,
+            KeySequence.self,
             Touch.self,
             Gesture.self,
             StreamVideo.self,
-            RecordVideo.self
+            RecordVideo.self,
+            Screenshot.self
         ]
     )
 }
