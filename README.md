@@ -25,6 +25,7 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
   - [**Hardware Buttons**](#hardware-buttons-1)
   - [**Keyboard Control**](#keyboard-control)
   - [**Video Streaming**](#video-streaming)
+  - [**Screenshot**](#screenshot)
   - [**Accessibility \& Info**](#accessibility--info)
 - [Architecture](#architecture)
   - [Why AXe?](#why-axe)
@@ -62,7 +63,8 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Sequence Timing**: Custom delays between key sequences
 - **Complex Automation**: Multi-step workflows with precise timing
 
-### Video Streaming
+### Video & Screenshots
+- **Screenshot Capture**: Capture simulator display as PNG with automatic or custom filenames
 - **Screenshot-based Streaming**: Capture simulator video at 1-30 FPS
 - **Multiple Output Formats**: MJPEG, raw JPEG, ffmpeg-compatible, BGRA
 - **H.264 Recording**: Use the `record-video` command to write MP4 files with hardware-friendly encoding
@@ -252,6 +254,22 @@ axe record-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --outpu
 
 > [!TIP]
 > Press `Ctrl+C` to stop recording. AXe finalises the MP4 before exiting and prints the file path to stdout.
+
+### **Screenshot**
+
+```bash
+# Capture screenshot with auto-generated filename
+axe screenshot --udid SIMULATOR_UDID
+
+# Save to specific file
+axe screenshot --output ~/Desktop/my-screenshot.png --udid SIMULATOR_UDID
+
+# Save to directory (auto-generates timestamped filename)
+axe screenshot --output ~/Desktop/ --udid SIMULATOR_UDID
+```
+
+> [!TIP]
+> The screenshot path is printed to stdout for easy scripting. Progress messages go to stderr.
 
 ### **Accessibility & Info**
 
