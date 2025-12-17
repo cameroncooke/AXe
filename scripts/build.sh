@@ -7,6 +7,7 @@ set -o pipefail
 # Environment and Configuration
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
 IDB_GIT_REF="${IDB_GIT_REF:-76639e4d0e1741adf391cab36f19fbc59378153e}"
+IDB_PATCHES_DIR="${IDB_PATCHES_DIR:-./patches/idb}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
@@ -15,6 +16,10 @@ TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
 
 FRAMEWORK_SDK="macosx"
 FRAMEWORK_CONFIGURATION="Release"
+
+# Codesigning configuration (override by exporting AXE_CODESIGN_IDENTITY)
+DEFAULT_CODESIGN_IDENTITY="Developer ID Application: Cameron Cooke (BR6WD3M6ZD)"
+CODESIGN_IDENTITY="${AXE_CODESIGN_IDENTITY:-$DEFAULT_CODESIGN_IDENTITY}"
 
 # Notarization Configuration
 NOTARIZATION_API_KEY_PATH="${NOTARIZATION_API_KEY_PATH:-./keys/AuthKey_8TJYVXVDQ6.p8}"
@@ -87,11 +92,42 @@ function clone_idb_repo() {
     git clone https://github.com/facebook/idb.git $IDB_CHECKOUT_DIR
     (cd $IDB_CHECKOUT_DIR && git checkout "$IDB_GIT_REF")
     print_success "idb repository cloned at $IDB_GIT_REF."
+    apply_idb_patches
   else
     print_info "Updating idb repository to $IDB_GIT_REF..."
     (cd $IDB_CHECKOUT_DIR && git fetch --all --tags --prune && git reset --hard "$IDB_GIT_REF")
     print_success "idb repository updated to $IDB_GIT_REF."
+    apply_idb_patches
   fi
+}
+
+function apply_idb_patches() {
+  if [ ! -d "$IDB_PATCHES_DIR" ]; then
+    return
+  fi
+
+  shopt -s nullglob
+  local patches=("$IDB_PATCHES_DIR"/*.patch)
+  if [ ${#patches[@]} -eq 0 ]; then
+    shopt -u nullglob
+    return
+  fi
+
+  print_info "Applying local patches to idb repository..."
+  # Ensure we start from a clean working tree so patches apply consistently.
+  (cd "$IDB_CHECKOUT_DIR" && git checkout -- . >/dev/null 2>&1 && git clean -fd >/dev/null 2>&1) || true
+
+  local patch_file
+  for patch_file in "${patches[@]}"; do
+    local patch_abs
+    patch_abs="$(cd "$(dirname "$patch_file")" && pwd)/$(basename "$patch_file")"
+    print_info "  → $(basename "$patch_file")"
+    if ! (cd "$IDB_CHECKOUT_DIR" && patch -p1 -N < "$patch_abs"); then
+      echo "❌ Error: Failed to apply patch $(basename "$patch_file")"
+      exit 1
+    fi
+  done
+  shopt -u nullglob
 }
 
 # Function to build a single framework
@@ -217,7 +253,7 @@ function resign_framework() {
     find "$framework_path" -name "*.dylib" -type f | while read -r dylib_path; do
       print_info "  Signing dylib: $(basename "$dylib_path")"
       codesign --force \
-        --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
+        --sign "${CODESIGN_IDENTITY}" \
         --options runtime \
         --timestamp \
         --verbose \
@@ -236,7 +272,7 @@ function resign_framework() {
     # Sign the main framework bundle with specific notarization-compatible options
     print_info "Signing main framework bundle: ${framework_name}"
     codesign --force \
-      --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
+      --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --entitlements entitlements.plist \
       --timestamp \
@@ -282,7 +318,7 @@ function resign_xcframework() {
 
     # Sign XCFramework with Developer ID and runtime hardening
     codesign --force \
-      --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
+      --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --deep \
       --timestamp \
@@ -386,7 +422,7 @@ function sign_axe_executable() {
 
     # Sign with Developer ID and runtime hardening
     codesign --force \
-      --sign "Developer ID Application: Cameron Cooke (BR6WD3M6ZD)" \
+      --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --entitlements entitlements.plist \
       --timestamp \
