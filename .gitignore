@@ -14,8 +14,6 @@
 idb_checkout/
 /build_products/*.zip
 /build_products/Frameworks
-/build_products/XCFrameworks
-/build_products/axe
 /build_derived_data
 
 # Generated version file
@@ -49,6 +47,6 @@ Temporary Items
 .vscode
 /.cursorrules
 
-# Other 
+# Other
 /keys
 /buildServer.json
