@@ -42,7 +42,7 @@ struct HIDInteractor {
             throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) not found in set.")
         }
         logger.info().log("Target (FBSimulator) obtained: \(simulator.udid)")
-        logger.info().log("Simulator name: \(simulator.name ?? "Unknown")")
+        logger.info().log("Simulator name: \(simulator.name)")
         
         // Check if simulator is booted
         guard simulator.state == .booted else {
