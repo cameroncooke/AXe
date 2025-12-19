@@ -122,7 +122,14 @@ function apply_idb_patches() {
     local patch_abs
     patch_abs="$(cd "$(dirname "$patch_file")" && pwd)/$(basename "$patch_file")"
     print_info "  → $(basename "$patch_file")"
-    if ! (cd "$IDB_CHECKOUT_DIR" && patch -p1 -N < "$patch_abs"); then
+    # First verify patch applies cleanly with git apply --check
+    if ! (cd "$IDB_CHECKOUT_DIR" && git apply --check "$patch_abs" 2>/dev/null); then
+      echo "❌ Error: Patch $(basename "$patch_file") does not apply cleanly."
+      echo "   The upstream IDB source may have changed. Please update the patch."
+      exit 1
+    fi
+    # Apply the patch
+    if ! (cd "$IDB_CHECKOUT_DIR" && git apply "$patch_abs"); then
       echo "❌ Error: Failed to apply patch $(basename "$patch_file")"
       exit 1
     fi
