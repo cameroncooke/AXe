@@ -131,6 +131,9 @@ axe type 'Hello World!' --udid $UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
 axe button home --udid $UDID
 
+# Screenshot
+axe screenshot --udid $UDID
+
 # Gesture presets
 axe gesture scroll-up --udid $UDID
 axe gesture swipe-from-left-edge --udid $UDID
