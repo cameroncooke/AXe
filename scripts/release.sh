@@ -14,6 +14,9 @@ usage() {
 AXe Release Helper
 
 Usage: scripts/create-release.sh [VERSION|major|minor|patch] [--notes-file FILE] [--dry-run]
+       [--tap-target TARGET] [--tap-repo REPO] [--tap-branch BRANCH] [--tap-formula NAME]
+       [--staging-tap-repo REPO] [--staging-tap-branch BRANCH] [--staging-tap-formula NAME]
+       [--dispatch-workflow]
        scripts/create-release.sh --help
 
 Arguments:
@@ -23,6 +26,14 @@ Arguments:
 Options:
   --notes-file FILE  Read release notes from FILE instead of prompting
   --dry-run          Preview actions without pushing
+  --tap-target       Homebrew tap target: production|staging|both|skip (default derives from version)
+  --tap-repo         Override production tap repo (default: cameroncooke/homebrew-axe)
+  --tap-branch       Override production tap branch (default: main)
+  --tap-formula      Override production tap formula (default: axe)
+  --staging-tap-repo Override staging tap repo (default: cameroncooke/axe-staging)
+  --staging-tap-branch Override staging tap branch (default: main)
+  --staging-tap-formula Override staging tap formula (default: axe)
+  --dispatch-workflow Trigger workflow_dispatch run with tap inputs (skips if unset)
   -h, --help         Show this help text
 USAGE
 }
@@ -73,6 +84,14 @@ VERSION=""
 BUMP_TYPE=""
 NOTES_FILE=""
 DRY_RUN=false
+TAP_TARGET=""
+TAP_REPO="cameroncooke/homebrew-axe"
+TAP_BRANCH="main"
+TAP_FORMULA="axe"
+STAGING_TAP_REPO="cameroncooke/axe-staging"
+STAGING_TAP_BRANCH="main"
+STAGING_TAP_FORMULA="axe"
+DISPATCH_WORKFLOW=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -83,6 +102,37 @@ while [[ $# -gt 0 ]]; do
       ;;
     --dry-run)
       DRY_RUN=true
+      ;;
+    --tap-target)
+      shift
+      TAP_TARGET="${1:-}"
+      ;;
+    --tap-repo)
+      shift
+      TAP_REPO="${1:-}"
+      ;;
+    --tap-branch)
+      shift
+      TAP_BRANCH="${1:-}"
+      ;;
+    --tap-formula)
+      shift
+      TAP_FORMULA="${1:-}"
+      ;;
+    --staging-tap-repo)
+      shift
+      STAGING_TAP_REPO="${1:-}"
+      ;;
+    --staging-tap-branch)
+      shift
+      STAGING_TAP_BRANCH="${1:-}"
+      ;;
+    --staging-tap-formula)
+      shift
+      STAGING_TAP_FORMULA="${1:-}"
+      ;;
+    --dispatch-workflow)
+      DISPATCH_WORKFLOW=true
       ;;
     -h|--help)
       usage
@@ -149,6 +199,15 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
 fi
 
 TAG_NAME="v$VERSION"
+
+# Derive tap target if not supplied: prerelease -> staging, else production.
+if [[ -z "$TAP_TARGET" ]]; then
+  if [[ "$VERSION" == *"-"* ]]; then
+    TAP_TARGET="staging"
+  else
+    TAP_TARGET="production"
+  fi
+fi
 
 if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
   log_error "Tag $TAG_NAME already exists locally."
@@ -241,4 +300,20 @@ else
   git push origin ":refs/tags/$TAG_NAME" || true
   git tag -d "$TAG_NAME" || true
   log_error "Release workflow failed. Fix issues and rerun the script with version $VERSION."
+fi
+
+if $DISPATCH_WORKFLOW; then
+  log_info "Dispatching release workflow with explicit tap targets..."
+  gh workflow run "$WORKFLOW_FILE" \
+    -f tag="$TAG_NAME" \
+    -f tap_repo="$TAP_REPO" \
+    -f tap_formula="$TAP_FORMULA" \
+    -f tap_branch="$TAP_BRANCH" \
+    -f staging_tap_repo="$STAGING_TAP_REPO" \
+    -f staging_tap_formula="$STAGING_TAP_FORMULA" \
+    -f staging_tap_branch="$STAGING_TAP_BRANCH" \
+    -f tap_target="$TAP_TARGET" \
+    -f create_release=true \
+    -f prerelease=$([[ "$VERSION" == *"-"* ]] && echo true || echo false)
+  log_success "Workflow dispatch requested (tag=$TAG_NAME, tap_target=$TAP_TARGET)."
 fi

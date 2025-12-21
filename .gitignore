@@ -12,8 +12,7 @@
 
 # Transient build artifacts and dependencies
 idb_checkout/
-/build_products/*.zip
-/build_products/Frameworks
+/build_products
 /build_derived_data
 
 # Generated version file

@@ -35,6 +35,7 @@ let package = Package(
                 // if you manually copy them later for distribution.
                 .unsafeFlags([
                     "-Xlinker", "-dead_strip",
+                    "-Xlinker", "-headerpad_max_install_names",
                     "-Xlinker", "-rpath", "-Xlinker", "@executable_path" // Simpler rpath for SPM-handled XCFrameworks
                 ])
             ],

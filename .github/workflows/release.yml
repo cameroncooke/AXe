@@ -10,6 +10,51 @@ on:
         description: 'Tag to build (e.g., v1.0.43)'
         required: false
         type: string
+      tap_repo:
+        description: 'Homebrew tap repo (owner/name). Leave blank to skip tap update.'
+        required: false
+        type: string
+        default: ''
+      tap_target:
+        description: 'Tap target(s): production, staging, both, skip (comma-separated). Default chooses staging for prerelease, production otherwise.'
+        required: false
+        type: string
+        default: ''
+      tap_formula:
+        description: 'Homebrew formula name'
+        required: false
+        type: string
+        default: 'axe'
+      tap_branch:
+        description: 'Homebrew tap branch'
+        required: false
+        type: string
+        default: 'main'
+      staging_tap_repo:
+        description: 'Staging Homebrew tap repo (owner/name)'
+        required: false
+        type: string
+        default: 'cameroncooke/axe-staging'
+      staging_tap_formula:
+        description: 'Staging Homebrew formula name'
+        required: false
+        type: string
+        default: 'axe'
+      staging_tap_branch:
+        description: 'Staging Homebrew tap branch'
+        required: false
+        type: string
+        default: 'main'
+      create_release:
+        description: 'Create a GitHub release on manual runs'
+        required: false
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Mark manual releases as prerelease'
+        required: false
+        type: boolean
+        default: true
 
 env:
   ARCHIVE_NAME: AXe-macOS # Name for the release archive
@@ -25,6 +70,8 @@ jobs:
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
       archive_sha256: ${{ steps.create_archive.outputs.sha256 }}
+      homebrew_archive_name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
+      homebrew_archive_sha256: ${{ steps.create_homebrew_archive.outputs.sha256 }}
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       package_path: ${{ steps.notarize.outputs.package_path }}
@@ -192,31 +239,6 @@ jobs:
       if: steps.idb_check.outputs.needs_setup == 'true'
       run: scripts/build.sh sign-xcframeworks
 
-    - name: Commit updated XCFrameworks
-      if: steps.idb_check.outputs.needs_setup == 'true'
-      run: |
-        set -e
-
-        echo "🔄 Committing updated XCFrameworks to repository..."
-
-        # Configure git
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-        # Add the XCFrameworks directory
-        git add build_products/XCFrameworks/
-
-        # Check if there are changes to commit
-        if git diff --staged --quiet; then
-          echo "ℹ️ No changes to XCFrameworks detected, skipping commit"
-        else
-          git commit -m "Update XCFrameworks to IDB commit ${{ steps.idb_check.outputs.idb_commit }}"
-
-          # Push to the main branch
-          git push origin HEAD:main
-          echo "✅ XCFrameworks committed and pushed successfully"
-        fi
-
     - name: Save IDB repository cache
       if: steps.idb_check.outputs.needs_setup == 'true'
       uses: actions/cache/save@v4
@@ -296,12 +318,66 @@ jobs:
           exit 1
         fi
 
+    - name: Create Homebrew archive (unsigned)
+      id: create_homebrew_archive
+      run: |
+        ARCHIVE_NAME="AXe-macOS-homebrew-${{ steps.version.outputs.tag }}.tar.gz"
+        echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+
+        PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
+        if [ -f "$PACKAGE_PATH" ]; then
+          echo "🍺 Creating Homebrew archive from: $PACKAGE_PATH"
+
+          # Extract the package to create the tar.gz
+          TEMP_EXTRACT="$RUNNER_TEMP/extract-homebrew"
+          mkdir -p "$TEMP_EXTRACT"
+          unzip -q "$PACKAGE_PATH" -d "$TEMP_EXTRACT"
+
+          TOP_LEVEL_DIR_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+          TOP_LEVEL_FILE_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+          if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
+            PACKAGE_ROOT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -1)
+          else
+            PACKAGE_ROOT="$TEMP_EXTRACT"
+          fi
+
+          # Remove signatures so Homebrew can adjust install names/rpaths
+          while IFS= read -r -d '' file; do
+            if file "$file" | grep -q "Mach-O"; then
+              codesign --remove-signature "$file" 2>/dev/null || true
+            fi
+          done < <(find "$TEMP_EXTRACT" -type f -print0)
+
+          find "$TEMP_EXTRACT" -type d -name "*.framework" -print0 | while IFS= read -r -d '' bundle; do
+            codesign --remove-signature "$bundle" 2>/dev/null || true
+          done
+
+          # Create tar.gz from extracted contents
+          tar -czf "$ARCHIVE_NAME" -C "$PACKAGE_ROOT" .
+
+          # Calculate SHA256
+          SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
+          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+          echo "✅ Homebrew archive created: $ARCHIVE_NAME (SHA256: $SHA256)"
+        else
+          echo "❌ Package path not found: $PACKAGE_PATH"
+          exit 1
+        fi
+
     - name: Upload build artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.create_archive.outputs.archive_name }}
         path: ${{ steps.create_archive.outputs.archive_name }}
+        retention-days: 30
+
+    - name: Upload Homebrew artifact (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
+        path: ${{ steps.create_homebrew_archive.outputs.archive_name }}
         retention-days: 30
 
     - name: Read tag release notes
@@ -339,55 +415,169 @@ jobs:
           --title "$TITLE" \
           --notes-file "$NOTES_FILE" \
           $PRERELEASE_FLAG \
-          "${{ steps.create_archive.outputs.archive_name }}"
+          "${{ steps.create_archive.outputs.archive_name }}" \
+          "${{ steps.create_homebrew_archive.outputs.archive_name }}"
 
         echo "✅ Release $TAG created."
 
-    - name: Update Homebrew tap
+    - name: Create GitHub release (manual trigger)
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        TITLE="Release $TAG"
+        VERSION="${{ steps.version.outputs.version }}"
+
+        if [[ "${{ github.event.inputs.prerelease }}" == "true" || "$VERSION" == *"-"* ]]; then
+          PRERELEASE_FLAG="--prerelease"
+        else
+          PRERELEASE_FLAG=""
+        fi
+
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          echo "🗑️ Existing release found for $TAG. Deleting..."
+          gh release delete "$TAG" --yes
+        fi
+
+        gh release create "$TAG" \
+          --title "$TITLE" \
+          --generate-notes \
+          $PRERELEASE_FLAG \
+          "${{ steps.create_archive.outputs.archive_name }}" \
+          "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+
+        echo "✅ Release $TAG created (manual trigger)."
+
+    - name: Update Homebrew tap(s)
+      # Skip tap updates on manual runs unless create_release is true, because no artifact is uploaded otherwise.
       if: |
-        (github.event_name == 'push' && !contains(steps.version.outputs.version, '-')) ||
-        (github.event_name == 'workflow_dispatch')
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       env:
         HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        HOMEBREW_STAGING_TAP_TOKEN: ${{ secrets.HOMEBREW_STAGING_TAP_TOKEN }}
       run: |
         set -e
-        if [ -z "$HOMEBREW_TAP_TOKEN" ]; then
-          echo "⚠️ Homebrew tap update skipped - no token provided"
+        VERSION_TAG="${{ steps.version.outputs.version }}"
+
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          TAP_TARGETS="${{ github.event.inputs.tap_target }}"
+          if [ -z "$TAP_TARGETS" ]; then
+            if [ "${{ github.event.inputs.create_release }}" = "true" ] && [[ "$VERSION_TAG" != *"-"* ]]; then
+              TAP_TARGETS="production"
+            else
+              TAP_TARGETS="staging"
+            fi
+          fi
+        else
+          if [[ "$VERSION_TAG" == *"-"* ]]; then
+            TAP_TARGETS="staging"
+          else
+            TAP_TARGETS="production"
+          fi
+        fi
+
+        if [ -z "$TAP_TARGETS" ]; then
+          echo "ℹ️ Homebrew tap update skipped - no targets requested"
           exit 0
         fi
 
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "🍺 Updating Homebrew tap (manual trigger)..."
-        else
-          echo "🍺 Updating Homebrew tap (release event)..."
+        # Normalize shorthand
+        if [[ "$TAP_TARGETS" == "both" ]]; then
+          TAP_TARGETS="production,staging"
         fi
 
-        git clone https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/cameroncooke/homebrew-axe.git tap-repo
-        cd tap-repo
+        IFS=',' read -ra RAW_TARGETS <<< "$TAP_TARGETS"
+        TARGETS=()
+        for T in "${RAW_TARGETS[@]}"; do
+          T_CLEAN=$(echo "$T" | tr -d '[:space:]')
+          [[ -z "$T_CLEAN" ]] && continue
+          TARGETS+=("$T_CLEAN")
+        done
 
-        FORMULA_FILE="Formula/axe.rb"
-        URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_archive.outputs.archive_name }}"
-        SHA256="${{ steps.create_archive.outputs.sha256 }}"
-        VERSION_TAG="${{ steps.version.outputs.version }}"
-
-        # Update formula with new version, URL, and SHA256
-        awk -v version="$VERSION_TAG" -v url="$URL" -v sha="$SHA256" '
-        /version "/ {gsub(/version \".*\"/, "version \"" version "\""); print; next}
-        /url "/ {gsub(/url \".*\"/, "url \"" url "\""); print; next}
-        /sha256 "/ {gsub(/sha256 \".*\"/, "sha256 \"" sha "\""); print; next}
-        {print}
-        ' "$FORMULA_FILE" > "${FORMULA_FILE}.new" && mv "${FORMULA_FILE}.new" "$FORMULA_FILE"
-
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        git add "$FORMULA_FILE"
-        if ! git diff --staged --quiet; then
-          git commit -m "Update axe to v${VERSION_TAG}"
-          git push origin main
-          echo "✅ Homebrew formula updated successfully to v${VERSION_TAG}"
-        else
-          echo "ℹ️ No changes to commit for Homebrew formula (v${VERSION_TAG})"
+        if [ ${#TARGETS[@]} -eq 0 ]; then
+          echo "ℹ️ Homebrew tap update skipped - no valid targets after normalization"
+          exit 0
         fi
+
+        for TARGET in "${TARGETS[@]}"; do
+          case "$TARGET" in
+            production)
+              TAP_REPO="${{ github.event.inputs.tap_repo }}"
+              TAP_FORMULA="${{ github.event.inputs.tap_formula }}"
+              TAP_BRANCH="${{ github.event.inputs.tap_branch }}"
+              TAP_REPO="${TAP_REPO:-cameroncooke/homebrew-axe}"
+              TAP_FORMULA="${TAP_FORMULA:-axe}"
+              TAP_BRANCH="${TAP_BRANCH:-main}"
+              TOKEN="$HOMEBREW_TAP_TOKEN"
+              FRIENDLY_NAME="production"
+              ;;
+            staging)
+              TAP_REPO="${{ github.event.inputs.staging_tap_repo }}"
+              TAP_FORMULA="${{ github.event.inputs.staging_tap_formula }}"
+              TAP_BRANCH="${{ github.event.inputs.staging_tap_branch }}"
+              TAP_REPO="${TAP_REPO:-cameroncooke/axe-staging}"
+              TAP_FORMULA="${TAP_FORMULA:-axe}"
+              TAP_BRANCH="${TAP_BRANCH:-main}"
+              TOKEN="${HOMEBREW_STAGING_TAP_TOKEN:-$HOMEBREW_TAP_TOKEN}"
+              FRIENDLY_NAME="staging"
+              ;;
+            skip)
+              echo "ℹ️ Homebrew tap update skipped by request (target=skip)"
+              continue
+              ;;
+            *)
+              echo "❌ Unknown tap target '$TARGET' - aborting tap updates"
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$TOKEN" ]; then
+            echo "⚠️ Homebrew tap update skipped for $FRIENDLY_NAME ($TAP_REPO) - no token provided"
+            continue
+          fi
+
+          echo "🍺 Updating Homebrew tap (${FRIENDLY_NAME}): ${TAP_REPO} [branch=${TAP_BRANCH}, formula=${TAP_FORMULA}]"
+
+          WORK_DIR="tap-repo-${TARGET}"
+          rm -rf "$WORK_DIR"
+          GH_TOKEN="$TOKEN" gh repo clone "${TAP_REPO}" "$WORK_DIR"
+          cd "$WORK_DIR"
+          git checkout "${TAP_BRANCH}"
+
+          # Ensure git pushes use the provided token (gh auth alone won't wire git by default here)
+          git remote set-url origin "https://${TOKEN}@github.com/${TAP_REPO}.git"
+
+          FORMULA_FILE="Formula/${TAP_FORMULA}.rb"
+          if [ ! -f "$FORMULA_FILE" ]; then
+            echo "❌ Formula file not found: $FORMULA_FILE"
+            exit 1
+          fi
+
+          URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_homebrew_archive.outputs.archive_name }}"
+          SHA256="${{ steps.create_homebrew_archive.outputs.sha256 }}"
+
+          awk -v version="$VERSION_TAG" -v url="$URL" -v sha="$SHA256" '
+          /version "/ {gsub(/version "[^"]*"/, "version \"" version "\""); print; next}
+          /url "/ {gsub(/url "[^"]*"/, "url \"" url "\""); print; next}
+          /sha256 "/ {gsub(/sha256 "[^"]*"/, "sha256 \"" sha "\""); print; next}
+          {print}
+          ' "$FORMULA_FILE" > "${FORMULA_FILE}.new" && mv "${FORMULA_FILE}.new" "$FORMULA_FILE"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$FORMULA_FILE"
+          if ! git diff --staged --quiet; then
+            git commit -m "Update axe to v${VERSION_TAG}"
+            git push origin "${TAP_BRANCH}"
+            echo "✅ Homebrew formula updated successfully to v${VERSION_TAG} (${FRIENDLY_NAME})"
+          else
+            echo "ℹ️ No changes to commit for Homebrew formula (v${VERSION_TAG})"
+          fi
+
+          cd ..
+        done
 
     - name: Cleanup
       if: always()

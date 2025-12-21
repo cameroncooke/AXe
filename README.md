@@ -105,7 +105,10 @@ For development work:
 git clone https://github.com/cameroncooke/AXe.git
 cd AXe
 
-# Run directly with Swift (frameworks handled automatically)
+# Build required XCFrameworks (not checked into the repo)
+./scripts/build.sh dev
+
+# Run directly with Swift after frameworks are built
 swift run axe --help
 swift run axe list-simulators
 

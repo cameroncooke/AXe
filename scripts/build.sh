@@ -71,15 +71,15 @@ function print_warning() {
 
 # Function to invoke xcodebuild, optionally with xcpretty
 function invoke_xcodebuild() {
-  local arguments=$@
+  local arguments=("$@")
   print_info "Executing: xcodebuild ${arguments[*]}"
 
   local exit_code
   if [[ -n $HAS_XCPRETTY ]]; then
-    NSUnbufferedIO=YES xcodebuild $arguments | xcpretty -c
+    NSUnbufferedIO=YES xcodebuild "${arguments[@]}" | xcpretty -c
     exit_code=${PIPESTATUS[0]}
   else
-    xcodebuild $arguments 2>&1
+    xcodebuild "${arguments[@]}" 2>&1
     exit_code=$?
   fi
 
@@ -163,7 +163,8 @@ function framework_build() {
     GCC_WARN_ABOUT_MISSING_FIELD_INITIALIZERS=NO \
     CLANG_WARN_DOCUMENTATION_COMMENTS=NO \
     GCC_TREAT_WARNINGS_AS_ERRORS=NO \
-    SWIFT_TREAT_WARNINGS_AS_ERRORS=NO
+    SWIFT_TREAT_WARNINGS_AS_ERRORS=NO \
+    OTHER_LDFLAGS='$(inherited) -Wl,-headerpad_max_install_names'
   local build_exit_code=$?
 
   if [ $build_exit_code -eq 0 ]; then
@@ -357,6 +358,42 @@ function resign_xcframework() {
   fi
 }
 
+function remove_xcode_rpaths() {
+  local target="$1"
+  if [[ ! -f "$target" ]]; then
+    return
+  fi
+
+  local rpaths
+  rpaths=$(otool -l "$target" 2>/dev/null | awk 'BEGIN{r=0} /LC_RPATH/{r=1} r==1 && /path/{print $2; r=0}' | grep "/Applications/Xcode" || true)
+  if [[ -n "$rpaths" ]]; then
+    while IFS= read -r path; do
+      install_name_tool -delete_rpath "$path" "$target" || true
+    done <<< "$rpaths"
+  fi
+}
+
+function sanitize_framework_rpaths() {
+  local frameworks_dir="$1"
+  if [[ ! -d "$frameworks_dir" ]]; then
+    print_warning "Frameworks directory not found: $frameworks_dir"
+    return
+  fi
+
+  print_info "Removing Xcode toolchain rpaths from framework binaries..."
+  local found=false
+  while IFS= read -r -d '' file; do
+    if file "$file" | grep -q "Mach-O"; then
+      found=true
+      remove_xcode_rpaths "$file"
+    fi
+  done < <(find "$frameworks_dir" -type f -print0)
+
+  if [[ "$found" == "false" ]]; then
+    print_warning "No Mach-O files found under ${frameworks_dir}"
+  fi
+}
+
 # Function to build the AXe executable using Swift Package Manager
 # $1: Base output directory
 function build_axe_executable() {
@@ -398,6 +435,9 @@ function build_axe_executable() {
     # Add fallback rpath: look for frameworks in Frameworks/ relative to current library
     install_name_tool -add_rpath "@loader_path/Frameworks" "${executable_dest}"
     print_success "Added rpath: @loader_path/Frameworks"
+
+    # Strip any Xcode toolchain rpaths that can trigger Homebrew relocation
+    remove_xcode_rpaths "${executable_dest}"
 
     # Verify rpath configuration
     print_info "Verifying rpath configuration..."
@@ -794,6 +834,7 @@ function cmd_strip() {
 function cmd_sign_frameworks() {
   print_section "🔒" "Resigning Frameworks"
   print_info "Resigning frameworks..."
+  sanitize_framework_rpaths "${BUILD_OUTPUT_DIR}/Frameworks"
   resign_framework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.framework"
   resign_framework "${BUILD_OUTPUT_DIR}" "FBDeviceControl.framework"
   resign_framework "${BUILD_OUTPUT_DIR}" "XCTestBootstrap.framework"
@@ -907,6 +948,15 @@ case $COMMAND in
   xcframeworks)
     cmd_xcframeworks;;
   sign-xcframeworks)
+    cmd_sign_xcframeworks;;
+  dev)
+    cmd_setup
+    cmd_clean
+    cmd_frameworks
+    cmd_install
+    cmd_strip
+    cmd_sign_frameworks
+    cmd_xcframeworks
     cmd_sign_xcframeworks;;
   executable)
     cmd_executable;;
