@@ -240,7 +240,7 @@ jobs:
       run: scripts/build.sh sign-xcframeworks
 
     - name: Commit updated XCFrameworks
-      if: steps.idb_check.outputs.needs_setup == 'true'
+      if: steps.idb_check.outputs.needs_setup == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
       run: |
         set -e
 
