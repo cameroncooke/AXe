@@ -240,7 +240,7 @@ jobs:
       run: scripts/build.sh sign-xcframeworks
 
     - name: Commit updated XCFrameworks
-      if: steps.idb_check.outputs.needs_setup == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      if: steps.idb_check.outputs.needs_setup == 'true' && startsWith(github.ref, 'refs/tags/')
       run: |
         set -e
 
@@ -510,9 +510,20 @@ jobs:
           TAP_TARGETS="production,staging"
         fi
 
-        IFS=',' read -ra TARGETS <<< "$TAP_TARGETS"
+        IFS=',' read -ra RAW_TARGETS <<< "$TAP_TARGETS"
+        TARGETS=()
+        for T in "${RAW_TARGETS[@]}"; do
+          T_CLEAN=$(echo "$T" | tr -d '[:space:]')
+          [[ -z "$T_CLEAN" ]] && continue
+          TARGETS+=("$T_CLEAN")
+        done
+
+        if [ ${#TARGETS[@]} -eq 0 ]; then
+          echo "ℹ️ Homebrew tap update skipped - no valid targets after normalization"
+          exit 0
+        fi
+
         for TARGET in "${TARGETS[@]}"; do
-          TARGET=$(echo "$TARGET" | tr -d '[:space:]')
           case "$TARGET" in
             production|"")
               TAP_REPO="${{ github.event.inputs.tap_repo }}"
@@ -539,8 +550,8 @@ jobs:
               continue
               ;;
             *)
-              echo "⚠️ Unknown tap target '$TARGET' - skipping"
-              continue
+              echo "❌ Unknown tap target '$TARGET' - aborting tap updates"
+              exit 1
               ;;
           esac
 
