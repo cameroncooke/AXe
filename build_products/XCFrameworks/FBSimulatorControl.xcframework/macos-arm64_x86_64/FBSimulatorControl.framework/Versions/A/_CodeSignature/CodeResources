@@ -6,11 +6,29 @@
 	<dict>
 		<key>Resources/Info.plist</key>
 		<data>
-		hPWxTxZNTQMsHnIiphOLv6bD3Q8=
+		n+Q+ntGpERw0fCUl0fTntaWPjog=
 		</data>
 	</dict>
 	<key>files2</key>
 	<dict>
+		<key>Frameworks/FBControlCore.framework</key>
+		<dict>
+			<key>cdhash</key>
+			<data>
+			sGJXDT6bwdTb72PTsZdpM/M5sgY=
+			</data>
+			<key>requirement</key>
+			<string>cdhash H"b062570d3e9bc1d4dbef63d3b1976933f339b206" or cdhash H"fb53a57c01f181c3437e50a68999ce014f024233"</string>
+		</dict>
+		<key>Frameworks/XCTestBootstrap.framework</key>
+		<dict>
+			<key>cdhash</key>
+			<data>
+			pW53yvg59PGzQzej29Eb2s22eTQ=
+			</data>
+			<key>requirement</key>
+			<string>cdhash H"a56e77caf839f4f1b34337a3dbd11bdacdb67934" or cdhash H"e8bc30916a039adc69db0848ba5c21617b59c416"</string>
+		</dict>
 		<key>Headers/FBFramebuffer.h</key>
 		<dict>
 			<key>hash2</key>
@@ -197,7 +215,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			dZ90k78Ubga1uMW5/V0MxuhwIaeYPClIOwRPT/OBWE0=
+			azczDG3nlPmoUjg4LooCrQQge0CD0nMoItMavcWadcc=
 			</data>
 		</dict>
 	</dict>
