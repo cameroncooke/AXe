@@ -557,6 +557,9 @@ jobs:
           cd "$WORK_DIR"
           git checkout "${TAP_BRANCH}"
 
+          # Ensure git pushes use the provided token (gh auth alone won't wire git by default here)
+          git remote set-url origin "https://${TOKEN}@github.com/${TAP_REPO}.git"
+
           FORMULA_FILE="Formula/${TAP_FORMULA}.rb"
           if [ ! -f "$FORMULA_FILE" ]; then
             echo "❌ Formula file not found: $FORMULA_FILE"
@@ -578,7 +581,7 @@ jobs:
           git add "$FORMULA_FILE"
           if ! git diff --staged --quiet; then
             git commit -m "Update axe to v${VERSION_TAG}"
-            GH_TOKEN="$TOKEN" git push origin "${TAP_BRANCH}"
+            git push origin "${TAP_BRANCH}"
             echo "✅ Homebrew formula updated successfully to v${VERSION_TAG} (${FRIENDLY_NAME})"
           else
             echo "ℹ️ No changes to commit for Homebrew formula (v${VERSION_TAG})"
