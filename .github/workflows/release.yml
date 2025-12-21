@@ -239,31 +239,6 @@ jobs:
       if: steps.idb_check.outputs.needs_setup == 'true'
       run: scripts/build.sh sign-xcframeworks
 
-    - name: Commit updated XCFrameworks
-      if: steps.idb_check.outputs.needs_setup == 'true' && startsWith(github.ref, 'refs/tags/')
-      run: |
-        set -e
-
-        echo "🔄 Committing updated XCFrameworks to repository..."
-
-        # Configure git
-        git config --local user.email "action@github.com"
-        git config --local user.name "GitHub Action"
-
-        # Add the XCFrameworks directory
-        git add build_products/XCFrameworks/
-
-        # Check if there are changes to commit
-        if git diff --staged --quiet; then
-          echo "ℹ️ No changes to XCFrameworks detected, skipping commit"
-        else
-          git commit -m "Update XCFrameworks to IDB commit ${{ steps.idb_check.outputs.idb_commit }}"
-
-          # Push to the main branch
-          git push origin HEAD:main
-          echo "✅ XCFrameworks committed and pushed successfully"
-        fi
-
     - name: Save IDB repository cache
       if: steps.idb_check.outputs.needs_setup == 'true'
       uses: actions/cache/save@v4
@@ -528,7 +503,7 @@ jobs:
 
         for TARGET in "${TARGETS[@]}"; do
           case "$TARGET" in
-            production|"")
+            production)
               TAP_REPO="${{ github.event.inputs.tap_repo }}"
               TAP_FORMULA="${{ github.event.inputs.tap_formula }}"
               TAP_BRANCH="${{ github.event.inputs.tap_branch }}"

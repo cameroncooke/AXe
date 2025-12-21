@@ -949,6 +949,15 @@ case $COMMAND in
     cmd_xcframeworks;;
   sign-xcframeworks)
     cmd_sign_xcframeworks;;
+  dev)
+    cmd_setup
+    cmd_clean
+    cmd_frameworks
+    cmd_install
+    cmd_strip
+    cmd_sign_frameworks
+    cmd_xcframeworks
+    cmd_sign_xcframeworks;;
   executable)
     cmd_executable;;
   sign-executable)
