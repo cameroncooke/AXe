@@ -475,7 +475,10 @@ jobs:
         echo "✅ Release $TAG created (manual trigger)."
 
     - name: Update Homebrew tap(s)
-      if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+      # Skip tap updates on manual runs unless create_release is true, because no artifact is uploaded otherwise.
+      if: |
+        github.event_name == 'push' ||
+        (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
       env:
         HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         HOMEBREW_STAGING_TAP_TOKEN: ${{ secrets.HOMEBREW_STAGING_TAP_TOKEN }}
