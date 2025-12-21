@@ -1,0 +1,31 @@
+diff --git a/FBSimulatorControl.xcodeproj/project.pbxproj b/FBSimulatorControl.xcodeproj/project.pbxproj
+index cbb0ae6d..812eeea5 100644
+--- a/FBSimulatorControl.xcodeproj/project.pbxproj
++++ b/FBSimulatorControl.xcodeproj/project.pbxproj
+@@ -3425,7 +3425,7 @@
+ 			);
+ 			runOnlyForDeploymentPostprocessing = 0;
+ 			shellPath = /bin/sh;
+-			shellScript = "set -exu\nfunction build_shim() {\n  local shim_to_build=$1 \n  local shim_destination=$2 \n  local build_log_mirror=$TEMP_DIR/$shim_to_build-build.log\n\n  xcodebuild -project Shims/Shimulator/Shimulator.xcodeproj -scheme $shim_to_build build | tee $build_log_mirror\n  \n  local build_out_file=$(grep \"SHIM_DYLIB_PATH\" $build_log_mirror | cut -d \"=\" -f2-)\n\n  echo cp $build_out_file $shim_destination/.\n    cp $build_out_file $shim_destination/.\n}\n\n# SRCROOT refers to FBSimulatorControl project\nbuild_shim Shimulator $SRCROOT/Shims/Binaries\nif codesign -dvvv $SRCROOT/Shims/Binaries/libShimulator.dylib; then\n    echo Shimulator was signed\nelse\n    echo Shimulator was not signed, but it should have been\n    exit 1\nfi\n\nbuild_shim Maculator $SRCROOT/Shims/Binaries\nif codesign -dvvv $SRCROOT/Shims/Binaries/libMaculator.dylib; then\n    echo Maculator was signed\nelse\n    echo Maculator was not signed, but it should have been\n    exit 1\nfi\n";
++			shellScript = "set -exu\nfunction build_shim() {\n  local shim_to_build=$1 \n  local shim_destination=$2 \n  local build_log_mirror=$TEMP_DIR/$shim_to_build-build.log\n\n  xcodebuild -project Shims/Shimulator/Shimulator.xcodeproj -scheme $shim_to_build build OTHER_LDFLAGS='$(inherited) -Wl,-headerpad_max_install_names' | tee $build_log_mirror\n  \n  local build_out_file=$(grep \"SHIM_DYLIB_PATH\" $build_log_mirror | cut -d \"=\" -f2-)\n\n  echo cp $build_out_file $shim_destination/.\n    cp $build_out_file $shim_destination/.\n}\n\n# SRCROOT refers to FBSimulatorControl project\nbuild_shim Shimulator $SRCROOT/Shims/Binaries\nif codesign -dvvv $SRCROOT/Shims/Binaries/libShimulator.dylib; then\n    echo Shimulator was signed\nelse\n    echo Shimulator was not signed, but it should have been\n    exit 1\nfi\n\nbuild_shim Maculator $SRCROOT/Shims/Binaries\nif codesign -dvvv $SRCROOT/Shims/Binaries/libMaculator.dylib; then\n    echo Maculator was signed\nelse\n    echo Maculator was not signed, but it should have been\n    exit 1\nfi\n";
+ 			showEnvVarsInLog = 0;
+ 		};
+ /* End PBXShellScriptBuildPhase section */
+diff --git a/Shims/Shimulator/Configs/Maculator.xcconfig b/Shims/Shimulator/Configs/Maculator.xcconfig
+index 8cccb535..daf77dbf 100644
+--- a/Shims/Shimulator/Configs/Maculator.xcconfig
++++ b/Shims/Shimulator/Configs/Maculator.xcconfig
+@@ -9,3 +9,4 @@ SDKROOT = macosx
+ MACOSX_DEPLOYMENT_TARGET = 10.13
+ COPY_PHASE_STRIP = NO
+ CODE_SIGN_IDENTITY = - // Maculator Shims must be CodeSigned, to work for injection.
++LD_DYLIB_INSTALL_NAME = @rpath/$(EXECUTABLE_NAME)
+diff --git a/Shims/Shimulator/Configs/Shimulator.xcconfig b/Shims/Shimulator/Configs/Shimulator.xcconfig
+index 442e69fe..dece5175 100644
+--- a/Shims/Shimulator/Configs/Shimulator.xcconfig
++++ b/Shims/Shimulator/Configs/Shimulator.xcconfig
+@@ -9,3 +9,4 @@ SDKROOT = iphonesimulator
+ IPHONEOS_DEPLOYMENT_TARGET = 11.0
+ COPY_PHASE_STRIP = NO
+ CODE_SIGN_IDENTITY = -  // Simulator Shims must be CodeSigned, to work for injection.
++LD_DYLIB_INSTALL_NAME = @rpath/$(EXECUTABLE_NAME)
