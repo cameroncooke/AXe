@@ -5,9 +5,9 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.3.0] - 2026-01-28
 
-- Add `key-combo` command for atomic modifier+key presses (e.g., Cmd+A, Cmd+Shift+Z)
+- Add `key-combo` command for atomic modifier+key presses (e.g., Cmd+A, Cmd+Shift+Z) Thanks to @jpsim for the contribution!
 
 ## [v1.2.0] - 2025-12-19
 
