@@ -16,7 +16,7 @@ struct RecordVideoTests {
 
     @Test("Record video honours FPS, scale, and quality settings")
     func recordVideoCustomOptions() async throws {
-        let result = try await invokeRecordVideo(fps: 5, scale: 0.5, quality: 60, duration: 2.0)
+        let result = try await invokeRecordVideo(fps: 5, quality: 60, scale: 0.5, duration: 2.0)
         defer { try? FileManager.default.removeItem(at: result.outputURL) }
 
         #expect(result.exitCode == 0)

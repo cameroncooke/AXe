@@ -203,6 +203,7 @@ For releases, use: `./scripts/create-release.sh`
 - `type`: Type text via direct input, stdin, or file
 - `key`: Press individual keys by HID keycode
 - `key-sequence`: Execute key sequences
+- `key-combo`: Atomic modifier+key combinations (e.g., Cmd+A)
 - `touch`: Low-level touch down/up events
 - `button`: Hardware button simulation
 - `gesture`: Gesture presets (scroll, swipe patterns)
@@ -211,4 +212,4 @@ For releases, use: `./scripts/create-release.sh`
 - Scrolling: `scroll-up`, `scroll-down`, `scroll-left`, `scroll-right`
 - Navigation: `swipe-from-left-edge`, `swipe-from-right-edge`, etc.
 
-All commands support `--pre-delay` and `--post-delay` for timing control.
+Most interaction commands support `--pre-delay` and `--post-delay` for timing control.

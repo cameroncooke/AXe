@@ -118,6 +118,12 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace for 1 second
 # Key sequences
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
 axe key-sequence --keycodes 40,40,40 --delay 0.5 --udid SIMULATOR_UDID  # Press Enter 3 times
+
+# Key combos (hold modifiers + press key as atomic operation)
+axe key-combo --modifiers 227 --key 4 --udid SIMULATOR_UDID              # Cmd+A (Select All)
+axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID              # Cmd+C (Copy)
+axe key-combo --modifiers 227 --key 25 --udid SIMULATOR_UDID             # Cmd+V (Paste)
+axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID          # Cmd+Shift+A
 ```
 
 ## Advanced Timing Control 🆕

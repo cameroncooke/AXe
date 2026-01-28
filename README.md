@@ -48,6 +48,7 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Text Input**: Comprehensive text typing with automatic shift key handling
 - **Key Presses**: Individual key presses by HID keycode
 - **Key Sequences**: Multi-key sequences with timing control
+- **Key Combos**: Atomic modifier+key combinations (e.g., Cmd+A, Cmd+Shift+Z)
 - **Multiple Input Methods**: Direct text, stdin, or file input
 
 ### Hardware Buttons
@@ -219,6 +220,11 @@ axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
 
 # Key sequences
 axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
+
+# Key combos (modifier + key as atomic operation)
+axe key-combo --modifiers 227 --key 4 --udid SIMULATOR_UDID          # Cmd+A (Select All)
+axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID          # Cmd+C (Copy)
+axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID      # Cmd+Shift+A
 ```
 
 ### **Video Streaming**
