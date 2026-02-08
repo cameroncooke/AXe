@@ -133,4 +133,26 @@ struct TouchTests {
         #expect(touchDownElement?.label == "Last touch down: (200, 300)", "Touch down should register with delays")
         #expect(touchUpElement?.label == "Last touch up: (200, 300)", "Touch up should register with delays")
     }
-}
+
+    @Test("Touch delay triggers long press recognition")
+    func touchDelayTriggersLongPressRecognition() async throws {
+        // Arrange
+        try await TestHelpers.launchPlaygroundApp(to: "touch-control")
+
+        // Act
+        try await TestHelpers.runAxeCommand("touch -x 220 -y 340 --down --up --delay 1.0", simulatorUDID: defaultSimulatorUDID)
+        try await Task.sleep(nanoseconds: 500_000_000)
+
+        // Assert
+        let uiState = try await TestHelpers.getUIState()
+        let longPressCountElement = UIStateParser.findElementContainingLabel(in: uiState, containing: "Long presses:")
+        let longPressElement = UIStateParser.findElementContainingLabel(in: uiState, containing: "Last long press:")
+        let touchDownElement = UIStateParser.findElementContainingLabel(in: uiState, containing: "Last touch down:")
+        let touchUpElement = UIStateParser.findElementContainingLabel(in: uiState, containing: "Last touch up:")
+
+        #expect(longPressCountElement?.label == "Long presses: 1", "Long press should be recognized once")
+        #expect(longPressElement?.label == "Last long press: (220, 340)", "Long press coordinates should match")
+        #expect(touchDownElement?.label == "Last touch down: (220, 340)", "Touch down coordinates should still match")
+        #expect(touchUpElement?.label == "Last touch up: (220, 340)", "Touch up coordinates should still match")
+    }
+} 

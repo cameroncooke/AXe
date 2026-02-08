@@ -11,8 +11,13 @@ import SwiftUI
 struct TouchControlView: View {
     @State private var touchEvents: [TouchEvent] = []
     @State private var eventCount = 0
+    @State private var longPressCount = 0
     @State private var lastTouchDownCoordinates: CGPoint?
     @State private var lastTouchUpCoordinates: CGPoint?
+    @State private var lastLongPressCoordinates: CGPoint?
+    @State private var latestTouchLocation: CGPoint?
+    
+    private let longPressMinimumDuration: TimeInterval = 0.5
     
     var body: some View {
         GeometryReader { geometry in
@@ -23,10 +28,19 @@ struct TouchControlView: View {
                     .gesture(
                         DragGesture(minimumDistance: 0)
                             .onChanged { value in
+                                latestTouchLocation = value.location
                                 addTouchEvent(at: value.location, type: .down, in: geometry)
                             }
                             .onEnded { value in
                                 addTouchEvent(at: value.location, type: .up, in: geometry)
+                                latestTouchLocation = nil
+                            }
+                    )
+                    .simultaneousGesture(
+                        LongPressGesture(minimumDuration: longPressMinimumDuration, maximumDistance: 20)
+                            .onEnded { _ in
+                                let location = latestTouchLocation ?? CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                                addLongPressEvent(at: location, in: geometry)
                             }
                     )
                     .accessibilityIdentifier("touch-control-area")
@@ -43,12 +57,23 @@ struct TouchControlView: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                             .accessibilityIdentifier("touch-control-description")
+
+                        Text("Hold for at least \(longPressMinimumDuration.formatted(.number.precision(.fractionLength(1))))s to trigger long press")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                            .accessibilityIdentifier("touch-long-press-description")
                         
                         Text("Events: \(eventCount)")
                             .font(.headline)
                             .foregroundColor(.orange)
                             .accessibilityIdentifier("touch-event-count")
                             .accessibilityValue("\(eventCount)")
+
+                        Text("Long presses: \(longPressCount)")
+                            .font(.headline)
+                            .foregroundColor(.purple)
+                            .accessibilityIdentifier("long-press-count")
+                            .accessibilityValue("\(longPressCount)")
                         
                         if let lastTouchDown = lastTouchDownCoordinates {
                             Text("Last touch down: (\(Int(lastTouchDown.x)), \(Int(lastTouchDown.y)))")
@@ -64,6 +89,14 @@ struct TouchControlView: View {
                                 .foregroundColor(.green)
                                 .accessibilityIdentifier("last-touch-up-coordinates")
                                 .accessibilityValue("x:\(Int(lastTouchUp.x)),y:\(Int(lastTouchUp.y))")
+                        }
+
+                        if let lastLongPress = lastLongPressCoordinates {
+                            Text("Last long press: (\(Int(lastLongPress.x)), \(Int(lastLongPress.y)))")
+                                .font(.headline)
+                                .foregroundColor(.purple)
+                                .accessibilityIdentifier("last-long-press-coordinates")
+                                .accessibilityValue("x:\(Int(lastLongPress.x)),y:\(Int(lastLongPress.y))")
                         }
                     }
                     .padding()
@@ -118,12 +151,7 @@ struct TouchControlView: View {
     }
     
     private func addTouchEvent(at point: CGPoint, type: TouchEvent.TouchType, in geometry: GeometryProxy) {
-        // Convert view coordinates to screen coordinates
-        let globalFrame = geometry.frame(in: .global)
-        let screenPoint = CGPoint(
-            x: point.x + globalFrame.minX,
-            y: point.y + globalFrame.minY
-        )
+        let screenPoint = screenPoint(from: point, in: geometry)
         
         // Update the appropriate coordinates based on touch type
         switch type {
@@ -158,6 +186,20 @@ struct TouchControlView: View {
                 touchEvents[index].opacity = 0.9
             }
         }
+    }
+
+    private func addLongPressEvent(at point: CGPoint, in geometry: GeometryProxy) {
+        let screenPoint = screenPoint(from: point, in: geometry)
+        lastLongPressCoordinates = screenPoint
+        longPressCount += 1
+    }
+
+    private func screenPoint(from point: CGPoint, in geometry: GeometryProxy) -> CGPoint {
+        let globalFrame = geometry.frame(in: .global)
+        return CGPoint(
+            x: point.x + globalFrame.minX,
+            y: point.y + globalFrame.minY
+        )
     }
     
     private func colorForType(_ type: TouchEvent.TouchType) -> Color {

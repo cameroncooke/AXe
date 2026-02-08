@@ -14,6 +14,7 @@ struct Touch: AsyncParsableCommand {
           axe touch --x 100 --y 200 --down --udid SIMULATOR_UDID        # Touch down at (100, 200)
           axe touch --x 100 --y 200 --up --udid SIMULATOR_UDID          # Touch up at (100, 200)
           axe touch --x 100 --y 200 --down --up --udid SIMULATOR_UDID   # Touch down then up (like tap)
+          axe touch --x 100 --y 200 --down --up --delay 1.0 --udid SIMULATOR_UDID # Long press (hold for 1s)
         """
     )
     
@@ -69,47 +70,46 @@ struct Touch: AsyncParsableCommand {
         try await performGlobalSetup(logger: logger)
 
         logger.info().log("Performing touch events at (\(pointX), \(pointY))")
-        
-        // Create touch events based on flags
-        var events: [FBSimulatorHIDEvent] = []
-        
-        if touchDown {
-            logger.info().log("Touch down")
-            let touchDownEvent = FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY)
-            events.append(touchDownEvent)
-        }
-        
-        // Add delay if both down and up are specified
+
         if touchDown && touchUp {
-            let touchDelay = delay ?? 0.1  // Default 100ms delay
-            if touchDelay > 0 {
-                logger.info().log("Delay: \(touchDelay) seconds")
-                let delayEvent = FBSimulatorHIDEvent.delay(touchDelay)
-                events.append(delayEvent)
-            }
-        }
-        
-        if touchUp {
-            logger.info().log("Touch up")
-            let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY)
-            events.append(touchUpEvent)
-        }
-        
-        // Perform the touch events
-        if events.count == 1 {
-            // Single event
+            // Send down and up as separate HID submissions so iOS recognizers
+            // observe a real hold duration for long-press gestures.
+            let touchDelay = delay ?? 0.1
+
+            logger.info().log("Touch down")
             try await HIDInteractor
                 .performHIDEvent(
-                    events[0],
+                    FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY),
+                    for: simulatorUDID,
+                    logger: logger
+                )
+
+            if touchDelay > 0 {
+                logger.info().log("Delay: \(touchDelay) seconds")
+                let delayNanoseconds = UInt64(touchDelay * 1_000_000_000)
+                try await Task.sleep(nanoseconds: delayNanoseconds)
+            }
+
+            logger.info().log("Touch up")
+            try await HIDInteractor
+                .performHIDEvent(
+                    FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY),
+                    for: simulatorUDID,
+                    logger: logger
+                )
+        } else if touchDown {
+            logger.info().log("Touch down")
+            try await HIDInteractor
+                .performHIDEvent(
+                    FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY),
                     for: simulatorUDID,
                     logger: logger
                 )
         } else {
-            // Multiple events - create composite event
-            let compositeEvent = FBSimulatorHIDEvent(events: events)
+            logger.info().log("Touch up")
             try await HIDInteractor
                 .performHIDEvent(
-                    compositeEvent,
+                    FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY),
                     for: simulatorUDID,
                     logger: logger
                 )

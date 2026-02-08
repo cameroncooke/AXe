@@ -164,6 +164,8 @@ axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --de
 # Advanced touch control
 axe touch -x 150 -y 250 --down --udid SIMULATOR_UDID
 axe touch -x 150 -y 250 --up --udid SIMULATOR_UDID
+axe touch -x 150 -y 250 --down --up --udid SIMULATOR_UDID
+# Long press (hold for 1 second)
 axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID
 ```
 
