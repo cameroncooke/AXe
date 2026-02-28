@@ -399,7 +399,9 @@ function sanitize_framework_rpaths() {
 function build_axe_executable() {
   local output_base_dir="$1"
   local build_config="release"
-  local executable_source=".build/arm64-apple-macosx/${build_config}/axe"
+  local host_arch
+  host_arch=$(uname -m)
+  local executable_source=".build/${host_arch}-apple-macosx/${build_config}/axe"
   local executable_dest="${output_base_dir}/axe"
 
   print_subsection "⚡" "Building AXe executable"
