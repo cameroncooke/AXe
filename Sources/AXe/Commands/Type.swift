@@ -44,6 +44,17 @@ struct Type: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    func validate() throws {
+        let sourceCount = [text != nil, useStdin, inputFile != nil].filter { $0 }.count
+        if sourceCount > 1 {
+            throw ValidationError("Please specify only one input source: text argument, --stdin, or --file.")
+        }
+
+        if sourceCount == 0 {
+            throw ValidationError("No input provided. Provide text as argument, or use --stdin, or --file.")
+        }
+    }
+
     func run() async throws {
         let logger = AxeLogger()
         try await setup(logger: logger)
@@ -133,7 +144,7 @@ struct Type: AsyncParsableCommand {
     
     // MARK: - Input Methods
     
-    private func readFromStdin() -> String {
+    func readFromStdin() -> String {
         var input = ""
         while let line = readLine() {
             if !input.isEmpty {
@@ -144,7 +155,7 @@ struct Type: AsyncParsableCommand {
         return input
     }
     
-    private func readFromFile(_ filePath: String) throws -> String {
+    func readFromFile(_ filePath: String) throws -> String {
         do {
             return try String(contentsOfFile: filePath, encoding: .utf8)
         } catch {

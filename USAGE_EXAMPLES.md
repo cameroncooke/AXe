@@ -126,6 +126,45 @@ axe key-combo --modifiers 227 --key 25 --udid SIMULATOR_UDID             # Cmd+V
 axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID          # Cmd+Shift+A
 ```
 
+### **6. Batch Workflows**
+
+```bash
+# Chain steps with one simulator/HID session
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --id SearchField" \
+  --step "type 'AXe batch input'" \
+  --step "key 40"
+
+# Add explicit per-step delay with sleep
+axe batch --udid SIMULATOR_UDID \
+  --step "tap -x 180 -y 360" \
+  --step "sleep 0.75" \
+  --step "tap -x 240 -y 420"
+
+# Read one step per line from a file
+cat > steps.txt <<'EOF'
+tap --id UsernameField
+type 'cam@example.com'
+key 43
+type 'super-secret'
+key 40
+EOF
+axe batch --udid SIMULATOR_UDID --file steps.txt
+
+# For large type steps, chunked mode is default; optional composite mode:
+axe batch --udid SIMULATOR_UDID --type-submission composite \
+  --step "type 'some long string here'"
+```
+
+Simple behavior rules:
+- One step source only: `--step`, `--file`, or `--stdin`.
+- Steps run in order.
+- Default mode is fail-fast (stop at first error).
+- Add `--continue-on-error` for best-effort execution.
+- Keep assertions separate with `describe-ui` or `screenshot`.
+
+For argument-by-argument behavior explanations, see [`BATCHING.md`](BATCHING.md).
+
 ## Advanced Timing Control 🆕
 
 ### **Pre/Post Delays**
@@ -366,6 +405,18 @@ done
 | `--post-delay` | 0-10 seconds | Delay after action | tap, swipe, gesture |
 | `--duration` | 0-10 seconds | Action duration | swipe, gesture, button, key |
 | `--delay` | 0-5 seconds | Between-key delay | key-sequence, touch |
+
+## Benchmarking Batch vs Non-Batch
+
+```bash
+# Build AXe binary
+swift build
+
+# Run benchmark on a booted simulator
+scripts/benchmark_batch.sh --udid SIMULATOR_UDID --iterations 20 --rounds 5
+```
+
+This benchmark compares equivalent two-tap workflows and reports per-iteration latency plus speedup.
 
 ## Key Advantages
 

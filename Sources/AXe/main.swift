@@ -27,7 +27,8 @@ struct Axe: AsyncParsableCommand {
             Gesture.self,
             StreamVideo.self,
             RecordVideo.self,
-            Screenshot.self
+            Screenshot.self,
+            Batch.self
         ]
     )
 }

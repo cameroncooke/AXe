@@ -24,12 +24,15 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
   - [**Text Input**](#text-input)
   - [**Hardware Buttons**](#hardware-buttons-1)
   - [**Keyboard Control**](#keyboard-control)
+  - [**Batch Chaining**](#batch-chaining)
   - [**Video Streaming**](#video-streaming)
   - [**Screenshot**](#screenshot)
   - [**Accessibility \& Info**](#accessibility--info)
 - [Architecture](#architecture)
   - [Why AXe?](#why-axe)
 - [Gesture Presets Reference](#gesture-presets-reference)
+- [Benchmarking](#benchmarking)
+- [Batch Guide](#batch-guide)
 - [Contributing](#contributing)
 - [Licence](#licence)
 
@@ -43,6 +46,7 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Swipe**: Multi-touch gestures with configurable duration and delta
 - **Touch Control**: Low-level touch down/up events for advanced gesture control
 - **Gesture Presets**: Common gesture patterns (scroll-up, scroll-down, scroll-left, scroll-right, edge swipes)
+- **Batch Chaining**: Execute ordered multi-step interaction workflows in one invocation
 
 ### Input & Text
 - **Text Input**: Comprehensive text typing with automatic shift key handling
@@ -229,6 +233,36 @@ axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID          # Cmd+C (Co
 axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID      # Cmd+Shift+A
 ```
 
+### **Batch Chaining**
+
+```bash
+# Execute multiple interaction steps in one command
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --id SearchField" \
+  --step "type 'hello world'" \
+  --step "key 40"
+
+# Add explicit timing between steps
+axe batch --udid SIMULATOR_UDID \
+  --step "tap -x 200 -y 400" \
+  --step "sleep 0.5" \
+  --step "tap -x 200 -y 500"
+
+# Read steps from a file (one step per line)
+axe batch --udid SIMULATOR_UDID --file steps.txt
+```
+
+`batch` behavior in plain terms:
+- Runs steps in order in a single invocation.
+- Accepts exactly one step source: `--step`, `--file`, or `--stdin`.
+- Uses fail-fast by default (stops on first error).
+- `--continue-on-error` switches to best-effort mode.
+- `--ax-cache perBatch` is default for faster selector-based taps.
+- `--type-submission chunked` is default for safer long text typing.
+
+> [!TIP]
+> Keep verification out-of-band by running `axe describe-ui` or `axe screenshot` after batch execution.
+
 ### **Video Streaming**
 
 ```bash
@@ -308,6 +342,24 @@ While `idb` offers a powerful client/server architecture and a broad set of devi
 - **Intelligent Automation:** Built-in gesture presets and coordinate helpers for common use cases.
 
 This makes AXe a lightweight and easily adoptable alternative for projects that need direct, scriptable access to Simulator automation.
+
+## Benchmarking
+
+Compare batched vs non-batched latency on AxePlayground:
+
+```bash
+# Build AXe first
+swift build
+
+# Use a booted simulator UDID
+scripts/benchmark_batch.sh --udid SIMULATOR_UDID --iterations 20 --rounds 5
+```
+
+The benchmark runs equivalent two-tap workflows in both modes and prints mean/median speedup.
+
+## Batch Guide
+
+For a full behavior-first explanation of every batch argument with practical examples, see [`BATCHING.md`](BATCHING.md).
 
 ## Gesture Presets Reference
 
