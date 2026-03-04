@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Touch Command Tests")
+@Suite("Touch Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct TouchTests {
     @Test("Basic touch down and up")
     func basicTouchDownUp() async throws {

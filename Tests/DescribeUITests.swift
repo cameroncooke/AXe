@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Describe UI Command Tests")
+@Suite("Describe UI Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct DescribeUITests {
     @Test("Basic describe-ui returns valid JSON")
     func basicDescribeUI() async throws {

@@ -26,12 +26,8 @@ struct KeySequence: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
     
-    private var keycodes: [Int] {
-        return keycodesString.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-    }
-
     func validate() throws {
-        let parsedKeycodes = keycodes
+        let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         
         // Validate that we have at least one keycode
         guard !parsedKeycodes.isEmpty else {
@@ -67,7 +63,7 @@ struct KeySequence: AsyncParsableCommand {
         
         try await performGlobalSetup(logger: logger)
 
-        let parsedKeycodes = keycodes
+        let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         let keyDelay = delay ?? 0.1  // Default 100ms delay between keys
         
         logger.info().log("Pressing key sequence: \(parsedKeycodes)")

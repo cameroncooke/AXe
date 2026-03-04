@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Swipe Command Tests")
+@Suite("Swipe Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct SwipeTests {
     @Test("Basic swipe registers on screen")
     func basicSwipe() async throws {

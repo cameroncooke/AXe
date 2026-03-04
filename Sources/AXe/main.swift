@@ -16,6 +16,7 @@ struct Axe: AsyncParsableCommand {
         subcommands: [
             DescribeUI.self,
             ListSimulators.self,
+            Init.self,
             Tap.self,
             Type.self,
             Swipe.self,
@@ -27,7 +28,8 @@ struct Axe: AsyncParsableCommand {
             Gesture.self,
             StreamVideo.self,
             RecordVideo.self,
-            Screenshot.self
+            Screenshot.self,
+            Batch.self
         ]
     )
 }

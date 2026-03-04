@@ -15,14 +15,18 @@ Each AXe command has its own dedicated test file:
 - `TouchTests.swift` - Tests for `touch` command
 - `ButtonTests.swift` - Tests for `button` command
 - `GestureTests.swift` - Tests for `gesture` command
+- `BatchTests.swift` - E2E coverage for `batch` command variants
 
 ## Running Tests
 
 Use Swift's built-in testing system:
 
 ```bash
-# Run all tests
+# Run default tests (unit/non-E2E)
 swift test
+
+# Run simulator E2E tests explicitly
+AXE_E2E=1 SIMULATOR_UDID=<UDID> swift test
 
 # Run specific test files
 swift test --filter TapTests
@@ -32,6 +36,7 @@ swift test --filter KeyTests
 swift test --filter TouchTests
 swift test --filter ButtonTests
 swift test --filter GestureTests
+swift test --filter BatchTests
 swift test --filter ListSimulatorsTests
 swift test --filter DescribeUITests
 
@@ -41,8 +46,9 @@ swift test --verbose
 
 ## Test Requirements
 
-- All tests require a booted iOS simulator
-- Get your simulator UDID with: `axe list-simulators` or `xcrun simctl list devices`
+- Simulator E2E tests require `AXE_E2E=1` and a booted iOS simulator
+- Set `SIMULATOR_UDID` with: `axe list-simulators` or `xcrun simctl list devices`
+- `swift test` without `AXE_E2E=1` runs non-E2E tests only
 - Some tests use the AxePlaygroundApp for validation
 - Each test file is self-contained and executable
 

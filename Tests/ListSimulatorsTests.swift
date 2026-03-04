@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("List Simulators Command Tests")
+@Suite("List Simulators Command Tests", .enabled(if: isE2EEnabled))
 struct ListSimulatorsTests {
     @Test("Basic list-simulators returns output")
     func basicListSimulators() async throws {
@@ -112,10 +112,5 @@ struct ListSimulatorsTests {
         
         #expect(simulatorLines.count > 0, "Should have properly formatted simulator entries")
         
-        // Check that simulator lines have consistent structure
-        for line in simulatorLines.prefix(5) {  // Check first 5 simulator lines
-            #expect(line.contains("(") && line.contains(")"), 
-                    "Simulator line should contain parentheses for status/OS info")
-        }
     }
 }

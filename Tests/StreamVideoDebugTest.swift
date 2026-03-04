@@ -1,13 +1,11 @@
 import Testing
 import Foundation
 
-@Suite("Stream Video Cancellation Tests")
+@Suite("Stream Video Cancellation Tests", .serialized, .enabled(if: isE2EEnabled))
 struct StreamVideoDebugTests {
     @Test("Stream video command can be cancelled without hanging")
     func streamVideoBasicExecution() async throws {
-        guard let udid = defaultSimulatorUDID else {
-            throw TestError.commandError("No simulator UDID specified")
-        }
+        let udid = try TestHelpers.requireSimulatorUDID()
 
         let axePath = try TestHelpers.getAxePath()
         let tempURL = FileManager.default.temporaryDirectory
@@ -29,7 +27,11 @@ struct StreamVideoDebugTests {
         try await Task.sleep(nanoseconds: 3_000_000_000) // 3 seconds
 
         process.interrupt()
-        process.waitUntilExit()
+        try await TestHelpers.waitForProcessExit(
+            process,
+            timeout: 10.0,
+            description: "record-video debug process did not exit after interrupt"
+        )
 
         #expect(process.terminationStatus == 0, "Command should exit cleanly after cancellation")
     }

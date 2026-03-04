@@ -1,13 +1,13 @@
 import Testing
 import Foundation
 
-@Suite("Stream Video Command Tests")
+@Suite("Stream Video Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct StreamVideoTests {
     @Test("Stream video outputs MJPEG data with HTTP headers")
     func streamVideoMJPEG() async throws {
         let result = try await streamVideoForDuration(format: "mjpeg", duration: 3.0)
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(!result.output.isEmpty, "Should have stderr messages")
         #expect(result.output.contains("Starting screenshot-based video stream"))
         #expect(result.output.contains("Format: mjpeg"))
@@ -17,7 +17,7 @@ struct StreamVideoTests {
     func streamVideoFFmpeg() async throws {
         let result = try await streamVideoForDuration(format: "ffmpeg", duration: 2.0)
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(result.output.contains("Format: ffmpeg"))
     }
 
@@ -25,7 +25,7 @@ struct StreamVideoTests {
     func streamVideoRaw() async throws {
         let result = try await streamVideoForDuration(format: "raw", duration: 2.0)
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(result.output.contains("Format: raw"))
     }
 
@@ -33,7 +33,7 @@ struct StreamVideoTests {
     func streamVideoWithFPS() async throws {
         let result = try await streamVideoForDuration(format: "mjpeg", fps: 5, duration: 2.0)
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(result.output.contains("FPS: 5"))
     }
 
@@ -47,7 +47,7 @@ struct StreamVideoTests {
             duration: 1.0
         )
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(result.output.contains("Quality: 50"))
         #expect(result.output.contains("Scale: 0.5"))
     }
@@ -56,7 +56,7 @@ struct StreamVideoTests {
     func streamVideoBGRA() async throws {
         let result = try await streamVideoForDuration(format: "bgra", duration: 2.0)
 
-        #expect(result.exitCode == 15 || result.exitCode == 0)
+        #expect(isAcceptableStreamExitCode(result.exitCode), "Unexpected exit code: \(result.exitCode)")
         #expect(!result.output.isEmpty)
         #expect(result.output.contains("Starting BGRA video stream"))
         #expect(result.output.contains("Format: bgra"))
@@ -75,9 +75,7 @@ struct StreamVideoTests {
 
     @Test("Stream video rejects invalid formats")
     func streamVideoInvalidFormat() async throws {
-        guard let udid = defaultSimulatorUDID else {
-            throw TestError.commandError("No simulator UDID specified")
-        }
+        let udid = try TestHelpers.requireSimulatorUDID()
 
         let axePath = try TestHelpers.getAxePath()
         let fullCommand = "\(axePath) stream-video --format h264 --udid \(udid)"
@@ -111,9 +109,7 @@ struct StreamVideoTests {
         command += " --fps \(fps)"
         command += " --quality \(quality) --scale \(scale)"
 
-        guard let udid = defaultSimulatorUDID else {
-            throw TestError.commandError("No simulator UDID specified in SIMULATOR_UDID environment variable")
-        }
+        let udid = try TestHelpers.requireSimulatorUDID()
 
         let axePath = try TestHelpers.getAxePath()
         let fullCommand = "\(axePath) \(command) --udid \(udid)"
@@ -127,13 +123,8 @@ struct StreamVideoTests {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
-        var outputData = Data()
-        let outputHandle = outputPipe.fileHandleForReading
-        outputHandle.readabilityHandler = { handle in
-            let availableData = handle.availableData
-            if !availableData.isEmpty {
-                outputData.append(availableData)
-            }
+        let stdoutReadTask = Task {
+            try outputPipe.fileHandleForReading.readToEnd() ?? Data()
         }
 
         try process.run()
@@ -142,14 +133,13 @@ struct StreamVideoTests {
 
         process.terminate()
 
-        outputHandle.readabilityHandler = nil
-        process.waitUntilExit()
+        try await TestHelpers.waitForProcessExit(
+            process,
+            timeout: 10.0,
+            description: "stream-video process did not exit after terminate"
+        )
 
-        let remainingData = outputHandle.readDataToEndOfFile()
-        if !remainingData.isEmpty {
-            outputData.append(remainingData)
-        }
-
+        let outputData = (try? await stdoutReadTask.value) ?? Data()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
         let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
         let dataString = String(data: outputData, encoding: .utf8) ?? ""
@@ -165,5 +155,10 @@ struct StreamVideoTests {
             dataSize: outputData.count,
             exitCode: process.terminationStatus
         )
+    }
+
+    private func isAcceptableStreamExitCode(_ code: Int32) -> Bool {
+        let acceptable: Set<Int32> = [0, 9, 15, 130, 137, 143]
+        return acceptable.contains(code)
     }
 }

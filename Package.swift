@@ -26,6 +26,9 @@ let package = Package(
                 "XCTestBootstrap"
             ],
             path: "Sources/AXe",
+            resources: [
+                .copy("Resources/skills")
+            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"])
             ],
