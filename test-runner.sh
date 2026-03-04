@@ -197,10 +197,13 @@ build_axe() {
         swift build > /dev/null 2>&1
     fi
 
+    local axe_bin_path
+    axe_bin_path="$(swift build --show-bin-path)/axe"
+
     # Verify the executable exists
-    if [[ -f ".build/arm64-apple-macosx/debug/axe" ]]; then
+    if [[ -f "$axe_bin_path" ]]; then
         print_success "AXe executable built successfully"
-        print_info "Location: .build/arm64-apple-macosx/debug/axe"
+        print_info "Location: $axe_bin_path"
     else
         print_error "Failed to build AXe executable"
         exit 1
@@ -346,7 +349,7 @@ show_summary() {
 
     if [[ "$BUILD_ONLY" == true ]]; then
         print_success "Build completed successfully"
-        print_info "AXe executable: .build/arm64-apple-macosx/debug/axe"
+        print_info "AXe executable: $(swift build --show-bin-path)/axe"
         print_info "Playground app installed on: $SIMULATOR_NAME ($SIMULATOR_UDID)"
     elif [[ "$TESTS_ONLY" == true ]]; then
         if [[ -n "$TEST_FILTER" ]]; then
@@ -356,7 +359,7 @@ show_summary() {
         fi
     else
         print_success "Build and test cycle completed successfully"
-        print_info "AXe executable: .build/arm64-apple-macosx/debug/axe"
+        print_info "AXe executable: $(swift build --show-bin-path)/axe"
         print_info "Playground app: Installed and tested on $SIMULATOR_NAME"
         if [[ -n "$TEST_FILTER" ]]; then
             print_info "Test suite: $TEST_FILTER"

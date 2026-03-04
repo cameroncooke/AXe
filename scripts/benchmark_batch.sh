@@ -2,7 +2,7 @@
 set -euo pipefail
 
 UDID="${UDID:-}"
-AXE_PATH="${AXE_PATH:-.build/arm64-apple-macosx/debug/axe}"
+AXE_PATH="${AXE_PATH:-}"
 ITERATIONS="${ITERATIONS:-30}"
 ROUNDS="${ROUNDS:-7}"
 APP_BUNDLE="${APP_BUNDLE:-com.cameroncooke.AxePlayground}"
@@ -51,6 +51,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [[ -z "$AXE_PATH" ]]; then
+  AXE_PATH="$(swift build --show-bin-path)/axe"
+fi
 
 if [[ -z "$UDID" ]]; then
   echo "Missing required --udid" >&2

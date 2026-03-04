@@ -184,6 +184,36 @@ struct UIStateParser {
 // MARK: - Test Helpers
 
 struct TestHelpers {
+    private static func resolveSwiftBinPath(sourceRoot: String) throws -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["swift", "build", "--show-bin-path"]
+        process.currentDirectoryURL = URL(fileURLWithPath: sourceRoot)
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let output = String(data: outputData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let errorOutput = String(data: errorData, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+        if process.terminationStatus != 0 || output.isEmpty {
+            throw TestError.commandError(
+                "Unable to resolve AXe binary path via `swift build --show-bin-path` from \(sourceRoot). \(errorOutput)"
+            )
+        }
+
+        return output
+    }
+
     static func requireE2EEnabled() throws {
         if !isE2EEnabled {
             throw TestError.commandError("E2E simulator tests are disabled. Run via ./test-runner.sh or set AXE_E2E=1.")
@@ -200,21 +230,18 @@ struct TestHelpers {
 
     /// Get the path to the axe binary using #file to find source root
     static func getAxePath(testFile: String = #file) throws -> String {
-        // First try SRC_ROOT environment variable
+        let sourceRoot: String
         if let srcRoot = ProcessInfo.processInfo.environment["SRC_ROOT"] {
-            let axePath = "\(srcRoot)/.build/arm64-apple-macosx/debug/axe"
-            if FileManager.default.fileExists(atPath: axePath) {
-                return axePath
-            }
-        }
-        
-        // Use #file to find source root - test files are in Tests/ directory,
-        // so source root is exactly one level up from the Tests directory
+            sourceRoot = srcRoot
+        } else {
         let testFileURL = URL(fileURLWithPath: testFile)
         let testsDirectory = testFileURL.deletingLastPathComponent()  // Gets Tests/
-        let sourceRoot = testsDirectory.deletingLastPathComponent()   // Gets source root
-        
-        let axePath = sourceRoot.appendingPathComponent(".build/arm64-apple-macosx/debug/axe").path
+            sourceRoot = testsDirectory.deletingLastPathComponent().path
+        }
+
+        let axePath = URL(fileURLWithPath: try resolveSwiftBinPath(sourceRoot: sourceRoot))
+            .appendingPathComponent("axe")
+            .path
         if FileManager.default.fileExists(atPath: axePath) {
             return axePath
         }

@@ -70,8 +70,10 @@ jobs:
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
       archive_sha256: ${{ steps.create_archive.outputs.sha256 }}
-      homebrew_archive_name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
-      homebrew_archive_sha256: ${{ steps.create_homebrew_archive.outputs.sha256 }}
+      homebrew_archive_arm64_name: ${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}
+      homebrew_archive_arm64_sha256: ${{ steps.create_homebrew_archives.outputs.archive_arm64_sha256 }}
+      homebrew_archive_x64_name: ${{ steps.create_homebrew_archives.outputs.archive_x64_name }}
+      homebrew_archive_x64_sha256: ${{ steps.create_homebrew_archives.outputs.archive_x64_sha256 }}
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
       package_path: ${{ steps.notarize.outputs.package_path }}
@@ -269,6 +271,9 @@ jobs:
     - name: Sign - AXe executable
       run: scripts/build.sh sign-executable
 
+    - name: Verify - Release artifact architectures
+      run: scripts/build.sh verify-arches
+
     - name: Package - Create notarization package
       run: scripts/build.sh package
 
@@ -318,47 +323,77 @@ jobs:
           exit 1
         fi
 
-    - name: Create Homebrew archive (unsigned)
-      id: create_homebrew_archive
+    - name: Create Homebrew archives (unsigned arm64 + x64)
+      id: create_homebrew_archives
       run: |
-        ARCHIVE_NAME="AXe-macOS-homebrew-${{ steps.version.outputs.tag }}.tar.gz"
-        echo "archive_name=$ARCHIVE_NAME" >> $GITHUB_OUTPUT
+        ARM64_ARCHIVE_NAME="AXe-macOS-homebrew-${{ steps.version.outputs.tag }}-arm64.tar.gz"
+        X64_ARCHIVE_NAME="AXe-macOS-homebrew-${{ steps.version.outputs.tag }}-x64.tar.gz"
+        echo "archive_arm64_name=$ARM64_ARCHIVE_NAME" >> $GITHUB_OUTPUT
+        echo "archive_x64_name=$X64_ARCHIVE_NAME" >> $GITHUB_OUTPUT
 
         PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
         if [ -f "$PACKAGE_PATH" ]; then
-          echo "🍺 Creating Homebrew archive from: $PACKAGE_PATH"
+          echo "🍺 Creating Homebrew archives from: $PACKAGE_PATH"
 
-          # Extract the package to create the tar.gz
-          TEMP_EXTRACT="$RUNNER_TEMP/extract-homebrew"
-          mkdir -p "$TEMP_EXTRACT"
-          unzip -q "$PACKAGE_PATH" -d "$TEMP_EXTRACT"
+          UNIVERSAL_ROOT="$RUNNER_TEMP/extract-homebrew-universal"
+          ARM64_ROOT="$RUNNER_TEMP/extract-homebrew-arm64"
+          X64_ROOT="$RUNNER_TEMP/extract-homebrew-x64"
+          mkdir -p "$UNIVERSAL_ROOT" "$ARM64_ROOT" "$X64_ROOT"
+          unzip -q "$PACKAGE_PATH" -d "$UNIVERSAL_ROOT"
 
-          TOP_LEVEL_DIR_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-          TOP_LEVEL_FILE_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+          TOP_LEVEL_DIR_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+          TOP_LEVEL_FILE_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
           if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
-            PACKAGE_ROOT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -1)
+            PACKAGE_ROOT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | head -1)
           else
-            PACKAGE_ROOT="$TEMP_EXTRACT"
+            PACKAGE_ROOT="$UNIVERSAL_ROOT"
           fi
 
-          # Remove signatures so Homebrew can adjust install names/rpaths
-          while IFS= read -r -d '' file; do
-            if file "$file" | grep -q "Mach-O"; then
-              codesign --remove-signature "$file" 2>/dev/null || true
-            fi
-          done < <(find "$TEMP_EXTRACT" -type f -print0)
+          cp -R "$PACKAGE_ROOT"/. "$ARM64_ROOT"/
+          cp -R "$PACKAGE_ROOT"/. "$X64_ROOT"/
 
-          find "$TEMP_EXTRACT" -type d -name "*.framework" -print0 | while IFS= read -r -d '' bundle; do
-            codesign --remove-signature "$bundle" 2>/dev/null || true
-          done
+          thin_tree_for_arch() {
+            local root_path="$1"
+            local target_arch="$2"
 
-          # Create tar.gz from extracted contents
-          tar -czf "$ARCHIVE_NAME" -C "$PACKAGE_ROOT" .
+            while IFS= read -r -d '' file_path; do
+              if file "$file_path" | grep -q "Mach-O"; then
+                local arch_info
+                arch_info="$(lipo -info "$file_path" 2>/dev/null || true)"
+                if [[ "$arch_info" == *"Non-fat file"* ]]; then
+                  if [[ "$arch_info" != *"$target_arch"* ]]; then
+                    echo "❌ Non-fat binary does not match target arch $target_arch: $file_path"
+                    exit 1
+                  fi
+                else
+                  lipo -thin "$target_arch" "$file_path" -output "${file_path}.thin"
+                  mv "${file_path}.thin" "$file_path"
+                fi
+                codesign --remove-signature "$file_path" 2>/dev/null || true
+              fi
+            done < <(find "$root_path" -type f -print0)
 
-          # Calculate SHA256
-          SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
-          echo "sha256=$SHA256" >> $GITHUB_OUTPUT
-          echo "✅ Homebrew archive created: $ARCHIVE_NAME (SHA256: $SHA256)"
+            find "$root_path" -type d -name "*.framework" -print0 | while IFS= read -r -d '' bundle; do
+              codesign --remove-signature "$bundle" 2>/dev/null || true
+            done
+          }
+
+          thin_tree_for_arch "$ARM64_ROOT" "arm64"
+          thin_tree_for_arch "$X64_ROOT" "x86_64"
+
+          lipo -info "$ARM64_ROOT/axe" | grep -q "arm64"
+          lipo -info "$X64_ROOT/axe" | grep -q "x86_64"
+
+          tar -czf "$ARM64_ARCHIVE_NAME" -C "$ARM64_ROOT" .
+          tar -czf "$X64_ARCHIVE_NAME" -C "$X64_ROOT" .
+
+          ARM64_SHA256=$(shasum -a 256 "$ARM64_ARCHIVE_NAME" | awk '{print $1}')
+          X64_SHA256=$(shasum -a 256 "$X64_ARCHIVE_NAME" | awk '{print $1}')
+          echo "archive_arm64_sha256=$ARM64_SHA256" >> $GITHUB_OUTPUT
+          echo "archive_x64_sha256=$X64_SHA256" >> $GITHUB_OUTPUT
+          echo "✅ Homebrew archives created:"
+          echo "  - $ARM64_ARCHIVE_NAME (SHA256: $ARM64_SHA256)"
+          echo "  - $X64_ARCHIVE_NAME (SHA256: $X64_SHA256)"
         else
           echo "❌ Package path not found: $PACKAGE_PATH"
           exit 1
@@ -372,12 +407,20 @@ jobs:
         path: ${{ steps.create_archive.outputs.archive_name }}
         retention-days: 30
 
-    - name: Upload Homebrew artifact (manual trigger)
+    - name: Upload Homebrew arm64 artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
-        path: ${{ steps.create_homebrew_archive.outputs.archive_name }}
+        name: ${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}
+        path: ${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}
+        retention-days: 30
+
+    - name: Upload Homebrew x64 artifact (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.create_homebrew_archives.outputs.archive_x64_name }}
+        path: ${{ steps.create_homebrew_archives.outputs.archive_x64_name }}
         retention-days: 30
 
     - name: Read tag release notes
@@ -416,7 +459,8 @@ jobs:
           --notes-file "$NOTES_FILE" \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
-          "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+          "${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}" \
+          "${{ steps.create_homebrew_archives.outputs.archive_x64_name }}"
 
         echo "✅ Release $TAG created."
 
@@ -445,7 +489,8 @@ jobs:
           --generate-notes \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
-          "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+          "${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}" \
+          "${{ steps.create_homebrew_archives.outputs.archive_x64_name }}"
 
         echo "✅ Release $TAG created (manual trigger)."
 
@@ -483,7 +528,6 @@ jobs:
           exit 0
         fi
 
-        # Normalize shorthand
         if [[ "$TAP_TARGETS" == "both" ]]; then
           TAP_TARGETS="production,staging"
         fi
@@ -545,8 +589,6 @@ jobs:
           GH_TOKEN="$TOKEN" gh repo clone "${TAP_REPO}" "$WORK_DIR"
           cd "$WORK_DIR"
           git checkout "${TAP_BRANCH}"
-
-          # Ensure git pushes use the provided token (gh auth alone won't wire git by default here)
           git remote set-url origin "https://${TOKEN}@github.com/${TAP_REPO}.git"
 
           FORMULA_FILE="Formula/${TAP_FORMULA}.rb"
@@ -555,15 +597,40 @@ jobs:
             exit 1
           fi
 
-          URL="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_homebrew_archive.outputs.archive_name }}"
-          SHA256="${{ steps.create_homebrew_archive.outputs.sha256 }}"
+          URL_ARM64="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}"
+          SHA_ARM64="${{ steps.create_homebrew_archives.outputs.archive_arm64_sha256 }}"
+          URL_X64="https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.tag }}/${{ steps.create_homebrew_archives.outputs.archive_x64_name }}"
+          SHA_X64="${{ steps.create_homebrew_archives.outputs.archive_x64_sha256 }}"
 
-          awk -v version="$VERSION_TAG" -v url="$URL" -v sha="$SHA256" '
-          /version "/ {gsub(/version "[^"]*"/, "version \"" version "\""); print; next}
-          /url "/ {gsub(/url "[^"]*"/, "url \"" url "\""); print; next}
-          /sha256 "/ {gsub(/sha256 "[^"]*"/, "sha256 \"" sha "\""); print; next}
-          {print}
-          ' "$FORMULA_FILE" > "${FORMULA_FILE}.new" && mv "${FORMULA_FILE}.new" "$FORMULA_FILE"
+          FORMULA_CLASS="$(echo "$TAP_FORMULA" | awk -F'[-_]' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print $0}' OFS="")"
+
+          {
+            echo "class ${FORMULA_CLASS} < Formula"
+            echo "  desc \"CLI tool for interacting with iOS Simulators via accessibility and HID APIs\""
+            echo "  homepage \"https://github.com/${{ github.repository }}\""
+            echo "  license \"MIT\""
+            echo "  version \"${VERSION_TAG}\""
+            echo
+            echo "  on_arm do"
+            echo "    url \"${URL_ARM64}\""
+            echo "    sha256 \"${SHA_ARM64}\""
+            echo "  end"
+            echo
+            echo "  on_intel do"
+            echo "    url \"${URL_X64}\""
+            echo "    sha256 \"${SHA_X64}\""
+            echo "  end"
+            echo
+            echo "  def install"
+            echo "    libexec.install \"axe\", \"Frameworks\""
+            echo "    bin.write_exec_script libexec/\"axe\""
+            echo "  end"
+            echo
+            echo "  test do"
+            echo "    assert_match version.to_s, shell_output(\"#{bin}/axe --version\")"
+            echo "  end"
+            echo "end"
+          } > "$FORMULA_FILE"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
