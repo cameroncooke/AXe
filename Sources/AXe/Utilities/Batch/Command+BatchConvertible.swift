@@ -1,3 +1,4 @@
+import ArgumentParser
 import Foundation
 import FBSimulatorControl
 
@@ -20,6 +21,17 @@ private func buildDelayedEvent(
         events.append(.delay(postDelay))
     }
     return events.count == 1 ? events[0] : FBSimulatorHIDEvent(events: events)
+}
+
+func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws -> [Int] {
+    let rawTokens = rawValue.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+
+    let invalidTokens = rawTokens.filter { Int($0) == nil }
+    guard invalidTokens.isEmpty else {
+        throw ValidationError("All \(fieldName) must be valid integers. Invalid token(s): \(invalidTokens.joined(separator: ", "))")
+    }
+
+    return rawTokens.compactMap(Int.init)
 }
 
 extension Tap: BatchConvertible {
@@ -167,9 +179,7 @@ extension Key: BatchConvertible {
 
 extension KeySequence: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let parsedKeycodes = keycodesString
-            .split(separator: ",")
-            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         let keyDelay = delay ?? 0.1
         var events: [FBSimulatorHIDEvent] = []
 
@@ -186,9 +196,7 @@ extension KeySequence: BatchConvertible {
 
 extension KeyCombo: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let parsedModifiers = modifiersString
-            .split(separator: ",")
-            .compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+        let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
         var events: [FBSimulatorHIDEvent] = []
         for modifier in parsedModifiers {

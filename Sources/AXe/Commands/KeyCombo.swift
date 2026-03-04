@@ -38,12 +38,8 @@ struct KeyCombo: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
-    private var modifiers: [Int] {
-        return modifiersString.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
-    }
-
     func validate() throws {
-        let parsedModifiers = modifiers
+        let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
         guard !parsedModifiers.isEmpty else {
             throw ValidationError("At least one modifier keycode must be provided.")
@@ -70,7 +66,7 @@ struct KeyCombo: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
-        let parsedModifiers = modifiers
+        let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
         logger.info().log("Pressing key combo: modifiers=\(parsedModifiers), key=\(key)")
 

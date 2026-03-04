@@ -26,8 +26,8 @@ struct BatchPlanRunner {
             case .hostSleep(let seconds):
                 try await flushPending()
                 guard seconds > 0 else { continue }
-                let nanoseconds = UInt64(seconds * 1_000_000_000)
-                try await Task.sleep(nanoseconds: nanoseconds)
+
+                try await Task.sleep(for: .seconds(seconds))
             }
         }
 
