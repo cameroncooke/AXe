@@ -99,8 +99,10 @@ struct Batch: AsyncParsableCommand {
         var failures: [String] = []
 
         for (index, line) in stepLines.enumerated() {
+            var stepName = "<unparsed>"
             do {
                 let tokens = try ShellTokenizer.tokenize(line)
+                stepName = tokens.first ?? "<empty>"
                 let primitives = try await BatchStepParser.parseStepTokens(
                     tokens,
                     globalUDID: simulatorUDID,
@@ -110,9 +112,9 @@ struct Batch: AsyncParsableCommand {
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
                 if continueOnError {
-                    failures.append("Step \(index + 1): \(line) -> \(error.localizedDescription)")
+                    failures.append("Step \(index + 1) [\(stepName)] -> \(error.localizedDescription)")
                 } else {
-                    throw CLIError(errorDescription: "Step \(index + 1) failed: \(line)\n\(error.localizedDescription)")
+                    throw CLIError(errorDescription: "Step \(index + 1) [\(stepName)] failed\n\(error.localizedDescription)")
                 }
             }
         }

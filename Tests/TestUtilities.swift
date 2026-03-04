@@ -45,11 +45,13 @@ struct CommandRunner {
         try process.run()
 
         let deadline = Date().addingTimeInterval(timeout)
+        var didTimeout = false
         while process.isRunning, Date() < deadline {
             try await Task.sleep(nanoseconds: 100_000_000)
         }
 
         if process.isRunning {
+            didTimeout = true
             process.terminate()
             try await Task.sleep(nanoseconds: 500_000_000)
         }
@@ -67,7 +69,7 @@ struct CommandRunner {
 
         let combinedOutput = stdoutText + (stderrText.isEmpty ? "" : "\n\(stderrText)")
 
-        if process.isRunning {
+        if didTimeout {
             throw NSError(
                 domain: "CommandRunner",
                 code: 124,

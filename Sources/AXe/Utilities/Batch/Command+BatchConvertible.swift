@@ -24,9 +24,13 @@ private func buildDelayedEvent(
 }
 
 func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws -> [Int] {
-    let rawTokens = rawValue.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+    let rawTokens = rawValue
+        .split(separator: ",", omittingEmptySubsequences: false)
+        .map { String($0).trimmingCharacters(in: .whitespaces) }
 
-    let invalidTokens = rawTokens.filter { Int($0) == nil }
+    let invalidTokens = rawTokens.filter { token in
+        token.isEmpty || Int(token) == nil
+    }
     guard invalidTokens.isEmpty else {
         throw ValidationError("All \(fieldName) must be valid integers. Invalid token(s): \(invalidTokens.joined(separator: ", "))")
     }

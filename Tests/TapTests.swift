@@ -93,8 +93,8 @@ struct TapTests {
         #expect(tapCountElement?.label == "Tap Count: 1", "Tap should still register with delays")
     }
     
-    @Test("Tap at screen edges")
-    func tapAtEdges() async throws {
+    @Test("At least one tap registers at screen edges")
+    func tapAtEdgesRegistersAtLeastOne() async throws {
         // Arrange
         try await TestHelpers.launchPlaygroundApp(to: "tap-test")
         
@@ -116,6 +116,6 @@ struct TapTests {
         let uiState = try await TestHelpers.getUIState()
         let tapCountElement = UIStateParser.findElementContainingLabel(in: uiState, containing: "Tap Count:")
         let tapCount = Int((tapCountElement?.label ?? "").replacingOccurrences(of: "Tap Count: ", with: "")) ?? 0
-        #expect(tapCount >= 1, "At least one edge tap should register")
+        #expect(tapCount >= 1, "At least one edge tap should register despite simulator edge flakiness")
     }
 }

@@ -25,18 +25,22 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --udid)
+      [[ $# -ge 2 ]] || { echo "Missing value for --udid" >&2; usage; exit 1; }
       UDID="$2"
       shift 2
       ;;
     --iterations)
+      [[ $# -ge 2 ]] || { echo "Missing value for --iterations" >&2; usage; exit 1; }
       ITERATIONS="$2"
       shift 2
       ;;
     --rounds)
+      [[ $# -ge 2 ]] || { echo "Missing value for --rounds" >&2; usage; exit 1; }
       ROUNDS="$2"
       shift 2
       ;;
     --axe-path)
+      [[ $# -ge 2 ]] || { echo "Missing value for --axe-path" >&2; usage; exit 1; }
       AXE_PATH="$2"
       shift 2
       ;;
