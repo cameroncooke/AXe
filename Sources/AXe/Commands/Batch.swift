@@ -51,6 +51,9 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active.")
     var pollInterval: Double = 0.25
 
+    @Flag(name: .customLong("verbose"), help: "Enable verbose logging to stderr.")
+    var verbose: Bool = false
+
     func validate() throws {
         let sourceCount = [!steps.isEmpty, file != nil, useStdin].filter { $0 }.count
         guard sourceCount == 1 else {
@@ -73,7 +76,7 @@ struct Batch: AsyncParsableCommand {
     }
 
     func run() async throws {
-        let logger = AxeLogger(writeToStdErr: true)
+        let logger = AxeLogger(writeToStdErr: verbose)
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)
 

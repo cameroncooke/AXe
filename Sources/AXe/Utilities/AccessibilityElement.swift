@@ -1,6 +1,21 @@
 import Foundation
 
 struct AccessibilityElement: Decodable {
+    private static let actionableTypes: Set<String> = [
+        "Button",
+        "Cell",
+        "CheckBox",
+        "Link",
+        "MenuItem",
+        "PopUpButton",
+        "RadioButton",
+        "SecureTextField",
+        "SegmentedControl",
+        "Switch",
+        "Tab",
+        "TabBarButton",
+        "TextField"
+    ]
     struct Frame: Decodable {
         let x: Double
         let y: Double
@@ -21,6 +36,13 @@ struct AccessibilityElement: Decodable {
     
     var normalizedUniqueId: String? {
         AXUniqueId?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var isActionable: Bool {
+        guard let type else {
+            return false
+        }
+        return Self.actionableTypes.contains(type)
     }
     
     func flattened() -> [AccessibilityElement] {

@@ -7,7 +7,7 @@ enum AccessibilityQuery {
 
 enum ElementResolutionError: LocalizedError {
     case notFound(kind: String, value: String)
-    case multipleMatches(count: Int, kind: String, value: String)
+    case multipleMatches(count: Int, kind: String, value: String, hasUniqueIDs: Bool)
     case invalidFrame(reason: String)
 
     var errorDescription: String? {
@@ -15,8 +15,11 @@ enum ElementResolutionError: LocalizedError {
         switch self {
         case .notFound(let kind, let value):
             return "No accessibility element matched \(kind) '\(value)'. \(tip)"
-        case .multipleMatches(let count, let kind, let value):
-            return "Multiple (\(count)) accessibility elements matched \(kind) '\(value)'. Use --id when labels are not unique. \(tip)"
+        case .multipleMatches(let count, let kind, let value, let hasUniqueIDs):
+            if hasUniqueIDs {
+                return "Multiple (\(count)) accessibility elements matched \(kind) '\(value)'. Use --id when labels are not unique. \(tip)"
+            }
+            return "Multiple (\(count)) accessibility elements matched \(kind) '\(value)', and none of the matches expose AXUniqueId on this screen. Use coordinates for this step (tap -x/-y) or target a more specific screen/state. \(tip)"
         case .invalidFrame(let reason):
             return "\(reason) \(tip)"
         }
@@ -46,7 +49,7 @@ struct AccessibilityTargetResolver {
         case .label(let rawValue):
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedLabel == value }
-            matchedElement = try selectUniqueMatch(matches, kind: "--label", value: rawValue)
+            matchedElement = try selectBestLabelMatch(matches, value: rawValue)
         }
 
         guard let frame = matchedElement.frame else {
@@ -70,9 +73,29 @@ struct AccessibilityTargetResolver {
             throw ElementResolutionError.notFound(kind: kind, value: value)
         }
         guard matches.count == 1 else {
-            throw ElementResolutionError.multipleMatches(count: matches.count, kind: kind, value: value)
+            let hasUniqueIDs = matches.contains {
+                guard let id = $0.normalizedUniqueId else { return false }
+                return !id.isEmpty
+            }
+            throw ElementResolutionError.multipleMatches(count: matches.count, kind: kind, value: value, hasUniqueIDs: hasUniqueIDs)
         }
         return matches[0]
+    }
+
+    private static func selectBestLabelMatch(
+        _ matches: [AccessibilityElement],
+        value: String
+    ) throws -> AccessibilityElement {
+        let actionableMatches = matches.filter(\.isActionable)
+        if actionableMatches.count == 1 {
+            return actionableMatches[0]
+        }
+
+        if actionableMatches.count > 1 {
+            return try selectUniqueMatch(actionableMatches, kind: "--label", value: value)
+        }
+
+        return try selectUniqueMatch(matches, kind: "--label", value: value)
     }
 }
 
