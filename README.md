@@ -381,3 +381,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Licence
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+Third-party licensing notices (including Meta's IDB MIT attribution) are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
