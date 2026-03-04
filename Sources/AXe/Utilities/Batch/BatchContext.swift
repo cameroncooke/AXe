@@ -18,6 +18,8 @@ final class BatchContext {
     let axCachePolicy: AXCachePolicy
     let typeSubmissionMode: TypeSubmissionMode
     let typeChunkSize: Int
+    let waitTimeout: TimeInterval
+    let pollInterval: TimeInterval
 
     private var cachedRoots: [AccessibilityElement]?
 
@@ -25,12 +27,16 @@ final class BatchContext {
         simulatorUDID: String,
         axCachePolicy: AXCachePolicy,
         typeSubmissionMode: TypeSubmissionMode,
-        typeChunkSize: Int
+        typeChunkSize: Int,
+        waitTimeout: TimeInterval = 0,
+        pollInterval: TimeInterval = 0.25
     ) {
         self.simulatorUDID = simulatorUDID
         self.axCachePolicy = axCachePolicy
         self.typeSubmissionMode = typeSubmissionMode
         self.typeChunkSize = typeChunkSize
+        self.waitTimeout = waitTimeout
+        self.pollInterval = pollInterval
     }
 
     func accessibilityRoots(logger: AxeLogger, forceRefresh: Bool = false) async throws -> [AccessibilityElement] {

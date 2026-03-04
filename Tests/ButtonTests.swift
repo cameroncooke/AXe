@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Button Command Tests")
+@Suite("Button Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct ButtonTests {
     @Test("Home button press")
     func homeButtonPress() async throws {

@@ -23,6 +23,8 @@ Use this reference when generating or reviewing `axe batch` commands.
 - `--ax-cache perBatch|perStep|none`: selector tap AX snapshot reuse policy.
 - `--type-submission chunked|composite`: submission mode for `type` steps.
 - `--type-chunk-size <n>`: chunk size when using chunked submission.
+- `--wait-timeout <seconds>`: maximum seconds to poll for selector-based elements before failing (0 = no waiting, default).
+- `--poll-interval <seconds>`: seconds between accessibility tree polls when `--wait-timeout` is active (default 0.25).
 
 ## Input rules
 - Use exactly one source: `--step` OR `--file` OR `--stdin`.
@@ -78,3 +80,13 @@ axe batch --udid SIMULATOR_UDID \
   --step "sleep 0.5" \
   --step "tap --id SaveButton"
 ```
+
+## Example: multi-screen flow with element waiting
+```bash
+axe batch --udid SIMULATOR_UDID \
+  --wait-timeout 5 \
+  --step "tap --id LoginButton" \
+  --step "tap --id WelcomeMessage"
+```
+
+The second step polls for up to 5 seconds for `WelcomeMessage` to appear after the login tap triggers navigation.

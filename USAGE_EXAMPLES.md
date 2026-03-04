@@ -14,6 +14,28 @@ axe list-simulators
 # Example: B34FF305-5EA8-412B-943F-1D0371CA17FF
 ```
 
+## Install the AXe Skill
+
+```bash
+# Install into detected clients (.claude/.agents)
+axe init
+
+# Non-interactive usage: pass an explicit target
+axe init --client claude
+
+# Install into a specific client directory
+axe init --client claude
+
+# Install into a custom destination directory
+axe init --dest ~/.agents/skills
+
+# Print the skill without writing files
+axe init --print
+
+# Remove installed skill directories
+axe init --uninstall --client agents
+```
+
 ## HID Commands Overview
 
 AXe provides comprehensive HID (Human Interface Device) functionality matching idb capabilities:

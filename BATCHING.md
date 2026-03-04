@@ -126,6 +126,31 @@ Smaller value:
 - more submissions
 - potentially more stable for very large text payloads
 
+### `--wait-timeout <seconds>`
+Maximum time to poll for selector-based elements (`tap --id` / `tap --label`) before failing.
+
+Default: `0` (no waiting — fail immediately if the element is not found).
+
+When set to a positive value, batch polls the accessibility tree at regular intervals until the element appears or the timeout expires. This is useful for multi-screen flows where a tap triggers navigation and the next tap targets an element on the new screen.
+
+Example:
+```bash
+axe batch --udid SIMULATOR_UDID --wait-timeout 5 \
+  --step "tap --id LoginButton" \
+  --step "tap --id WelcomeMessage"
+```
+
+The second step polls for up to 5 seconds for `WelcomeMessage` to appear after the login tap triggers navigation.
+
+Only `.notFound` errors are retried. If the selector matches multiple elements or the matched element has an invalid frame, the step fails immediately without retrying.
+
+### `--poll-interval <seconds>`
+How frequently the accessibility tree is re-fetched when `--wait-timeout` is active.
+
+Default: `0.25`
+
+Lower values poll more aggressively (faster detection, more overhead). Higher values reduce overhead but increase detection latency.
+
 ### `--continue-on-error`
 Controls failure policy.
 
@@ -190,6 +215,17 @@ axe batch --udid SIMULATOR_UDID \
   --step "tap --id SaveButton"
 ```
 
+## Real-world example: multi-screen flow with element waiting
+
+```bash
+axe batch --udid SIMULATOR_UDID --wait-timeout 5 \
+  --step "tap --id LoginButton" \
+  --step "tap --id DashboardTitle" \
+  --step "tap --label Profile"
+```
+
+Each selector tap polls for up to 5 seconds, so if `LoginButton` triggers a screen transition, `DashboardTitle` will be found once the new screen loads.
+
 ## Troubleshooting
 
 - Error: multiple input sources
@@ -198,6 +234,7 @@ axe batch --udid SIMULATOR_UDID \
 - Error: no element matched in `tap --id` / `tap --label`
   - Confirm current screen.
   - Run `axe describe-ui --udid ...` to refresh selectors.
+  - Use `--wait-timeout <seconds>` if the element appears after a previous step triggers navigation.
   - Consider `--ax-cache perStep` if your UI changes between steps.
 
 - Steps succeed but final state is wrong

@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Gesture Command Tests")
+@Suite("Gesture Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct GestureTests {
     @Test("Scroll up gesture")
     func scrollUpGesture() async throws {

@@ -5,6 +5,29 @@ enum AccessibilityQuery {
     case label(String)
 }
 
+enum ElementResolutionError: LocalizedError {
+    case notFound(kind: String, value: String)
+    case multipleMatches(count: Int, kind: String, value: String)
+    case invalidFrame(reason: String)
+
+    var errorDescription: String? {
+        let tip = AccessibilityTargetResolver.describeUITip
+        switch self {
+        case .notFound(let kind, let value):
+            return "No accessibility element matched \(kind) '\(value)'. \(tip)"
+        case .multipleMatches(let count, let kind, let value):
+            return "Multiple (\(count)) accessibility elements matched \(kind) '\(value)'. Use --id when labels are not unique. \(tip)"
+        case .invalidFrame(let reason):
+            return "\(reason) \(tip)"
+        }
+    }
+
+    var isNotFound: Bool {
+        if case .notFound = self { return true }
+        return false
+    }
+}
+
 struct AccessibilityTargetResolver {
     static let describeUITip = "Make sure the app is on the expected screen, then run `axe describe-ui --udid <SIMULATOR_UDID>` and prefer --id when available."
 
@@ -27,10 +50,10 @@ struct AccessibilityTargetResolver {
         }
 
         guard let frame = matchedElement.frame else {
-            throw CLIError(errorDescription: "Matched element has no frame. \(describeUITip)")
+            throw ElementResolutionError.invalidFrame(reason: "Matched element has no frame.")
         }
         guard frame.width > 0, frame.height > 0 else {
-            throw CLIError(errorDescription: "Matched element has an invalid frame size (\(frame.width)x\(frame.height)). \(describeUITip)")
+            throw ElementResolutionError.invalidFrame(reason: "Matched element has an invalid frame size (\(frame.width)x\(frame.height)).")
         }
 
         let centerX = frame.x + (frame.width / 2.0)
@@ -44,10 +67,10 @@ struct AccessibilityTargetResolver {
         value: String
     ) throws -> AccessibilityElement {
         guard !matches.isEmpty else {
-            throw CLIError(errorDescription: "No accessibility element matched \(kind) '\(value)'. \(describeUITip)")
+            throw ElementResolutionError.notFound(kind: kind, value: value)
         }
         guard matches.count == 1 else {
-            throw CLIError(errorDescription: "Multiple (\(matches.count)) accessibility elements matched \(kind) '\(value)'. Use --id when labels are not unique. \(describeUITip)")
+            throw ElementResolutionError.multipleMatches(count: matches.count, kind: kind, value: value)
         }
         return matches[0]
     }

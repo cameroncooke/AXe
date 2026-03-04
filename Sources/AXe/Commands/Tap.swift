@@ -90,8 +90,8 @@ struct Tap: AsyncParsableCommand {
 
             do {
                 resolvedPoint = try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query)
-            } catch let error as CLIError {
-                print("Warning: \(error.errorDescription) No tap performed.", to: &standardError)
+            } catch let error as ElementResolutionError {
+                print("Warning: \(error.localizedDescription) No tap performed.", to: &standardError)
                 throw error
             }
 

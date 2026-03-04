@@ -45,6 +45,12 @@ struct Batch: AsyncParsableCommand {
     @Flag(name: .customLong("continue-on-error"), help: "Continue executing later steps even if one step fails.")
     var continueOnError: Bool = false
 
+    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for selector-based elements before failing (0 = no waiting).")
+    var waitTimeout: Double = 0
+
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active.")
+    var pollInterval: Double = 0.25
+
     func validate() throws {
         let sourceCount = [!steps.isEmpty, file != nil, useStdin].filter { $0 }.count
         guard sourceCount == 1 else {
@@ -53,6 +59,14 @@ struct Batch: AsyncParsableCommand {
 
         guard typeChunkSize > 0 else {
             throw ValidationError("--type-chunk-size must be greater than 0.")
+        }
+
+        guard waitTimeout >= 0 else {
+            throw ValidationError("--wait-timeout must be non-negative.")
+        }
+
+        guard pollInterval > 0 else {
+            throw ValidationError("--poll-interval must be greater than 0.")
         }
     }
 
@@ -71,70 +85,42 @@ struct Batch: AsyncParsableCommand {
                 simulatorUDID: simulatorUDID,
                 axCachePolicy: axCachePolicy,
                 typeSubmissionMode: typeSubmissionMode,
-                typeChunkSize: typeChunkSize
+                typeChunkSize: typeChunkSize,
+                waitTimeout: waitTimeout,
+                pollInterval: pollInterval
             )
         }
 
         let session = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
         let runner = BatchPlanRunner(session: session, logger: logger)
 
-        if continueOnError {
-            var failures: [String] = []
+        var failures: [String] = []
 
-            for (index, line) in stepLines.enumerated() {
-                do {
-                    let tokens = try ShellTokenizer.tokenize(line)
-                    let primitives = try await BatchStepParser.parseStepTokens(
-                        tokens,
-                        globalUDID: simulatorUDID,
-                        context: context,
-                        logger: logger
-                    )
-                    try await runner.run(BatchPlan(primitives: primitives))
-                } catch {
+        for (index, line) in stepLines.enumerated() {
+            do {
+                let tokens = try ShellTokenizer.tokenize(line)
+                let primitives = try await BatchStepParser.parseStepTokens(
+                    tokens,
+                    globalUDID: simulatorUDID,
+                    context: context,
+                    logger: logger
+                )
+                try await runner.run(BatchPlan(primitives: primitives))
+            } catch {
+                if continueOnError {
                     failures.append("Step \(index + 1): \(line) -> \(error.localizedDescription)")
-                }
-            }
-
-            if failures.isEmpty {
-                print("✓ Batch completed successfully (\(stepLines.count) steps)")
-                return
-            }
-
-            let failureMessage = failures.joined(separator: "\n")
-            throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failureMessage)")
-        } else {
-            var allPrimitives: [BatchPrimitive] = []
-
-            for (index, line) in stepLines.enumerated() {
-                let tokens: [String]
-                do {
-                    tokens = try ShellTokenizer.tokenize(line)
-                } catch {
-                    throw CLIError(errorDescription: "Invalid step \(index + 1): \(line)\n\(error.localizedDescription)")
-                }
-
-                do {
-                    let primitives = try await BatchStepParser.parseStepTokens(
-                        tokens,
-                        globalUDID: simulatorUDID,
-                        context: context,
-                        logger: logger
-                    )
-                    allPrimitives.append(contentsOf: primitives)
-                } catch {
+                } else {
                     throw CLIError(errorDescription: "Step \(index + 1) failed: \(line)\n\(error.localizedDescription)")
                 }
             }
-
-            do {
-                try await runner.run(BatchPlan(primitives: allPrimitives))
-            } catch {
-                throw CLIError(errorDescription: "Batch execution failed: \(error.localizedDescription)")
-            }
-
-            print("✓ Batch completed successfully (\(stepLines.count) steps)")
         }
+
+        if !failures.isEmpty {
+            let failureMessage = failures.joined(separator: "\n")
+            throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failureMessage)")
+        }
+
+        print("✓ Batch completed successfully (\(stepLines.count) steps)")
     }
 
     private func loadStepLines() throws -> [String] {

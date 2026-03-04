@@ -1,7 +1,7 @@
 import Testing
 import Foundation
 
-@Suite("Type Command Tests")
+@Suite("Type Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct TypeTests {
     @Test("Basic text typing")
     func basicTextTyping() async throws {

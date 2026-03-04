@@ -12,6 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added new `batch` command to execute ordered interaction steps (`tap`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`) in one invocation with a shared simulator/HID session.
 - Added `sleep <seconds>` pseudo-step for explicit per-step delays in batch flows.
 - Added batch options for accessibility caching (`--ax-cache`) and type submission strategy (`--type-submission chunked|composite`, `--type-chunk-size`).
+- Added `--wait-timeout` and `--poll-interval` options to `batch` for polling selector-based elements that appear after earlier steps execute (e.g., multi-screen flows).
+- Added `axe init` command to install, uninstall, or print the AXe skill for detected AI clients (`claude`, `agents`) or a custom destination.
+
+### Changed
+
+- Batch now executes steps sequentially (parse-one-execute-one) instead of pre-resolving all selectors upfront, enabling multi-screen flows where earlier taps trigger navigation.
 
 ## [v1.4.0] - 2026-02-08
 

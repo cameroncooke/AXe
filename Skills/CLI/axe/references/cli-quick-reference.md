@@ -161,6 +161,12 @@ axe batch --udid <UDID> \
   --step "tap --label Settings" \
   --step "sleep 0.5" \
   --step "tap --id SaveButton"
+
+# With element waiting (polls for elements that appear after navigation)
+axe batch --udid <UDID> \
+  --wait-timeout 5 \
+  --step "tap --id LoginButton" \
+  --step "tap --id WelcomeMessage"
 ```
 
 See `batch-reference.md` for full batch semantics.

@@ -18,6 +18,7 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
     - [Install via Homebrew](#install-via-homebrew)
     - [Build from source](#build-from-source)
   - [Basic Usage](#basic-usage)
+  - [Install AXe Skill](#install-axe-skill)
 - [Commands Overview](#commands-overview)
   - [**Touch \& Gestures**](#touch--gestures-1)
   - [**Gesture Presets**](#gesture-presets)
@@ -119,6 +120,15 @@ swift build
 .build/debug/axe --help
 ```
 
+#### Makefile shortcuts
+
+```bash
+make build   # swift build
+make test    # default tests (non-E2E)
+make e2e     # full simulator E2E flow via test-runner.sh
+make clean
+```
+
 ### Basic Usage
 
 ```bash
@@ -146,6 +156,25 @@ axe gesture swipe-from-left-edge --udid $UDID
 # With timing controls (NEW!)
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid $UDID
 axe gesture scroll-down --pre-delay 0.5 --post-delay 1.0 --udid $UDID
+```
+
+### Install AXe Skill
+
+```bash
+# Auto-detect installed clients (~/.claude or ~/.agents)
+axe init
+
+# Non-interactive usage: pass an explicit target
+axe init --client claude
+
+# Install directly to a custom skills directory
+axe init --dest ~/.claude/skills
+
+# Print bundled skill content only
+axe init --print
+
+# Remove installed AXe skill directory
+axe init --uninstall --client agents
 ```
 
 ## Commands Overview

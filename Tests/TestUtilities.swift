@@ -1,9 +1,14 @@
+import Darwin
 import Foundation
 import Testing
 
 // MARK: - Command Execution
 
 let defaultSimulatorUDID = ProcessInfo.processInfo.environment["SIMULATOR_UDID"]
+let isE2EEnabled = {
+    let raw = ProcessInfo.processInfo.environment["AXE_E2E"]?.lowercased() ?? ""
+    return raw == "1" || raw == "true" || raw == "yes"
+}()
 
 struct CommandOutput {
     let output: String
@@ -11,34 +16,75 @@ struct CommandOutput {
 }
 
 struct CommandRunner {
-    static func run(_ command: String) async throws -> (output: String, exitCode: Int32) {
+    static func run(
+        _ command: String,
+        environment: [String: String]? = nil,
+        allowFailure: Bool = false,
+        timeout: TimeInterval = 30
+    ) async throws -> (output: String, exitCode: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = ["-c", command]
-        
+
+        if let environment {
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
+
         let outputPipe = Pipe()
         let errorPipe = Pipe()
         process.standardOutput = outputPipe
         process.standardError = errorPipe
-        
+
+        let stdoutReadTask = Task {
+            try outputPipe.fileHandleForReading.readToEnd() ?? Data()
+        }
+        let stderrReadTask = Task {
+            try errorPipe.fileHandleForReading.readToEnd() ?? Data()
+        }
+
         try process.run()
-        process.waitUntilExit()
-        
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        let error = String(data: errorData, encoding: .utf8) ?? ""
-        
-        let combinedOutput = output + (error.isEmpty ? "" : "\n\(error)")
-        
-        if process.terminationStatus != 0 {
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        if process.isRunning {
+            process.terminate()
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        let outputData = (try? await stdoutReadTask.value) ?? Data()
+        let errorData = (try? await stderrReadTask.value) ?? Data()
+
+        let stdoutText = String(data: outputData, encoding: .utf8) ?? ""
+        let stderrText = String(data: errorData, encoding: .utf8) ?? ""
+
+        let combinedOutput = stdoutText + (stderrText.isEmpty ? "" : "\n\(stderrText)")
+
+        if process.isRunning {
+            throw NSError(
+                domain: "CommandRunner",
+                code: 124,
+                userInfo: [
+                    NSLocalizedDescriptionKey: "Command timed out after \(timeout)s: \(command)\n\(combinedOutput)"
+                ]
+            )
+        }
+
+        if process.terminationStatus != 0, !allowFailure {
             throw NSError(
                 domain: "CommandRunner",
                 code: Int(process.terminationStatus),
                 userInfo: [NSLocalizedDescriptionKey: combinedOutput]
             )
         }
-        
+
         return (combinedOutput, process.terminationStatus)
     }
 }
@@ -138,6 +184,20 @@ struct UIStateParser {
 // MARK: - Test Helpers
 
 struct TestHelpers {
+    static func requireE2EEnabled() throws {
+        if !isE2EEnabled {
+            throw TestError.commandError("E2E simulator tests are disabled. Run via ./test-runner.sh or set AXE_E2E=1.")
+        }
+    }
+
+    static func requireSimulatorUDID() throws -> String {
+        try requireE2EEnabled()
+        guard let udid = defaultSimulatorUDID, !udid.isEmpty else {
+            throw TestError.commandError("SIMULATOR_UDID is required for E2E simulator tests.")
+        }
+        return udid
+    }
+
     /// Get the path to the axe binary using #file to find source root
     static func getAxePath(testFile: String = #file) throws -> String {
         // First try SRC_ROOT environment variable
@@ -162,9 +222,12 @@ struct TestHelpers {
         throw TestError.unexpectedState("axe binary not found at \(axePath). Please run 'swift build'.")
     }
     
-    static func launchPlaygroundApp(to screen: String, simulatorUDID: String? = nil) async throws {        
-        guard let udid = simulatorUDID ?? defaultSimulatorUDID else {
-            throw TestError.commandError("No simulator UDID specified")
+    static func launchPlaygroundApp(to screen: String, simulatorUDID: String? = nil) async throws {
+        let udid: String
+        if let simulatorUDID {
+            udid = simulatorUDID
+        } else {
+            udid = try requireSimulatorUDID()
         }
         
         // Terminate existing instance
@@ -177,8 +240,11 @@ struct TestHelpers {
     }
     
     static func getUIState(simulatorUDID: String? = nil) async throws -> UIElement {
-        guard let udid = simulatorUDID ?? defaultSimulatorUDID else {
-            throw TestError.commandError("No simulator UDID specified")
+        let udid: String
+        if let simulatorUDID {
+            udid = simulatorUDID
+        } else {
+            udid = try requireSimulatorUDID()
         }
         let result = try await runAxeCommand("describe-ui", simulatorUDID: udid)
         
@@ -191,7 +257,11 @@ struct TestHelpers {
     }
     
     @discardableResult
-    static func runAxeCommand(_ command: String, simulatorUDID: String? = nil) async throws -> CommandOutput {
+    static func runAxeCommand(
+        _ command: String,
+        simulatorUDID: String? = nil,
+        environment: [String: String]? = nil
+    ) async throws -> CommandOutput {
         var fullCommand = command
         if let udid = simulatorUDID {
             fullCommand.append(" --udid \(udid)")
@@ -199,7 +269,10 @@ struct TestHelpers {
         
         // Use the built executable directly for faster test execution
         let axePath = try getAxePath()
-        let (output, exitCode) = try await CommandRunner.run("\(axePath) \(fullCommand)")
+        let (output, exitCode) = try await CommandRunner.run(
+            "\(axePath) \(fullCommand)",
+            environment: environment
+        )
         
         // Check if the command failed
         if exitCode != 0 {
@@ -207,6 +280,51 @@ struct TestHelpers {
         }
         
         return CommandOutput(output: output, exitCode: exitCode)
+    }
+
+    static func runAxeCommandAllowFailure(
+        _ command: String,
+        simulatorUDID: String? = nil,
+        environment: [String: String]? = nil
+    ) async throws -> CommandOutput {
+        var fullCommand = command
+        if let udid = simulatorUDID {
+            fullCommand.append(" --udid \(udid)")
+        }
+
+        let axePath = try getAxePath()
+        let (output, exitCode) = try await CommandRunner.run(
+            "\(axePath) \(fullCommand)",
+            environment: environment,
+            allowFailure: true
+        )
+
+        return CommandOutput(output: output, exitCode: exitCode)
+    }
+
+    static func waitForProcessExit(
+        _ process: Process,
+        timeout: TimeInterval,
+        description: String
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+        }
+
+        if process.isRunning {
+            process.terminate()
+            try await Task.sleep(nanoseconds: 500_000_000)
+        }
+
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        if process.isRunning {
+            throw TestError.unexpectedState(description)
+        }
     }
 }
 
