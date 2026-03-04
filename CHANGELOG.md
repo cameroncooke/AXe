@@ -22,8 +22,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed Intel compatibility in release artifacts by building and validating arm64+x86_64 executable/framework slices before packaging, generating architecture-specific Homebrew archives, and updating tap formulas with `on_arm`/`on_intel` URLs and checksums ([#21](https://github.com/cameroncooke/AXe/issues/21))
-- Removed hardcoded arm64 local build paths in test/dev tooling by resolving AXe binary locations via `swift build --show-bin-path` ([#21](https://github.com/cameroncooke/AXe/issues/21))
-- Added a CI release dry-run workflow to validate packaging split (`arm64`/`x64`) and Homebrew formula generation before tag releases ([#21](https://github.com/cameroncooke/AXe/issues/21))
+- Fixed hardcoded arm64 local build paths in test/dev tooling by resolving AXe binary locations via `swift build --show-bin-path` ([#21](https://github.com/cameroncooke/AXe/issues/21))
+- Fixed pre-tag release validation by adding a CI dry-run workflow to validate packaging split (`arm64`/`x64`) and Homebrew formula generation before tag releases ([#21](https://github.com/cameroncooke/AXe/issues/21))
 
 ## [v1.4.0] - 2026-02-08
 

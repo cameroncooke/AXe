@@ -24,7 +24,8 @@ jobs:
           xcode-version: latest-stable
 
       - name: Validate release workflow YAML
-        run: ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true); puts "release.yml YAML parse OK"'
+        run: |
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true); puts "release.yml YAML parse OK"'
 
       - name: Validate shell scripts syntax
         run: |

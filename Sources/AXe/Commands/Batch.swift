@@ -112,9 +112,9 @@ struct Batch: AsyncParsableCommand {
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
                 if continueOnError {
-                    failures.append("Step \(index + 1) [\(stepName)] -> \(error.localizedDescription)")
+                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(error.localizedDescription)")
                 } else {
-                    throw CLIError(errorDescription: "Step \(index + 1) [\(stepName)] failed\n\(error.localizedDescription)")
+                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(error.localizedDescription)")
                 }
             }
         }

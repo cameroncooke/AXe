@@ -272,6 +272,7 @@ jobs:
       run: scripts/build.sh sign-executable
 
     - name: Verify - Release artifact architectures
+      if: steps.idb_check.outputs.needs_setup == 'true'
       run: scripts/build.sh verify-arches
 
     - name: Package - Create notarization package
