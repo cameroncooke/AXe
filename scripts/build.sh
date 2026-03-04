@@ -69,6 +69,26 @@ function print_warning() {
   echo "⚠️  ${message}"
 }
 
+function codesign_with_retry() {
+  local max_attempts=5
+  local delay=10
+  local attempt=1
+  while [ $attempt -le $max_attempts ]; do
+    if codesign "$@" 2>&1; then
+      return 0
+    fi
+    local exit_code=$?
+    if [ $attempt -lt $max_attempts ]; then
+      print_warning "codesign failed (attempt $attempt/$max_attempts), retrying in ${delay}s..."
+      sleep $delay
+      delay=$((delay * 2))
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo "❌ Error: codesign failed after $max_attempts attempts"
+  return 1
+}
+
 function verify_macho_has_arch() {
   local binary_path="$1"
   local expected_arch="$2"
@@ -284,7 +304,7 @@ function resign_framework() {
     # Find and sign all .dylib files recursively
     find "$framework_path" -name "*.dylib" -type f | while read -r dylib_path; do
       print_info "  Signing dylib: $(basename "$dylib_path")"
-      codesign --force \
+      codesign_with_retry --force \
         --sign "${CODESIGN_IDENTITY}" \
         --options runtime \
         --timestamp \
@@ -303,7 +323,7 @@ function resign_framework() {
 
     # Sign the main framework bundle with specific notarization-compatible options
     print_info "Signing main framework bundle: ${framework_name}"
-    codesign --force \
+    codesign_with_retry --force \
       --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --entitlements entitlements.plist \
@@ -349,7 +369,7 @@ function resign_xcframework() {
     print_info "Resigning XCFramework: ${xcframework_name}"
 
     # Sign XCFramework with Developer ID and runtime hardening
-    codesign --force \
+    codesign_with_retry --force \
       --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --deep \
@@ -552,7 +572,7 @@ function sign_axe_executable() {
     print_info "Signing AXe executable: ${executable_path}"
 
     # Sign with Developer ID and runtime hardening
-    codesign --force \
+    codesign_with_retry --force \
       --sign "${CODESIGN_IDENTITY}" \
       --options runtime \
       --entitlements entitlements.plist \
