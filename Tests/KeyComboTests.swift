@@ -20,6 +20,10 @@ struct KeyComboTests {
         let uiState = try await TestHelpers.getUIState()
         let textField = UIStateParser.findElement(in: uiState) { $0.type == "TextField" }
         #expect(textField != nil)
+        #expect(
+            textField?.value == nil || textField?.value == "",
+            "Text field should be cleared after Cmd+A then Backspace"
+        )
     }
 
     @Test("Single modifier key combo")

@@ -69,6 +69,24 @@ function print_warning() {
   echo "⚠️  ${message}"
 }
 
+function verify_macho_has_arch() {
+  local binary_path="$1"
+  local expected_arch="$2"
+
+  if [[ ! -f "$binary_path" ]]; then
+    echo "❌ Error: Binary not found for architecture verification: $binary_path"
+    exit 1
+  fi
+
+  local arch_info
+  arch_info=$(lipo -info "$binary_path" 2>/dev/null || true)
+  if [[ "$arch_info" != *"$expected_arch"* ]]; then
+    echo "❌ Error: Missing architecture '${expected_arch}' in $binary_path"
+    echo "   lipo output: ${arch_info:-<empty>}"
+    exit 1
+  fi
+}
+
 # Function to invoke xcodebuild, optionally with xcpretty
 function invoke_xcodebuild() {
   local arguments=("$@")
@@ -84,6 +102,11 @@ function invoke_xcodebuild() {
   fi
 
   return $exit_code
+}
+
+function swift_build_bin_path() {
+  local build_config="$1"
+  swift build --configuration "$build_config" --arch arm64 --arch x86_64 --show-bin-path
 }
 
 function clone_idb_repo() {
@@ -159,6 +182,7 @@ function framework_build() {
     build \
     SKIP_INSTALL=NO \
     ONLY_ACTIVE_ARCH=NO \
+    ARCHS="arm64 x86_64" \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     GCC_WARN_ABOUT_MISSING_FIELD_INITIALIZERS=NO \
     CLANG_WARN_DOCUMENTATION_COMMENTS=NO \
@@ -399,7 +423,7 @@ function sanitize_framework_rpaths() {
 function build_axe_executable() {
   local output_base_dir="$1"
   local build_config="release"
-  local executable_source=".build/arm64-apple-macosx/${build_config}/axe"
+  local executable_source
   local executable_dest="${output_base_dir}/axe"
 
   print_subsection "⚡" "Building AXe executable"
@@ -409,16 +433,24 @@ function build_axe_executable() {
   print_info "Cleaning previous build products..."
   swift package clean
 
-  # Build using Swift Package Manager (rely on environment variables for cache control)
-  swift build --configuration ${build_config}
+  # Build a universal executable (arm64 + x86_64)
+  swift build --configuration "${build_config}" --arch arm64 --arch x86_64
   local build_exit_code=$?
 
   if [ $build_exit_code -eq 0 ]; then
     print_success "AXe executable built successfully!"
 
+    executable_source="$(swift_build_bin_path "$build_config")/axe"
+    if [[ ! -f "${executable_source}" ]]; then
+      echo "❌ Error: AXe executable not found at ${executable_source}"
+      exit 1
+    fi
+
     # Copy executable to build products directory
     print_info "Installing executable to ${executable_dest}"
     cp "${executable_source}" "${executable_dest}"
+    verify_macho_has_arch "${executable_dest}" "arm64"
+    verify_macho_has_arch "${executable_dest}" "x86_64"
     print_success "AXe executable installed to ${executable_dest}"
 
     # Configure rpath for organized framework loading
@@ -456,6 +488,58 @@ function build_axe_executable() {
     echo "❌ Error: AXe executable build failed with exit code ${build_exit_code}"
     exit $build_exit_code
   fi
+}
+
+function verify_release_architectures() {
+  local output_base_dir="$1"
+  local frameworks_dir="${output_base_dir}/Frameworks"
+  local xcframeworks_dir="${output_base_dir}/XCFrameworks"
+  local executable_path="${output_base_dir}/axe"
+  local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
+
+  print_subsection "🧪" "Validating release artifact architectures"
+  verify_macho_has_arch "${executable_path}" "arm64"
+  verify_macho_has_arch "${executable_path}" "x86_64"
+
+  if [[ -d "${frameworks_dir}" ]]; then
+    for framework_name in "${expected_frameworks[@]}"; do
+      local framework_path="${frameworks_dir}/${framework_name}.framework"
+      if [[ ! -d "${framework_path}" ]]; then
+        echo "❌ Error: Expected framework missing from ${frameworks_dir}: ${framework_name}.framework"
+        exit 1
+      fi
+      local framework_binary="${framework_path}/Versions/A/${framework_name}"
+      if [[ ! -f "${framework_binary}" ]]; then
+        framework_binary="${framework_path}/Versions/Current/${framework_name}"
+      fi
+      if [[ ! -f "${framework_binary}" ]]; then
+        framework_binary="${framework_path}/${framework_name}"
+      fi
+      verify_macho_has_arch "${framework_binary}" "arm64"
+      verify_macho_has_arch "${framework_binary}" "x86_64"
+    done
+  elif [[ -d "${xcframeworks_dir}" ]]; then
+    for framework_name in "${expected_frameworks[@]}"; do
+      local xcframework_path="${xcframeworks_dir}/${framework_name}.xcframework"
+      if [[ ! -d "${xcframework_path}" ]]; then
+        echo "❌ Error: Expected XCFramework missing from ${xcframeworks_dir}: ${framework_name}.xcframework"
+        exit 1
+      fi
+      local framework_binary
+      framework_binary="$(find "${xcframework_path}" -type f -name "${framework_name}" -path "*/macos-*/*.framework/*" | head -1)"
+      if [[ -z "${framework_binary}" ]]; then
+        echo "❌ Error: Could not locate framework binary inside ${xcframework_path}"
+        exit 1
+      fi
+      verify_macho_has_arch "${framework_binary}" "arm64"
+      verify_macho_has_arch "${framework_binary}" "x86_64"
+    done
+  else
+    echo "❌ Error: Neither Frameworks nor XCFrameworks directory found under ${output_base_dir}"
+    exit 1
+  fi
+
+  print_success "Release artifacts include arm64 and x86_64 slices"
 }
 
 # Function to sign the AXe executable with Developer ID
@@ -768,6 +852,9 @@ Commands:
   notarize
     Submit package for Apple notarization and replace original executable.
 
+  verify-arches
+    Verify executable and frameworks include arm64 and x86_64 slices.
+
   build (default)
     Run all steps from setup through notarization.
 
@@ -890,6 +977,11 @@ function cmd_notarize() {
   notarize_package "${PACKAGE_ZIP}"
 }
 
+function cmd_verify_arches() {
+  print_section "🧪" "Verifying Architecture Slices"
+  verify_release_architectures "${BUILD_OUTPUT_DIR}"
+}
+
 function cmd_build() {
   print_section "🚀" "IDB Framework Builder for AXe Project"
 
@@ -966,6 +1058,8 @@ case $COMMAND in
     cmd_package;;
   notarize)
     cmd_notarize;;
+  verify-arches)
+    cmd_verify_arches;;
   build)
     cmd_build;;
   *)

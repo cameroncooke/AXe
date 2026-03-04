@@ -1,0 +1,36 @@
+name: Release Dry Run
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - 'scripts/build.sh'
+      - 'scripts/release-dry-run.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-release-packaging:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Validate release workflow YAML
+        run: |
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true); puts "release.yml YAML parse OK"'
+
+      - name: Validate shell scripts syntax
+        run: |
+          bash -n scripts/build.sh
+          bash -n scripts/release-dry-run.sh
+
+      - name: Dry-run release packaging and formula generation
+        run: scripts/release-dry-run.sh

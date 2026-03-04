@@ -43,7 +43,6 @@ Use these sections under `## [Unreleased]`:
 - Append to existing subsections (e.g., `### Fixed`), do not create duplicates
 - NEVER modify already-released version sections (e.g., `## [0.12.2]`)
 - Each version section is immutable once released
--
 #### Attribution
 - **Internal changes (from issues)**: `Fixed foo bar ([#123](https://github.com/cameroncooke/AXe/issues/123))`
 - **External contributions**: `Added feature X ([#456](https://github.com/cameroncooke/AXe/pull/456) by [@username](https://github.com/username))`
