@@ -5,7 +5,7 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 
 ## Step 1: Confirm runtime context
 1. Identify simulator UDID target first (`axe list-simulators`).
-2. Every AXe command requires `--udid <UDID>`.
+2. Simulator-interaction AXe commands require `--udid <UDID>`. Commands like `list-simulators` and `init` do not.
 3. Run `axe describe-ui --udid <UDID>` to inspect the current screen. Use the output to discover available `--id` and `--label` values for selector taps, and to confirm coordinates for coordinate-based taps.
 4. Prefer selector taps (`tap --id` / `tap --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting (`--wait-timeout`) in batch flows.
 
@@ -68,7 +68,7 @@ axe screenshot --udid <UDID> --output post-state.png
 
 ## Step 7: Exit criteria
 Before finalising guidance, verify:
-- Every command includes `--udid`.
+- Every simulator-interaction command includes `--udid`.
 - Only valid AXe commands and flags are used.
 - Shell quoting is correct (single quotes for literals, `--stdin`/`--file` for complex text).
 - Verification is suggested as a separate step when results matter.

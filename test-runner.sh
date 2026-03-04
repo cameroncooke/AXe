@@ -14,7 +14,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 SIMULATOR_NAME="iPhone 17 Pro"
-SIMULATOR_UDID="B38FE93D-578B-454B-BE9A-C6FA0CE5F096"
+SIMULATOR_UDID="${SIMULATOR_UDID:-}"
 PLAYGROUND_PROJECT="AxePlaygroundApp/AxePlayground.xcodeproj"
 PLAYGROUND_SCHEME="AxePlayground"
 BUNDLE_ID="com.cameroncooke.AxePlayground"
@@ -147,10 +147,14 @@ check_prerequisites() {
 boot_simulator() {
     print_header "Setting Up Simulator"
 
+    if [[ -z "$SIMULATOR_UDID" ]]; then
+        SIMULATOR_UDID=$(xcrun simctl list devices | grep "$SIMULATOR_NAME" | grep -oE '[A-F0-9-]{36}' | head -1)
+    fi
+
     print_info "Checking simulator status..."
     SIMULATOR_STATUS=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -o "Booted\|Shutdown" || echo "NotFound")
 
-    if [[ "$SIMULATOR_STATUS" == "NotFound" ]]; then
+    if [[ -z "$SIMULATOR_UDID" || "$SIMULATOR_STATUS" == "NotFound" ]]; then
         print_error "Simulator with UDID $SIMULATOR_UDID not found"
         print_info "Available simulators:"
         xcrun simctl list devices | grep "iPhone"

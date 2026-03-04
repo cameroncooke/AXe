@@ -76,7 +76,7 @@ struct BatchStepParser {
     }
 
     private static func ensureNoPerStepUDID(_ args: [String]) throws {
-        if args.contains("--udid") {
+        if args.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
             throw ValidationError("Per-step --udid is not supported in batch steps. Use batch-level --udid.")
         }
     }

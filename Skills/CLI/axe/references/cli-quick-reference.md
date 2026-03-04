@@ -1,6 +1,6 @@
 # AXe CLI Reference
 
-Comprehensive reference for all AXe commands. Every command requires `--udid <UDID>` unless noted.
+Comprehensive reference for all AXe commands. Most simulator-interaction commands require `--udid <UDID>` unless noted.
 
 ## Simulator discovery
 

@@ -283,7 +283,7 @@ axe batch --udid SIMULATOR_UDID --file steps.txt
 
 `batch` behavior in plain terms:
 - Runs steps in order in a single invocation.
-- Accepts exactly one step source: `--step`, `--file`, or `--stdin`.
+- Accepts exactly one-step source: `--step`, `--file`, or `--stdin`.
 - Uses fail-fast by default (stops on first error).
 - `--continue-on-error` switches to best-effort mode.
 - `--ax-cache perBatch` is default for faster selector-based taps.

@@ -65,8 +65,10 @@ struct Batch: AsyncParsableCommand {
             throw ValidationError("--wait-timeout must be non-negative.")
         }
 
-        guard pollInterval > 0 else {
-            throw ValidationError("--poll-interval must be greater than 0.")
+        if waitTimeout > 0 {
+            guard pollInterval > 0 else {
+                throw ValidationError("--poll-interval must be greater than 0 when --wait-timeout is active.")
+            }
         }
     }
 

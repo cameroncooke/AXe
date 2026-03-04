@@ -23,9 +23,6 @@ axe init
 # Non-interactive usage: pass an explicit target
 axe init --client claude
 
-# Install into a specific client directory
-axe init --client claude
-
 # Install into a custom destination directory
 axe init --dest ~/.agents/skills
 
@@ -179,7 +176,7 @@ axe batch --udid SIMULATOR_UDID --type-submission composite \
 ```
 
 Simple behavior rules:
-- One step source only: `--step`, `--file`, or `--stdin`.
+- One-step source only: `--step`, `--file`, or `--stdin`.
 - Steps run in order.
 - Default mode is fail-fast (stop at first error).
 - Add `--continue-on-error` for best-effort execution.
