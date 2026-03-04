@@ -25,6 +25,7 @@ Use this reference when generating or reviewing `axe batch` commands.
 - `--type-chunk-size <n>`: chunk size when using chunked submission.
 - `--wait-timeout <seconds>`: maximum seconds to poll for selector-based elements before failing (0 = no waiting, default).
 - `--poll-interval <seconds>`: seconds between accessibility tree polls when `--wait-timeout` is active (default 0.25).
+- `--verbose`: enable detailed stderr logs for troubleshooting (default quiet output).
 
 ## Input rules
 - Use exactly one source: `--step` OR `--file` OR `--stdin`.
@@ -90,3 +91,5 @@ axe batch --udid SIMULATOR_UDID \
 ```
 
 The second step polls for up to 5 seconds for `WelcomeMessage` to appear after the login tap triggers navigation.
+
+If label selectors are ambiguous and AXe reports no `AXUniqueId` values for matches, switch that step to coordinates (`tap -x/-y`).

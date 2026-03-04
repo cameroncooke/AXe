@@ -9,21 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added new `batch` command to execute ordered interaction steps (`tap`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`) in one invocation with a shared simulator/HID session.
-- Added `sleep <seconds>` pseudo-step for explicit per-step delays in batch flows.
-- Added batch options for accessibility caching (`--ax-cache`) and type submission strategy (`--type-submission chunked|composite`, `--type-chunk-size`).
-- Added `--wait-timeout` and `--poll-interval` options to `batch` for polling selector-based elements that appear after earlier steps execute (e.g., multi-screen flows).
-- Added `axe init` command to install, uninstall, or print the AXe skill for detected AI clients (`claude`, `agents`) or a custom destination.
-
-### Changed
-
-- Batch now executes steps sequentially (parse-one-execute-one) instead of pre-resolving all selectors upfront, enabling multi-screen flows where earlier taps trigger navigation.
+- Added `batch` command for executing ordered multi-step interaction workflows in a single invocation with a shared simulator session. Supports all interaction commands (`tap`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`), explicit `sleep` delays between steps, accessibility caching (`--ax-cache`), configurable text submission strategies (`--type-submission`), and element polling for multi-screen flows (`--wait-timeout`, `--poll-interval`). See [BATCHING.md](BATCHING.md).
+- Added `axe init` command to install, uninstall, or print the AXe skill for AI clients (`claude`, `agents`) or a custom destination.
 
 ### Fixed
 
-- Fixed Intel compatibility in release artifacts by building and validating arm64+x86_64 executable/framework slices before packaging, generating architecture-specific Homebrew archives, and updating tap formulas with `on_arm`/`on_intel` URLs and checksums ([#21](https://github.com/cameroncooke/AXe/issues/21))
-- Fixed hardcoded arm64 local build paths in test/dev tooling by resolving AXe binary locations via `swift build --show-bin-path` ([#21](https://github.com/cameroncooke/AXe/issues/21))
-- Fixed pre-tag release validation by adding a CI dry-run workflow to validate packaging split (`arm64`/`x64`) and Homebrew formula generation before tag releases ([#21](https://github.com/cameroncooke/AXe/issues/21))
+- Fixed `axe batch` noisy stderr output by default; added `--verbose` for opt-in troubleshooting logs.
+- Fixed `tap --label` resolution to prefer actionable elements (for example, buttons) when a label is shared with read-only elements.
+- Fixed selector ambiguity guidance for `tap --label` collisions by clarifying when to fall back to coordinates if no `AXUniqueId` values are exposed.
+- Fixed Homebrew installation failing on Intel Macs ([#27](https://github.com/cameroncooke/AXe/pull/27), [#21](https://github.com/cameroncooke/AXe/issues/21))
 
 ## [v1.4.0] - 2026-02-08
 

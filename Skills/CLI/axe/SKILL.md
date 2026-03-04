@@ -50,6 +50,8 @@ HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe c
 - Use `--poll-interval <seconds>` to control polling frequency during waiting (default 0.25s).
 - Use `--ax-cache perStep` when *not* using `--wait-timeout` but the UI still changes between steps — this ensures each selector tap gets a fresh accessibility snapshot rather than a stale cached one.
 - Insert explicit `sleep <seconds>` steps when coordinate-based taps need the UI to be stable (selectors with `--wait-timeout` are preferred over sleep where possible).
+- Keep batch output quiet by default. Add `--verbose` only when troubleshooting.
+- If `tap --label` reports multiple matches and no `AXUniqueId` values are exposed, fall back to `tap -x/-y` for that step.
 
 Key rules:
 - Use exactly one step source per run: `--step`, `--file`, or `--stdin`.

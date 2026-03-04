@@ -151,6 +151,13 @@ Default: `0.25`
 
 Lower values poll more aggressively (faster detection, more overhead). Higher values reduce overhead but increase detection latency.
 
+### `--verbose`
+Enables detailed stderr logging for troubleshooting.
+
+Default: disabled (quiet output, success/failure summary only).
+
+Use this when debugging selector resolution, setup, or retries.
+
 ### `--continue-on-error`
 Controls failure policy.
 
@@ -236,6 +243,16 @@ Each selector tap polls for up to 5 seconds, so if `LoginButton` triggers a scre
   - Run `axe describe-ui --udid ...` to refresh selectors.
   - Use `--wait-timeout <seconds>` if the element appears after a previous step triggers navigation.
   - Consider `--ax-cache perStep` if your UI changes between steps.
+
+- Error: multiple elements matched for `--label`
+  - Labels are not guaranteed to be unique.
+  - AXe prefers actionable matches first (for example, `Button`) when a label is shared with read-only text, but it still fails if multiple actionable matches remain.
+  - Prefer `--id` when available.
+  - If AXe reports that none of the matches expose `AXUniqueId`, use coordinate taps (`tap -x/-y`) for that step.
+
+- Output is too noisy
+  - Keep default quiet mode for normal runs.
+  - Add `--verbose` only when you need troubleshooting details.
 
 - Steps succeed but final state is wrong
   - Add `sleep` between navigation-heavy steps.
