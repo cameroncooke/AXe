@@ -9,15 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `batch` command for executing ordered multi-step interaction workflows in a single invocation with a shared simulator session. Supports all interaction commands (`tap`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`), explicit `sleep` delays between steps, accessibility caching (`--ax-cache`), configurable text submission strategies (`--type-submission`), and element polling for multi-screen flows (`--wait-timeout`, `--poll-interval`). See [BATCHING.md](BATCHING.md).
-- Added `axe init` command to install, uninstall, or print the AXe skill for AI clients (`claude`, `agents`) or a custom destination.
+- Added `batch` command for executing ordered multi-step interaction workflows in a single invocation, with sequential execution that supports multi-screen flows, built-in `sleep` delays, accessibility caching, and configurable text submission strategies ([#25](https://github.com/cameroncooke/AXe/pull/25)). See [BATCHING.md](BATCHING.md).
+- Added `axe init` command to install, uninstall, or print the AXe skill for AI clients (`claude`, `agents`) or a custom destination ([#25](https://github.com/cameroncooke/AXe/pull/25)).
 
 ### Fixed
 
-- Fixed `axe batch` noisy stderr output by default; added `--verbose` for opt-in troubleshooting logs.
-- Fixed `tap --label` resolution to prefer actionable elements (for example, buttons) when a label is shared with read-only elements.
-- Fixed selector ambiguity guidance for `tap --label` collisions by clarifying when to fall back to coordinates if no `AXUniqueId` values are exposed.
-- Fixed Homebrew installation failing on Intel Macs ([#27](https://github.com/cameroncooke/AXe/pull/27), [#21](https://github.com/cameroncooke/AXe/issues/21))
+- Fixed Homebrew installation on Intel Macs by producing architecture-specific release artifacts ([#27](https://github.com/cameroncooke/AXe/pull/27), [#21](https://github.com/cameroncooke/AXe/issues/21))
+- Fixed `tap --label` resolving ambiguous matches by preferring actionable elements over read-only ones ([#28](https://github.com/cameroncooke/AXe/pull/28))
 
 ## [v1.4.0] - 2026-02-08
 
