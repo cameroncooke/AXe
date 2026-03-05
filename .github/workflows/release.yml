@@ -472,9 +472,29 @@ jobs:
       env:
         VERSION: ${{ steps.version.outputs.version }}
       run: |
-        node scripts/generate-github-release-notes.mjs \
+        set -e
+
+        # Try target version first
+        if node scripts/generate-github-release-notes.mjs \
           --version "$VERSION" \
+          --out github-release-body.md; then
+          echo "✅ Generated release notes for v$VERSION"
+          exit 0
+        fi
+
+        # Deploy-only patch fallback: reuse previous version notes when target notes are missing
+        PREVIOUS_VERSION=$(git tag | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$' | sort -V | awk -v v="$VERSION" '$0 < v' | tail -1)
+
+        if [ -z "$PREVIOUS_VERSION" ]; then
+          echo "❌ Could not determine previous version for fallback release notes"
+          exit 1
+        fi
+
+        echo "ℹ️ No CHANGELOG notes for v$VERSION, falling back to v$PREVIOUS_VERSION"
+        node scripts/generate-github-release-notes.mjs \
+          --version "$PREVIOUS_VERSION" \
           --out github-release-body.md
+        echo "✅ Generated release notes for v$VERSION using fallback v$PREVIOUS_VERSION notes"
 
     - name: Create GitHub release
       if: github.event_name == 'push'
