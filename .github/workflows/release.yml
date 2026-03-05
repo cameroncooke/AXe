@@ -460,12 +460,9 @@ jobs:
         TAP_SOURCE_DIR="$TEST_ROOT/homebrew-axe-test"
         FORMULA_PATH="$TAP_SOURCE_DIR/Formula/axe.rb"
         HOMEBREW_CACHE_DIR="$TEST_ROOT/cache"
-        HOMEBREW_PREFIX_DIR="$TEST_ROOT/prefix"
-        HOMEBREW_REPOSITORY_DIR="$TEST_ROOT/repo"
-        HOMEBREW_CELLAR_DIR="$TEST_ROOT/cellar"
 
         rm -rf "$TEST_ROOT"
-        mkdir -p "$TEST_ROOT" "$TAP_SOURCE_DIR/Formula" "$HOMEBREW_CACHE_DIR" "$HOMEBREW_PREFIX_DIR" "$HOMEBREW_REPOSITORY_DIR" "$HOMEBREW_CELLAR_DIR"
+        mkdir -p "$TEST_ROOT" "$TAP_SOURCE_DIR/Formula" "$HOMEBREW_CACHE_DIR"
 
         scripts/generate-homebrew-formula.sh \
           --formula-class "Axe" \
@@ -483,38 +480,19 @@ jobs:
 
         HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
-        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
-        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
-        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
         brew untap "$TAP_NAME" >/dev/null 2>&1 || true
 
         HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
-        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
-        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
-        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
         brew tap "$TAP_NAME" "$TAP_SOURCE_DIR"
 
         HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
-        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
-        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
-        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
         brew install "$TAP_NAME/axe"
 
-        HOMEBREW_NO_AUTO_UPDATE=1 \
-        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
-        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
-        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
-        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
-        "$HOMEBREW_PREFIX_DIR/bin/axe" --version
-
-        HOMEBREW_NO_AUTO_UPDATE=1 \
-        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
-        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
-        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
-        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
-        "$HOMEBREW_PREFIX_DIR/bin/axe" init --print | grep -q "name: axe"
+        BREW_AXE_PREFIX=$(brew --prefix "$TAP_NAME/axe")
+        "$BREW_AXE_PREFIX/bin/axe" --version
+        "$BREW_AXE_PREFIX/bin/axe" init --print | grep -q "name: axe"
 
     - name: Smoke test universal archive
       run: |
