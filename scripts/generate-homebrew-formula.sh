@@ -70,22 +70,11 @@ class ${FORMULA_CLASS} < Formula
   end
 
   def post_install
-    signed_paths = {}
-
-    Dir.glob("#{libexec}/**/*", File::FNM_DOTMATCH).each do |path|
-      next unless File.file?(path)
-      next if path.match?(%r{\.framework/[^/]+$}) && File.directory?(File.join(File.dirname(path), "Versions"))
-
-      resolved_path = Pathname.new(path).realpath.to_s
-      next if signed_paths[resolved_path]
-      next unless quiet_system("file", resolved_path)
-
-      file_output = Utils.safe_popen_read("file", resolved_path)
-      next unless file_output.include?("Mach-O")
-
-      system "codesign", "--force", "--sign", "-", "--timestamp=none", resolved_path
-      signed_paths[resolved_path] = true
+    Dir.glob("#{libexec}/Frameworks/*.framework").each do |framework|
+      system "codesign", "--force", "--sign", "-", "--timestamp=none", framework
     end
+
+    system "codesign", "--force", "--sign", "-", "--timestamp=none", libexec/"axe"
   end
 
   test do
