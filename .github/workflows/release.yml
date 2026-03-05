@@ -406,6 +406,21 @@ jobs:
 
           cp -R "$PACKAGE_ROOT"/. "$HOMEBREW_ROOT"/
 
+          # IMPORTANT: Keep this stripping step.
+          # Homebrew modifies binaries/framework metadata during install (relocation + ad-hoc signing).
+          # If release signatures are left in place, Homebrew prints noisy "Failed applying an ad-hoc signature"
+          # messages that look like install failures to users even when install succeeds.
+          # We intentionally ship the Homebrew archive unsigned to keep installs clean and predictable.
+          while IFS= read -r -d '' file_path; do
+            if file "$file_path" | grep -q "Mach-O"; then
+              codesign --remove-signature "$file_path" 2>/dev/null || true
+            fi
+          done < <(find "$HOMEBREW_ROOT" -type f -print0)
+
+          find "$HOMEBREW_ROOT" -type d -name "*.framework" -print0 | while IFS= read -r -d '' bundle; do
+            codesign --remove-signature "$bundle" 2>/dev/null || true
+          done
+
           lipo -info "$HOMEBREW_ROOT/axe" | grep -q "arm64"
           lipo -info "$HOMEBREW_ROOT/axe" | grep -q "x86_64"
 
