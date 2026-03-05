@@ -309,7 +309,7 @@ jobs:
           TEMP_EXTRACT="$RUNNER_TEMP/extract"
           ARCHIVE_ROOT="$RUNNER_TEMP/extract-archive"
           mkdir -p "$TEMP_EXTRACT" "$ARCHIVE_ROOT"
-          unzip -q "$PACKAGE_PATH" -d "$TEMP_EXTRACT"
+          ditto -x -k "$PACKAGE_PATH" "$TEMP_EXTRACT"
 
           TOP_LEVEL_DIR_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
           TOP_LEVEL_FILE_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
@@ -346,7 +346,7 @@ jobs:
           UNIVERSAL_ROOT="$RUNNER_TEMP/extract-homebrew-universal"
           HOMEBREW_ROOT="$RUNNER_TEMP/extract-homebrew"
           mkdir -p "$UNIVERSAL_ROOT" "$HOMEBREW_ROOT"
-          unzip -q "$PACKAGE_PATH" -d "$UNIVERSAL_ROOT"
+          ditto -x -k "$PACKAGE_PATH" "$UNIVERSAL_ROOT"
 
           TOP_LEVEL_DIR_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
           TOP_LEVEL_FILE_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
@@ -399,7 +399,7 @@ jobs:
 
         SMOKE_ROOT="$RUNNER_TEMP/extract-smoke"
         mkdir -p "$SMOKE_ROOT"
-        unzip -q "$PACKAGE_PATH" -d "$SMOKE_ROOT"
+        ditto -x -k "$PACKAGE_PATH" "$SMOKE_ROOT"
 
         TOP_LEVEL_DIR_COUNT=$(find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
         TOP_LEVEL_FILE_COUNT=$(find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')

@@ -675,9 +675,9 @@ function package_for_notarization() {
     exit 1
   fi
 
-  # Create zip package (redirect zip output to stderr)
+  # Create zip package while preserving framework symlinks and metadata
   print_info "Creating zip package: ${package_zip}" >&2
-  (cd "${output_base_dir}" && zip -r "${package_name}.zip" "${package_name}/") >&2
+  ditto -c -k --keepParent "${package_dir}" "${package_zip}" >&2
 
   # Clean up temporary directory
   rm -rf "${package_dir}"
@@ -737,8 +737,8 @@ function notarize_package() {
     rm -rf "${temp_extract_dir}"
     mkdir -p "${temp_extract_dir}"
 
-    # Extract the notarized package
-    unzip -q "${package_zip}" -d "${temp_extract_dir}"
+    # Extract the notarized package while preserving framework structure
+    ditto -x -k "${package_zip}" "${temp_extract_dir}"
 
     local extracted_package_dir
     extracted_package_dir="$(find "${temp_extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -1)"
@@ -808,9 +808,9 @@ function notarize_package() {
         print_info "No Frameworks directory found - creating executable-only package"
       fi
 
-      # Create final zip package
+      # Create final zip package while preserving framework symlinks and metadata
       print_info "Creating final package: ${final_package_zip}"
-      (cd "${TEMP_DIR}" && zip -r "${final_package_name}.zip" "${final_package_name}/")
+      ditto -c -k --keepParent "${final_package_dir}" "${final_package_zip}"
 
       # Clean up temporary package directory
       rm -rf "${final_package_dir}"
