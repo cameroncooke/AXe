@@ -126,7 +126,8 @@ function invoke_xcodebuild() {
 
 function swift_build_bin_path() {
   local build_config="$1"
-  swift build --configuration "$build_config" --arch arm64 --arch x86_64 --show-bin-path
+  local target_arch="$2"
+  swift build --configuration "$build_config" --arch "$target_arch" --show-bin-path
 }
 
 function clone_idb_repo() {
@@ -443,8 +444,11 @@ function sanitize_framework_rpaths() {
 function build_axe_executable() {
   local output_base_dir="$1"
   local build_config="release"
-  local executable_source
   local executable_dest="${output_base_dir}/axe"
+  local arm64_executable="${output_base_dir}/axe-arm64"
+  local x64_executable="${output_base_dir}/axe-x86_64"
+  local arm64_bin_path
+  local x64_bin_path
 
   print_subsection "⚡" "Building AXe executable"
   print_info "Using Swift Package Manager to build AXe..."
@@ -453,61 +457,63 @@ function build_axe_executable() {
   print_info "Cleaning previous build products..."
   swift package clean
 
-  # Build a universal executable (arm64 + x86_64)
-  swift build --configuration "${build_config}" --arch arm64 --arch x86_64
-  local build_exit_code=$?
-
-  if [ $build_exit_code -eq 0 ]; then
-    print_success "AXe executable built successfully!"
-
-    executable_source="$(swift_build_bin_path "$build_config")/axe"
-    if [[ ! -f "${executable_source}" ]]; then
-      echo "❌ Error: AXe executable not found at ${executable_source}"
-      exit 1
-    fi
-
-    # Copy executable to build products directory
-    print_info "Installing executable to ${executable_dest}"
-    cp "${executable_source}" "${executable_dest}"
-    verify_macho_has_arch "${executable_dest}" "arm64"
-    verify_macho_has_arch "${executable_dest}" "x86_64"
-    print_success "AXe executable installed to ${executable_dest}"
-
-    # Configure rpath for organized framework loading
-    print_info "Configuring executable rpath for organized framework loading..."
-
-    # Remove any existing rpaths first
-    install_name_tool -delete_rpath "@executable_path/Frameworks" "${executable_dest}" 2>/dev/null || true
-    install_name_tool -delete_rpath "@loader_path/Frameworks" "${executable_dest}" 2>/dev/null || true
-
-    # Add primary rpath: look for frameworks in Frameworks/ subdirectory relative to executable
-    install_name_tool -add_rpath "@executable_path/Frameworks" "${executable_dest}"
-    print_success "Added rpath: @executable_path/Frameworks"
-
-    # Add fallback rpath: look for frameworks in Frameworks/ relative to current library
-    install_name_tool -add_rpath "@loader_path/Frameworks" "${executable_dest}"
-    print_success "Added rpath: @loader_path/Frameworks"
-
-    # Strip any Xcode toolchain rpaths that can trigger Homebrew relocation
-    remove_xcode_rpaths "${executable_dest}"
-
-    # Verify rpath configuration
-    print_info "Verifying rpath configuration..."
-    local rpath_output=$(otool -l "${executable_dest}" | grep -A2 LC_RPATH | grep path | awk '{print $2}')
-    if [[ -n "$rpath_output" ]]; then
-      print_success "Executable rpath configuration verified:"
-      echo "$rpath_output" | while read -r path; do
-        print_info "  → ${path}"
-      done
-    else
-      print_warning "No rpath entries found in executable"
-    fi
-
-    print_success "Executable rpath configured for organized framework deployment"
-  else
-    echo "❌ Error: AXe executable build failed with exit code ${build_exit_code}"
-    exit $build_exit_code
+  print_info "Building arm64 executable..."
+  swift build --configuration "${build_config}" --arch arm64
+  arm64_bin_path="$(swift_build_bin_path "$build_config" "arm64")/axe"
+  if [[ ! -f "${arm64_bin_path}" ]]; then
+    echo "❌ Error: arm64 AXe executable not found at ${arm64_bin_path}"
+    exit 1
   fi
+  cp "${arm64_bin_path}" "${arm64_executable}"
+
+  print_info "Building x86_64 executable..."
+  swift build --configuration "${build_config}" --arch x86_64
+  x64_bin_path="$(swift_build_bin_path "$build_config" "x86_64")/axe"
+  if [[ ! -f "${x64_bin_path}" ]]; then
+    echo "❌ Error: x86_64 AXe executable not found at ${x64_bin_path}"
+    exit 1
+  fi
+  cp "${x64_bin_path}" "${x64_executable}"
+
+  print_info "Creating universal executable with lipo..."
+  lipo -create -output "${executable_dest}" "${arm64_executable}" "${x64_executable}"
+  rm -f "${arm64_executable}" "${x64_executable}"
+
+  verify_macho_has_arch "${executable_dest}" "arm64"
+  verify_macho_has_arch "${executable_dest}" "x86_64"
+  print_success "AXe executable installed to ${executable_dest}"
+
+  # Configure rpath for organized framework loading
+  print_info "Configuring executable rpath for organized framework loading..."
+
+  # Remove any existing rpaths first
+  install_name_tool -delete_rpath "@executable_path/Frameworks" "${executable_dest}" 2>/dev/null || true
+  install_name_tool -delete_rpath "@loader_path/Frameworks" "${executable_dest}" 2>/dev/null || true
+
+  # Add primary rpath: look for frameworks in Frameworks/ subdirectory relative to executable
+  install_name_tool -add_rpath "@executable_path/Frameworks" "${executable_dest}"
+  print_success "Added rpath: @executable_path/Frameworks"
+
+  # Add fallback rpath: look for frameworks in Frameworks/ relative to current library
+  install_name_tool -add_rpath "@loader_path/Frameworks" "${executable_dest}"
+  print_success "Added rpath: @loader_path/Frameworks"
+
+  # Strip any Xcode toolchain rpaths that can trigger Homebrew relocation
+  remove_xcode_rpaths "${executable_dest}"
+
+  # Verify rpath configuration
+  print_info "Verifying rpath configuration..."
+  local rpath_output=$(otool -l "${executable_dest}" | grep -A2 LC_RPATH | grep path | awk '{print $2}')
+  if [[ -n "$rpath_output" ]]; then
+    print_success "Executable rpath configuration verified:"
+    echo "$rpath_output" | while read -r path; do
+      print_info "  → ${path}"
+    done
+  else
+    print_warning "No rpath entries found in executable"
+  fi
+
+  print_success "Executable rpath configured for organized framework deployment"
 }
 
 function verify_release_architectures() {
