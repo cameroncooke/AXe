@@ -70,6 +70,10 @@ jobs:
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
       archive_sha256: ${{ steps.create_archive.outputs.sha256 }}
+      release_archive_arm64_name: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
+      release_archive_arm64_sha256: ${{ steps.create_release_archives.outputs.archive_arm64_sha256 }}
+      release_archive_x64_name: ${{ steps.create_release_archives.outputs.archive_x64_name }}
+      release_archive_x64_sha256: ${{ steps.create_release_archives.outputs.archive_x64_sha256 }}
       homebrew_archive_name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
       homebrew_archive_sha256: ${{ steps.create_homebrew_archive.outputs.archive_sha256 }}
       version: ${{ steps.version.outputs.version }}
@@ -298,7 +302,7 @@ jobs:
     - name: Create release archive
       id: create_archive
       run: |
-        ARCHIVE_NAME="${{ env.ARCHIVE_NAME }}-${{ steps.version.outputs.tag }}.tar.gz"
+        ARCHIVE_NAME="${{ env.ARCHIVE_NAME }}-${{ steps.version.outputs.tag }}-universal.tar.gz"
         echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
 
         PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
@@ -317,6 +321,61 @@ jobs:
           SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
           echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "✅ Archive created: $ARCHIVE_NAME (SHA256: $SHA256)"
+        else
+          echo "❌ Package path not found: $PACKAGE_PATH"
+          exit 1
+        fi
+
+    - name: Create release archives (arm64 + x64)
+      id: create_release_archives
+      run: |
+        ARM64_ARCHIVE_NAME="AXe-macOS-${{ steps.version.outputs.tag }}-arm64.tar.gz"
+        X64_ARCHIVE_NAME="AXe-macOS-${{ steps.version.outputs.tag }}-x64.tar.gz"
+        echo "archive_arm64_name=$ARM64_ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+        echo "archive_x64_name=$X64_ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+
+        PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
+        if [ -f "$PACKAGE_PATH" ]; then
+          echo "📦 Creating release arch-specific archives from: $PACKAGE_PATH"
+
+          UNIVERSAL_ROOT="$RUNNER_TEMP/extract-release-universal"
+          ARM64_ROOT="$RUNNER_TEMP/extract-release-arm64"
+          X64_ROOT="$RUNNER_TEMP/extract-release-x64"
+          mkdir -p "$UNIVERSAL_ROOT" "$ARM64_ROOT" "$X64_ROOT"
+          unzip -q "$PACKAGE_PATH" -d "$UNIVERSAL_ROOT"
+
+          TOP_LEVEL_DIR_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+          TOP_LEVEL_FILE_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+          if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
+            PACKAGE_ROOT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | head -1)
+          else
+            PACKAGE_ROOT="$UNIVERSAL_ROOT"
+          fi
+
+          cp -R "$PACKAGE_ROOT"/. "$ARM64_ROOT"/
+          cp -R "$PACKAGE_ROOT"/. "$X64_ROOT"/
+
+          lipo -thin arm64 "$ARM64_ROOT/axe" -output "$ARM64_ROOT/axe.thin"
+          mv "$ARM64_ROOT/axe.thin" "$ARM64_ROOT/axe"
+          codesign --remove-signature "$ARM64_ROOT/axe" 2>/dev/null || true
+
+          lipo -thin x86_64 "$X64_ROOT/axe" -output "$X64_ROOT/axe.thin"
+          mv "$X64_ROOT/axe.thin" "$X64_ROOT/axe"
+          codesign --remove-signature "$X64_ROOT/axe" 2>/dev/null || true
+
+          lipo -info "$ARM64_ROOT/axe" | grep -q "arm64"
+          lipo -info "$X64_ROOT/axe" | grep -q "x86_64"
+
+          tar -czf "$ARM64_ARCHIVE_NAME" -C "$ARM64_ROOT" .
+          tar -czf "$X64_ARCHIVE_NAME" -C "$X64_ROOT" .
+
+          ARM64_SHA256=$(shasum -a 256 "$ARM64_ARCHIVE_NAME" | awk '{print $1}')
+          X64_SHA256=$(shasum -a 256 "$X64_ARCHIVE_NAME" | awk '{print $1}')
+          echo "archive_arm64_sha256=$ARM64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "archive_x64_sha256=$X64_SHA256" >> "$GITHUB_OUTPUT"
+          echo "✅ Release arch-specific archives created:"
+          echo "  - $ARM64_ARCHIVE_NAME (SHA256: $ARM64_SHA256)"
+          echo "  - $X64_ARCHIVE_NAME (SHA256: $X64_SHA256)"
         else
           echo "❌ Package path not found: $PACKAGE_PATH"
           exit 1
@@ -369,6 +428,22 @@ jobs:
         path: ${{ steps.create_archive.outputs.archive_name }}
         retention-days: 30
 
+    - name: Upload arm64 build artifact (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
+        path: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
+        retention-days: 30
+
+    - name: Upload x64 build artifact (manual trigger)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.create_release_archives.outputs.archive_x64_name }}
+        path: ${{ steps.create_release_archives.outputs.archive_x64_name }}
+        retention-days: 30
+
     - name: Upload Homebrew artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
@@ -411,6 +486,8 @@ jobs:
           --notes-file "github-release-body.md" \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
+          "${{ steps.create_release_archives.outputs.archive_arm64_name }}" \
+          "${{ steps.create_release_archives.outputs.archive_x64_name }}" \
           "${{ steps.create_homebrew_archive.outputs.archive_name }}"
 
         echo "Release $TAG created."
@@ -440,7 +517,9 @@ jobs:
           --generate-notes \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
-          "${{ steps.create_homebrew_archive.outputs.archive_name }}
+          "${{ steps.create_release_archives.outputs.archive_arm64_name }}" \
+          "${{ steps.create_release_archives.outputs.archive_x64_name }}" \
+          "${{ steps.create_homebrew_archive.outputs.archive_name }}"
 
         echo "✅ Release $TAG created (manual trigger)."
 
