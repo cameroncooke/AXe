@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/release.yml'
       - 'scripts/build.sh'
+      - 'scripts/generate-homebrew-formula.sh'
       - 'scripts/release-dry-run.sh'
   workflow_dispatch:
 
@@ -30,6 +31,7 @@ jobs:
       - name: Validate shell scripts syntax
         run: |
           bash -n scripts/build.sh
+          bash -n scripts/generate-homebrew-formula.sh
           bash -n scripts/release-dry-run.sh
 
       - name: Dry-run release packaging and formula generation
