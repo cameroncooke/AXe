@@ -24,6 +24,8 @@ STAGING_TAP_REPO="cameroncooke/axe-staging"
 STAGING_TAP_BRANCH="main"
 STAGING_TAP_FORMULA="axe"
 DISPATCH_WORKFLOW=false
+REUSE_PREVIOUS_NOTES=false
+NO_NOTES_FALLBACK=false
 
 show_help() {
   cat << 'EOF'
@@ -50,6 +52,9 @@ OPTIONS:
     --staging-tap-branch BRANCH Override staging tap branch
     --staging-tap-formula NAME  Override staging tap formula
     --dispatch-workflow  Trigger workflow_dispatch run with tap inputs
+    --reuse-previous-notes
+                         Reuse previous version's release notes if target notes are missing
+    --no-notes-fallback  Disable fallback to previous version notes
     -h, --help           Show this help
 
 EXAMPLES:
@@ -163,6 +168,13 @@ ask_confirmation() {
   echo ""
   echo "Suggested next version: $suggested_version"
   read -p "Do you want to use this version? (y/N): " -n 1 -r
+  echo
+  [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+ask_yes_no() {
+  local prompt="$1"
+  read -p "$prompt (y/N): " -n 1 -r
   echo
   [[ $REPLY =~ ^[Yy]$ ]]
 }
@@ -302,6 +314,12 @@ while [[ $# -gt 0 ]]; do
     --dispatch-workflow)
       DISPATCH_WORKFLOW=true
       ;;
+    --reuse-previous-notes)
+      REUSE_PREVIOUS_NOTES=true
+      ;;
+    --no-notes-fallback)
+      NO_NOTES_FALLBACK=true
+      ;;
     major|minor|patch)
       if [[ -n "$VERSION" ]]; then
         echo "Error: Cannot specify both explicit version and bump type." >&2
@@ -384,6 +402,7 @@ fi
 
 # Validate that the new version is actually newer
 HIGHEST_VERSION=$(get_highest_version)
+PREVIOUS_VERSION="$HIGHEST_VERSION"
 if [[ -n "$HIGHEST_VERSION" ]]; then
   COMPARISON=$(compare_versions "$VERSION" "$HIGHEST_VERSION")
   if [[ $COMPARISON -le 0 ]]; then
@@ -478,18 +497,55 @@ fi
 echo ""
 echo "Validating CHANGELOG release notes for v$VERSION..."
 RELEASE_NOTES_TMP=$(mktemp "${TMPDIR:-/tmp}/axe-release-notes.XXXXXX")
+RELEASE_NOTES_SOURCE_VERSION="$VERSION"
 if node scripts/generate-github-release-notes.mjs --version "$VERSION" --changelog "$CHANGELOG_FOR_VALIDATION" --out "$RELEASE_NOTES_TMP"; then
-  echo "CHANGELOG entry found and release notes generated."
+  echo "CHANGELOG entry found and release notes generated for v$VERSION."
 else
-  echo "Error: Failed to generate release notes from CHANGELOG." >&2
-  echo "Ensure CHANGELOG.md has an entry for version $VERSION (or [Unreleased])." >&2
-  rm -f "$RELEASE_NOTES_TMP"
-  [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
-  # Restore changelog if we modified it
-  if $CHANGELOG_UPDATED; then
-    git checkout -- "$CHANGELOG_PATH"
+  FALLBACK_ALLOWED=true
+  if $NO_NOTES_FALLBACK; then
+    FALLBACK_ALLOWED=false
   fi
-  exit 1
+
+  if [[ "$FALLBACK_ALLOWED" == "true" && -n "$PREVIOUS_VERSION" && "$PREVIOUS_VERSION" != "$VERSION" ]]; then
+    USE_FALLBACK=false
+    if $REUSE_PREVIOUS_NOTES; then
+      USE_FALLBACK=true
+    elif [[ -t 0 ]]; then
+      echo ""
+      echo "No release notes found for v$VERSION (and no [Unreleased] entry to promote)."
+      if ask_yes_no "Reuse release notes from v$PREVIOUS_VERSION?"; then
+        USE_FALLBACK=true
+      fi
+    fi
+
+    if [[ "$USE_FALLBACK" == "true" ]]; then
+      if node scripts/generate-github-release-notes.mjs --version "$PREVIOUS_VERSION" --changelog "$CHANGELOG_FOR_VALIDATION" --out "$RELEASE_NOTES_TMP"; then
+        RELEASE_NOTES_SOURCE_VERSION="$PREVIOUS_VERSION"
+        echo "Using release notes from v$PREVIOUS_VERSION for v$VERSION."
+      else
+        echo "Error: Failed to generate fallback release notes from v$PREVIOUS_VERSION." >&2
+        rm -f "$RELEASE_NOTES_TMP"
+        [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
+        if $CHANGELOG_UPDATED; then
+          git checkout -- "$CHANGELOG_PATH"
+        fi
+        exit 1
+      fi
+    fi
+  fi
+
+  if [[ "$RELEASE_NOTES_SOURCE_VERSION" == "$VERSION" ]]; then
+    echo "Error: Failed to generate release notes from CHANGELOG." >&2
+    echo "Ensure CHANGELOG.md has an entry for version $VERSION or [Unreleased]." >&2
+    echo "If this is a deploy-only patch, rerun with --reuse-previous-notes to reuse v$PREVIOUS_VERSION notes." >&2
+    rm -f "$RELEASE_NOTES_TMP"
+    [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
+    # Restore changelog if we modified it
+    if $CHANGELOG_UPDATED; then
+      git checkout -- "$CHANGELOG_PATH"
+    fi
+    exit 1
+  fi
 fi
 rm -f "$RELEASE_NOTES_TMP"
 [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
