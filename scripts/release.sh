@@ -16,7 +16,6 @@ FIRST_ARG="${1:-}"
 DRY_RUN=false
 VERSION=""
 BUMP_TYPE=""
-NOTES_FILE=""
 TAP_TARGET=""
 TAP_REPO="cameroncooke/homebrew-axe"
 TAP_BRANCH="main"
@@ -41,7 +40,6 @@ ARGUMENTS:
     BUMP_TYPE            major | minor [default] | patch
 
 OPTIONS:
-    --notes-file FILE    Read release notes from FILE instead of prompting
     --dry-run            Preview without executing
     --tap-target TARGET  Homebrew tap target: production|staging|both|skip
                          (default derives from version)
@@ -211,44 +209,59 @@ sed_inplace() {
   fi
 }
 
-# Rename the first [Unreleased] heading in the CHANGELOG to the target version.
+# Rename the first [Unreleased] heading in the CHANGELOG to the target version
+# and optionally write the result to a different file.
 # Exit code 3 means the heading was already renamed or not found (non-fatal skip).
-prepare_changelog_for_release() {
-  local changelog_path="$1"
-  local target_version="$2"
+prepare_changelog_for_release_notes() {
+  local source_path="$1"
+  local destination_path="$2"
+  local target_version="$3"
 
-  if [[ ! -f "$changelog_path" ]]; then
-    return 3
-  fi
+  node - "$source_path" "$destination_path" "$target_version" <<'NODE'
+const fs = require('fs');
 
-  local found_unreleased=false
-  local already_has_version=false
-  local line
+const [sourcePath, destinationPath, targetVersion] = process.argv.slice(2);
+const versionHeadingRegex = /^##\s+\[([^\]]+)\](?:\s+-\s+.*)?\s*$/;
+const normalizeVersion = (value) => value.trim().replace(/^v/, '');
 
-  while IFS= read -r line; do
-    if [[ "$line" =~ ^##[[:space:]]+\[([^\]]+)\] ]]; then
-      local heading="${BASH_REMATCH[1]}"
-      local normalized_heading
-      normalized_heading=$(echo "$heading" | sed 's/^v//')
-      if [[ "$normalized_heading" == "$target_version" ]]; then
-        already_has_version=true
-        break
-      fi
-      if [[ "$heading" == "Unreleased" ]]; then
-        found_unreleased=true
-        break
-      fi
-    fi
-  done < "$changelog_path"
+try {
+  const changelog = fs.readFileSync(sourcePath, 'utf8');
+  const lines = changelog.split(/\r?\n/);
+  const normalizedTargetVersion = normalizeVersion(targetVersion);
+  let firstHeadingIndex = -1;
+  let firstHeadingLabel = '';
 
-  if $already_has_version || ! $found_unreleased; then
-    return 3
-  fi
+  for (let index = 0; index < lines.length; index += 1) {
+    const match = lines[index].match(versionHeadingRegex);
+    if (!match) {
+      continue;
+    }
 
-  local today
-  today=$(date +%Y-%m-%d)
-  sed_inplace "s/^(## \\[)Unreleased(\\].*)$/\\1v${target_version}\\2 - ${today}/" "$changelog_path"
-  return 0
+    const label = match[1].trim();
+    if (normalizeVersion(label) === normalizedTargetVersion) {
+      process.exit(3);
+    }
+
+    if (firstHeadingIndex === -1) {
+      firstHeadingIndex = index;
+      firstHeadingLabel = label;
+    }
+  }
+
+  if (firstHeadingIndex === -1 || firstHeadingLabel !== 'Unreleased') {
+    process.exit(3);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  lines[firstHeadingIndex] = `## [v${normalizedTargetVersion}] - ${today}`;
+  fs.writeFileSync(destinationPath, `${lines.join('\n')}`, 'utf8');
+  process.exit(0);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`Failed to prepare changelog for release notes: ${message}`);
+  process.exit(1);
+}
+NODE
 }
 
 # --- Parse arguments ---
@@ -262,11 +275,6 @@ done
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --notes-file)
-      shift
-      [[ $# -gt 0 ]] || { echo "Error: --notes-file requires a path" >&2; exit 1; }
-      NOTES_FILE=$1
-      ;;
     --dry-run)
       DRY_RUN=true
       ;;
@@ -435,31 +443,60 @@ fi
 
 CHANGELOG_PATH="CHANGELOG.md"
 CHANGELOG_UPDATED=false
+CHANGELOG_FOR_VALIDATION="$CHANGELOG_PATH"
+CHANGELOG_VALIDATION_TEMP=""
 
-if prepare_changelog_for_release "$CHANGELOG_PATH" "$VERSION"; then
-  CHANGELOG_UPDATED=true
-  if $DRY_RUN; then
-    echo "[dry-run] Would rename CHANGELOG heading [Unreleased] -> [v$VERSION]"
-    git checkout -- "$CHANGELOG_PATH"
+if $DRY_RUN; then
+  CHANGELOG_VALIDATION_TEMP=$(mktemp "${TMPDIR:-/tmp}/axe-changelog-validation.XXXXXX")
+  if prepare_changelog_for_release_notes "$CHANGELOG_PATH" "$CHANGELOG_VALIDATION_TEMP" "$VERSION"; then
+    CHANGELOG_FOR_VALIDATION="$CHANGELOG_VALIDATION_TEMP"
+    echo "Dry-run: prepared release changelog from [Unreleased] in a temp file."
   else
+    PREPARE_STATUS=$?
+    if [[ $PREPARE_STATUS -eq 3 ]]; then
+      rm -f "$CHANGELOG_VALIDATION_TEMP"
+      CHANGELOG_VALIDATION_TEMP=""
+    else
+      rm -f "$CHANGELOG_VALIDATION_TEMP"
+      exit $PREPARE_STATUS
+    fi
+  fi
+else
+  if prepare_changelog_for_release_notes "$CHANGELOG_PATH" "$CHANGELOG_PATH" "$VERSION"; then
+    CHANGELOG_UPDATED=true
     echo "Renamed CHANGELOG heading [Unreleased] -> [v$VERSION]"
+  else
+    PREPARE_STATUS=$?
+    if [[ $PREPARE_STATUS -ne 3 ]]; then
+      exit $PREPARE_STATUS
+    fi
   fi
 fi
 
-# --- Release notes ---
+# --- Validate changelog release notes ---
 
-if [[ -n "$NOTES_FILE" ]]; then
-  [[ -f "$NOTES_FILE" ]] || { echo "Error: Release notes file not found: $NOTES_FILE" >&2; exit 1; }
-  RELEASE_NOTES=$(<"$NOTES_FILE")
+echo ""
+echo "Validating CHANGELOG release notes for v$VERSION..."
+RELEASE_NOTES_TMP=$(mktemp "${TMPDIR:-/tmp}/axe-release-notes.XXXXXX")
+if node scripts/generate-github-release-notes.mjs --version "$VERSION" --changelog "$CHANGELOG_FOR_VALIDATION" --out "$RELEASE_NOTES_TMP"; then
+  echo "CHANGELOG entry found and release notes generated."
 else
-  echo ""
-  echo "Enter release notes (Ctrl+D to finish):"
-  RELEASE_NOTES=$(cat)
+  echo "Error: Failed to generate release notes from CHANGELOG." >&2
+  echo "Ensure CHANGELOG.md has an entry for version $VERSION (or [Unreleased])." >&2
+  rm -f "$RELEASE_NOTES_TMP"
+  [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
+  # Restore changelog if we modified it
+  if $CHANGELOG_UPDATED; then
+    git checkout -- "$CHANGELOG_PATH"
+  fi
+  exit 1
 fi
+rm -f "$RELEASE_NOTES_TMP"
+[[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
 
-if [[ -z "$RELEASE_NOTES" ]]; then
-  RELEASE_NOTES="Release $TAG_NAME"
-fi
+# --- Release notes (tag annotation) ---
+
+RELEASE_NOTES="Release $TAG_NAME"
 
 # --- Commit, tag, and push ---
 

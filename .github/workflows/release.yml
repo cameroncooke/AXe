@@ -424,15 +424,14 @@ jobs:
         path: ${{ steps.create_homebrew_archives.outputs.archive_x64_name }}
         retention-days: 30
 
-    - name: Read tag release notes
+    - name: Generate GitHub release notes from CHANGELOG
       if: github.event_name == 'push'
-      id: release_notes
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
       run: |
-        TAG="${{ steps.version.outputs.tag }}"
-        git fetch --tags --force
-        NOTES=$(git tag -l --format='%(contents)' "$TAG")
-        printf '%s\n' "$NOTES" > release-notes.md
-        echo "file=release-notes.md" >> "$GITHUB_OUTPUT"
+        node scripts/generate-github-release-notes.mjs \
+          --version "$VERSION" \
+          --out github-release-body.md
 
     - name: Create GitHub release
       if: github.event_name == 'push'
@@ -441,7 +440,6 @@ jobs:
       run: |
         TAG="${{ steps.version.outputs.tag }}"
         TITLE="Release $TAG"
-        NOTES_FILE="${{ steps.release_notes.outputs.file }}"
         VERSION="${{ steps.version.outputs.version }}"
 
         if [[ "$VERSION" == *"-"* ]]; then
@@ -451,19 +449,19 @@ jobs:
         fi
 
         if gh release view "$TAG" >/dev/null 2>&1; then
-          echo "🗑️ Existing release found for $TAG. Deleting..."
+          echo "Existing release found for $TAG. Deleting..."
           gh release delete "$TAG" --yes
         fi
 
         gh release create "$TAG" \
           --title "$TITLE" \
-          --notes-file "$NOTES_FILE" \
+          --notes-file "github-release-body.md" \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
           "${{ steps.create_homebrew_archives.outputs.archive_arm64_name }}" \
           "${{ steps.create_homebrew_archives.outputs.archive_x64_name }}"
 
-        echo "✅ Release $TAG created."
+        echo "Release $TAG created."
 
     - name: Create GitHub release (manual trigger)
       if: github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true'
