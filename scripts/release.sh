@@ -540,20 +540,64 @@ if gh run watch "$RUN_ID" --exit-status; then
   echo "Release v$VERSION completed successfully!"
   echo "View release: https://github.com/$REPO_NAME/releases/tag/$TAG_NAME"
 else
+  WATCH_EXIT=$?
   echo ""
-  echo "CI workflow monitoring reported failure."
-  echo "This may be a transient API error. The workflow may still be running."
-  echo "  Check manually: gh run view $RUN_ID"
+  echo "CI workflow monitoring exited with status $WATCH_EXIT."
   echo ""
 
-  JOB_CONCLUSION=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name=="build-and-release") | .conclusion' 2>/dev/null || true)
+  # Query the actual workflow state — gh run watch can fail due to network
+  # issues even when the job is still running or has already succeeded.
+  JOB_CONCLUSION=""
+  JOB_STATUS=""
+  for poll in $(seq 1 3); do
+    JOB_JSON=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name=="build-and-release") | {conclusion,status}' 2>/dev/null || true)
+    if [[ -n "$JOB_JSON" ]]; then
+      JOB_CONCLUSION=$(echo "$JOB_JSON" | jq -r '.conclusion // empty')
+      JOB_STATUS=$(echo "$JOB_JSON" | jq -r '.status // empty')
+      break
+    fi
+    sleep 5
+  done
+
   if [[ "$JOB_CONCLUSION" == "success" ]]; then
-    echo "Workflow reported failure, but primary 'build-and-release' job concluded SUCCESS."
-    echo "Treating release as successful. Tag $TAG_NAME is kept."
+    echo "Workflow monitoring lost connection, but 'build-and-release' job concluded SUCCESS."
+    echo "Tag $TAG_NAME is kept."
     echo "View release: https://github.com/$REPO_NAME/releases/tag/$TAG_NAME"
     exit 0
   fi
 
+  if [[ "$JOB_STATUS" == "in_progress" || "$JOB_STATUS" == "queued" ]]; then
+    echo "The 'build-and-release' job is still $JOB_STATUS."
+    echo "The local monitoring connection was lost but the workflow continues on GitHub."
+    echo ""
+    echo "Tag $TAG_NAME is kept. Do NOT re-run the release script."
+    echo ""
+    echo "To resume monitoring:"
+    echo "  gh run watch $RUN_ID --exit-status"
+    echo ""
+    echo "To check status:"
+    echo "  gh run view $RUN_ID"
+    echo "  https://github.com/$REPO_NAME/actions"
+    exit 0
+  fi
+
+  if [[ -z "$JOB_CONCLUSION" && -z "$JOB_STATUS" ]]; then
+    echo "Could not reach GitHub API to determine workflow state."
+    echo "The workflow may still be running."
+    echo ""
+    echo "Tag $TAG_NAME is kept to avoid deleting a potentially successful release."
+    echo ""
+    echo "Once connectivity is restored, check status with:"
+    echo "  gh run view $RUN_ID"
+    echo ""
+    echo "If the workflow failed, clean up manually with:"
+    echo "  gh release delete $TAG_NAME --yes 2>/dev/null; git push origin :refs/tags/$TAG_NAME; git tag -d $TAG_NAME"
+    exit 1
+  fi
+
+  # Job genuinely failed — clean up
+  echo "Workflow failed (conclusion: $JOB_CONCLUSION)."
+  echo ""
   echo "Cleaning up tags (keeping version commit)..."
 
   if gh release view "$TAG_NAME" >/dev/null 2>&1; then
