@@ -276,6 +276,34 @@ try {
 NODE
 }
 
+get_latest_changelog_version_before() {
+  local changelog_path="$1"
+  local target_version="$2"
+  local versions=()
+
+  while IFS= read -r heading_version; do
+    versions+=("$heading_version")
+  done < <(
+    grep -E '^##[[:space:]]+\[[^]]+\]([[:space:]]+-[[:space:]]+.*)?[[:space:]]*$' "$changelog_path" \
+      | sed -E 's/^##[[:space:]]+\[([^]]+)\]([[:space:]]+-[[:space:]]+.*)?[[:space:]]*$/\1/' \
+      | sed -E 's/^v//' \
+      | grep -v '^Unreleased$' || true
+  )
+
+  local best_version=""
+  for version in "${versions[@]}"; do
+    if [[ "$(compare_versions "$version" "$target_version")" -ge 0 ]]; then
+      continue
+    fi
+
+    if [[ -z "$best_version" || "$(compare_versions "$version" "$best_version")" -gt 0 ]]; then
+      best_version="$version"
+    fi
+  done
+
+  echo "$best_version"
+}
+
 # --- Parse arguments ---
 
 for arg in "$@"; do
@@ -464,6 +492,7 @@ CHANGELOG_PATH="CHANGELOG.md"
 CHANGELOG_UPDATED=false
 CHANGELOG_FOR_VALIDATION="$CHANGELOG_PATH"
 CHANGELOG_VALIDATION_TEMP=""
+CHANGELOG_FALLBACK_VERSION=""
 
 if $DRY_RUN; then
   CHANGELOG_VALIDATION_TEMP=$(mktemp "${TMPDIR:-/tmp}/axe-changelog-validation.XXXXXX")
@@ -492,6 +521,8 @@ else
   fi
 fi
 
+CHANGELOG_FALLBACK_VERSION=$(get_latest_changelog_version_before "$CHANGELOG_FOR_VALIDATION" "$VERSION")
+
 # --- Validate changelog release notes ---
 
 echo ""
@@ -506,24 +537,24 @@ else
     FALLBACK_ALLOWED=false
   fi
 
-  if [[ "$FALLBACK_ALLOWED" == "true" && -n "$PREVIOUS_VERSION" && "$PREVIOUS_VERSION" != "$VERSION" ]]; then
+  if [[ "$FALLBACK_ALLOWED" == "true" && -n "$CHANGELOG_FALLBACK_VERSION" && "$CHANGELOG_FALLBACK_VERSION" != "$VERSION" ]]; then
     USE_FALLBACK=false
     if $REUSE_PREVIOUS_NOTES; then
       USE_FALLBACK=true
     elif [[ -t 0 ]]; then
       echo ""
       echo "No release notes found for v$VERSION (and no [Unreleased] entry to promote)."
-      if ask_yes_no "Reuse release notes from v$PREVIOUS_VERSION?"; then
+      if ask_yes_no "Reuse release notes from v$CHANGELOG_FALLBACK_VERSION?"; then
         USE_FALLBACK=true
       fi
     fi
 
     if [[ "$USE_FALLBACK" == "true" ]]; then
-      if node scripts/generate-github-release-notes.mjs --version "$PREVIOUS_VERSION" --changelog "$CHANGELOG_FOR_VALIDATION" --out "$RELEASE_NOTES_TMP"; then
-        RELEASE_NOTES_SOURCE_VERSION="$PREVIOUS_VERSION"
-        echo "Using release notes from v$PREVIOUS_VERSION for v$VERSION."
+      if node scripts/generate-github-release-notes.mjs --version "$CHANGELOG_FALLBACK_VERSION" --changelog "$CHANGELOG_FOR_VALIDATION" --out "$RELEASE_NOTES_TMP"; then
+        RELEASE_NOTES_SOURCE_VERSION="$CHANGELOG_FALLBACK_VERSION"
+        echo "Using release notes from v$CHANGELOG_FALLBACK_VERSION for v$VERSION."
       else
-        echo "Error: Failed to generate fallback release notes from v$PREVIOUS_VERSION." >&2
+        echo "Error: Failed to generate fallback release notes from v$CHANGELOG_FALLBACK_VERSION." >&2
         rm -f "$RELEASE_NOTES_TMP"
         [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
         if $CHANGELOG_UPDATED; then
@@ -537,7 +568,9 @@ else
   if [[ "$RELEASE_NOTES_SOURCE_VERSION" == "$VERSION" ]]; then
     echo "Error: Failed to generate release notes from CHANGELOG." >&2
     echo "Ensure CHANGELOG.md has an entry for version $VERSION or [Unreleased]." >&2
-    echo "If this is a deploy-only patch, rerun with --reuse-previous-notes to reuse v$PREVIOUS_VERSION notes." >&2
+    if [[ -n "$CHANGELOG_FALLBACK_VERSION" ]]; then
+      echo "If this is a deploy-only patch, rerun with --reuse-previous-notes to reuse v$CHANGELOG_FALLBACK_VERSION notes." >&2
+    fi
     rm -f "$RELEASE_NOTES_TMP"
     [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
     # Restore changelog if we modified it
