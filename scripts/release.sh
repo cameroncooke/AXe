@@ -1,50 +1,91 @@
 #!/bin/bash
 set -euo pipefail
 
+# AXe Release Helper
+# Creates GitHub releases with automatic semver bumping.
+# Building, signing, and packaging are handled by the release workflow.
+#
+# Usage: scripts/release.sh [VERSION|BUMP_TYPE] [OPTIONS]
+# Run with --help for detailed usage information
+
 WORKFLOW_NAME="Release"
 WORKFLOW_FILE="release.yml"
 WORKFLOW_IDENTIFIER="$WORKFLOW_FILE"
 
-log_info() { printf '\n🔷 %s\n' "$1"; }
-log_error() { printf '❌ %s\n' "$1" >&2; exit 1; }
-log_success() { printf '\n✅ %s\n' "$1"; }
+FIRST_ARG="${1:-}"
+DRY_RUN=false
+VERSION=""
+BUMP_TYPE=""
+NOTES_FILE=""
+TAP_TARGET=""
+TAP_REPO="cameroncooke/homebrew-axe"
+TAP_BRANCH="main"
+TAP_FORMULA="axe"
+STAGING_TAP_REPO="cameroncooke/axe-staging"
+STAGING_TAP_BRANCH="main"
+STAGING_TAP_FORMULA="axe"
+DISPATCH_WORKFLOW=false
 
-usage() {
-  cat <<'USAGE'
+show_help() {
+  cat << 'EOF'
 AXe Release Helper
 
-Usage: scripts/create-release.sh [VERSION|major|minor|patch] [--notes-file FILE] [--dry-run]
-       [--tap-target TARGET] [--tap-repo REPO] [--tap-branch BRANCH] [--tap-formula NAME]
-       [--staging-tap-repo REPO] [--staging-tap-branch BRANCH] [--staging-tap-formula NAME]
-       [--dispatch-workflow]
-       scripts/create-release.sh --help
+Creates releases with automatic semver bumping. Building, signing,
+and packaging are handled by the release workflow.
 
-Arguments:
-  VERSION           Explicit semantic version (e.g. 1.4.0 or 1.5.0-beta.1)
-  major|minor|patch Semantic version bump type (defaults to minor when omitted)
+USAGE:
+    scripts/release.sh [VERSION|BUMP_TYPE] [OPTIONS]
 
-Options:
-  --notes-file FILE  Read release notes from FILE instead of prompting
-  --dry-run          Preview actions without pushing
-  --tap-target       Homebrew tap target: production|staging|both|skip (default derives from version)
-  --tap-repo         Override production tap repo (default: cameroncooke/homebrew-axe)
-  --tap-branch       Override production tap branch (default: main)
-  --tap-formula      Override production tap formula (default: axe)
-  --staging-tap-repo Override staging tap repo (default: cameroncooke/axe-staging)
-  --staging-tap-branch Override staging tap branch (default: main)
-  --staging-tap-formula Override staging tap formula (default: axe)
-  --dispatch-workflow Trigger workflow_dispatch run with tap inputs (skips if unset)
-  -h, --help         Show this help text
-USAGE
+ARGUMENTS:
+    VERSION              Explicit version (e.g. 1.5.0, 2.0.0-beta.1)
+    BUMP_TYPE            major | minor [default] | patch
+
+OPTIONS:
+    --notes-file FILE    Read release notes from FILE instead of prompting
+    --dry-run            Preview without executing
+    --tap-target TARGET  Homebrew tap target: production|staging|both|skip
+                         (default derives from version)
+    --tap-repo REPO      Override production tap repo
+    --tap-branch BRANCH  Override production tap branch
+    --tap-formula NAME   Override production tap formula
+    --staging-tap-repo REPO     Override staging tap repo
+    --staging-tap-branch BRANCH Override staging tap branch
+    --staging-tap-formula NAME  Override staging tap formula
+    --dispatch-workflow  Trigger workflow_dispatch run with tap inputs
+    -h, --help           Show this help
+
+EXAMPLES:
+    (no args)            Interactive minor bump
+    major                Interactive major bump
+    1.5.0                Use specific version
+    patch --dry-run      Preview patch bump
+
+EOF
+
+  local highest_version
+  highest_version=$(get_highest_version)
+  if [[ -n "$highest_version" ]]; then
+    echo "CURRENT: $highest_version"
+    echo "NEXT: major=$(bump_version "$highest_version" "major") | minor=$(bump_version "$highest_version" "minor") | patch=$(bump_version "$highest_version" "patch")"
+  else
+    echo "No existing version tags found"
+  fi
+  echo ""
 }
 
 ensure_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
-    log_error "$1 not found. Please install it first."
+    echo "Error: $1 not found. Please install it first." >&2
+    exit 1
   fi
 }
 
 # --- Version helpers ---
+
+get_highest_version() {
+  git tag | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$' | sed 's/^v//' | sort -V | tail -1
+}
+
 parse_version() {
   echo "$1" | sed -E 's/^([0-9]+)\.([0-9]+)\.([0-9]+)(-.*)?$/\1 \2 \3 \4/'
 }
@@ -71,136 +112,291 @@ bump_version() {
     major) echo "$((major + 1)).0.0" ;;
     minor) echo "${major}.$((minor + 1)).0" ;;
     patch) echo "${major}.${minor}.$((patch + 1))" ;;
-    *) log_error "Unknown bump type: $bump_type" ;;
+    *)
+      echo "Error: Unknown bump type: $bump_type" >&2
+      exit 1
+      ;;
   esac
 }
 
-latest_version() {
-  git tag | grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$' | sed 's/^v//' | sort -V | tail -1
+validate_version() {
+  local version=$1
+  if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
+    echo "Error: Invalid version format: $version"
+    echo "Version must be in format: x.y.z or x.y.z-prerelease (e.g., 1.4.0, 1.4.0-beta.1)"
+    return 1
+  fi
+  return 0
+}
+
+compare_versions() {
+  local version1=$1
+  local version2=$2
+
+  local v1_base=${version1%%-*}
+  local v2_base=${version2%%-*}
+  local v1_pre=""
+  local v2_pre=""
+
+  [[ "$version1" == *-* ]] && v1_pre=${version1#*-}
+  [[ "$version2" == *-* ]] && v2_pre=${version2#*-}
+
+  if [[ "$v1_base" == "$v2_base" ]]; then
+    if [[ -z "$v1_pre" && -n "$v2_pre" ]]; then
+      echo 1; return
+    elif [[ -n "$v1_pre" && -z "$v2_pre" ]]; then
+      echo -1; return
+    elif [[ "$version1" == "$version2" ]]; then
+      echo 0; return
+    fi
+  fi
+
+  local sorted
+  sorted=$(printf "%s\n%s" "$version1" "$version2" | sort -V)
+  if [[ "$(echo "$sorted" | head -1)" == "$version1" ]]; then
+    echo -1
+  else
+    echo 1
+  fi
+}
+
+ask_confirmation() {
+  local suggested_version=$1
+  echo ""
+  echo "Suggested next version: $suggested_version"
+  read -p "Do you want to use this version? (y/N): " -n 1 -r
+  echo
+  [[ $REPLY =~ ^[Yy]$ ]]
+}
+
+get_version_interactively() {
+  echo ""
+  echo "Please enter the version manually:"
+  while true; do
+    read -rp "Version: " manual_version
+    if validate_version "$manual_version"; then
+      local highest_version
+      highest_version=$(get_highest_version)
+      if [[ -n "$highest_version" ]]; then
+        local comparison
+        comparison=$(compare_versions "$manual_version" "$highest_version")
+        if [[ $comparison -le 0 ]]; then
+          echo "Error: Version $manual_version is not newer than the highest existing version $highest_version"
+          continue
+        fi
+      fi
+      VERSION="$manual_version"
+      break
+    fi
+  done
+}
+
+run() {
+  if $DRY_RUN; then
+    echo "[dry-run] $*"
+    return 0
+  fi
+  "$@"
+}
+
+# Portable in-place sed (BSD/macOS vs GNU/Linux)
+sed_inplace() {
+  local expr="$1"
+  local file="$2"
+
+  if sed --version >/dev/null 2>&1; then
+    sed -i -E "$expr" "$file"
+  else
+    sed -i '' -E "$expr" "$file"
+  fi
+}
+
+# Rename the first [Unreleased] heading in the CHANGELOG to the target version.
+# Exit code 3 means the heading was already renamed or not found (non-fatal skip).
+prepare_changelog_for_release() {
+  local changelog_path="$1"
+  local target_version="$2"
+
+  if [[ ! -f "$changelog_path" ]]; then
+    return 3
+  fi
+
+  local found_unreleased=false
+  local already_has_version=false
+  local line
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^##[[:space:]]+\[([^\]]+)\] ]]; then
+      local heading="${BASH_REMATCH[1]}"
+      local normalized_heading
+      normalized_heading=$(echo "$heading" | sed 's/^v//')
+      if [[ "$normalized_heading" == "$target_version" ]]; then
+        already_has_version=true
+        break
+      fi
+      if [[ "$heading" == "Unreleased" ]]; then
+        found_unreleased=true
+        break
+      fi
+    fi
+  done < "$changelog_path"
+
+  if $already_has_version || ! $found_unreleased; then
+    return 3
+  fi
+
+  local today
+  today=$(date +%Y-%m-%d)
+  sed_inplace "s/^(## \\[)Unreleased(\\].*)$/\\1v${target_version}\\2 - ${today}/" "$changelog_path"
+  return 0
 }
 
 # --- Parse arguments ---
-VERSION=""
-BUMP_TYPE=""
-NOTES_FILE=""
-DRY_RUN=false
-TAP_TARGET=""
-TAP_REPO="cameroncooke/homebrew-axe"
-TAP_BRANCH="main"
-TAP_FORMULA="axe"
-STAGING_TAP_REPO="cameroncooke/axe-staging"
-STAGING_TAP_BRANCH="main"
-STAGING_TAP_FORMULA="axe"
-DISPATCH_WORKFLOW=false
+
+for arg in "$@"; do
+  if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]]; then
+    show_help
+    exit 0
+  fi
+done
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --notes-file)
       shift
-      [[ $# -gt 0 ]] || log_error "--notes-file requires a path"
+      [[ $# -gt 0 ]] || { echo "Error: --notes-file requires a path" >&2; exit 1; }
       NOTES_FILE=$1
       ;;
     --dry-run)
       DRY_RUN=true
       ;;
     --tap-target)
-      shift
-      TAP_TARGET="${1:-}"
+      shift; TAP_TARGET="${1:-}"
       ;;
     --tap-repo)
-      shift
-      TAP_REPO="${1:-}"
+      shift; TAP_REPO="${1:-}"
       ;;
     --tap-branch)
-      shift
-      TAP_BRANCH="${1:-}"
+      shift; TAP_BRANCH="${1:-}"
       ;;
     --tap-formula)
-      shift
-      TAP_FORMULA="${1:-}"
+      shift; TAP_FORMULA="${1:-}"
       ;;
     --staging-tap-repo)
-      shift
-      STAGING_TAP_REPO="${1:-}"
+      shift; STAGING_TAP_REPO="${1:-}"
       ;;
     --staging-tap-branch)
-      shift
-      STAGING_TAP_BRANCH="${1:-}"
+      shift; STAGING_TAP_BRANCH="${1:-}"
       ;;
     --staging-tap-formula)
-      shift
-      STAGING_TAP_FORMULA="${1:-}"
+      shift; STAGING_TAP_FORMULA="${1:-}"
       ;;
     --dispatch-workflow)
       DISPATCH_WORKFLOW=true
       ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
     major|minor|patch)
       if [[ -n "$VERSION" ]]; then
-        log_error "Cannot specify both explicit version and bump type."
+        echo "Error: Cannot specify both explicit version and bump type." >&2
+        exit 1
       fi
       BUMP_TYPE=$1
       ;;
     *)
-      if [[ -z "$VERSION" ]]; then
+      if [[ -z "$VERSION" ]] && [[ "$1" != "--"* ]]; then
         VERSION=$1
-      else
-        log_error "Unexpected argument: $1"
+      elif [[ "$1" != "--"* ]]; then
+        echo "Error: Unexpected argument: $1" >&2
+        exit 1
       fi
       ;;
   esac
   shift || true
 done
 
+# --- Preflight checks ---
+
 ensure_command gh
 ensure_command jq
 
 if ! gh auth status >/dev/null 2>&1; then
-  log_error "GitHub CLI is not authenticated. Run 'gh auth login'."
+  echo "Error: GitHub CLI is not authenticated. Run 'gh auth login'." >&2
+  exit 1
+fi
+
+cd "$(dirname "$0")/.."
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [[ "$BRANCH" != "main" ]]; then
+  echo "Error: Releases must be created from the main branch."
+  echo "Current branch: $BRANCH"
+  echo "Please switch to main and try again."
+  exit 1
 fi
 
 REPO_NAME=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 
 git fetch --tags >/dev/null 2>&1 || true
 
-LATEST_VERSION=$(latest_version)
-if [[ -n "$LATEST_VERSION" ]]; then
-  log_info "Latest version: $LATEST_VERSION"
-else
-  log_info "No previous versions found."
+# --- Determine version ---
+
+if [[ -z "$VERSION" && -z "$BUMP_TYPE" ]]; then
+  BUMP_TYPE="minor"
 fi
 
 if [[ -n "$VERSION" && -n "$BUMP_TYPE" ]]; then
-  log_error "Specify either an explicit version or a bump type, not both."
+  echo "Error: Specify either an explicit version or a bump type, not both." >&2
+  exit 1
 fi
 
-if [[ -n "$BUMP_TYPE" ]]; then
-  VERSION=$(bump_version "$LATEST_VERSION" "$BUMP_TYPE")
-  log_info "Bump type '$BUMP_TYPE' selected -> $VERSION"
-fi
-
-if [[ -z "$VERSION" ]]; then
-  DEFAULT_VERSION=$(bump_version "$LATEST_VERSION" "minor")
-  read -rp "Enter version [$DEFAULT_VERSION]: " VERSION_INPUT
-  if [[ -z "$VERSION_INPUT" ]]; then
-    VERSION=$DEFAULT_VERSION
-  else
-    VERSION=$VERSION_INPUT
+if [[ -n "$VERSION" ]]; then
+  if ! validate_version "$VERSION"; then
+    exit 1
   fi
 fi
 
-[[ -n "$VERSION" ]] || log_error "No version provided."
+if [[ -n "$BUMP_TYPE" ]]; then
+  HIGHEST_VERSION=$(get_highest_version)
+  if [[ -z "$HIGHEST_VERSION" ]]; then
+    echo "No existing version tags found. Please provide a version manually."
+    get_version_interactively
+  else
+    SUGGESTED_VERSION=$(bump_version "$HIGHEST_VERSION" "$BUMP_TYPE")
+    if ask_confirmation "$SUGGESTED_VERSION"; then
+      VERSION="$SUGGESTED_VERSION"
+    else
+      get_version_interactively
+    fi
+  fi
+fi
 
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$ ]]; then
-  log_error "Invalid version format '$VERSION'."
+if [[ -z "$VERSION" ]]; then
+  echo "Error: No version determined" >&2
+  exit 1
+fi
+
+# Validate that the new version is actually newer
+HIGHEST_VERSION=$(get_highest_version)
+if [[ -n "$HIGHEST_VERSION" ]]; then
+  COMPARISON=$(compare_versions "$VERSION" "$HIGHEST_VERSION")
+  if [[ $COMPARISON -le 0 ]]; then
+    echo "Error: Version $VERSION is not newer than the highest existing version $HIGHEST_VERSION"
+    exit 1
+  fi
 fi
 
 TAG_NAME="v$VERSION"
 
-# Derive tap target if not supplied: prerelease -> staging, else production.
+# Check tag doesn't already exist
+if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
+  echo "Error: Tag $TAG_NAME already exists locally."
+  exit 1
+fi
+if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME$"; then
+  echo "Error: Tag $TAG_NAME already exists on origin."
+  exit 1
+fi
+
+# Derive tap target: prerelease -> staging, else production
 if [[ -z "$TAP_TARGET" ]]; then
   if [[ "$VERSION" == *"-"* ]]; then
     TAP_TARGET="staging"
@@ -209,23 +405,55 @@ if [[ -z "$TAP_TARGET" ]]; then
   fi
 fi
 
-if git rev-parse "$TAG_NAME" >/dev/null 2>&1; then
-  log_error "Tag $TAG_NAME already exists locally."
+# --- Release-managed files and working tree check ---
+
+RELEASE_MANAGED_FILES=(
+  "CHANGELOG.md"
+)
+
+has_unmanaged_changes() {
+  local exclude_args=()
+  for f in "${RELEASE_MANAGED_FILES[@]}"; do
+    exclude_args+=(":(exclude)$f")
+  done
+  ! git diff-index --quiet HEAD -- . "${exclude_args[@]}"
+}
+
+if ! $DRY_RUN; then
+  if has_unmanaged_changes; then
+    echo "Error: Working directory has uncommitted changes outside release-managed files."
+    echo "Please commit or stash those changes before creating a release."
+    exit 1
+  fi
+else
+  if has_unmanaged_changes; then
+    echo "Warning: Dry-run: working directory has unmanaged changes (continuing)."
+  fi
 fi
 
-if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME$"; then
-  log_error "Tag $TAG_NAME already exists on origin."
+# --- Changelog handling ---
+
+CHANGELOG_PATH="CHANGELOG.md"
+CHANGELOG_UPDATED=false
+
+if prepare_changelog_for_release "$CHANGELOG_PATH" "$VERSION"; then
+  CHANGELOG_UPDATED=true
+  if $DRY_RUN; then
+    echo "[dry-run] Would rename CHANGELOG heading [Unreleased] -> [v$VERSION]"
+    git checkout -- "$CHANGELOG_PATH"
+  else
+    echo "Renamed CHANGELOG heading [Unreleased] -> [v$VERSION]"
+  fi
 fi
 
-if ! git diff-index --quiet HEAD --; then
-  log_error "Working tree is not clean. Commit or stash changes first."
-fi
+# --- Release notes ---
 
 if [[ -n "$NOTES_FILE" ]]; then
-  [[ -f "$NOTES_FILE" ]] || log_error "Release notes file not found: $NOTES_FILE"
+  [[ -f "$NOTES_FILE" ]] || { echo "Error: Release notes file not found: $NOTES_FILE" >&2; exit 1; }
   RELEASE_NOTES=$(<"$NOTES_FILE")
 else
-  log_info "Enter release notes (Ctrl+D to finish):"
+  echo ""
+  echo "Enter release notes (Ctrl+D to finish):"
   RELEASE_NOTES=$(cat)
 fi
 
@@ -233,40 +461,52 @@ if [[ -z "$RELEASE_NOTES" ]]; then
   RELEASE_NOTES="Release $TAG_NAME"
 fi
 
-log_info "Preparing release for $TAG_NAME"
-log_info "Workflow: $WORKFLOW_NAME"
+# --- Commit, tag, and push ---
+
+echo ""
+echo "Preparing release for $TAG_NAME"
+echo "Workflow: $WORKFLOW_NAME"
+echo "Tap target: $TAP_TARGET"
+
+if $CHANGELOG_UPDATED && ! $DRY_RUN; then
+  echo "Committing changelog update..."
+  git add "$CHANGELOG_PATH"
+  git commit -m "Finalize changelog for v$VERSION"
+fi
 
 TMP_NOTES=$(mktemp)
 printf '%s\n' "$RELEASE_NOTES" > "$TMP_NOTES"
 trap 'rm -f "$TMP_NOTES"' EXIT
 
-if $DRY_RUN; then
-  log_info "[dry-run] Would create annotated tag $TAG_NAME"
-else
-  git tag -a "$TAG_NAME" -F "$TMP_NOTES"
-  log_success "Tag $TAG_NAME created."
+run git tag -a "$TAG_NAME" -F "$TMP_NOTES"
+if ! $DRY_RUN; then
+  echo "Tag $TAG_NAME created."
 fi
 
-CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 HEAD_SHA=$(git rev-parse HEAD)
 
-if $DRY_RUN; then
-  log_info "[dry-run] Would push branch $CURRENT_BRANCH and tag $TAG_NAME"
-else
-  git push origin "$CURRENT_BRANCH"
-  git push origin "$TAG_NAME"
-  log_success "Tag $TAG_NAME pushed to origin."
-fi
+echo ""
+echo "Pushing to origin..."
+run git push origin "$BRANCH"
+run git push origin "$TAG_NAME"
 
 if $DRY_RUN; then
-  log_info "[dry-run] Skipping workflow monitoring."
+  echo ""
+  echo "Dry-run: skipping GitHub Actions workflow monitoring."
   exit 0
 fi
 
-log_info "Waiting for GitHub Actions workflow to start..."
+echo "Tag $TAG_NAME pushed to origin."
+
+# --- Monitor workflow ---
+
+echo ""
+echo "Monitoring GitHub Actions workflow..."
+echo "This may take a few minutes..."
+
 RUN_ID=""
 FALLBACK_USED=false
-for attempt in {1..30}; do
+for attempt in $(seq 1 30); do
   RUN_JSON=$(gh run list --workflow "$WORKFLOW_IDENTIFIER" --limit 10 --json databaseId,headSha,status,event 2>/dev/null || true)
   if [[ -z "$RUN_JSON" ]]; then
     RUN_JSON="[]"
@@ -280,30 +520,71 @@ for attempt in {1..30}; do
   if [[ -n "$RUN_ID" ]]; then
     break
   fi
+  echo "  Waiting for workflow to appear... (attempt $attempt/30)"
   sleep 10
 done
 
 if [[ -z "$RUN_ID" ]]; then
-  log_error "Could not find workflow run for commit $HEAD_SHA. Monitor manually on GitHub."
+  echo "Warning: Could not find workflow run for commit $HEAD_SHA."
+  echo "Please check manually: https://github.com/$REPO_NAME/actions"
+  exit 1
 fi
 
-log_info "Monitoring workflow run ID $RUN_ID..."
+echo "Workflow run ID: $RUN_ID"
+echo "Watching workflow progress..."
+echo "(Press Ctrl+C to detach and monitor manually)"
+echo ""
+
 if gh run watch "$RUN_ID" --exit-status; then
-  log_success "Workflow succeeded!"
-  log_info "Release will be published automatically."
-  log_info "https://github.com/$REPO_NAME/releases/tag/$TAG_NAME"
+  echo ""
+  echo "Release v$VERSION completed successfully!"
+  echo "View release: https://github.com/$REPO_NAME/releases/tag/$TAG_NAME"
 else
-  log_info "Workflow failed. Cleaning up..."
+  echo ""
+  echo "CI workflow monitoring reported failure."
+  echo "This may be a transient API error. The workflow may still be running."
+  echo "  Check manually: gh run view $RUN_ID"
+  echo ""
+
+  JOB_CONCLUSION=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name=="build-and-release") | .conclusion' 2>/dev/null || true)
+  if [[ "$JOB_CONCLUSION" == "success" ]]; then
+    echo "Workflow reported failure, but primary 'build-and-release' job concluded SUCCESS."
+    echo "Treating release as successful. Tag $TAG_NAME is kept."
+    echo "View release: https://github.com/$REPO_NAME/releases/tag/$TAG_NAME"
+    exit 0
+  fi
+
+  echo "Cleaning up tags (keeping version commit)..."
+
   if gh release view "$TAG_NAME" >/dev/null 2>&1; then
+    echo "  - Deleting draft release $TAG_NAME..."
     gh release delete "$TAG_NAME" --yes || true
   fi
-  git push origin ":refs/tags/$TAG_NAME" || true
-  git tag -d "$TAG_NAME" || true
-  log_error "Release workflow failed. Fix issues and rerun the script with version $VERSION."
+
+  echo "  - Deleting remote tag $TAG_NAME..."
+  git push origin ":refs/tags/$TAG_NAME" 2>/dev/null || true
+
+  echo "  - Deleting local tag $TAG_NAME..."
+  git tag -d "$TAG_NAME" 2>/dev/null || true
+
+  echo ""
+  echo "Tag cleanup complete."
+  echo ""
+  echo "The version commit remains in your history."
+  echo "To retry after fixing issues:"
+  echo "  1. Fix the CI issues"
+  echo "  2. Commit your fixes"
+  echo "  3. Run: ./scripts/release.sh $VERSION"
+  echo ""
+  echo "To see what failed: gh run view $RUN_ID --log-failed"
+  exit 1
 fi
 
+# --- Optional workflow dispatch ---
+
 if $DISPATCH_WORKFLOW; then
-  log_info "Dispatching release workflow with explicit tap targets..."
+  echo ""
+  echo "Dispatching release workflow with explicit tap targets..."
   gh workflow run "$WORKFLOW_FILE" \
     -f tag="$TAG_NAME" \
     -f tap_repo="$TAP_REPO" \
@@ -315,5 +596,5 @@ if $DISPATCH_WORKFLOW; then
     -f tap_target="$TAP_TARGET" \
     -f create_release=true \
     -f prerelease=$([[ "$VERSION" == *"-"* ]] && echo true || echo false)
-  log_success "Workflow dispatch requested (tag=$TAG_NAME, tap_target=$TAP_TARGET)."
+  echo "Workflow dispatch requested (tag=$TAG_NAME, tap_target=$TAP_TARGET)."
 fi
