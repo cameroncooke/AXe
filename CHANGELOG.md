@@ -5,6 +5,16 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Simplified GitHub release assets to ship only the signed universal direct-download archive and the Homebrew archive.
+
+### Fixed
+
+- Fixed Homebrew installs by re-signing the installed `axe` binary and framework binaries after installation, while preserving the unsigned Homebrew release archive to avoid misleading install warnings.
+
 ## [v1.5.0] - 2026-03-04
 
 ### Added

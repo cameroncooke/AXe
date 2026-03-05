@@ -659,6 +659,22 @@ function package_for_notarization() {
   print_info "Copying executable to package..." >&2
   cp "${output_base_dir}/axe" "${package_dir}/"
 
+  if [ -d "${output_base_dir}/Frameworks" ]; then
+    print_info "Copying Frameworks directory to package..." >&2
+    cp -R "${output_base_dir}/Frameworks" "${package_dir}/"
+  else
+    echo "❌ Error: Frameworks directory missing from ${output_base_dir}" >&2
+    exit 1
+  fi
+
+  if [ -d "${output_base_dir}/AXe_AXe.bundle" ]; then
+    print_info "Copying AXe resource bundle to package..." >&2
+    cp -R "${output_base_dir}/AXe_AXe.bundle" "${package_dir}/"
+  else
+    echo "❌ Error: AXe resource bundle missing from ${output_base_dir}" >&2
+    exit 1
+  fi
+
   # Create zip package (redirect zip output to stderr)
   print_info "Creating zip package: ${package_zip}" >&2
   (cd "${output_base_dir}" && zip -r "${package_name}.zip" "${package_name}/") >&2
@@ -715,8 +731,8 @@ function notarize_package() {
     print_success "Notarization completed successfully!"
     print_info "Submission ID: ${submission_id}"
 
-    # Extract notarized executable from package and replace original
-    print_info "Extracting notarized executable to replace original..."
+    # Extract notarized package and replace original distribution payload
+    print_info "Extracting notarized package to replace original distribution payload..."
     local temp_extract_dir="${BUILD_OUTPUT_DIR}/temp_notarized"
     rm -rf "${temp_extract_dir}"
     mkdir -p "${temp_extract_dir}"
@@ -724,13 +740,30 @@ function notarize_package() {
     # Extract the notarized package
     unzip -q "${package_zip}" -d "${temp_extract_dir}"
 
-    # Find the extracted executable
-    local extracted_executable=$(find "${temp_extract_dir}" -name "axe" -type f | head -1)
+    local extracted_package_dir
+    extracted_package_dir="$(find "${temp_extract_dir}" -mindepth 1 -maxdepth 1 -type d | head -1)"
 
-    if [ -f "${extracted_executable}" ]; then
-      # Replace the original executable with the notarized one
-      cp "${extracted_executable}" "${BUILD_OUTPUT_DIR}/axe"
+    if [ -n "${extracted_package_dir}" ] && [ -f "${extracted_package_dir}/axe" ]; then
+      cp "${extracted_package_dir}/axe" "${BUILD_OUTPUT_DIR}/axe"
       print_success "Original executable replaced with notarized version"
+
+      rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
+      if [ -d "${extracted_package_dir}/Frameworks" ]; then
+        cp -R "${extracted_package_dir}/Frameworks" "${BUILD_OUTPUT_DIR}/"
+        print_success "Original Frameworks directory replaced with notarized version"
+      else
+        echo "❌ Error: Notarized package missing Frameworks directory"
+        exit 1
+      fi
+
+      rm -rf "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle"
+      if [ -d "${extracted_package_dir}/AXe_AXe.bundle" ]; then
+        cp -R "${extracted_package_dir}/AXe_AXe.bundle" "${BUILD_OUTPUT_DIR}/"
+        print_success "Original AXe resource bundle replaced with notarized version"
+      else
+        echo "❌ Error: Notarized package missing AXe resource bundle"
+        exit 1
+      fi
 
       # Verify notarization status using spctl
       print_info "Verifying notarization with spctl assessment..."
@@ -750,33 +783,6 @@ function notarize_package() {
 
       print_success "Notarized executable is ready for distribution"
 
-      # Ensure Frameworks directory exists for final package
-      print_info "Preparing Frameworks directory for final package..."
-      if [ ! -d "${BUILD_OUTPUT_DIR}/Frameworks" ]; then
-        print_info "Frameworks directory not found, recreating from XCFrameworks..."
-        mkdir -p "${BUILD_OUTPUT_DIR}/Frameworks"
-
-        # Extract frameworks from XCFrameworks for deployment
-        for xcframework in "${BUILD_OUTPUT_DIR}/XCFrameworks"/*.xcframework; do
-          if [ -d "$xcframework" ]; then
-            local framework_name=$(basename "$xcframework" .xcframework)
-            print_info "Extracting ${framework_name}.framework from XCFramework..."
-
-            # Find the macOS framework inside the XCFramework
-            local macos_framework=$(find "$xcframework" -name "${framework_name}.framework" -path "*/macos-*" | head -1)
-            if [ -d "$macos_framework" ]; then
-              cp -R "$macos_framework" "${BUILD_OUTPUT_DIR}/Frameworks/"
-              print_info "Copied ${framework_name}.framework to Frameworks directory"
-            else
-              print_warning "Could not find macOS framework in ${xcframework}"
-            fi
-          fi
-        done
-        print_success "Frameworks directory recreated from XCFrameworks"
-      else
-        print_info "Frameworks directory already exists"
-      fi
-
       # Create final deployment package in temporary directory
       print_info "Creating final deployment package..."
       local final_package_name="AXe-Final-$(date +%Y%m%d-%H%M%S)"
@@ -786,7 +792,7 @@ function notarize_package() {
       # Create final package directory
       mkdir -p "${final_package_dir}"
 
-      # Copy notarized executable and frameworks to final package
+      # Copy notarized executable, resource bundle, and frameworks to final package
       cp "${BUILD_OUTPUT_DIR}/axe" "${final_package_dir}/"
       if [ -d "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" ]; then
         cp -R "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" "${final_package_dir}/"

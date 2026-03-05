@@ -70,10 +70,6 @@ jobs:
     outputs:
       archive_name: ${{ steps.create_archive.outputs.archive_name }}
       archive_sha256: ${{ steps.create_archive.outputs.sha256 }}
-      release_archive_arm64_name: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
-      release_archive_arm64_sha256: ${{ steps.create_release_archives.outputs.archive_arm64_sha256 }}
-      release_archive_x64_name: ${{ steps.create_release_archives.outputs.archive_x64_name }}
-      release_archive_x64_sha256: ${{ steps.create_release_archives.outputs.archive_x64_sha256 }}
       homebrew_archive_name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
       homebrew_archive_sha256: ${{ steps.create_homebrew_archive.outputs.archive_sha256 }}
       version: ${{ steps.version.outputs.version }}
@@ -326,61 +322,6 @@ jobs:
           exit 1
         fi
 
-    - name: Create release archives (arm64 + x64)
-      id: create_release_archives
-      run: |
-        ARM64_ARCHIVE_NAME="AXe-macOS-${{ steps.version.outputs.tag }}-arm64.tar.gz"
-        X64_ARCHIVE_NAME="AXe-macOS-${{ steps.version.outputs.tag }}-x64.tar.gz"
-        echo "archive_arm64_name=$ARM64_ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
-        echo "archive_x64_name=$X64_ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
-
-        PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
-        if [ -f "$PACKAGE_PATH" ]; then
-          echo "📦 Creating release arch-specific archives from: $PACKAGE_PATH"
-
-          UNIVERSAL_ROOT="$RUNNER_TEMP/extract-release-universal"
-          ARM64_ROOT="$RUNNER_TEMP/extract-release-arm64"
-          X64_ROOT="$RUNNER_TEMP/extract-release-x64"
-          mkdir -p "$UNIVERSAL_ROOT" "$ARM64_ROOT" "$X64_ROOT"
-          unzip -q "$PACKAGE_PATH" -d "$UNIVERSAL_ROOT"
-
-          TOP_LEVEL_DIR_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
-          TOP_LEVEL_FILE_COUNT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
-          if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
-            PACKAGE_ROOT=$(find "$UNIVERSAL_ROOT" -mindepth 1 -maxdepth 1 -type d | head -1)
-          else
-            PACKAGE_ROOT="$UNIVERSAL_ROOT"
-          fi
-
-          cp -R "$PACKAGE_ROOT"/. "$ARM64_ROOT"/
-          cp -R "$PACKAGE_ROOT"/. "$X64_ROOT"/
-
-          lipo -thin arm64 "$ARM64_ROOT/axe" -output "$ARM64_ROOT/axe.thin"
-          mv "$ARM64_ROOT/axe.thin" "$ARM64_ROOT/axe"
-          codesign --remove-signature "$ARM64_ROOT/axe" 2>/dev/null || true
-
-          lipo -thin x86_64 "$X64_ROOT/axe" -output "$X64_ROOT/axe.thin"
-          mv "$X64_ROOT/axe.thin" "$X64_ROOT/axe"
-          codesign --remove-signature "$X64_ROOT/axe" 2>/dev/null || true
-
-          lipo -info "$ARM64_ROOT/axe" | grep -q "arm64"
-          lipo -info "$X64_ROOT/axe" | grep -q "x86_64"
-
-          tar -czf "$ARM64_ARCHIVE_NAME" -C "$ARM64_ROOT" .
-          tar -czf "$X64_ARCHIVE_NAME" -C "$X64_ROOT" .
-
-          ARM64_SHA256=$(shasum -a 256 "$ARM64_ARCHIVE_NAME" | awk '{print $1}')
-          X64_SHA256=$(shasum -a 256 "$X64_ARCHIVE_NAME" | awk '{print $1}')
-          echo "archive_arm64_sha256=$ARM64_SHA256" >> "$GITHUB_OUTPUT"
-          echo "archive_x64_sha256=$X64_SHA256" >> "$GITHUB_OUTPUT"
-          echo "✅ Release arch-specific archives created:"
-          echo "  - $ARM64_ARCHIVE_NAME (SHA256: $ARM64_SHA256)"
-          echo "  - $X64_ARCHIVE_NAME (SHA256: $X64_SHA256)"
-        else
-          echo "❌ Package path not found: $PACKAGE_PATH"
-          exit 1
-        fi
-
     - name: Create Homebrew archive (universal)
       id: create_homebrew_archive
       run: |
@@ -417,7 +358,7 @@ jobs:
             fi
           done < <(find "$HOMEBREW_ROOT" -type f -print0)
 
-          find "$HOMEBREW_ROOT" -type d -name "*.framework" -print0 | while IFS= read -r -d '' bundle; do
+          find "$HOMEBREW_ROOT" \( -type d -name "*.framework" -o -type d -name "*.bundle" \) -print0 | while IFS= read -r -d '' bundle; do
             codesign --remove-signature "$bundle" 2>/dev/null || true
           done
 
@@ -485,22 +426,6 @@ jobs:
         path: ${{ steps.create_archive.outputs.archive_name }}
         retention-days: 30
 
-    - name: Upload arm64 build artifact (manual trigger)
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
-        path: ${{ steps.create_release_archives.outputs.archive_arm64_name }}
-        retention-days: 30
-
-    - name: Upload x64 build artifact (manual trigger)
-      if: github.event_name == 'workflow_dispatch'
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.create_release_archives.outputs.archive_x64_name }}
-        path: ${{ steps.create_release_archives.outputs.archive_x64_name }}
-        retention-days: 30
-
     - name: Upload Homebrew artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
@@ -508,6 +433,70 @@ jobs:
         name: ${{ steps.create_homebrew_archive.outputs.archive_name }}
         path: ${{ steps.create_homebrew_archive.outputs.archive_name }}
         retention-days: 30
+
+    - name: Smoke test Homebrew install
+      run: |
+        set -euo pipefail
+
+        HOMEBREW_ARCHIVE_NAME="${{ steps.create_homebrew_archive.outputs.archive_name }}"
+        if [ ! -f "$HOMEBREW_ARCHIVE_NAME" ]; then
+          echo "❌ Homebrew archive not found: $HOMEBREW_ARCHIVE_NAME"
+          exit 1
+        fi
+
+        TEST_ROOT="$RUNNER_TEMP/homebrew-install-test"
+        FORMULA_PATH="$TEST_ROOT/axe.rb"
+        HOMEBREW_CACHE_DIR="$TEST_ROOT/cache"
+        HOMEBREW_PREFIX_DIR="$TEST_ROOT/prefix"
+        HOMEBREW_REPOSITORY_DIR="$TEST_ROOT/repo"
+        HOMEBREW_CELLAR_DIR="$TEST_ROOT/cellar"
+
+        rm -rf "$TEST_ROOT"
+        mkdir -p "$TEST_ROOT" "$HOMEBREW_CACHE_DIR" "$HOMEBREW_PREFIX_DIR" "$HOMEBREW_REPOSITORY_DIR" "$HOMEBREW_CELLAR_DIR"
+
+        scripts/generate-homebrew-formula.sh \
+          --formula-class "Axe" \
+          --homepage "https://github.com/${{ github.repository }}" \
+          --version "${{ steps.version.outputs.version }}" \
+          --url "file://${{ github.workspace }}/$HOMEBREW_ARCHIVE_NAME" \
+          --sha256 "${{ steps.create_homebrew_archive.outputs.archive_sha256 }}" \
+          > "$FORMULA_PATH"
+
+        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
+        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
+        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
+        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
+        brew install --formula "$FORMULA_PATH"
+
+        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
+        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
+        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
+        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
+        "$HOMEBREW_PREFIX_DIR/bin/axe" --version
+
+        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
+        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
+        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
+        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
+        "$HOMEBREW_PREFIX_DIR/bin/axe" init --print | grep -q "name: axe"
+
+    - name: Smoke test universal archive
+      run: |
+        set -euo pipefail
+
+        ARCHIVE_NAME="${{ steps.create_archive.outputs.archive_name }}"
+        if [ ! -f "$ARCHIVE_NAME" ]; then
+          echo "❌ Universal archive not found: $ARCHIVE_NAME"
+          exit 1
+        fi
+
+        TEST_ROOT="$RUNNER_TEMP/universal-archive-test"
+        rm -rf "$TEST_ROOT"
+        mkdir -p "$TEST_ROOT"
+
+        tar -xzf "$ARCHIVE_NAME" -C "$TEST_ROOT"
+        "$TEST_ROOT/axe" --version
+        "$TEST_ROOT/axe" init --print | grep -q "name: axe"
 
     - name: Generate GitHub release notes from CHANGELOG
       if: github.event_name == 'push'
@@ -563,8 +552,6 @@ jobs:
           --notes-file "github-release-body.md" \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
-          "${{ steps.create_release_archives.outputs.archive_arm64_name }}" \
-          "${{ steps.create_release_archives.outputs.archive_x64_name }}" \
           "${{ steps.create_homebrew_archive.outputs.archive_name }}"
 
         echo "Release $TAG created."
@@ -594,8 +581,6 @@ jobs:
           --generate-notes \
           $PRERELEASE_FLAG \
           "${{ steps.create_archive.outputs.archive_name }}" \
-          "${{ steps.create_release_archives.outputs.archive_arm64_name }}" \
-          "${{ steps.create_release_archives.outputs.archive_x64_name }}" \
           "${{ steps.create_homebrew_archive.outputs.archive_name }}"
 
         echo "✅ Release $TAG created (manual trigger)."
@@ -708,26 +693,13 @@ jobs:
 
           FORMULA_CLASS="$(echo "$TAP_FORMULA" | awk -F'[-_]' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print $0}' OFS="")"
 
-          {
-            echo "class ${FORMULA_CLASS} < Formula"
-            echo "  desc \"CLI tool for interacting with iOS Simulators via accessibility and HID APIs\""
-            echo "  homepage \"https://github.com/${{ github.repository }}\""
-            echo "  license \"MIT\""
-            echo "  version \"${VERSION_TAG}\""
-            echo
-            echo "  url \"${HOMEBREW_URL}\""
-            echo "  sha256 \"${HOMEBREW_SHA}\""
-            echo
-            echo "  def install"
-            echo "    libexec.install \"axe\", \"Frameworks\", \"AXe_AXe.bundle\""
-            echo "    bin.write_exec_script libexec/\"axe\""
-            echo "  end"
-            echo
-            echo "  test do"
-            echo "    assert_match \"name: axe\", shell_output(\"#{bin}/axe init --print\")"
-            echo "  end"
-            echo "end"
-          } > "$FORMULA_FILE"
+          "${GITHUB_WORKSPACE}/scripts/generate-homebrew-formula.sh" \
+            --formula-class "${FORMULA_CLASS}" \
+            --homepage "https://github.com/${{ github.repository }}" \
+            --version "${VERSION_TAG}" \
+            --url "${HOMEBREW_URL}" \
+            --sha256 "${HOMEBREW_SHA}" \
+            > "$FORMULA_FILE"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
