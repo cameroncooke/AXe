@@ -17,7 +17,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WORK_DIR/universal/Frameworks/Fake.framework" "$WORK_DIR/universal/AXe_AXe.bundle" "$WORK_DIR/out" "$WORK_DIR/homebrew"
+PACKAGE_DIR="$WORK_DIR/universal/AXe-Final-dryrun"
+mkdir -p "$PACKAGE_DIR/Frameworks/Fake.framework" "$PACKAGE_DIR/AXe_AXe.bundle" "$WORK_DIR/out" "$WORK_DIR/homebrew" "$WORK_DIR/archive-root"
 
 echo "[release-dry-run] Preparing universal test binary"
 BIN_PATH="/usr/bin/file"
@@ -30,15 +31,24 @@ fi
 lipo -info "$BIN_PATH" | grep -q "arm64"
 lipo -info "$BIN_PATH" | grep -q "x86_64"
 
-cp "$BIN_PATH" "$WORK_DIR/universal/axe"
-cp "$BIN_PATH" "$WORK_DIR/universal/Frameworks/Fake.framework/Fake"
-printf 'name: axe\n' > "$WORK_DIR/universal/AXe_AXe.bundle/manifest.txt"
+cp "$BIN_PATH" "$PACKAGE_DIR/axe"
+cp "$BIN_PATH" "$PACKAGE_DIR/Frameworks/Fake.framework/Fake"
+printf 'name: axe\n' > "$PACKAGE_DIR/AXe_AXe.bundle/manifest.txt"
 
 UNIVERSAL_ARCHIVE="$WORK_DIR/out/AXe-macOS-${TAG}-universal.tar.gz"
 HOMEBREW_ARCHIVE="$WORK_DIR/out/AXe-macOS-homebrew-${TAG}.tar.gz"
 FORMULA_OUT="$WORK_DIR/out/${FORMULA_NAME}.rb"
 
-tar -czf "$UNIVERSAL_ARCHIVE" -C "$WORK_DIR/universal" .
+TOP_LEVEL_DIR_COUNT=$(find "$WORK_DIR/universal" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+TOP_LEVEL_FILE_COUNT=$(find "$WORK_DIR/universal" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+if [[ "$TOP_LEVEL_DIR_COUNT" -eq 1 && "$TOP_LEVEL_FILE_COUNT" -eq 0 ]]; then
+  PACKAGE_ROOT=$(find "$WORK_DIR/universal" -mindepth 1 -maxdepth 1 -type d | head -1)
+else
+  PACKAGE_ROOT="$WORK_DIR/universal"
+fi
+
+cp -R "$PACKAGE_ROOT"/. "$WORK_DIR/archive-root"/
+tar -czf "$UNIVERSAL_ARCHIVE" -C "$WORK_DIR/archive-root" .
 mkdir -p "$WORK_DIR/out/universal-extract"
 tar -xzf "$UNIVERSAL_ARCHIVE" -C "$WORK_DIR/out/universal-extract"
 test -f "$WORK_DIR/out/universal-extract/axe"
@@ -46,7 +56,7 @@ test -d "$WORK_DIR/out/universal-extract/Frameworks/Fake.framework"
 test -f "$WORK_DIR/out/universal-extract/Frameworks/Fake.framework/Fake"
 test -d "$WORK_DIR/out/universal-extract/AXe_AXe.bundle"
 
-cp -R "$WORK_DIR/universal"/. "$WORK_DIR/homebrew"/
+cp -R "$PACKAGE_ROOT"/. "$WORK_DIR/homebrew"/
 
 while IFS= read -r -d '' file_path; do
   if file "$file_path" | grep -q "Mach-O"; then

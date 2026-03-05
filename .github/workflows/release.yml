@@ -307,11 +307,22 @@ jobs:
 
           # Extract the package to create the tar.gz
           TEMP_EXTRACT="$RUNNER_TEMP/extract"
-          mkdir -p "$TEMP_EXTRACT"
+          ARCHIVE_ROOT="$RUNNER_TEMP/extract-archive"
+          mkdir -p "$TEMP_EXTRACT" "$ARCHIVE_ROOT"
           unzip -q "$PACKAGE_PATH" -d "$TEMP_EXTRACT"
 
+          TOP_LEVEL_DIR_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+          TOP_LEVEL_FILE_COUNT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+          if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
+            PACKAGE_ROOT=$(find "$TEMP_EXTRACT" -mindepth 1 -maxdepth 1 -type d | head -1)
+          else
+            PACKAGE_ROOT="$TEMP_EXTRACT"
+          fi
+
+          cp -R "$PACKAGE_ROOT"/. "$ARCHIVE_ROOT"/
+
           # Create tar.gz from extracted contents
-          tar -czf "$ARCHIVE_NAME" -C "$TEMP_EXTRACT" .
+          tar -czf "$ARCHIVE_NAME" -C "$ARCHIVE_ROOT" .
 
           # Calculate SHA256
           SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
