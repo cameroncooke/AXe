@@ -435,6 +435,48 @@ jobs:
           exit 1
         fi
 
+    - name: Smoke test packaged CLI resources
+      run: |
+        set -e
+
+        PACKAGE_PATH="${{ steps.notarize.outputs.package_path }}"
+        if [ ! -f "$PACKAGE_PATH" ]; then
+          echo "❌ Package path not found: $PACKAGE_PATH"
+          exit 1
+        fi
+
+        SMOKE_ROOT="$RUNNER_TEMP/extract-smoke"
+        mkdir -p "$SMOKE_ROOT"
+        unzip -q "$PACKAGE_PATH" -d "$SMOKE_ROOT"
+
+        TOP_LEVEL_DIR_COUNT=$(find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')
+        TOP_LEVEL_FILE_COUNT=$(find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')
+        if [ "$TOP_LEVEL_DIR_COUNT" -eq 1 ] && [ "$TOP_LEVEL_FILE_COUNT" -eq 0 ]; then
+          PACKAGE_ROOT=$(find "$SMOKE_ROOT" -mindepth 1 -maxdepth 1 -type d | head -1)
+        else
+          PACKAGE_ROOT="$SMOKE_ROOT"
+        fi
+
+        test -d "$PACKAGE_ROOT/AXe_AXe.bundle"
+        "$PACKAGE_ROOT/axe" init --print | grep -q "name: axe"
+
+    - name: Smoke test Homebrew archive resources
+      run: |
+        set -e
+
+        HOMEBREW_ARCHIVE_NAME="${{ steps.create_homebrew_archive.outputs.archive_name }}"
+        if [ ! -f "$HOMEBREW_ARCHIVE_NAME" ]; then
+          echo "❌ Homebrew archive not found: $HOMEBREW_ARCHIVE_NAME"
+          exit 1
+        fi
+
+        SMOKE_ROOT="$RUNNER_TEMP/extract-homebrew-smoke"
+        mkdir -p "$SMOKE_ROOT"
+        tar -xzf "$HOMEBREW_ARCHIVE_NAME" -C "$SMOKE_ROOT"
+
+        test -d "$SMOKE_ROOT/AXe_AXe.bundle"
+        "$SMOKE_ROOT/axe" init --print | grep -q "name: axe"
+
     - name: Upload build artifact (manual trigger)
       if: github.event_name == 'workflow_dispatch'
       uses: actions/upload-artifact@v4
@@ -677,12 +719,12 @@ jobs:
             echo "  sha256 \"${HOMEBREW_SHA}\""
             echo
             echo "  def install"
-            echo "    libexec.install \"axe\", \"Frameworks\""
+            echo "    libexec.install \"axe\", \"Frameworks\", \"AXe_AXe.bundle\""
             echo "    bin.write_exec_script libexec/\"axe\""
             echo "  end"
             echo
             echo "  test do"
-            echo "    assert_match version.to_s, shell_output(\"#{bin}/axe --version\")"
+            echo "    assert_match \"name: axe\", shell_output(\"#{bin}/axe init --print\")"
             echo "  end"
             echo "end"
           } > "$FORMULA_FILE"

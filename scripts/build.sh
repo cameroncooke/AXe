@@ -130,6 +130,33 @@ function swift_build_bin_path() {
   swift build --configuration "$build_config" --arch "$target_arch" --show-bin-path
 }
 
+function copy_resource_bundle() {
+  local output_base_dir="$1"
+  local bundle_name="AXe_AXe.bundle"
+  local bundle_dest="${output_base_dir}/${bundle_name}"
+  local bundle_source=""
+  local candidate_dir=""
+
+  for candidate_dir in \
+    "$(swift_build_bin_path "release" "arm64")" \
+    "$(swift_build_bin_path "release" "x86_64")"
+  do
+    if [[ -d "${candidate_dir}/${bundle_name}" ]]; then
+      bundle_source="${candidate_dir}/${bundle_name}"
+      break
+    fi
+  done
+
+  if [[ -z "$bundle_source" ]]; then
+    echo "❌ Error: AXe resource bundle not found in Swift build outputs"
+    exit 1
+  fi
+
+  rm -rf "$bundle_dest"
+  cp -R "$bundle_source" "$bundle_dest"
+  print_success "AXe resource bundle installed to ${bundle_dest}"
+}
+
 function clone_idb_repo() {
   if [ ! -d $IDB_CHECKOUT_DIR ]; then
     print_info "Creating $IDB_DIRECTORY directory and cloning idb repository..."
@@ -479,6 +506,8 @@ function build_axe_executable() {
   lipo -create -output "${executable_dest}" "${arm64_executable}" "${x64_executable}"
   rm -f "${arm64_executable}" "${x64_executable}"
 
+  copy_resource_bundle "${output_base_dir}"
+
   verify_macho_has_arch "${executable_dest}" "arm64"
   verify_macho_has_arch "${executable_dest}" "x86_64"
   print_success "AXe executable installed to ${executable_dest}"
@@ -759,6 +788,13 @@ function notarize_package() {
 
       # Copy notarized executable and frameworks to final package
       cp "${BUILD_OUTPUT_DIR}/axe" "${final_package_dir}/"
+      if [ -d "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" ]; then
+        cp -R "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" "${final_package_dir}/"
+        print_info "Included AXe resource bundle in final package"
+      else
+        echo "❌ Error: AXe resource bundle missing from ${BUILD_OUTPUT_DIR}"
+        exit 1
+      fi
       if [ -d "${BUILD_OUTPUT_DIR}/Frameworks" ]; then
         cp -R "${BUILD_OUTPUT_DIR}/Frameworks" "${final_package_dir}/"
         print_info "Included Frameworks directory in final package"
@@ -779,8 +815,9 @@ function notarize_package() {
         # Clean up build artifacts (axe executable and Frameworks, keep XCFrameworks)
         print_info "Cleaning up build artifacts..."
         rm -f "${BUILD_OUTPUT_DIR}/axe"
+        rm -rf "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle"
         rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
-        print_success "Cleaned up axe executable and Frameworks directory"
+        print_success "Cleaned up axe executable, resource bundle, and Frameworks directory"
         print_info "Preserved XCFrameworks directory for Swift package builds"
 
         # Output the final package path
