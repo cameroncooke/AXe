@@ -456,14 +456,16 @@ jobs:
         fi
 
         TEST_ROOT="$RUNNER_TEMP/homebrew-install-test"
-        FORMULA_PATH="$TEST_ROOT/axe.rb"
+        TAP_NAME="local/axe-test-${{ github.run_id }}"
+        TAP_SOURCE_DIR="$TEST_ROOT/homebrew-axe-test"
+        FORMULA_PATH="$TAP_SOURCE_DIR/Formula/axe.rb"
         HOMEBREW_CACHE_DIR="$TEST_ROOT/cache"
         HOMEBREW_PREFIX_DIR="$TEST_ROOT/prefix"
         HOMEBREW_REPOSITORY_DIR="$TEST_ROOT/repo"
         HOMEBREW_CELLAR_DIR="$TEST_ROOT/cellar"
 
         rm -rf "$TEST_ROOT"
-        mkdir -p "$TEST_ROOT" "$HOMEBREW_CACHE_DIR" "$HOMEBREW_PREFIX_DIR" "$HOMEBREW_REPOSITORY_DIR" "$HOMEBREW_CELLAR_DIR"
+        mkdir -p "$TEST_ROOT" "$TAP_SOURCE_DIR/Formula" "$HOMEBREW_CACHE_DIR" "$HOMEBREW_PREFIX_DIR" "$HOMEBREW_REPOSITORY_DIR" "$HOMEBREW_CELLAR_DIR"
 
         scripts/generate-homebrew-formula.sh \
           --formula-class "Axe" \
@@ -473,18 +475,41 @@ jobs:
           --sha256 "${{ steps.create_homebrew_archive.outputs.archive_sha256 }}" \
           > "$FORMULA_PATH"
 
+        git -C "$TAP_SOURCE_DIR" init
+        git -C "$TAP_SOURCE_DIR" config user.name "GitHub Actions"
+        git -C "$TAP_SOURCE_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
+        git -C "$TAP_SOURCE_DIR" add Formula/axe.rb
+        git -C "$TAP_SOURCE_DIR" -c commit.gpgsign=false commit -m "Add axe formula for smoke test"
+
+        HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
         HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
         HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
         HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
-        brew install --formula "$FORMULA_PATH"
+        brew untap "$TAP_NAME" >/dev/null 2>&1 || true
 
+        HOMEBREW_NO_AUTO_UPDATE=1 \
+        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
+        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
+        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
+        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
+        brew tap "$TAP_NAME" "$TAP_SOURCE_DIR"
+
+        HOMEBREW_NO_AUTO_UPDATE=1 \
+        HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
+        HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
+        HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
+        HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
+        brew install "$TAP_NAME/axe"
+
+        HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
         HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
         HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
         HOMEBREW_CELLAR="$HOMEBREW_CELLAR_DIR" \
         "$HOMEBREW_PREFIX_DIR/bin/axe" --version
 
+        HOMEBREW_NO_AUTO_UPDATE=1 \
         HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" \
         HOMEBREW_PREFIX="$HOMEBREW_PREFIX_DIR" \
         HOMEBREW_REPOSITORY="$HOMEBREW_REPOSITORY_DIR" \
@@ -514,7 +539,7 @@ jobs:
       env:
         VERSION: ${{ steps.version.outputs.version }}
       run: |
-        set -e
+        set -euo pipefail
 
         # Try target version first
         if node scripts/generate-github-release-notes.mjs \
@@ -524,19 +549,46 @@ jobs:
           exit 0
         fi
 
-        # Deploy-only patch fallback: reuse previous version notes when target notes are missing
-        PREVIOUS_VERSION=$(git tag | sed 's/^v//' | grep -E '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.-]+)?$' | sort -V | awk -v v="$VERSION" '$0 < v' | tail -1)
+        # Deploy-only patch fallback: reuse the newest CHANGELOG entry older than the target version.
+        CHANGELOG_FALLBACK_VERSION=$(node -e "
+          const fs = require('fs');
+          const targetVersion = process.argv[1];
+          const changelog = fs.readFileSync('CHANGELOG.md', 'utf8');
+          const versionHeadingRegex = /^##\\s+\\[([^\\]]+)\\](?:\\s+-\\s+.*)?\\s*$/gm;
+          const normalizeVersion = (value) => value.trim().replace(/^v/, '');
+          function compareVersions(version1, version2) {
+            const v1Base = version1.split('-')[0];
+            const v2Base = version2.split('-')[0];
+            const v1Pre = version1.includes('-') ? version1.slice(version1.indexOf('-') + 1) : '';
+            const v2Pre = version2.includes('-') ? version2.slice(version2.indexOf('-') + 1) : '';
+            if (v1Base === v2Base) {
+              if (!v1Pre && v2Pre) return 1;
+              if (v1Pre && !v2Pre) return -1;
+              if (version1 === version2) return 0;
+            }
+            const sorted = [version1, version2].sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            return sorted[0] === version1 ? -1 : 1;
+          }
+          let bestVersion = '';
+          for (const match of changelog.matchAll(versionHeadingRegex)) {
+            const version = normalizeVersion(match[1]);
+            if (version === 'Unreleased') continue;
+            if (compareVersions(version, targetVersion) >= 0) continue;
+            if (!bestVersion || compareVersions(version, bestVersion) > 0) bestVersion = version;
+          }
+          process.stdout.write(bestVersion);
+        " "$VERSION")
 
-        if [ -z "$PREVIOUS_VERSION" ]; then
-          echo "❌ Could not determine previous version for fallback release notes"
+        if [ -z "$CHANGELOG_FALLBACK_VERSION" ]; then
+          echo "❌ Could not determine a fallback CHANGELOG version for release notes"
           exit 1
         fi
 
-        echo "ℹ️ No CHANGELOG notes for v$VERSION, falling back to v$PREVIOUS_VERSION"
+        echo "ℹ️ No CHANGELOG notes for v$VERSION, falling back to v$CHANGELOG_FALLBACK_VERSION"
         node scripts/generate-github-release-notes.mjs \
-          --version "$PREVIOUS_VERSION" \
+          --version "$CHANGELOG_FALLBACK_VERSION" \
           --out github-release-body.md
-        echo "✅ Generated release notes for v$VERSION using fallback v$PREVIOUS_VERSION notes"
+        echo "✅ Generated release notes for v$VERSION using fallback v$CHANGELOG_FALLBACK_VERSION notes"
 
     - name: Create GitHub release
       if: github.event_name == 'push'
