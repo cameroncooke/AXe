@@ -62,13 +62,6 @@ strip_signatures() {
   done < <(find "$stage_dir" \( -type d -name "*.framework" -o -type d -name "*.bundle" \) -print0)
 }
 
-copy_stage_payload() {
-  local source_dir="$1"
-  local stage_dir="$2"
-
-  copy_release_payload "$source_dir" "$stage_dir"
-}
-
 extract_stage() {
   local package_zip="$1"
   local stage_dir="$2"
@@ -96,7 +89,7 @@ extract_stage() {
     package_root="$extract_root"
   fi
 
-  copy_stage_payload "$package_root" "$stage_dir"
+  copy_release_payload "$package_root" "$stage_dir"
   rm -rf "$extract_root"
   echo "✅ Extracted staged payload to $stage_dir"
 }
@@ -105,7 +98,7 @@ stage_build_output() {
   local build_output_dir="$1"
   local stage_dir="$2"
 
-  copy_stage_payload "$build_output_dir" "$stage_dir"
+  copy_release_payload "$build_output_dir" "$stage_dir"
   echo "✅ Materialized staged payload from build output to $stage_dir"
 }
 
