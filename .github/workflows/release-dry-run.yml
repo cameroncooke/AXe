@@ -13,7 +13,9 @@ on:
       - 'scripts/release-artifacts.sh'
       - 'scripts/release-context.mjs'
       - 'scripts/release-dry-run.sh'
+      - 'scripts/release-payload.sh'
       - 'scripts/update-homebrew-tap.sh'
+      - 'scripts/fixtures/homebrew-formula.expected.rb'
   workflow_dispatch:
 
 permissions:
@@ -31,20 +33,6 @@ jobs:
         with:
           xcode-version: '26.2'
 
-      - name: Checkout production tap fixture
-        uses: actions/checkout@v4
-        with:
-          repository: cameroncooke/homebrew-axe
-          path: tap-fixtures/homebrew-axe
-          fetch-depth: 1
-
-      - name: Checkout staging tap fixture
-        uses: actions/checkout@v4
-        with:
-          repository: cameroncooke/homebrew-axe-staging
-          path: tap-fixtures/homebrew-axe-staging
-          fetch-depth: 1
-
       - name: Validate release workflow YAML
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true); puts "release.yml YAML parse OK"'
@@ -58,12 +46,10 @@ jobs:
           bash -n scripts/publish-github-release.sh
           bash -n scripts/release-artifacts.sh
           bash -n scripts/release-dry-run.sh
+          bash -n scripts/release-payload.sh
           bash -n scripts/update-homebrew-tap.sh
           node scripts/release-context.mjs --help >/dev/null
           node scripts/generate-github-release-notes.mjs --help >/dev/null
 
       - name: Dry-run release packaging and formula generation
-        env:
-          PRODUCTION_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/homebrew-axe/Formula/axe.rb
-          STAGING_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/homebrew-axe-staging/Formula/axe.rb
         run: scripts/release-dry-run.sh

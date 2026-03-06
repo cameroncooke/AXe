@@ -11,8 +11,7 @@ VERSION="${TAG#v}"
 FORMULA_NAME="${FORMULA_NAME:-axe}"
 FORMULA_CLASS="$(echo "$FORMULA_NAME" | awk -F'[-_]' '{for(i=1;i<=NF;i++) $i=toupper(substr($i,1,1)) substr($i,2); print $0}' OFS="")"
 HOMEPAGE="${HOMEPAGE:-https://github.com/cameroncooke/AXe}"
-PRODUCTION_FORMULA_PATH="${PRODUCTION_FORMULA_PATH:-../homebrew-axe/Formula/axe.rb}"
-STAGING_FORMULA_PATH="${STAGING_FORMULA_PATH:-../homebrew-axe-staging/Formula/axe.rb}"
+CANONICAL_FORMULA_PATH="${CANONICAL_FORMULA_PATH:-./scripts/fixtures/homebrew-formula.expected.rb}"
 
 cleanup() {
   rm -rf "$WORK_DIR"
@@ -99,11 +98,9 @@ normalize_formula() {
 }
 
 normalize_formula "$FORMULA_OUT" > "$tmp_dir/generated.rb"
-normalize_formula "$PRODUCTION_FORMULA_PATH" > "$tmp_dir/production.rb"
-normalize_formula "$STAGING_FORMULA_PATH" > "$tmp_dir/staging.rb"
+normalize_formula "$CANONICAL_FORMULA_PATH" > "$tmp_dir/canonical.rb"
 
-cmp -s "$tmp_dir/generated.rb" "$tmp_dir/production.rb"
-cmp -s "$tmp_dir/generated.rb" "$tmp_dir/staging.rb"
+cmp -s "$tmp_dir/generated.rb" "$tmp_dir/canonical.rb"
 
 node <<'NODE'
 const { execFileSync } = require('node:child_process');
