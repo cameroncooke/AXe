@@ -135,9 +135,13 @@ grep -q '^  pull_request:$' .github/workflows/release-staging.yml
 grep -q "description: 'Exact ref to build for staging (branch, tag, or SHA)'" .github/workflows/release-staging.yml
 grep -q '^        required: true$' .github/workflows/release-staging.yml
 grep -q '^        default: validate$' .github/workflows/release-staging.yml
-grep -q "github.event_name == 'pull_request' && 'staging-validate'" .github/workflows/release-staging.yml
+grep -q '^  staging-validate:$' .github/workflows/release-staging.yml
+grep -q '^  staging-publish:$' .github/workflows/release-staging.yml
+grep -q "mode: staging-validate" .github/workflows/release-staging.yml
+grep -q "mode: staging-publish" .github/workflows/release-staging.yml
+grep -q "github.event_name == 'pull_request' && github.sha" .github/workflows/release-staging.yml
 ! grep -q 'defaults to main' .github/workflows/release-staging.yml
-! grep -q "refs/heads/main') || github.sha" .github/workflows/release-staging.yml
+! grep -q "github.event_name == 'pull_request' && github.event.pull_request.head.sha" .github/workflows/release-staging.yml
 
 echo "[release-dry-run] OK"
 echo "[release-dry-run] universal archive: $UNIVERSAL_ARCHIVE"

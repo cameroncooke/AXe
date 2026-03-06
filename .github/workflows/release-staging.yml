@@ -21,13 +21,27 @@ on:
           - publish
 
 permissions:
-  contents: write
+  contents: read
   actions: read
 
 jobs:
-  staging-release:
+  staging-validate:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'validate')
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/release-shared.yml
+    with:
+      mode: staging-validate
+      requested_ref: ${{ github.event_name == 'pull_request' && github.sha || github.event.inputs.ref }}
+
+  staging-publish:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'publish')
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/release-shared.yml
     secrets: inherit
     with:
-      mode: ${{ github.event_name == 'push' && 'staging-publish' || github.event_name == 'pull_request' && 'staging-validate' || github.event.inputs.intent == 'publish' && 'staging-publish' || 'staging-validate' }}
-      requested_ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.ref || github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      mode: staging-publish
+      requested_ref: ${{ github.event_name == 'push' && github.ref || github.event.inputs.ref }}

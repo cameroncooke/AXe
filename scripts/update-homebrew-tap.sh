@@ -69,7 +69,6 @@ rm -rf "$WORK_DIR"
 GH_TOKEN="$TOKEN" gh repo clone "$TAP_REPO" "$WORK_DIR"
 cd "$WORK_DIR"
 git checkout "$TAP_BRANCH"
-git remote set-url origin "https://${TOKEN}@github.com/${TAP_REPO}.git"
 
 FORMULA_FILE="Formula/${TAP_FORMULA}.rb"
 if [[ ! -f "$FORMULA_FILE" ]]; then
@@ -90,5 +89,6 @@ git config user.email "github-actions[bot]@users.noreply.github.com"
 git add "$FORMULA_FILE"
 if ! git diff --staged --quiet; then
   git commit -m "Update axe to v${VERSION}"
-  git push origin "$TAP_BRANCH"
+  AUTH_HEADER=$(printf 'x-access-token:%s' "$TOKEN" | base64)
+  git -c http.https://github.com/.extraheader="AUTHORIZATION: basic ${AUTH_HEADER}" push origin "$TAP_BRANCH"
 fi
