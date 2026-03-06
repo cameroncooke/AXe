@@ -14,6 +14,10 @@ BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks
 FBSIMCONTROL_PROJECT="${IDB_CHECKOUT_DIR}/FBSimulatorControl.xcodeproj"
 TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
 
+# Shared payload helper
+# shellcheck source=./release-payload.sh
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-payload.sh"
+
 FRAMEWORK_SDK="macosx"
 FRAMEWORK_CONFIGURATION="Release"
 
@@ -545,10 +549,60 @@ function build_axe_executable() {
   print_success "Executable rpath configured for organized framework deployment"
 }
 
+function resolve_framework_binary() {
+  local framework_path="$1"
+  local framework_name="$2"
+  local framework_binary="${framework_path}/Versions/A/${framework_name}"
+
+  if [[ ! -f "${framework_binary}" ]]; then
+    framework_binary="${framework_path}/Versions/Current/${framework_name}"
+  fi
+  if [[ ! -f "${framework_binary}" ]]; then
+    framework_binary="${framework_path}/${framework_name}"
+  fi
+
+  if [[ ! -f "${framework_binary}" ]]; then
+    echo ""
+    return 1
+  fi
+
+  echo "${framework_binary}"
+}
+
+function verify_xcframework_inputs() {
+  local output_base_dir="$1"
+  local xcframeworks_dir="${output_base_dir}/XCFrameworks"
+  local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
+
+  print_subsection "🧪" "Validating XCFramework inputs"
+
+  if [[ ! -d "${xcframeworks_dir}" ]]; then
+    echo "❌ Error: XCFrameworks directory not found under ${output_base_dir}"
+    exit 1
+  fi
+
+  for framework_name in "${expected_frameworks[@]}"; do
+    local xcframework_path="${xcframeworks_dir}/${framework_name}.xcframework"
+    if [[ ! -d "${xcframework_path}" ]]; then
+      echo "❌ Error: Expected XCFramework missing from ${xcframeworks_dir}: ${framework_name}.xcframework"
+      exit 1
+    fi
+    local framework_binary
+    framework_binary="$(find "${xcframework_path}" -type f -name "${framework_name}" -path "*/macos-*/*.framework/*" | head -1)"
+    if [[ -z "${framework_binary}" ]]; then
+      echo "❌ Error: Could not locate framework binary inside ${xcframework_path}"
+      exit 1
+    fi
+    verify_macho_has_arch "${framework_binary}" "arm64"
+    verify_macho_has_arch "${framework_binary}" "x86_64"
+  done
+
+  print_success "XCFramework inputs include arm64 and x86_64 slices"
+}
+
 function verify_release_architectures() {
   local output_base_dir="$1"
   local frameworks_dir="${output_base_dir}/Frameworks"
-  local xcframeworks_dir="${output_base_dir}/XCFrameworks"
   local executable_path="${output_base_dir}/axe"
   local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
 
@@ -556,43 +610,26 @@ function verify_release_architectures() {
   verify_macho_has_arch "${executable_path}" "arm64"
   verify_macho_has_arch "${executable_path}" "x86_64"
 
-  if [[ -d "${frameworks_dir}" ]]; then
-    for framework_name in "${expected_frameworks[@]}"; do
-      local framework_path="${frameworks_dir}/${framework_name}.framework"
-      if [[ ! -d "${framework_path}" ]]; then
-        echo "❌ Error: Expected framework missing from ${frameworks_dir}: ${framework_name}.framework"
-        exit 1
-      fi
-      local framework_binary="${framework_path}/Versions/A/${framework_name}"
-      if [[ ! -f "${framework_binary}" ]]; then
-        framework_binary="${framework_path}/Versions/Current/${framework_name}"
-      fi
-      if [[ ! -f "${framework_binary}" ]]; then
-        framework_binary="${framework_path}/${framework_name}"
-      fi
-      verify_macho_has_arch "${framework_binary}" "arm64"
-      verify_macho_has_arch "${framework_binary}" "x86_64"
-    done
-  elif [[ -d "${xcframeworks_dir}" ]]; then
-    for framework_name in "${expected_frameworks[@]}"; do
-      local xcframework_path="${xcframeworks_dir}/${framework_name}.xcframework"
-      if [[ ! -d "${xcframework_path}" ]]; then
-        echo "❌ Error: Expected XCFramework missing from ${xcframeworks_dir}: ${framework_name}.xcframework"
-        exit 1
-      fi
-      local framework_binary
-      framework_binary="$(find "${xcframework_path}" -type f -name "${framework_name}" -path "*/macos-*/*.framework/*" | head -1)"
-      if [[ -z "${framework_binary}" ]]; then
-        echo "❌ Error: Could not locate framework binary inside ${xcframework_path}"
-        exit 1
-      fi
-      verify_macho_has_arch "${framework_binary}" "arm64"
-      verify_macho_has_arch "${framework_binary}" "x86_64"
-    done
-  else
-    echo "❌ Error: Neither Frameworks nor XCFrameworks directory found under ${output_base_dir}"
+  if [[ ! -d "${frameworks_dir}" ]]; then
+    echo "❌ Error: Frameworks directory not found under ${output_base_dir}"
     exit 1
   fi
+
+  for framework_name in "${expected_frameworks[@]}"; do
+    local framework_path="${frameworks_dir}/${framework_name}.framework"
+    if [[ ! -d "${framework_path}" ]]; then
+      echo "❌ Error: Expected framework missing from ${frameworks_dir}: ${framework_name}.framework"
+      exit 1
+    fi
+    local framework_binary
+    framework_binary="$(resolve_framework_binary "${framework_path}" "${framework_name}" || true)"
+    if [[ -z "${framework_binary}" ]]; then
+      echo "❌ Error: Could not locate framework binary in ${framework_path}"
+      exit 1
+    fi
+    verify_macho_has_arch "${framework_binary}" "arm64"
+    verify_macho_has_arch "${framework_binary}" "x86_64"
+  done
 
   print_success "Release artifacts include arm64 and x86_64 slices"
 }
@@ -655,25 +692,8 @@ function package_for_notarization() {
   rm -rf "${package_dir}" "${package_zip}"
   mkdir -p "${package_dir}"
 
-  # Copy executable to package directory
-  print_info "Copying executable to package..." >&2
-  cp "${output_base_dir}/axe" "${package_dir}/"
-
-  if [ -d "${output_base_dir}/Frameworks" ]; then
-    print_info "Copying Frameworks directory to package..." >&2
-    cp -R "${output_base_dir}/Frameworks" "${package_dir}/"
-  else
-    echo "❌ Error: Frameworks directory missing from ${output_base_dir}" >&2
-    exit 1
-  fi
-
-  if [ -d "${output_base_dir}/AXe_AXe.bundle" ]; then
-    print_info "Copying AXe resource bundle to package..." >&2
-    cp -R "${output_base_dir}/AXe_AXe.bundle" "${package_dir}/"
-  else
-    echo "❌ Error: AXe resource bundle missing from ${output_base_dir}" >&2
-    exit 1
-  fi
+  print_info "Copying staged release payload to package..." >&2
+  copy_release_payload "${output_base_dir}" "${package_dir}"
 
   # Create zip package while preserving framework symlinks and metadata
   print_info "Creating zip package: ${package_zip}" >&2
@@ -793,20 +813,8 @@ function notarize_package() {
       mkdir -p "${final_package_dir}"
 
       # Copy notarized executable, resource bundle, and frameworks to final package
-      cp "${BUILD_OUTPUT_DIR}/axe" "${final_package_dir}/"
-      if [ -d "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" ]; then
-        cp -R "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle" "${final_package_dir}/"
-        print_info "Included AXe resource bundle in final package"
-      else
-        echo "❌ Error: AXe resource bundle missing from ${BUILD_OUTPUT_DIR}"
-        exit 1
-      fi
-      if [ -d "${BUILD_OUTPUT_DIR}/Frameworks" ]; then
-        cp -R "${BUILD_OUTPUT_DIR}/Frameworks" "${final_package_dir}/"
-        print_info "Included Frameworks directory in final package"
-      else
-        print_info "No Frameworks directory found - creating executable-only package"
-      fi
+      copy_release_payload "${BUILD_OUTPUT_DIR}" "${final_package_dir}"
+      print_info "Included staged AXe payload in final package"
 
       # Create final zip package while preserving framework symlinks and metadata
       print_info "Creating final package: ${final_package_zip}"
@@ -920,6 +928,9 @@ Commands:
 
   notarize
     Submit package for Apple notarization and replace original executable.
+
+  verify-xcframeworks
+    Verify XCFramework inputs include arm64 and x86_64 slices.
 
   verify-arches
     Verify executable and frameworks include arm64 and x86_64 slices.
@@ -1046,6 +1057,11 @@ function cmd_notarize() {
   notarize_package "${PACKAGE_ZIP}"
 }
 
+function cmd_verify_xcframeworks() {
+  print_section "🧪" "Verifying XCFramework Inputs"
+  verify_xcframework_inputs "${BUILD_OUTPUT_DIR}"
+}
+
 function cmd_verify_arches() {
   print_section "🧪" "Verifying Architecture Slices"
   verify_release_architectures "${BUILD_OUTPUT_DIR}"
@@ -1127,6 +1143,8 @@ case $COMMAND in
     cmd_package;;
   notarize)
     cmd_notarize;;
+  verify-xcframeworks)
+    cmd_verify_xcframeworks;;
   verify-arches)
     cmd_verify_arches;;
   build)

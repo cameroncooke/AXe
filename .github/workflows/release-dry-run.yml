@@ -4,9 +4,16 @@ on:
   pull_request:
     paths:
       - '.github/workflows/release.yml'
+      - '.github/workflows/release-shared.yml'
+      - '.github/workflows/release-staging.yml'
       - 'scripts/build.sh'
+      - 'scripts/generate-github-release-notes.mjs'
       - 'scripts/generate-homebrew-formula.sh'
+      - 'scripts/publish-github-release.sh'
+      - 'scripts/release-artifacts.sh'
+      - 'scripts/release-context.mjs'
       - 'scripts/release-dry-run.sh'
+      - 'scripts/update-homebrew-tap.sh'
   workflow_dispatch:
 
 permissions:
@@ -24,15 +31,39 @@ jobs:
         with:
           xcode-version: '26.2'
 
+      - name: Checkout production tap fixture
+        uses: actions/checkout@v4
+        with:
+          repository: cameroncooke/homebrew-axe
+          path: tap-fixtures/homebrew-axe
+          fetch-depth: 1
+
+      - name: Checkout staging tap fixture
+        uses: actions/checkout@v4
+        with:
+          repository: cameroncooke/axe-staging
+          path: tap-fixtures/axe-staging
+          fetch-depth: 1
+
       - name: Validate release workflow YAML
         run: |
           ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release.yml"), aliases: true); puts "release.yml YAML parse OK"'
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release-shared.yml"), aliases: true); puts "release-shared.yml YAML parse OK"'
+          ruby -e 'require "yaml"; YAML.safe_load(File.read(".github/workflows/release-staging.yml"), aliases: true); puts "release-staging.yml YAML parse OK"'
 
-      - name: Validate shell scripts syntax
+      - name: Validate release scripts syntax
         run: |
           bash -n scripts/build.sh
           bash -n scripts/generate-homebrew-formula.sh
+          bash -n scripts/publish-github-release.sh
+          bash -n scripts/release-artifacts.sh
           bash -n scripts/release-dry-run.sh
+          bash -n scripts/update-homebrew-tap.sh
+          node scripts/release-context.mjs --help >/dev/null
+          node scripts/generate-github-release-notes.mjs --help >/dev/null
 
       - name: Dry-run release packaging and formula generation
+        env:
+          PRODUCTION_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/homebrew-axe/Formula/axe.rb
+          STAGING_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/axe-staging/Formula/axe.rb
         run: scripts/release-dry-run.sh

@@ -16,14 +16,6 @@ FIRST_ARG="${1:-}"
 DRY_RUN=false
 VERSION=""
 BUMP_TYPE=""
-TAP_TARGET=""
-TAP_REPO="cameroncooke/homebrew-axe"
-TAP_BRANCH="main"
-TAP_FORMULA="axe"
-STAGING_TAP_REPO="cameroncooke/axe-staging"
-STAGING_TAP_BRANCH="main"
-STAGING_TAP_FORMULA="axe"
-DISPATCH_WORKFLOW=false
 REUSE_PREVIOUS_NOTES=false
 NO_NOTES_FALLBACK=false
 
@@ -43,15 +35,6 @@ ARGUMENTS:
 
 OPTIONS:
     --dry-run            Preview without executing
-    --tap-target TARGET  Homebrew tap target: production|staging|both|skip
-                         (default derives from version)
-    --tap-repo REPO      Override production tap repo
-    --tap-branch BRANCH  Override production tap branch
-    --tap-formula NAME   Override production tap formula
-    --staging-tap-repo REPO     Override staging tap repo
-    --staging-tap-branch BRANCH Override staging tap branch
-    --staging-tap-formula NAME  Override staging tap formula
-    --dispatch-workflow  Trigger workflow_dispatch run with tap inputs
     --reuse-previous-notes
                          Reuse previous version's release notes if target notes are missing
     --no-notes-fallback  Disable fallback to previous version notes
@@ -318,30 +301,6 @@ while [[ $# -gt 0 ]]; do
     --dry-run)
       DRY_RUN=true
       ;;
-    --tap-target)
-      shift; TAP_TARGET="${1:-}"
-      ;;
-    --tap-repo)
-      shift; TAP_REPO="${1:-}"
-      ;;
-    --tap-branch)
-      shift; TAP_BRANCH="${1:-}"
-      ;;
-    --tap-formula)
-      shift; TAP_FORMULA="${1:-}"
-      ;;
-    --staging-tap-repo)
-      shift; STAGING_TAP_REPO="${1:-}"
-      ;;
-    --staging-tap-branch)
-      shift; STAGING_TAP_BRANCH="${1:-}"
-      ;;
-    --staging-tap-formula)
-      shift; STAGING_TAP_FORMULA="${1:-}"
-      ;;
-    --dispatch-workflow)
-      DISPATCH_WORKFLOW=true
-      ;;
     --reuse-previous-notes)
       REUSE_PREVIOUS_NOTES=true
       ;;
@@ -449,15 +408,6 @@ fi
 if git ls-remote --tags origin | grep -q "refs/tags/$TAG_NAME$"; then
   echo "Error: Tag $TAG_NAME already exists on origin."
   exit 1
-fi
-
-# Derive tap target: prerelease -> staging, else production
-if [[ -z "$TAP_TARGET" ]]; then
-  if [[ "$VERSION" == *"-"* ]]; then
-    TAP_TARGET="staging"
-  else
-    TAP_TARGET="production"
-  fi
 fi
 
 # --- Release-managed files and working tree check ---
@@ -592,7 +542,6 @@ RELEASE_NOTES="Release $TAG_NAME"
 echo ""
 echo "Preparing release for $TAG_NAME"
 echo "Workflow: $WORKFLOW_NAME"
-echo "Tap target: $TAP_TARGET"
 
 if $CHANGELOG_UPDATED && ! $DRY_RUN; then
   echo "Committing changelog update..."
@@ -676,7 +625,7 @@ else
   JOB_CONCLUSION=""
   JOB_STATUS=""
   for poll in $(seq 1 3); do
-    JOB_JSON=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name=="build-and-release") | {conclusion,status}' 2>/dev/null || true)
+    JOB_JSON=$(gh run view "$RUN_ID" --json jobs --jq '.jobs[] | select(.name=="build-and-release" or (.name | endswith(" / build-and-release"))) | {conclusion,status}' 2>/dev/null || true)
     if [[ -n "$JOB_JSON" ]]; then
       JOB_CONCLUSION=$(echo "$JOB_JSON" | jq -r '.conclusion // empty')
       JOB_STATUS=$(echo "$JOB_JSON" | jq -r '.status // empty')
@@ -750,21 +699,3 @@ else
   exit 1
 fi
 
-# --- Optional workflow dispatch ---
-
-if $DISPATCH_WORKFLOW; then
-  echo ""
-  echo "Dispatching release workflow with explicit tap targets..."
-  gh workflow run "$WORKFLOW_FILE" \
-    -f tag="$TAG_NAME" \
-    -f tap_repo="$TAP_REPO" \
-    -f tap_formula="$TAP_FORMULA" \
-    -f tap_branch="$TAP_BRANCH" \
-    -f staging_tap_repo="$STAGING_TAP_REPO" \
-    -f staging_tap_formula="$STAGING_TAP_FORMULA" \
-    -f staging_tap_branch="$STAGING_TAP_BRANCH" \
-    -f tap_target="$TAP_TARGET" \
-    -f create_release=true \
-    -f prerelease=$([[ "$VERSION" == *"-"* ]] && echo true || echo false)
-  echo "Workflow dispatch requested (tag=$TAG_NAME, tap_target=$TAP_TARGET)."
-fi
