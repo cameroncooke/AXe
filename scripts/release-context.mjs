@@ -106,7 +106,7 @@ function buildStagingContext({ mode, requestedRef, commitSha, runNumber }) {
     uploadArtifacts: publish ? 'false' : 'true',
     updateTapTarget: publish ? 'staging' : 'none',
     notesMode: publish ? 'staging' : 'none',
-    stageSource: 'build-output',
+    stageSource: publish ? 'notarized-package' : 'build-output',
     releaseTarget: commitSha,
   };
 }

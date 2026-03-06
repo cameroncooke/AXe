@@ -121,7 +121,7 @@ if (productionVerify.publishRelease !== 'false' || productionVerify.uploadArtifa
 }
 
 const stagingPublish = resolve('staging-publish', 'refs/heads/main', 'abcdef0123456789', '42');
-if (stagingPublish.publishRelease !== 'true' || stagingPublish.uploadArtifacts !== 'false' || stagingPublish.updateTapTarget !== 'staging' || stagingPublish.stageSource !== 'build-output') {
+if (stagingPublish.publishRelease !== 'true' || stagingPublish.uploadArtifacts !== 'false' || stagingPublish.updateTapTarget !== 'staging' || stagingPublish.stageSource !== 'notarized-package') {
   throw new Error('staging-publish context is invalid');
 }
 
