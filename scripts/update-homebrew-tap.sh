@@ -89,6 +89,6 @@ git config user.email "github-actions[bot]@users.noreply.github.com"
 git add "$FORMULA_FILE"
 if ! git diff --staged --quiet; then
   git commit -m "Update axe to v${VERSION}"
-  AUTH_HEADER=$(printf 'x-access-token:%s' "$TOKEN" | base64)
+  AUTH_HEADER=$(printf 'x-access-token:%s' "$TOKEN" | base64 | tr -d '\n')
   git -c http.https://github.com/.extraheader="AUTHORIZATION: basic ${AUTH_HEADER}" push origin "$TAP_BRANCH"
 fi
