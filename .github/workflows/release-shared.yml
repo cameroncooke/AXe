@@ -157,7 +157,10 @@ jobs:
           else
             security import "$RUNNER_TEMP/certificate.p12" -P "$DEVELOPER_ID_APPLICATION_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           fi
-          mapfile -t EXISTING_KEYCHAINS < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"//; s/"$//')
+          EXISTING_KEYCHAINS=()
+          while IFS= read -r keychain; do
+            EXISTING_KEYCHAINS+=("$keychain")
+          done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"//; s/"$//')
           security list-keychains -d user -s "$KEYCHAIN_PATH" "${EXISTING_KEYCHAINS[@]}"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           echo "has_certificate=true" >> "$GITHUB_OUTPUT"
