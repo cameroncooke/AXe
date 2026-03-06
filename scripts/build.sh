@@ -549,26 +549,6 @@ function build_axe_executable() {
   print_success "Executable rpath configured for organized framework deployment"
 }
 
-function resolve_framework_binary() {
-  local framework_path="$1"
-  local framework_name="$2"
-  local framework_binary="${framework_path}/Versions/A/${framework_name}"
-
-  if [[ ! -f "${framework_binary}" ]]; then
-    framework_binary="${framework_path}/Versions/Current/${framework_name}"
-  fi
-  if [[ ! -f "${framework_binary}" ]]; then
-    framework_binary="${framework_path}/${framework_name}"
-  fi
-
-  if [[ ! -f "${framework_binary}" ]]; then
-    echo ""
-    return 1
-  fi
-
-  echo "${framework_binary}"
-}
-
 function verify_xcframework_inputs() {
   local output_base_dir="$1"
   local xcframeworks_dir="${output_base_dir}/XCFrameworks"

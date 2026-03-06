@@ -241,7 +241,7 @@ function buildStagingReleaseBody({ version, ref, commitSha }) {
     '### Homebrew staging tap',
     '',
     '```bash',
-    'brew tap cameroncooke/axe-staging',
+    'brew tap cameroncooke/homebrew-axe-staging',
     'brew install axe',
     '```',
     '',

@@ -41,8 +41,8 @@ jobs:
       - name: Checkout staging tap fixture
         uses: actions/checkout@v4
         with:
-          repository: cameroncooke/axe-staging
-          path: tap-fixtures/axe-staging
+          repository: cameroncooke/homebrew-axe-staging
+          path: tap-fixtures/homebrew-axe-staging
           fetch-depth: 1
 
       - name: Validate release workflow YAML
@@ -65,5 +65,5 @@ jobs:
       - name: Dry-run release packaging and formula generation
         env:
           PRODUCTION_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/homebrew-axe/Formula/axe.rb
-          STAGING_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/axe-staging/Formula/axe.rb
+          STAGING_FORMULA_PATH: ${{ github.workspace }}/tap-fixtures/homebrew-axe-staging/Formula/axe.rb
         run: scripts/release-dry-run.sh
