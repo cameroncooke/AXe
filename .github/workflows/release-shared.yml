@@ -13,10 +13,6 @@ on:
 env:
   ARCHIVE_NAME: AXe-macOS
 
-permissions:
-  contents: write
-  actions: read
-
 jobs:
   build-and-release:
     runs-on: macos-latest
