@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ github.token }}
           ref: ${{ inputs.requested_ref }}
 
       - name: Setup Xcode
@@ -134,13 +134,19 @@ jobs:
         run: scripts/build.sh strip
 
       - name: Setup - Import code signing certificate
+        id: signing
         env:
           DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
           DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
         run: |
           set -euo pipefail
           if [ -z "$DEVELOPER_ID_APPLICATION_P12" ]; then
-            echo "⚠️ No certificate provided - builds will be unsigned"
+            if [ "${{ steps.context.outputs.publishRelease }}" = "true" ]; then
+              echo "❌ Code signing certificate is required for publishing runs"
+              exit 1
+            fi
+            echo "⚠️ No certificate provided - validation build will remain unsigned"
+            echo "has_certificate=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -155,8 +161,10 @@ jobs:
           else
             security import "$RUNNER_TEMP/certificate.p12" -P "$DEVELOPER_ID_APPLICATION_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           fi
-          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          mapfile -t EXISTING_KEYCHAINS < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"//; s/"$//')
+          security list-keychains -d user -s "$KEYCHAIN_PATH" "${EXISTING_KEYCHAINS[@]}"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "has_certificate=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup - Prepare notarization API key
         if: steps.context.outputs.stageSource == 'notarized-package'
@@ -172,7 +180,7 @@ jobs:
           echo "$NOTARIZE_APP_STORE_CONNECT_API_KEY" | base64 --decode > keys/AuthKey_${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}.p8
 
       - name: Sign - Framework binaries
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.signing.outputs.has_certificate == 'true' && (steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true')
         run: scripts/build.sh sign-frameworks
 
       - name: Create - XCFrameworks
@@ -180,7 +188,7 @@ jobs:
         run: scripts/build.sh xcframeworks
 
       - name: Sign - XCFramework bundles
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.signing.outputs.has_certificate == 'true' && (steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true')
         run: scripts/build.sh sign-xcframeworks
 
       - name: Save IDB repository cache
@@ -227,6 +235,7 @@ jobs:
         run: scripts/build.sh executable
 
       - name: Sign - AXe executable
+        if: steps.signing.outputs.has_certificate == 'true'
         run: scripts/build.sh sign-executable
 
       - name: Verify - Release artifact architectures
