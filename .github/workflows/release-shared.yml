@@ -1,0 +1,410 @@
+name: Release Shared
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        required: true
+        type: string
+      requested_ref:
+        required: true
+        type: string
+
+env:
+  ARCHIVE_NAME: AXe-macOS
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ inputs.requested_ref }}
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.2'
+
+      - name: Install dependencies
+        run: brew install jq
+
+      - name: Make release scripts executable
+        run: |
+          chmod +x scripts/build.sh
+          chmod +x scripts/generate-homebrew-formula.sh
+          chmod +x scripts/release-artifacts.sh
+          chmod +x scripts/publish-github-release.sh
+          chmod +x scripts/update-homebrew-tap.sh
+
+      - name: Resolve release context
+        id: context
+        run: |
+          COMMIT_SHA=$(git rev-parse HEAD)
+          node scripts/release-context.mjs \
+            --mode "${{ inputs.mode }}" \
+            --requested-ref "${{ inputs.requested_ref }}" \
+            --commit-sha "$COMMIT_SHA" \
+            --run-number "${{ github.run_number }}" \
+            >> "$GITHUB_OUTPUT"
+
+      - name: Restore IDB repository cache
+        uses: actions/cache/restore@v4
+        with:
+          path: idb_checkout
+          key: idb-repo-${{ runner.os }}-dummy
+          restore-keys: |
+            idb-repo-${{ runner.os }}-
+
+      - name: Check IDB repository freshness
+        id: idb_check
+        run: |
+          set -euo pipefail
+          PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
+          echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
+
+          if [ -d "idb_checkout/.git" ]; then
+            LOCAL_COMMIT=$(git -C idb_checkout rev-parse HEAD)
+            if [ "$LOCAL_COMMIT" = "$PINNED_IDB_COMMIT" ]; then
+              echo "needs_setup=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          echo "needs_setup=true" >> "$GITHUB_OUTPUT"
+
+      - name: Restore runtime Frameworks cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build_products/Frameworks
+          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+
+      - name: Restore XCFramework cache
+        uses: actions/cache/restore@v4
+        with:
+          path: build_products/XCFrameworks
+          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+
+      - name: Check XCFramework outputs
+        id: xcframework_check
+        run: |
+          set -euo pipefail
+          REQUIRED=(
+            "build_products/XCFrameworks/FBControlCore.xcframework"
+            "build_products/XCFrameworks/XCTestBootstrap.xcframework"
+            "build_products/XCFrameworks/FBSimulatorControl.xcframework"
+            "build_products/XCFrameworks/FBDeviceControl.xcframework"
+          )
+
+          for path in "${REQUIRED[@]}"; do
+            if [ ! -d "$path" ]; then
+              echo "needs_build=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+
+          echo "needs_build=false" >> "$GITHUB_OUTPUT"
+
+      - name: Setup - Clone IDB repository
+        if: steps.idb_check.outputs.needs_setup == 'true'
+        run: scripts/build.sh setup
+
+      - name: Clean - Remove previous build artifacts
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh clean
+
+      - name: Build - IDB Frameworks
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh frameworks
+
+      - name: Install - Copy frameworks to build directory
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh install
+
+      - name: Strip - Remove nested frameworks
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh strip
+
+      - name: Setup - Import code signing certificate
+        env:
+          DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
+          DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DEVELOPER_ID_APPLICATION_P12" ]; then
+            echo "⚠️ No certificate provided - builds will be unsigned"
+            exit 0
+          fi
+
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          echo "$DEVELOPER_ID_APPLICATION_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          if [ -z "$DEVELOPER_ID_APPLICATION_PASSWORD" ]; then
+            security import "$RUNNER_TEMP/certificate.p12" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          else
+            security import "$RUNNER_TEMP/certificate.p12" -P "$DEVELOPER_ID_APPLICATION_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          fi
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+      - name: Setup - Prepare notarization API key
+        if: steps.context.outputs.stageSource == 'notarized-package'
+        env:
+          NOTARIZE_APP_STORE_CONNECT_API_KEY: ${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "$NOTARIZE_APP_STORE_CONNECT_API_KEY" ]; then
+            echo "❌ ERROR: Notarization API key is required but not provided"
+            exit 1
+          fi
+          mkdir -p keys
+          echo "$NOTARIZE_APP_STORE_CONNECT_API_KEY" | base64 --decode > keys/AuthKey_${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}.p8
+
+      - name: Sign - Framework binaries
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh sign-frameworks
+
+      - name: Create - XCFrameworks
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh xcframeworks
+
+      - name: Sign - XCFramework bundles
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        run: scripts/build.sh sign-xcframeworks
+
+      - name: Save IDB repository cache
+        if: steps.idb_check.outputs.needs_setup == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: idb_checkout
+          key: idb-repo-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+
+      - name: Save runtime Frameworks cache
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build_products/Frameworks
+          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+
+      - name: Save XCFramework cache
+        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: build_products/XCFrameworks
+          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+
+      - name: Prepare - Clean Swift build environment
+        run: |
+          rm -rf .build
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+
+      - name: Verify - XCFramework inputs
+        run: scripts/build.sh verify-xcframeworks
+
+      - name: Build - AXe executable
+        env:
+          AXE_VERSION: ${{ steps.context.outputs.version }}
+          SWIFT_DETERMINISTIC_HASHING: 1
+          HOMEBREW_NO_AUTO_UPDATE: 1
+          CI_BUILD: "true"
+          TMPDIR: "/tmp"
+          TMP: "/tmp"
+          TEMP: "/tmp"
+          XDG_CACHE_HOME: "/tmp"
+          CLANG_MODULE_CACHE_PATH: "/tmp/clang-modules"
+          SWIFT_MODULE_CACHE_PATH: "/tmp/swift-modules"
+        run: scripts/build.sh executable
+
+      - name: Sign - AXe executable
+        run: scripts/build.sh sign-executable
+
+      - name: Verify - Release artifact architectures
+        run: scripts/build.sh verify-arches
+
+      - name: Package - Create notarization package
+        if: steps.context.outputs.stageSource == 'notarized-package'
+        run: scripts/build.sh package
+
+      - name: Notarize - Submit to Apple for notarization
+        if: steps.context.outputs.stageSource == 'notarized-package'
+        id: notarize
+        env:
+          NOTARIZATION_API_KEY_PATH: keys/AuthKey_${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}.p8
+          NOTARIZATION_KEY_ID: ${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}
+          NOTARIZATION_ISSUER_ID: ${{ secrets.NOTARIZE_APP_STORE_CONNECT_ISSUER_ID }}
+          TEMP_DIR: ${{ runner.temp }}
+        run: |
+          scripts/build.sh notarize
+          PACKAGE_PATH=$(find "$RUNNER_TEMP" -name "AXe-Final-*.zip" | head -1)
+          if [ -z "$PACKAGE_PATH" ]; then
+            echo "❌ Could not find final package"
+            exit 1
+          fi
+          echo "package_path=$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Extract staged payload from notarized package
+        if: steps.context.outputs.stageSource == 'notarized-package'
+        run: |
+          scripts/release-artifacts.sh extract-stage \
+            --package-zip "${{ steps.notarize.outputs.package_path }}" \
+            --stage-dir "$RUNNER_TEMP/release-stage"
+
+      - name: Materialize staged payload from build outputs
+        if: steps.context.outputs.stageSource == 'build-output'
+        run: |
+          scripts/release-artifacts.sh stage-build-output \
+            --build-output-dir build_products \
+            --stage-dir "$RUNNER_TEMP/release-stage"
+
+      - name: Verify staged release payload
+        run: scripts/release-artifacts.sh verify-stage --stage-dir "$RUNNER_TEMP/release-stage"
+
+      - name: Create universal archive
+        id: create_archive
+        run: |
+          ARCHIVE_NAME="${{ env.ARCHIVE_NAME }}-${{ steps.context.outputs.releaseTag }}-universal.tar.gz"
+          echo "archive_name=$ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+          scripts/release-artifacts.sh create-universal-archive \
+            --stage-dir "$RUNNER_TEMP/release-stage" \
+            --archive "$ARCHIVE_NAME"
+          SHA256=$(shasum -a 256 "$ARCHIVE_NAME" | awk '{print $1}')
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Create Homebrew archive
+        id: create_homebrew_archive
+        run: |
+          HOMEBREW_ARCHIVE_NAME="AXe-macOS-homebrew-${{ steps.context.outputs.releaseTag }}.tar.gz"
+          echo "archive_name=$HOMEBREW_ARCHIVE_NAME" >> "$GITHUB_OUTPUT"
+          scripts/release-artifacts.sh create-homebrew-archive \
+            --stage-dir "$RUNNER_TEMP/release-stage" \
+            --archive "$HOMEBREW_ARCHIVE_NAME"
+          HOMEBREW_SHA256=$(shasum -a 256 "$HOMEBREW_ARCHIVE_NAME" | awk '{print $1}')
+          echo "archive_sha256=$HOMEBREW_SHA256" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test staged CLI resources
+        run: scripts/release-artifacts.sh smoke-test-stage --stage-dir "$RUNNER_TEMP/release-stage"
+
+      - name: Smoke test universal archive
+        run: scripts/release-artifacts.sh smoke-test-archive --archive "${{ steps.create_archive.outputs.archive_name }}"
+
+      - name: Smoke test Homebrew archive resources
+        run: scripts/release-artifacts.sh smoke-test-archive --archive "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+
+      - name: Smoke test Homebrew install
+        run: |
+          set -euo pipefail
+          HOMEBREW_ARCHIVE_NAME="${{ steps.create_homebrew_archive.outputs.archive_name }}"
+          TEST_ROOT="$RUNNER_TEMP/homebrew-install-test"
+          TAP_NAME="local/axe-test-${{ github.run_id }}"
+          TAP_SOURCE_DIR="$TEST_ROOT/homebrew-axe-test"
+          FORMULA_PATH="$TAP_SOURCE_DIR/Formula/axe.rb"
+          HOMEBREW_CACHE_DIR="$TEST_ROOT/cache"
+
+          rm -rf "$TEST_ROOT"
+          mkdir -p "$TEST_ROOT" "$TAP_SOURCE_DIR/Formula" "$HOMEBREW_CACHE_DIR"
+
+          scripts/generate-homebrew-formula.sh \
+            --formula-class "Axe" \
+            --homepage "https://github.com/${{ github.repository }}" \
+            --version "${{ steps.context.outputs.version }}" \
+            --url "file://${{ github.workspace }}/$HOMEBREW_ARCHIVE_NAME" \
+            --sha256 "${{ steps.create_homebrew_archive.outputs.archive_sha256 }}" \
+            > "$FORMULA_PATH"
+
+          git -C "$TAP_SOURCE_DIR" init
+          git -C "$TAP_SOURCE_DIR" config user.name "GitHub Actions"
+          git -C "$TAP_SOURCE_DIR" config user.email "github-actions[bot]@users.noreply.github.com"
+          git -C "$TAP_SOURCE_DIR" add Formula/axe.rb
+          git -C "$TAP_SOURCE_DIR" -c commit.gpgsign=false commit -m "Add axe formula for smoke test"
+
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" brew untap "$TAP_NAME" >/dev/null 2>&1 || true
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" brew tap "$TAP_NAME" "$TAP_SOURCE_DIR"
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_CACHE="$HOMEBREW_CACHE_DIR" brew install "$TAP_NAME/axe"
+
+          BREW_AXE_PREFIX=$(brew --prefix "$TAP_NAME/axe")
+          "$BREW_AXE_PREFIX/bin/axe" --version
+          "$BREW_AXE_PREFIX/bin/axe" init --print | grep -q "name: axe"
+          ! otool -l "$BREW_AXE_PREFIX/libexec/axe" | grep -q "/Applications/Xcode"
+
+      - name: Generate release notes
+        if: steps.context.outputs.notesMode != 'none'
+        run: |
+          node scripts/generate-github-release-notes.mjs \
+            --channel "${{ steps.context.outputs.channel }}" \
+            --version "${{ steps.context.outputs.version }}" \
+            --fallback newest-older \
+            --ref "${{ inputs.requested_ref }}" \
+            --commit-sha "${{ steps.context.outputs.commitSha }}" \
+            --out github-release-body.md
+
+      - name: Upload build artifacts
+        if: steps.context.outputs.uploadArtifacts == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.create_archive.outputs.archive_name }}
+          path: |
+            ${{ steps.create_archive.outputs.archive_name }}
+            ${{ steps.create_homebrew_archive.outputs.archive_name }}
+          retention-days: 30
+
+      - name: Publish GitHub release
+        if: steps.context.outputs.publishRelease == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          RELEASE_ARGS=(
+            --tag "${{ steps.context.outputs.releaseTag }}"
+            --title "${{ steps.context.outputs.releaseTitle }}"
+            --notes-file github-release-body.md
+            --target "${{ steps.context.outputs.releaseTarget }}"
+            --asset "${{ steps.create_archive.outputs.archive_name }}"
+            --asset "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+          )
+
+          if [ "${{ steps.context.outputs.prerelease }}" = "true" ]; then
+            RELEASE_ARGS+=(--prerelease)
+          fi
+
+          scripts/publish-github-release.sh "${RELEASE_ARGS[@]}"
+
+      - name: Update Homebrew tap
+        if: steps.context.outputs.updateTapTarget != 'none'
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          HOMEBREW_STAGING_TAP_TOKEN: ${{ secrets.HOMEBREW_STAGING_TAP_TOKEN }}
+        run: |
+          if [ "${{ steps.context.outputs.updateTapTarget }}" = "production" ]; then
+            TOKEN="$HOMEBREW_TAP_TOKEN"
+          else
+            TOKEN="${HOMEBREW_STAGING_TAP_TOKEN:-$HOMEBREW_TAP_TOKEN}"
+          fi
+
+          if [ -z "$TOKEN" ]; then
+            echo "No Homebrew tap token available for ${{ steps.context.outputs.updateTapTarget }}"
+            exit 1
+          fi
+
+          scripts/update-homebrew-tap.sh \
+            --target "${{ steps.context.outputs.updateTapTarget }}" \
+            --version "${{ steps.context.outputs.version }}" \
+            --archive-url "https://github.com/${{ github.repository }}/releases/download/${{ steps.context.outputs.releaseTag }}/${{ steps.create_homebrew_archive.outputs.archive_name }}" \
+            --archive-sha "${{ steps.create_homebrew_archive.outputs.archive_sha256 }}" \
+            --homepage "https://github.com/${{ github.repository }}" \
+            --token "$TOKEN"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -rf keys/
+          rm -f "$RUNNER_TEMP"/*.p12
