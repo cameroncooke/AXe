@@ -48,26 +48,6 @@ verify_arch() {
   [[ "$arch_info" == *"$expected_arch"* ]] || fail "Missing architecture '$expected_arch' in $binary_path"
 }
 
-resolve_framework_binary() {
-  local framework_path="$1"
-  local framework_name="$2"
-  local candidates=(
-    "$framework_path/Versions/A/$framework_name"
-    "$framework_path/Versions/Current/$framework_name"
-    "$framework_path/$framework_name"
-  )
-
-  local candidate
-  for candidate in "${candidates[@]}"; do
-    if [[ -f "$candidate" ]]; then
-      echo "$candidate"
-      return 0
-    fi
-  done
-
-  return 1
-}
-
 strip_signatures() {
   local stage_dir="$1"
 
