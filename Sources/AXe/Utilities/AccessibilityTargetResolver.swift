@@ -60,7 +60,7 @@ struct AccessibilityTargetResolver {
         case .value(let rawValue):
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedValue == value }
-            matchedElement = try selectBestLabelMatch(matches, value: rawValue)
+            matchedElement = try selectBestLabelMatch(matches, kind: "--value", value: rawValue)
         }
 
         guard let frame = matchedElement.frame else {
@@ -95,6 +95,7 @@ struct AccessibilityTargetResolver {
 
     private static func selectBestLabelMatch(
         _ matches: [AccessibilityElement],
+        kind: String = "--label",
         value: String
     ) throws -> AccessibilityElement {
         let actionableMatches = matches.filter(\.isActionable)
@@ -103,10 +104,10 @@ struct AccessibilityTargetResolver {
         }
 
         if actionableMatches.count > 1 {
-            return try selectUniqueMatch(actionableMatches, kind: "--label", value: value)
+            return try selectUniqueMatch(actionableMatches, kind: kind, value: value)
         }
 
-        return try selectUniqueMatch(matches, kind: "--label", value: value)
+        return try selectUniqueMatch(matches, kind: kind, value: value)
     }
 }
 
