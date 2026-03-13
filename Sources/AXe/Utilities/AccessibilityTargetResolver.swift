@@ -3,6 +3,7 @@ import Foundation
 enum AccessibilityQuery {
     case id(String)
     case label(String)
+    case value(String)
 }
 
 enum ElementResolutionError: LocalizedError {
@@ -36,9 +37,15 @@ struct AccessibilityTargetResolver {
 
     static func resolveCenterPoint(
         roots: [AccessibilityElement],
-        query: AccessibilityQuery
+        query: AccessibilityQuery,
+        elementType: String? = nil
     ) throws -> (x: Double, y: Double) {
-        let allElements = roots.flatMap { $0.flattened() }
+        var allElements = roots.flatMap { $0.flattened() }
+
+        if let elementType {
+            allElements = allElements.filter { $0.type == elementType }
+        }
+
         let matchedElement: AccessibilityElement
 
         switch query {
@@ -50,6 +57,10 @@ struct AccessibilityTargetResolver {
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedLabel == value }
             matchedElement = try selectBestLabelMatch(matches, value: rawValue)
+        case .value(let rawValue):
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            let matches = allElements.filter { $0.normalizedValue == value }
+            matchedElement = try selectBestLabelMatch(matches, kind: "--value", value: rawValue)
         }
 
         guard let frame = matchedElement.frame else {
@@ -84,6 +95,7 @@ struct AccessibilityTargetResolver {
 
     private static func selectBestLabelMatch(
         _ matches: [AccessibilityElement],
+        kind: String = "--label",
         value: String
     ) throws -> AccessibilityElement {
         let actionableMatches = matches.filter(\.isActionable)
@@ -92,10 +104,10 @@ struct AccessibilityTargetResolver {
         }
 
         if actionableMatches.count > 1 {
-            return try selectUniqueMatch(actionableMatches, kind: "--label", value: value)
+            return try selectUniqueMatch(actionableMatches, kind: kind, value: value)
         }
 
-        return try selectUniqueMatch(matches, kind: "--label", value: value)
+        return try selectUniqueMatch(matches, kind: kind, value: value)
     }
 }
 
