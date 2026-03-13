@@ -26,16 +26,21 @@ struct AccessibilityElement: Decodable {
     let type: String?
     let frame: Frame?
     let children: [AccessibilityElement]?
-    
+
     let AXLabel: String?
     let AXUniqueId: String?
-    
+    let AXValue: String?
+
     var normalizedLabel: String? {
         AXLabel?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
-    
+
     var normalizedUniqueId: String? {
         AXUniqueId?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var normalizedValue: String? {
+        AXValue?.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     var isActionable: Bool {

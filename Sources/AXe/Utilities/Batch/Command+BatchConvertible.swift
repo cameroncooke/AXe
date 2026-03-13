@@ -50,6 +50,8 @@ extension Tap: BatchConvertible {
                 query = .id(elementID)
             } else if let elementLabel {
                 query = .label(elementLabel)
+            } else if let elementValue {
+                query = .value(elementValue)
             } else {
                 throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
             }
@@ -59,6 +61,7 @@ extension Tap: BatchConvertible {
                 simulatorUDID: context.simulatorUDID,
                 waitTimeout: context.waitTimeout,
                 pollInterval: context.pollInterval,
+                elementType: elementType,
                 logger: logger
             )
         }
