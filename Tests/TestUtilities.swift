@@ -97,11 +97,40 @@ struct UIElement: Codable {
     let type: String
     let frame: Frame?
     let children: [UIElement]?
+    let role: String?
+    let enabled: Bool?
+    let title: String?
+    let subrole: String?
+    let contentRequired: Bool?
+    let roleDescription: String?
+    let helpText: String?
+    let AXFrame: String?
+    let customActions: [String]?
     
     // The actual JSON uses AX prefixed fields
     let AXLabel: String?
     let AXValue: String?
+    let AXUniqueId: String?
     let AXIdentifier: String?
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case frame
+        case children
+        case role
+        case enabled
+        case title
+        case subrole
+        case contentRequired = "content_required"
+        case roleDescription = "role_description"
+        case helpText = "help"
+        case AXFrame
+        case customActions = "custom_actions"
+        case AXLabel
+        case AXValue
+        case AXUniqueId
+        case AXIdentifier
+    }
     
     struct Frame: Codable {
         let x: Double
@@ -120,18 +149,15 @@ struct UIElement: Codable {
     }
     
     var identifier: String? {
-        return AXIdentifier
+        return AXUniqueId ?? AXIdentifier
     }
 }
 
 struct UIStateParser {
-    static func parseDescribeUIOutput(_ jsonString: String) throws -> UIElement {
-        // The describe-ui command outputs a header "Accessibility Information (JSON):" 
-        // followed by the JSON array. We need to extract just the JSON part.
+    static func parseDescribeUIRoots(_ jsonString: String) throws -> [UIElement] {
         var jsonContent = jsonString
         
-        // Find the first '[' which marks the start of the JSON array
-        if let jsonStart = jsonString.firstIndex(of: "[") {
+        if let jsonStart = jsonString.firstIndex(where: { $0 == "[" || $0 == "{" }) {
             jsonContent = String(jsonString[jsonStart...])
         }
         
@@ -140,8 +166,16 @@ struct UIStateParser {
         }
         
         let decoder = JSONDecoder()
-        // The output is an array, so decode it and return the first element
-        let elements = try decoder.decode([UIElement].self, from: data)
+        if let elements = try? decoder.decode([UIElement].self, from: data) {
+            return elements
+        }
+
+        let element = try decoder.decode(UIElement.self, from: data)
+        return [element]
+    }
+
+    static func parseDescribeUIOutput(_ jsonString: String) throws -> UIElement {
+        let elements = try parseDescribeUIRoots(jsonString)
         guard let firstElement = elements.first else {
             throw TestError.invalidJSON("No UI elements found")
         }
@@ -179,6 +213,22 @@ struct UIStateParser {
     static func findElementContainingLabel(in root: UIElement, containing: String) -> UIElement? {
         return findElement(in: root) { element in
             element.label?.contains(containing) == true
+        }
+    }
+
+    static func findElement(in roots: [UIElement], matching predicate: (UIElement) -> Bool) -> UIElement? {
+        for root in roots {
+            if let element = findElement(in: root, matching: predicate) {
+                return element
+            }
+        }
+
+        return nil
+    }
+
+    static func findElement(in roots: [UIElement], withIdentifier identifier: String) -> UIElement? {
+        findElement(in: roots) { element in
+            element.identifier == identifier
         }
     }
 }
