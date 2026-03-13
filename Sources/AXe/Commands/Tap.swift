@@ -26,6 +26,12 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after tapping in seconds.")
     var postDelay: Double?
 
+    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting.")
+    var waitTimeout: Double = 0
+
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
+    var pollInterval: Double = 0.25
+
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
@@ -63,6 +69,16 @@ struct Tap: AsyncParsableCommand {
                 throw ValidationError("Post-delay must be between 0 and 10 seconds.")
             }
         }
+
+        guard waitTimeout >= 0 else {
+            throw ValidationError("--wait-timeout must be non-negative.")
+        }
+
+        if waitTimeout > 0 {
+            guard pollInterval > 0 else {
+                throw ValidationError("--poll-interval must be greater than 0 when --wait-timeout is active.")
+            }
+        }
     }
 
     func run() async throws {
@@ -78,7 +94,6 @@ struct Tap: AsyncParsableCommand {
             resolvedPoint = (x: pointX, y: pointY)
             resolvedDescription = "(\(pointX), \(pointY))"
         } else {
-            let roots = try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
             let query: AccessibilityQuery
             if let elementID {
                 query = .id(elementID)
@@ -89,7 +104,13 @@ struct Tap: AsyncParsableCommand {
             }
 
             do {
-                resolvedPoint = try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query)
+                resolvedPoint = try await AccessibilityPoller.resolveWithPolling(
+                    query: query,
+                    simulatorUDID: simulatorUDID,
+                    waitTimeout: waitTimeout,
+                    pollInterval: pollInterval,
+                    logger: logger
+                )
             } catch let error as ElementResolutionError {
                 print("Warning: \(error.localizedDescription) No tap performed.", to: &standardError)
                 throw error

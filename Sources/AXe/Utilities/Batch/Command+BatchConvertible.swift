@@ -54,41 +54,17 @@ extension Tap: BatchConvertible {
                 throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
             }
 
-            resolvedPoint = try await resolveWithPolling(query: query, context: context, logger: logger)
+            resolvedPoint = try await AccessibilityPoller.resolveWithPolling(
+                query: query,
+                simulatorUDID: context.simulatorUDID,
+                waitTimeout: context.waitTimeout,
+                pollInterval: context.pollInterval,
+                logger: logger
+            )
         }
 
         let tapEvent = FBSimulatorHIDEvent.tapAt(x: resolvedPoint.x, y: resolvedPoint.y)
         return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: tapEvent, postDelay: postDelay))]
-    }
-
-    private func resolveWithPolling(
-        query: AccessibilityQuery,
-        context: BatchContext,
-        logger: AxeLogger
-    ) async throws -> (x: Double, y: Double) {
-        let roots = try await context.accessibilityRoots(logger: logger)
-        do {
-            return try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query)
-        } catch let error as ElementResolutionError where error.isNotFound && context.waitTimeout > 0 {
-            let clock = ContinuousClock()
-            let deadline = clock.now + .seconds(context.waitTimeout)
-
-            var lastError = error
-            while clock.now < deadline {
-                logger.info().log("Element not found, retrying in \(context.pollInterval)s…")
-                try await Task.sleep(for: .seconds(context.pollInterval))
-
-                let freshRoots = try await context.accessibilityRoots(logger: logger, forceRefresh: true)
-                do {
-                    return try AccessibilityTargetResolver.resolveCenterPoint(roots: freshRoots, query: query)
-                } catch let retryError as ElementResolutionError where retryError.isNotFound {
-                    lastError = retryError
-                    continue
-                }
-            }
-
-            throw lastError
-        }
     }
 }
 
