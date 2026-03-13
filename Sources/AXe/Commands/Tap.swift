@@ -20,6 +20,12 @@ struct Tap: AsyncParsableCommand {
     @Option(name: [.customLong("label")], help: "Tap the center of the element matching AXLabel (accessibilityLabel). Ignored if -x and -y are provided.")
     var elementLabel: String?
 
+    @Option(name: [.customLong("value")], help: "Tap the center of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
+    var elementValue: String?
+
+    @Option(name: [.customLong("element-type")], help: "Filter matches to elements of this accessibility type (e.g. Button, TextField, Switch). Narrows --id/--label/--value results when multiple elements match.")
+    var elementType: String?
+
     @Option(name: .customLong("pre-delay"), help: "Delay before tapping in seconds.")
     var preDelay: Double?
 
@@ -44,17 +50,21 @@ struct Tap: AsyncParsableCommand {
                 throw ValidationError("Coordinates must be non-negative values.")
             }
         } else {
-            if elementID == nil && elementLabel == nil {
-                throw ValidationError("Either provide both -x/-y, or use --id/--label to tap an element.")
+            let selectorCount = [elementID != nil, elementLabel != nil, elementValue != nil].filter { $0 }.count
+            if selectorCount == 0 {
+                throw ValidationError("Either provide both -x/-y, or use --id/--label/--value to tap an element.")
             }
-            if elementID != nil && elementLabel != nil {
-                throw ValidationError("Use only one of --id or --label.")
+            if selectorCount > 1 {
+                throw ValidationError("Use only one of --id, --label, or --value.")
             }
             if let elementID, elementID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw ValidationError("--id must not be empty.")
             }
             if let elementLabel, elementLabel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw ValidationError("--label must not be empty.")
+            }
+            if let elementValue, elementValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ValidationError("--value must not be empty.")
             }
         }
 
@@ -99,6 +109,8 @@ struct Tap: AsyncParsableCommand {
                 query = .id(elementID)
             } else if let elementLabel {
                 query = .label(elementLabel)
+            } else if let elementValue {
+                query = .value(elementValue)
             } else {
                 throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
             }
@@ -109,6 +121,7 @@ struct Tap: AsyncParsableCommand {
                     simulatorUDID: simulatorUDID,
                     waitTimeout: waitTimeout,
                     pollInterval: pollInterval,
+                    elementType: elementType,
                     logger: logger
                 )
             } catch let error as ElementResolutionError {

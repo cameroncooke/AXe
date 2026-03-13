@@ -7,11 +7,12 @@ struct AccessibilityPoller {
         simulatorUDID: String,
         waitTimeout: TimeInterval,
         pollInterval: TimeInterval,
+        elementType: String? = nil,
         logger: AxeLogger
     ) async throws -> (x: Double, y: Double) {
         let roots = try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
         do {
-            return try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query)
+            return try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query, elementType: elementType)
         } catch let error as ElementResolutionError where error.isNotFound && waitTimeout > 0 {
             let clock = ContinuousClock()
             let deadline = clock.now + .seconds(waitTimeout)
@@ -23,7 +24,7 @@ struct AccessibilityPoller {
 
                 let freshRoots = try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
                 do {
-                    return try AccessibilityTargetResolver.resolveCenterPoint(roots: freshRoots, query: query)
+                    return try AccessibilityTargetResolver.resolveCenterPoint(roots: freshRoots, query: query, elementType: elementType)
                 } catch let retryError as ElementResolutionError where retryError.isNotFound {
                     lastError = retryError
                     continue
