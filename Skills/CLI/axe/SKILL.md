@@ -5,8 +5,8 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 
 ## Step 1: Confirm runtime context
 1. Identify simulator UDID target first (`axe list-simulators`).
-2. Every AXe command requires `--udid <UDID>`.
-3. Run `axe describe-ui --udid <UDID>` to inspect the current screen. Use the output to discover available `--id` and `--label` values for selector taps, and to confirm coordinates for coordinate-based taps.
+2. Simulator-interaction AXe commands require `--udid <UDID>`. Commands like `list-simulators` and `init` do not.
+3. Run `axe describe-ui --udid <UDID>` to inspect the full current screen. Use `axe describe-ui --point <X,Y> --udid <UDID>` to inspect the element at a specific coordinate. Use the output to discover available `--id` and `--label` values for selector taps, and to confirm coordinates for coordinate-based taps.
 4. Prefer selector taps (`tap --id` / `tap --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting (`--wait-timeout`) in batch flows.
 
 ## Step 2: Choose the right command
@@ -20,6 +20,7 @@ axe tap --label <text> --udid <UDID>
 axe tap -x <X> -y <Y> --udid <UDID>
 axe type 'text' --udid <UDID>
 axe describe-ui --udid <UDID>
+axe describe-ui --point <X,Y> --udid <UDID>
 axe screenshot --udid <UDID> --output screenshot.png
 ```
 
@@ -64,6 +65,7 @@ Batch and individual commands are execution-focused, not assertion-focused. Alwa
 
 ```bash
 axe describe-ui --udid <UDID>
+axe describe-ui --point <X,Y> --udid <UDID>
 # or
 axe screenshot --udid <UDID> --output post-state.png
 ```
