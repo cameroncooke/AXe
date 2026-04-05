@@ -30,6 +30,13 @@ HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe c
 - Always verify outcomes separately with `describe-ui` or `screenshot`.
 - Use `--wait-timeout` in batch to wait for elements to appear, and `sleep` steps or `--pre-delay` / `--post-delay` to allow animations to settle.
 
+**AXe vs XCUITest — different event models:**
+AXe sends pure HID touch events. XCUITest's `element.tap()` sends `UIAccessibilityActivate` (an AX action), which bypasses the touch system entirely. These are not equivalent:
+- A bug that only manifests under XCUITest's AX action (e.g. a SwiftUI sheet dismissing when an `@Observable` store mutates during an AX action) **cannot be reproduced or diagnosed with AXe**. AXe will show correct behavior while XCUITest fails.
+- Conversely, AXe HID taps can be intercepted by a scroll gesture recognizer inside a `UIScrollView` (SwiftUI `List`/`Form`), while XCUITest's AX action bypasses the gesture system entirely.
+
+When AXe shows "it works" but XCUITest fails: the bug is in the AX action interaction, not the app's visual behavior. Switch to `app.debugDescription` inside a diagnostic XCUITest for ground truth — AXe `describe-ui` cannot capture in-process XCUITest state.
+
 ## Step 4: Apply timing and input best practices
 - Use `--pre-delay` / `--post-delay` on tap, swipe, and gesture commands for fixed delays around actions.
 - Use `--duration` to control how long a swipe, gesture, button press, or key press lasts.
