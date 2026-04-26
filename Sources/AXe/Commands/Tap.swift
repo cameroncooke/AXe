@@ -41,6 +41,9 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @Flag(name: .customLong("landscape-flipped"), help: "Treat coordinates as logical landscape-flipped (home button left / 90° CCW). Use when the device is rotated counter-clockwise and the default landscape detection is incorrect.")
+    var landscapeFlipped: Bool = false
+
     func validate() throws {
         if pointX != nil || pointY != nil {
             guard let pointX, let pointY else {
@@ -97,11 +100,11 @@ struct Tap: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
-        let resolvedPoint: (x: Double, y: Double)
+        let logicalPoint: (x: Double, y: Double)
         let resolvedDescription: String
 
         if let pointX, let pointY {
-            resolvedPoint = (x: pointX, y: pointY)
+            logicalPoint = (x: pointX, y: pointY)
             resolvedDescription = "(\(pointX), \(pointY))"
         } else {
             let query: AccessibilityQuery
@@ -116,7 +119,7 @@ struct Tap: AsyncParsableCommand {
             }
 
             do {
-                resolvedPoint = try await AccessibilityPoller.resolveWithPolling(
+                logicalPoint = try await AccessibilityPoller.resolveWithPolling(
                     query: query,
                     simulatorUDID: simulatorUDID,
                     waitTimeout: waitTimeout,
@@ -129,10 +132,18 @@ struct Tap: AsyncParsableCommand {
                 throw error
             }
 
-            resolvedDescription = "center of matched element at (\(resolvedPoint.x), \(resolvedPoint.y))"
+            resolvedDescription = "center of matched element at (\(logicalPoint.x), \(logicalPoint.y))"
         }
 
         logger.info().log("Tapping at \(resolvedDescription)")
+
+        let orientationOverride: SimulatorOrientation? = landscapeFlipped ? .landscapeFlipped : nil
+        let resolvedPoint = try await OrientationAwareCoordinates.translate(
+            point: logicalPoint,
+            for: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
 
         var events: [FBSimulatorHIDEvent] = []
         if let preDelay = preDelay, preDelay > 0 {

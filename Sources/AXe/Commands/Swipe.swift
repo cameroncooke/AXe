@@ -35,6 +35,9 @@ struct Swipe: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @Flag(name: .customLong("landscape-flipped"), help: "Treat coordinates as logical landscape-flipped (home button left / 90° CCW). Use when the device is rotated counter-clockwise and the default landscape detection is incorrect.")
+    var landscapeFlipped: Bool = false
+
     func validate() throws {
         // Validate coordinates are non-negative
         guard startX >= 0, startY >= 0, endX >= 0, endY >= 0 else {
@@ -87,6 +90,16 @@ struct Swipe: AsyncParsableCommand {
         logger.info().log("Performing swipe from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
+        let orientationOverride: SimulatorOrientation? = landscapeFlipped ? .landscapeFlipped : nil
+        let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
+            points: [(x: startX, y: startY), (x: endX, y: endY)],
+            for: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
+        let physicalStart = physicalPoints[0]
+        let physicalEnd = physicalPoints[1]
+
         // Broadcast swipe notification for external listeners
         NotificationCenter.default.post(
             name: .hidSwipePerformed,
@@ -112,10 +125,10 @@ struct Swipe: AsyncParsableCommand {
         
         // Create main swipe HID event
         let swipeEvent = FBSimulatorHIDEvent.swipe(
-            startX,
-            yStart: startY,
-            xEnd: endX,
-            yEnd: endY,
+            physicalStart.x,
+            yStart: physicalStart.y,
+            xEnd: physicalEnd.x,
+            yEnd: physicalEnd.y,
             delta: swipeDelta,
             duration: swipeDuration
         )
