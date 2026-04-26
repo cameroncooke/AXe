@@ -36,6 +36,9 @@ struct Touch: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @Flag(name: .customLong("landscape-flipped"), help: "Treat coordinates as logical landscape-flipped (home button left / 90° CCW). Use when the device is rotated counter-clockwise and the default landscape detection is incorrect.")
+    var landscapeFlipped: Bool = false
+
     func validate() throws {
         // Validate coordinates are non-negative
         guard pointX >= 0, pointY >= 0 else {
@@ -71,6 +74,14 @@ struct Touch: AsyncParsableCommand {
 
         logger.info().log("Performing touch events at (\(pointX), \(pointY))")
 
+        let orientationOverride: SimulatorOrientation? = landscapeFlipped ? .landscapeFlipped : nil
+        let physicalPoint = try await OrientationAwareCoordinates.translate(
+            point: (x: pointX, y: pointY),
+            for: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
+
         if touchDown && touchUp {
             // Send down and up as separate HID submissions so iOS recognizers
             // observe a real hold duration for long-press gestures.
@@ -79,7 +90,7 @@ struct Touch: AsyncParsableCommand {
             logger.info().log("Touch down")
             try await HIDInteractor
                 .performHIDEvent(
-                    FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY),
+                    FBSimulatorHIDEvent.touchDownAt(x: physicalPoint.x, y: physicalPoint.y),
                     for: simulatorUDID,
                     logger: logger
                 )
@@ -93,7 +104,7 @@ struct Touch: AsyncParsableCommand {
             logger.info().log("Touch up")
             try await HIDInteractor
                 .performHIDEvent(
-                    FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY),
+                    FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y),
                     for: simulatorUDID,
                     logger: logger
                 )
@@ -101,7 +112,7 @@ struct Touch: AsyncParsableCommand {
             logger.info().log("Touch down")
             try await HIDInteractor
                 .performHIDEvent(
-                    FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY),
+                    FBSimulatorHIDEvent.touchDownAt(x: physicalPoint.x, y: physicalPoint.y),
                     for: simulatorUDID,
                     logger: logger
                 )
@@ -109,7 +120,7 @@ struct Touch: AsyncParsableCommand {
             logger.info().log("Touch up")
             try await HIDInteractor
                 .performHIDEvent(
-                    FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY),
+                    FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y),
                     for: simulatorUDID,
                     logger: logger
                 )
