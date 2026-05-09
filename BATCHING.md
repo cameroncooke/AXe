@@ -151,6 +151,15 @@ Default: `0.25`
 
 Lower values poll more aggressively (faster detection, more overhead). Higher values reduce overhead but increase detection latency.
 
+### `--tap-style <automatic|simulator|physical>`
+Controls the default tap event style for tap steps.
+
+- `automatic` (default): uses physical touch down/up for matched switches/toggles and FBSimulator `tapAt` for other targets.
+- `simulator`: always uses FBSimulator `tapAt`.
+- `physical`: always uses touch down/up.
+
+A tap step can override the batch default with its own `--tap-style` option.
+
 ### `--verbose`
 Enables detailed stderr logging for troubleshooting.
 
@@ -177,10 +186,14 @@ Each step command keeps its normal options and validation.
 
 Examples:
 - `tap --id BackButton`
+- `tap --label 'Weather Alerts'`
 - `tap -x 200 -y 400 --pre-delay 0.2 --post-delay 0.2`
 - `swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100`
+- `tap -x 320 -y 780 --tap-style physical`
 - `gesture scroll-down --duration 1.0`
 - `touch -x 150 -y 300 --down --up --delay 1.0`
+
+Selector tap steps use the same activation behavior as direct `axe tap`: when a matched row or label contains exactly one UIKit `UISwitch` or SwiftUI `Toggle`/switch control, AXe taps the switch control instead of the row's geometric center. With the default `--tap-style automatic`, those switch/toggle activations use physical touch down/up; normal taps use FBSimulator `tapAt`.
 
 One important rule:
 - Do not include `--udid` inside a step. Use the batch-level `--udid` only.
@@ -224,6 +237,16 @@ axe batch --udid SIMULATOR_UDID \
   --step "sleep 0.5" \
   --step "tap --id SaveButton"
 ```
+
+## Real-world example: toggling a setting
+
+```bash
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --label 'Weather Alerts'"
+```
+
+If the `Weather Alerts` row contains one switch/toggle control, AXe taps that control's activation point using physical touch in automatic tap style.
+
 
 ## Real-world example: multi-screen flow with element waiting
 

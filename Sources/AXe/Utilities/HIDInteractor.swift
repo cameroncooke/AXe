@@ -12,6 +12,8 @@ struct HIDInteractor {
         let hid: FBSimulatorHID
     }
 
+
+
     // Cache for HID connections per simulator
     private static var hidConnections: [String: FBSimulatorHID] = [:]
 
@@ -71,6 +73,53 @@ struct HIDInteractor {
         let session = try await makeSession(for: simulatorUDID, logger: logger)
         try await performHIDEvent(event, in: session, logger: logger)
     }
+
+    static func performPhysicalTap(
+        at point: (x: Double, y: Double),
+        preDelay: Double?,
+        postDelay: Double?,
+        for simulatorUDID: String,
+        logger: AxeLogger
+    ) async throws {
+        let session = try await makeSession(for: simulatorUDID, logger: logger)
+        try await performPhysicalTap(at: point, preDelay: preDelay, postDelay: postDelay, in: session, logger: logger)
+    }
+
+    static func performPhysicalTap(
+        at point: (x: Double, y: Double),
+        preDelay: Double?,
+        postDelay: Double?,
+        in session: Session,
+        logger: AxeLogger
+    ) async throws {
+        if let preDelay, preDelay > 0 {
+            logger.info().log("Pre-delay: \(preDelay)s")
+            try await Task.sleep(for: .seconds(preDelay))
+        }
+
+        let touchDownEvent = FBSimulatorHIDEvent.touchDownAt(x: point.x, y: point.y)
+        let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: point.x, y: point.y)
+        var didTouchDown = false
+
+        do {
+            try await performHIDEvent(touchDownEvent, in: session, logger: logger)
+            didTouchDown = true
+            try await Task.sleep(for: .seconds(TapTiming.defaultHoldDuration))
+            try await performHIDEvent(touchUpEvent, in: session, logger: logger)
+            didTouchDown = false
+        } catch {
+            if didTouchDown {
+                try? await performHIDEvent(touchUpEvent, in: session, logger: logger)
+            }
+            throw error
+        }
+
+        if let postDelay, postDelay > 0 {
+            logger.info().log("Post-delay: \(postDelay)s")
+            try await Task.sleep(for: .seconds(postDelay))
+        }
+    }
+
 
     // Get or create a cached HID connection (matching CompanionLib's connectToHID behavior)
     private static func getOrCreateHIDConnection(for simulator: FBSimulator, logger: AxeLogger) async throws -> FBSimulatorHID {

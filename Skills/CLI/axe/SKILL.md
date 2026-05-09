@@ -7,7 +7,7 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 1. Identify simulator UDID target first (`axe list-simulators`).
 2. Simulator-interaction AXe commands require `--udid <UDID>`. Commands like `list-simulators` and `init` do not.
 3. Run `axe describe-ui --udid <UDID>` to inspect the full current screen. Use `axe describe-ui --point <X,Y> --udid <UDID>` to inspect the element at a specific coordinate. Use the output to discover available `--id` and `--label` values for selector taps, and to confirm coordinates for coordinate-based taps.
-4. Prefer selector taps (`tap --id` / `tap --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting (`--wait-timeout`) in batch flows.
+4. Prefer selector taps (`tap --id` / `tap --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting (`--wait-timeout`) in batch flows. For UIKit `UISwitch` and SwiftUI `Toggle` rows, selector taps activate the contained switch/toggle when the match contains exactly one such control. Default tap style is `automatic`: switches/toggles use physical touch down/up, while normal taps use simulator `tapAt`.
 
 ## Step 2: Choose the right command
 
@@ -17,6 +17,8 @@ Common examples:
 ```bash
 axe tap --id <identifier> --udid <UDID>
 axe tap --label <text> --udid <UDID>
+axe tap --label 'Weather Alerts' --udid <UDID>
+axe tap -x <X> -y <Y> --tap-style physical --udid <UDID>
 axe tap -x <X> -y <Y> --udid <UDID>
 axe type 'text' --udid <UDID>
 axe describe-ui --udid <UDID>
@@ -53,6 +55,7 @@ HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe c
 - Use `--ax-cache perStep` when *not* using `--wait-timeout` but the UI still changes between steps — this ensures each selector tap gets a fresh accessibility snapshot rather than a stale cached one.
 - Insert explicit `sleep <seconds>` steps when coordinate-based taps need the UI to be stable (selectors with `--wait-timeout` are preferred over sleep where possible).
 - Keep batch output quiet by default. Add `--verbose` only when troubleshooting.
+- Selector taps in batch share direct `tap` semantics, including switch/toggle activation-point handling and `--tap-style automatic` behavior. Use batch-level `--tap-style physical|simulator` as the default for tap steps, or step-level `tap --tap-style ...` to override one step.
 - If `tap --label` reports multiple matches and no `AXUniqueId` values are exposed, fall back to `tap -x/-y` for that step.
 
 Key rules:

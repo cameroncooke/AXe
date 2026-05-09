@@ -21,6 +21,9 @@ axe tap --id "SearchField" --udid <UDID>
 
 # By accessibility label
 axe tap --label "Safari" --udid <UDID>
+axe tap --label "Weather Alerts" --udid <UDID>  # Auto physical touch for switches/toggles
+axe tap --label "Submit" --tap-style simulator --udid <UDID>
+axe tap -x 320 -y 780 --tap-style physical --udid <UDID>
 
 # With timing
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid <UDID>
@@ -158,6 +161,7 @@ axe batch --udid <UDID> \
   --ax-cache perStep \
   --type-submission chunked \
   --type-chunk-size 150 \
+  --tap-style automatic \
   --step "tap --label Settings" \
   --step "sleep 0.5" \
   --step "tap --id SaveButton"
@@ -167,6 +171,10 @@ axe batch --udid <UDID> \
   --wait-timeout 5 \
   --step "tap --id LoginButton" \
   --step "tap --id WelcomeMessage"
+
+# Toggle a setting switch by label
+axe batch --udid <UDID> \
+  --step "tap --label 'Weather Alerts'"
 ```
 
 See `batch-reference.md` for full batch semantics.
@@ -214,6 +222,8 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 
 ## Best practices
 - Prefer `--id` / `--label` taps over coordinates for resilience.
+- Selector taps activate a contained UIKit `UISwitch` or SwiftUI `Toggle` when the matched row or label contains exactly one switch/toggle.
+- Default `--tap-style automatic` uses physical touch for matched switches/toggles and simulator `tapAt` for normal taps; use `--tap-style physical|simulator` to override.
 - Use single quotes for inline text to avoid shell expansion.
 - Use `--stdin` or `--file` when input contains shell-sensitive characters.
 - Keep verification (`describe-ui`, `screenshot`) separate from execution.

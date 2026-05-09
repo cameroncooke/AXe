@@ -189,6 +189,40 @@ struct BatchTests {
         #expect(settingsOpened != nil)
     }
 
+    @Test("Batch selector taps toggle SwiftUI and UIKit switches")
+    func selectorTapsToggleSwitches() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "switch-test")
+
+        try await TestHelpers.runAxeCommand(
+            "batch --ax-cache perStep --step \"tap --label 'SwiftUI Weather Alerts'\" --step \"tap --label 'UIKit Weather Alerts'\"",
+            simulatorUDID: defaultSimulatorUDID
+        )
+
+        let swiftUIState = try await TestHelpers.waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
+            $0 == "SwiftUI Weather Alerts: On"
+        }
+        let uiKitState = try await TestHelpers.waitForLabel(containing: "UIKit Weather Alerts:", timeout: 3) {
+            $0 == "UIKit Weather Alerts: On"
+        }
+        #expect(swiftUIState == "SwiftUI Weather Alerts: On")
+        #expect(uiKitState == "UIKit Weather Alerts: On")
+    }
+
+    @Test("Batch tap step automatic overrides simulator batch tap style for switches")
+    func tapStepAutomaticOverridesSimulatorBatchStyleForSwitches() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "switch-test")
+
+        try await TestHelpers.runAxeCommand(
+            "batch --tap-style simulator --step \"tap --label 'SwiftUI Weather Alerts' --tap-style automatic\"",
+            simulatorUDID: defaultSimulatorUDID
+        )
+
+        let swiftUIState = try await TestHelpers.waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
+            $0 == "SwiftUI Weather Alerts: On"
+        }
+        #expect(swiftUIState == "SwiftUI Weather Alerts: On")
+    }
+
     @Test("Batch login flow fails without waiting for post-sign-in screen")
     func loginFlowFailsWithoutWait() async throws {
         try await TestHelpers.launchPlaygroundApp(to: "batch-login-flow")

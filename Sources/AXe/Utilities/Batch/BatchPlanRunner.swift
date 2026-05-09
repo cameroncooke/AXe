@@ -28,6 +28,15 @@ struct BatchPlanRunner {
                 guard seconds > 0 else { continue }
 
                 try await Task.sleep(for: .seconds(seconds))
+            case .physicalTap(let point, let preDelay, let postDelay):
+                try await flushPending()
+                try await HIDInteractor.performPhysicalTap(
+                    at: point,
+                    preDelay: preDelay,
+                    postDelay: postDelay,
+                    in: session,
+                    logger: logger
+                )
             }
         }
 

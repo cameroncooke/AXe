@@ -18,6 +18,7 @@ final class BatchContext {
     let axCachePolicy: AXCachePolicy
     let typeSubmissionMode: TypeSubmissionMode
     let typeChunkSize: Int
+    let tapStyle: TapStyle
     let waitTimeout: TimeInterval
     let pollInterval: TimeInterval
 
@@ -28,6 +29,7 @@ final class BatchContext {
         axCachePolicy: AXCachePolicy,
         typeSubmissionMode: TypeSubmissionMode,
         typeChunkSize: Int,
+        tapStyle: TapStyle = .automatic,
         waitTimeout: TimeInterval = 0,
         pollInterval: TimeInterval = 0.25
     ) {
@@ -35,6 +37,7 @@ final class BatchContext {
         self.axCachePolicy = axCachePolicy
         self.typeSubmissionMode = typeSubmissionMode
         self.typeChunkSize = typeChunkSize
+        self.tapStyle = tapStyle
         self.waitTimeout = waitTimeout
         self.pollInterval = pollInterval
     }

@@ -63,6 +63,9 @@ axe tap -x 100 -y 200 --udid SIMULATOR_UDID
 # Tap by accessibility element (uses describe-ui accessibility tree)
 axe tap --id "Safari" --udid SIMULATOR_UDID
 axe tap --label "Safari" --udid SIMULATOR_UDID
+axe tap --label "Weather Alerts" --udid SIMULATOR_UDID  # Auto-uses physical touch for matched switches/toggles
+axe tap --label "Submit" --tap-style simulator --udid SIMULATOR_UDID  # Force FBSimulator tapAt
+axe tap -x 320 -y 780 --tap-style physical --udid SIMULATOR_UDID  # Force touch down/up for coordinates
 
 # Tap with timing controls
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
@@ -173,7 +176,19 @@ axe batch --udid SIMULATOR_UDID --file steps.txt
 # For large type steps, chunked mode is default; optional composite mode:
 axe batch --udid SIMULATOR_UDID --type-submission composite \
   --step "type 'some long string here'"
+
+# Toggle a setting switch by label. Automatic tap style uses physical touch for matched switches/toggles.
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --label 'Weather Alerts'"
+
+# Override tap style for all tap steps in a batch, or for one tap step.
+axe batch --udid SIMULATOR_UDID --tap-style physical \
+  --step "tap -x 320 -y 780"
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --label 'Submit' --tap-style simulator"
 ```
+
+Selector taps activate switch/toggle controls at the control's activation point when the matched row or label contains one switch/toggle. The default `--tap-style automatic` uses physical touch down/up for those switch/toggle activations and FBSimulator `tapAt` for normal taps.
 
 Simple behavior rules:
 - One-step source only: `--step`, `--file`, or `--stdin`.
