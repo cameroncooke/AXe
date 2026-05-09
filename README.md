@@ -142,6 +142,8 @@ UDID="B34FF305-5EA8-412B-943F-1D0371CA17FF"
 axe tap -x 100 -y 200 --udid $UDID
 axe tap --id "Safari" --udid $UDID
 axe tap --label "Safari" --udid $UDID
+axe tap --label "Weather Alerts" --udid $UDID  # Auto-uses physical touch for matched switches/toggles
+axe tap -x 320 -y 780 --tap-style physical --udid $UDID  # Force physical touch for coordinate taps
 axe type 'Hello World!' --udid $UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
 axe button home --udid $UDID
@@ -189,6 +191,9 @@ axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 # Tap by accessibility element (uses describe-ui accessibility tree)
 axe tap --id "Safari" --udid SIMULATOR_UDID
 axe tap --label "Safari" --udid SIMULATOR_UDID
+axe tap --label "Weather Alerts" --udid SIMULATOR_UDID  # Switches/toggles use their activation point and physical touch when matched
+axe tap --label "Submit" --tap-style simulator --udid SIMULATOR_UDID  # Force FBSimulator tapAt
+axe tap -x 320 -y 780 --tap-style physical --udid SIMULATOR_UDID  # Force touch down/up
 
 # Swipe gestures
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
@@ -276,6 +281,10 @@ axe batch --udid SIMULATOR_UDID \
   --step "tap --id SearchField" \
   --step "type 'hello world'" \
   --step "key 40"
+
+# Toggle a switch by its label
+axe batch --udid SIMULATOR_UDID \
+  --step "tap --label 'Weather Alerts'"
 
 # Add explicit timing between steps
 axe batch --udid SIMULATOR_UDID \

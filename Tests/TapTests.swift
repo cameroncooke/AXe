@@ -197,6 +197,54 @@ struct TapTests {
         )
     }
 
+    @Test("Selector tap toggles SwiftUI Toggle")
+    func selectorTapTogglesSwiftUIToggle() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "switch-test")
+
+        try await TestHelpers.runAxeCommand("tap --label 'SwiftUI Weather Alerts'", simulatorUDID: defaultSimulatorUDID)
+
+        let state = try await TestHelpers.waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
+            $0 == "SwiftUI Weather Alerts: On"
+        }
+        #expect(state == "SwiftUI Weather Alerts: On")
+    }
+
+    @Test("Selector tap toggles UIKit UISwitch")
+    func selectorTapTogglesUIKitSwitch() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "switch-test")
+
+        try await TestHelpers.runAxeCommand("tap --label 'UIKit Weather Alerts'", simulatorUDID: defaultSimulatorUDID)
+
+        let state = try await TestHelpers.waitForLabel(containing: "UIKit Weather Alerts:", timeout: 3) {
+            $0 == "UIKit Weather Alerts: On"
+        }
+        #expect(state == "UIKit Weather Alerts: On")
+    }
+
+    @Test("Coordinate tap toggles switch center")
+    func coordinateTapTogglesSwitchCenter() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "switch-test")
+
+        let uiState = try await TestHelpers.getUIState()
+        guard let switchElement = UIStateParser.findElement(in: uiState, matching: {
+            $0.label == "UIKit Weather Alerts" && $0.roleDescription == "switch"
+        }) else {
+            throw TestError.elementNotFound("UIKit switch not found")
+        }
+        guard let frame = switchElement.frame else {
+            throw TestError.unexpectedState("UIKit switch has no frame")
+        }
+
+        let centerX = frame.x + (frame.width / 2.0)
+        let centerY = frame.y + (frame.height / 2.0)
+        try await TestHelpers.runAxeCommand("tap -x \(centerX) -y \(centerY) --tap-style physical", simulatorUDID: defaultSimulatorUDID)
+
+        let state = try await TestHelpers.waitForLabel(containing: "UIKit Weather Alerts:", timeout: 3) {
+            $0 == "UIKit Weather Alerts: On"
+        }
+        #expect(state == "UIKit Weather Alerts: On")
+    }
+
     @Test("At least one tap registers at screen edges")
     func tapAtEdgesRegistersAtLeastOne() async throws {
         // Arrange

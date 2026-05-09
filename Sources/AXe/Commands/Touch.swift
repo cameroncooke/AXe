@@ -81,7 +81,7 @@ struct Touch: AsyncParsableCommand {
         if touchDown && touchUp {
             // Send down and up as separate HID submissions so iOS recognizers
             // observe a real hold duration for long-press gestures.
-            let touchDelay = delay ?? 0.1
+            let touchDelay = delay ?? TapTiming.defaultHoldDuration
 
             logger.info().log("Touch down")
             try await HIDInteractor

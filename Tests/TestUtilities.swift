@@ -417,6 +417,30 @@ struct TestHelpers {
 
         throw TestError.unexpectedState("Unable to reset simulator to portrait fixture layout")
     }
+
+    static func waitForLabel(
+        containing text: String,
+        timeout: TimeInterval,
+        simulatorUDID: String? = nil,
+        satisfies predicate: (String) -> Bool
+    ) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await getUIState(simulatorUDID: simulatorUDID)
+            if let element = UIStateParser.findElementContainingLabel(in: uiState, containing: text),
+               let label = element.label {
+                lastValue = label
+                if predicate(label) {
+                    return label
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Timed out waiting for label containing '\(text)'. Last value: \(lastValue ?? "none")")
+    }
     
     @discardableResult
     static func runAxeCommand(

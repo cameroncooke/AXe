@@ -28,11 +28,11 @@ private func resolveBatchTapPoint(
     context: BatchContext,
     elementType: String?,
     logger: AxeLogger
-) async throws -> (point: (x: Double, y: Double), roots: [AccessibilityElement]) {
+) async throws -> (resolution: TapResolution, roots: [AccessibilityElement]) {
     let roots = try await context.accessibilityRoots(logger: logger)
     do {
-        let point = try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query, elementType: elementType)
-        return (point, roots)
+        let resolution = try AccessibilityTargetResolver.resolveTap(roots: roots, query: query, elementType: elementType)
+        return (resolution, roots)
     } catch let error as ElementResolutionError where error.isNotFound && context.waitTimeout > 0 {
         let clock = ContinuousClock()
         let deadline = clock.now + .seconds(context.waitTimeout)
@@ -44,8 +44,8 @@ private func resolveBatchTapPoint(
 
             let freshRoots = try await context.accessibilityRoots(logger: logger, forceRefresh: true)
             do {
-                let point = try AccessibilityTargetResolver.resolveCenterPoint(roots: freshRoots, query: query, elementType: elementType)
-                return (point, freshRoots)
+                let resolution = try AccessibilityTargetResolver.resolveTap(roots: freshRoots, query: query, elementType: elementType)
+                return (resolution, freshRoots)
             } catch let retryError as ElementResolutionError where retryError.isNotFound {
                 lastError = retryError
                 continue
@@ -72,12 +72,24 @@ func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws
 }
 
 extension Tap: BatchConvertible {
+    private func resolvedTapStyle(for resolution: TapResolution, context: BatchContext) -> TapStyle {
+        let requestedStyle = tapStyle ?? context.tapStyle
+        switch requestedStyle {
+        case .automatic:
+            return resolution.isSwitchLikeControl ? .physical : .simulator
+        case .simulator:
+            return .simulator
+        case .physical:
+            return .physical
+        }
+    }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let resolvedPoint: (x: Double, y: Double)
+        let resolution: TapResolution
         let resolvedRoots: [AccessibilityElement]?
 
         if let pointX, let pointY {
-            resolvedPoint = (pointX, pointY)
+            resolution = TapResolution(point: (x: pointX, y: pointY), isSwitchLikeControl: false)
             resolvedRoots = nil
         } else {
             let query: AccessibilityQuery
@@ -97,28 +109,36 @@ extension Tap: BatchConvertible {
                 elementType: elementType,
                 logger: logger
             )
-            resolvedPoint = resolved.point
+            resolution = resolved.resolution
             resolvedRoots = resolved.roots
         }
 
         let physicalPoint: (x: Double, y: Double)
         if let resolvedRoots {
             physicalPoint = try await OrientationAwareCoordinates.translate(
-                point: resolvedPoint,
+                point: resolution.point,
                 roots: resolvedRoots,
                 for: context.simulatorUDID,
                 logger: logger
             )
         } else {
             physicalPoint = try await OrientationAwareCoordinates.translate(
-                point: resolvedPoint,
+                point: resolution.point,
                 for: context.simulatorUDID,
                 logger: logger
             )
         }
 
-        let tapEvent = FBSimulatorHIDEvent.tapAt(x: physicalPoint.x, y: physicalPoint.y)
-        return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: tapEvent, postDelay: postDelay))]
+        let style = resolvedTapStyle(for: resolution, context: context)
+        switch style {
+        case .physical:
+            return [.physicalTap(point: physicalPoint, preDelay: preDelay, postDelay: postDelay)]
+        case .simulator:
+            let tapEvent = FBSimulatorHIDEvent.tapAt(x: physicalPoint.x, y: physicalPoint.y)
+            return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: tapEvent, postDelay: postDelay))]
+        case .automatic:
+            throw CLIError(errorDescription: "Unexpected tap style resolution.")
+        }
     }
 }
 
@@ -179,7 +199,7 @@ extension Touch: BatchConvertible {
         let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y)
 
         if touchDown && touchUp {
-            let holdDelay = delay ?? 0.1
+            let holdDelay = delay ?? TapTiming.defaultHoldDuration
             return [
                 .hidBarrier(touchDownEvent),
                 .hostSleep(holdDelay),

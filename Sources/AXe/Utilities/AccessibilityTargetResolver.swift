@@ -10,6 +10,7 @@ enum ElementResolutionError: LocalizedError {
     case notFound(kind: String, value: String)
     case multipleMatches(count: Int, kind: String, value: String, hasUniqueIDs: Bool)
     case invalidFrame(reason: String)
+    case multipleSwitchDescendants(count: Int, selectorDescription: String)
 
     var errorDescription: String? {
         let tip = AccessibilityTargetResolver.describeUITip
@@ -23,6 +24,8 @@ enum ElementResolutionError: LocalizedError {
             return "Multiple (\(count)) accessibility elements matched \(kind) '\(value)', and none of the matches expose AXUniqueId on this screen. Use coordinates for this step (tap -x/-y) or target a more specific screen/state. \(tip)"
         case .invalidFrame(let reason):
             return "\(reason) \(tip)"
+        case .multipleSwitchDescendants(let count, let selectorDescription):
+            return "Matched element for \(selectorDescription) contains multiple (\(count)) switch/toggle controls. Target the switch more specifically with --id, --element-type Switch, or coordinates. \(tip)"
         }
     }
 
@@ -35,11 +38,19 @@ enum ElementResolutionError: LocalizedError {
 struct AccessibilityTargetResolver {
     static let describeUITip = "Make sure the app is on the expected screen, then run `axe describe-ui --udid <SIMULATOR_UDID>` and prefer --id when available."
 
-    static func resolveCenterPoint(
+    static func resolveTapPoint(
         roots: [AccessibilityElement],
         query: AccessibilityQuery,
         elementType: String? = nil
     ) throws -> (x: Double, y: Double) {
+        try resolveTap(roots: roots, query: query, elementType: elementType).point
+    }
+
+    static func resolveTap(
+        roots: [AccessibilityElement],
+        query: AccessibilityQuery,
+        elementType: String? = nil
+    ) throws -> TapResolution {
         var allElements = roots.flatMap { $0.flattened() }
 
         if let elementType {
@@ -47,32 +58,57 @@ struct AccessibilityTargetResolver {
         }
 
         let matchedElement: AccessibilityElement
+        let selectorDescription: String
 
         switch query {
         case .id(let rawValue):
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedUniqueId == value }
             matchedElement = try selectUniqueMatch(matches, kind: "--id", value: rawValue)
+            selectorDescription = "--id '\(rawValue)'"
         case .label(let rawValue):
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedLabel == value }
             matchedElement = try selectBestLabelMatch(matches, value: rawValue)
+            selectorDescription = "--label '\(rawValue)'"
         case .value(let rawValue):
             let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
             let matches = allElements.filter { $0.normalizedValue == value }
             matchedElement = try selectBestLabelMatch(matches, kind: "--value", value: rawValue)
+            selectorDescription = "--value '\(rawValue)'"
         }
 
-        guard let frame = matchedElement.frame else {
+        let activationElement = try selectActivationElement(
+            from: matchedElement,
+            roots: roots,
+            selectorDescription: selectorDescription
+        )
+
+        guard let frame = activationElement.frame else {
             throw ElementResolutionError.invalidFrame(reason: "Matched element has no frame.")
         }
         guard frame.width > 0, frame.height > 0 else {
             throw ElementResolutionError.invalidFrame(reason: "Matched element has an invalid frame size (\(frame.width)x\(frame.height)).")
         }
 
-        let centerX = frame.x + (frame.width / 2.0)
+        return TapResolution(
+            point: activationPoint(for: activationElement, frame: frame),
+            isSwitchLikeControl: activationElement.isSwitchLikeControl
+        )
+    }
+
+    private static func activationPoint(
+        for element: AccessibilityElement,
+        frame: AccessibilityElement.Frame
+    ) -> (x: Double, y: Double) {
         let centerY = frame.y + (frame.height / 2.0)
-        return (x: centerX, y: centerY)
+
+        if element.isSwitchLikeControl, frame.width > 100 {
+            let switchTrailingActivationInset = 31.0
+            return (x: frame.x + frame.width - switchTrailingActivationInset, y: centerY)
+        }
+
+        return (x: frame.x + (frame.width / 2.0), y: centerY)
     }
 
     private static func selectUniqueMatch(
@@ -98,6 +134,14 @@ struct AccessibilityTargetResolver {
         kind: String = "--label",
         value: String
     ) throws -> AccessibilityElement {
+        let switchLikeMatches = matches.filter(\.isSwitchLikeControl)
+        if switchLikeMatches.count == 1 {
+            return switchLikeMatches[0]
+        }
+        if switchLikeMatches.count > 1 {
+            return try selectUniqueMatch(switchLikeMatches, kind: kind, value: value)
+        }
+
         let actionableMatches = matches.filter(\.isActionable)
         if actionableMatches.count == 1 {
             return actionableMatches[0]
@@ -109,5 +153,82 @@ struct AccessibilityTargetResolver {
 
         return try selectUniqueMatch(matches, kind: kind, value: value)
     }
-}
 
+    private static func selectActivationElement(
+        from matchedElement: AccessibilityElement,
+        roots: [AccessibilityElement],
+        selectorDescription: String
+    ) throws -> AccessibilityElement {
+        if matchedElement.isSwitchLikeControl {
+            return matchedElement
+        }
+
+        let switchDescendants = matchedElement.switchLikeDescendantsIncludingSelf()
+        if !switchDescendants.isEmpty {
+            guard switchDescendants.count == 1 else {
+                throw ElementResolutionError.multipleSwitchDescendants(
+                    count: switchDescendants.count,
+                    selectorDescription: selectorDescription
+                )
+            }
+            return switchDescendants[0]
+        }
+
+        if let ancestor = nearestAncestor(of: matchedElement, in: roots) {
+            let siblingSwitches = ancestor.switchLikeDescendantsIncludingSelf()
+            if siblingSwitches.count == 1 {
+                return siblingSwitches[0]
+            }
+        }
+
+        return matchedElement
+    }
+
+    private static func nearestAncestor(
+        of matchedElement: AccessibilityElement,
+        in roots: [AccessibilityElement]
+    ) -> AccessibilityElement? {
+        for root in roots {
+            if let ancestor = nearestAncestor(of: matchedElement, in: root, parent: nil) {
+                return ancestor
+            }
+        }
+        return nil
+    }
+
+    private static func nearestAncestor(
+        of matchedElement: AccessibilityElement,
+        in currentElement: AccessibilityElement,
+        parent: AccessibilityElement?
+    ) -> AccessibilityElement? {
+        if sameElement(currentElement, matchedElement) {
+            return parent
+        }
+
+        for child in currentElement.children ?? [] {
+            if let ancestor = nearestAncestor(of: matchedElement, in: child, parent: currentElement) {
+                return ancestor
+            }
+        }
+        return nil
+    }
+
+    private static func sameElement(_ lhs: AccessibilityElement, _ rhs: AccessibilityElement) -> Bool {
+        if let lhsID = lhs.normalizedUniqueId, let rhsID = rhs.normalizedUniqueId {
+            return lhsID == rhsID
+        }
+
+        return lhs.type == rhs.type
+            && lhs.normalizedLabel == rhs.normalizedLabel
+            && lhs.normalizedValue == rhs.normalizedValue
+            && sameFrame(lhs.frame, rhs.frame)
+    }
+
+    private static func sameFrame(_ lhs: AccessibilityElement.Frame?, _ rhs: AccessibilityElement.Frame?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        return lhs.x == rhs.x
+            && lhs.y == rhs.y
+            && lhs.width == rhs.width
+            && lhs.height == rhs.height
+    }
+}
