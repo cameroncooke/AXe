@@ -222,10 +222,20 @@ struct AccessibilityTargetResolver {
             return lhsID == rhsID
         }
 
-        return lhs.type == rhs.type
-            && lhs.normalizedLabel == rhs.normalizedLabel
-            && lhs.normalizedValue == rhs.normalizedValue
-            && sameFrame(lhs.frame, rhs.frame)
+        guard lhs.type == rhs.type,
+              lhs.normalizedLabel == rhs.normalizedLabel,
+              lhs.normalizedValue == rhs.normalizedValue,
+              sameFrame(lhs.frame, rhs.frame) else {
+            return false
+        }
+
+        if lhs.normalizedLabel == nil && lhs.normalizedValue == nil {
+            return lhs.role == rhs.role
+                && lhs.roleDescription == rhs.roleDescription
+                && lhs.subrole == rhs.subrole
+        }
+
+        return true
     }
 
     private static func sameFrame(_ lhs: AccessibilityElement.Frame?, _ rhs: AccessibilityElement.Frame?) -> Bool {
