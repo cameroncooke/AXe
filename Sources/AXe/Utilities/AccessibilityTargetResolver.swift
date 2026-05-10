@@ -174,6 +174,10 @@ struct AccessibilityTargetResolver {
             return switchDescendants[0]
         }
 
+        if matchedElement.isActionable {
+            return matchedElement
+        }
+
         if let ancestor = nearestAncestor(of: matchedElement, in: roots) {
             let siblingSwitches = ancestor.switchLikeDescendantsIncludingSelf()
             if siblingSwitches.count == 1 {
