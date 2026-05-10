@@ -24,6 +24,80 @@ struct SwipeTests {
         #expect(endElement?.label == "End: (300, 400)")
     }
     
+    @Test("Landscape coordinate swipe preserves translated start and end", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeCoordinateSwipePreservesTranslatedStartAndEnd() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            try await TestHelpers.setSimulatorOrientationLandscapeLeft()
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let start = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe Start"),
+                  let startFrame = start.frame,
+                  let end = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe End"),
+                  let endFrame = end.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-swipe-targets")
+            }
+
+            let startX = Int(startFrame.x + startFrame.width / 2)
+            let startY = Int(startFrame.y + startFrame.height / 2)
+            let endX = Int(endFrame.x + endFrame.width / 2)
+            let endY = Int(endFrame.y + endFrame.height / 2)
+
+            try await TestHelpers.runAxeCommand(
+                "swipe --start-x \(startX) --start-y \(startY) --end-x \(endX) --end-y \(endY) --duration 0.3 --delta 10",
+                simulatorUDID: defaultSimulatorUDID
+            )
+
+            let hitCount = try await waitForLandscapeSwipeHitCount(expected: "Landscape Swipe Hit Count: 1", timeout: 3)
+            #expect(hitCount == "Landscape Swipe Hit Count: 1")
+            try await assertLastNamedCoordinate(containing: "Last Swipe Start:", expectedX: startX, expectedY: startY, timeout: 3)
+            try await assertLastNamedCoordinate(containing: "Last Swipe End:", expectedX: endX, expectedY: endY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
+    @Test("Landscape-right coordinate swipe preserves translated start and end", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeRightCoordinateSwipePreservesTranslatedStartAndEnd() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            try await TestHelpers.setSimulatorOrientationLandscapeRight()
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let start = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe Start"),
+                  let startFrame = start.frame,
+                  let end = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe End"),
+                  let endFrame = end.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-swipe-targets")
+            }
+
+            let startX = Int(startFrame.x + startFrame.width / 2)
+            let startY = Int(startFrame.y + startFrame.height / 2)
+            let endX = Int(endFrame.x + endFrame.width / 2)
+            let endY = Int(endFrame.y + endFrame.height / 2)
+
+            try await TestHelpers.runAxeCommand(
+                "swipe --start-x \(startX) --start-y \(startY) --end-x \(endX) --end-y \(endY) --duration 0.3 --delta 10",
+                simulatorUDID: defaultSimulatorUDID
+            )
+
+            let hitCount = try await waitForLandscapeSwipeHitCount(expected: "Landscape Swipe Hit Count: 1", timeout: 3)
+            #expect(hitCount == "Landscape Swipe Hit Count: 1")
+            try await assertLastNamedCoordinate(containing: "Last Swipe Start:", expectedX: startX, expectedY: startY, timeout: 3)
+            try await assertLastNamedCoordinate(containing: "Last Swipe End:", expectedX: endX, expectedY: endY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
     @Test("Swipe direction detection", arguments: [
         (start: (100, 400), end: (300, 400), direction: "Right"),
         (start: (300, 400), end: (100, 400), direction: "Left"),
@@ -91,6 +165,52 @@ struct SwipeTests {
         #expect(swipeCountElement?.label == "Count: \(swipeCount)", "Swipe count should be \(swipeCount)")
     }
     
+    private func waitForLandscapeSwipeHitCount(expected: String, timeout: TimeInterval) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let element = UIStateParser.findElementContainingLabel(in: uiState, containing: "Landscape Swipe Hit Count:"),
+               let label = element.label {
+                lastValue = label
+                if label == expected {
+                    return label
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Timed out waiting for \(expected). Last value: \(lastValue ?? "none")")
+    }
+
+    private func assertLastNamedCoordinate(
+        containing text: String,
+        expectedX: Int,
+        expectedY: Int,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
+                lastValue = label
+                if let point = CoordinateParser.parseNamedCoordinates(from: label),
+                   abs(point.x - expectedX) <= 1,
+                   abs(point.y - expectedY) <= 1 {
+                    return
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState(
+            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
+        )
+    }
+
     @Test("Draw complex shapes")
     func swipeSegmentedStarTenPaths() async throws {
         // Arrange

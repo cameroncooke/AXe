@@ -54,6 +54,9 @@ show_usage() {
     echo "  -s, --sequential    Run suites one-by-one (single simulator-safe flow)"
     echo "  -v, --verbose       Verbose output"
     echo ""
+    echo "Environment:"
+    echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
+    echo ""
     echo "Test Filters (optional):"
     echo "  SwipeTests          Run only swipe tests"
     echo "  TapTests            Run only tap tests"
@@ -106,7 +109,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        SwipeTests|TapTests|KeyTests|TouchTests|TypeTests|ButtonTests|GestureTests|ListSimulatorsTests)
+        BatchTests|SwipeTests|TapTests|KeyTests|TouchTests|TypeTests|ButtonTests|GestureTests|ListSimulatorsTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -259,6 +262,17 @@ build_playground_app() {
     print_info "App path: $APP_PATH"
 }
 
+landscape_orientation_menu_available() {
+    local enabled_items
+    enabled_items=$(osascript \
+        -e 'tell application "Simulator" to activate' \
+        -e 'delay 0.5' \
+        -e 'tell application "System Events" to tell process "Simulator" to get enabled of menu items of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1' \
+        2>/dev/null || true)
+
+    [[ "$enabled_items" == true,\ true,\ true,\ true* ]]
+}
+
 # Function to run tests
 run_tests() {
     print_header "Running Tests"
@@ -266,8 +280,24 @@ run_tests() {
     # Set up environment
     export SIMULATOR_UDID="$SIMULATOR_UDID"
     export AXE_E2E=1
+    local requested_landscape_e2e="${AXE_LANDSCAPE_E2E:-0}"
+    local normalized_landscape_e2e
+    normalized_landscape_e2e=$(printf '%s' "$requested_landscape_e2e" | tr '[:upper:]' '[:lower:]')
+    case "$normalized_landscape_e2e" in
+        1|true|yes)
+            if landscape_orientation_menu_available; then
+                export AXE_LANDSCAPE_E2E=1
+            else
+                print_warning "Skipping landscape orientation precision tests because Simulator menu automation is unavailable. Open Simulator and grant macOS Accessibility permissions, then rerun with AXE_LANDSCAPE_E2E=1."
+                export AXE_LANDSCAPE_E2E=0
+            fi
+            ;;
+        *)
+            export AXE_LANDSCAPE_E2E=0
+            ;;
+    esac
 
-    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E"
+    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E, AXE_LANDSCAPE_E2E=$AXE_LANDSCAPE_E2E"
 
     run_swift_test() {
         local filter="$1"

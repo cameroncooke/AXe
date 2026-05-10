@@ -7,6 +7,10 @@ let package = Package(
         .macOS(.v14)
     ],
     products: [
+        .library(
+            name: "AXeCore",
+            targets: ["AXeCore"]
+        ),
         .executable(
             name: "axe",
             targets: ["AXe"]
@@ -16,9 +20,14 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
     ],
     targets: [
+        .target(
+            name: "AXeCore",
+            path: "Sources/AXeCore"
+        ),
         .executableTarget(
             name: "AXe",
             dependencies: [
+                "AXeCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 "FBSimulatorControl",
                 "FBDeviceControl",
@@ -46,7 +55,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AXeTests",
-            dependencies: ["AXe"],
+            dependencies: ["AXe", "AXeCore"],
             path: "Tests",
             resources: [
                 .copy("README.md")

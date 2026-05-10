@@ -41,8 +41,6 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
-    @Flag(name: .customLong("landscape-flipped"), help: "Treat coordinates as logical landscape-flipped (home button left / 90° CCW). Use when the device is rotated counter-clockwise and the default landscape detection is incorrect.")
-    var landscapeFlipped: Bool = false
 
     func validate() throws {
         if pointX != nil || pointY != nil {
@@ -70,6 +68,7 @@ struct Tap: AsyncParsableCommand {
                 throw ValidationError("--value must not be empty.")
             }
         }
+
 
         if let preDelay = preDelay {
             guard preDelay >= 0 && preDelay <= 10.0 else {
@@ -137,11 +136,9 @@ struct Tap: AsyncParsableCommand {
 
         logger.info().log("Tapping at \(resolvedDescription)")
 
-        let orientationOverride: SimulatorOrientation? = landscapeFlipped ? .landscapeFlipped : nil
         let resolvedPoint = try await OrientationAwareCoordinates.translate(
             point: logicalPoint,
             for: simulatorUDID,
-            orientationOverride: orientationOverride,
             logger: logger
         )
 
@@ -163,6 +160,6 @@ struct Tap: AsyncParsableCommand {
         try await HIDInteractor.performHIDEvent(finalEvent, for: simulatorUDID, logger: logger)
 
         logger.info().log("Tap completed successfully")
-        print("✓ Tap at (\(resolvedPoint.x), \(resolvedPoint.y)) completed successfully")
+        print("✓ Tap at \(resolvedDescription) completed successfully")
     }
 }

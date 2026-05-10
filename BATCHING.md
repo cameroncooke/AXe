@@ -178,11 +178,14 @@ Each step command keeps its normal options and validation.
 Examples:
 - `tap --id BackButton`
 - `tap -x 200 -y 400 --pre-delay 0.2 --post-delay 0.2`
+- `swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100`
 - `gesture scroll-down --duration 1.0`
 - `touch -x 150 -y 300 --down --up --delay 1.0`
 
 One important rule:
 - Do not include `--udid` inside a step. Use the batch-level `--udid` only.
+
+Coordinate-based `tap`, `swipe`, and `touch` steps use the same orientation-aware coordinate mapping as the standalone commands. Use coordinates from `describe-ui` directly; AXe detects rotated landscape simulator orientation and letterboxed landscape-only app layouts automatically.
 
 ## Verification strategy
 

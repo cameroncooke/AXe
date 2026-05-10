@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import AXeCore
 
 // MARK: - Orientation Math Tests
 //
@@ -11,10 +12,8 @@ import Foundation
 //   (a) Rotated hardware — `translateToPhysical` rotation math.
 //   (b) Portrait hardware + landscape-only app — `letterboxToPhysical` scale + offset math.
 //
-// Because the AXe executable target does not expose its types to the test target,
-// the reference math is duplicated here.  Any change to OrientationAwareCoordinates
-// must be reflected in the local implementation below so that a divergence causes a
-// test failure rather than a silent gap.
+// The pure coordinate math lives in AXeCore so production and tests exercise the
+// same implementation rather than mirrored copies.
 //
 // Device under test in the parameterized tests: iPad Pro 13-inch (M5)
 //   portrait width  = 1032 pts  (short side)
@@ -22,70 +21,51 @@ import Foundation
 //   landscape frame = 1376 × 1032 (width > height → isLandscape)
 //   screenshot (portrait physical): 2064 × 2752 px  → 1032 × 1376 pts at 2x scale
 
-// MARK: - Local Reference Implementation
+// MARK: - Test Helpers
 
-/// Mirror of `SimulatorOrientation` in OrientationAwareCoordinates.swift.
-private enum TestOrientation {
-    case portrait
-    case portraitUpsideDown
-    case landscape
-    case landscapeFlipped
-}
+typealias TestOrientation = OrientationCoordinateMath.Orientation
 
-/// Mirror of `OrientationAwareCoordinates.translateToPhysical`.
-/// Must stay in sync with the production implementation.
 private func translateToPhysical(
     lx: Double, ly: Double,
     orientation: TestOrientation,
     portraitWidth pw: Double,
     portraitHeight ph: Double
 ) -> (x: Double, y: Double) {
-    switch orientation {
-    case .portrait:
-        return (lx, ly)
-    case .portraitUpsideDown:
-        return (pw - lx, ph - ly)
-    case .landscape:
-        // 90° CW: px = ly, py = ph - lx
-        return (ly, ph - lx)
-    case .landscapeFlipped:
-        // 90° CCW: px = pw - ly, py = lx
-        return (pw - ly, lx)
-    }
+    OrientationCoordinateMath.translateToPhysical(
+        x: lx,
+        y: ly,
+        orientation: orientation,
+        portraitWidth: pw,
+        portraitHeight: ph
+    )
 }
 
-/// Mirror of `OrientationAwareCoordinates.letterboxToPhysical`.
-/// Must stay in sync with the production implementation.
 private func letterboxToPhysical(
     lx: Double, ly: Double,
     scale: Double,
     offsetX: Double,
     offsetY: Double
 ) -> (x: Double, y: Double) {
-    return (
-        x: offsetX + lx * scale,
-        y: offsetY + ly * scale
+    OrientationCoordinateMath.letterboxToPhysical(
+        x: lx,
+        y: ly,
+        scale: scale,
+        offsetX: offsetX,
+        offsetY: offsetY
     )
 }
 
-/// Mirror of the letterbox parameter calculation in
-/// `OrientationAwareCoordinates.detectMapping`.
-///
-/// Given:
-///   - `logicalSize` = landscape AX frame (e.g. 1376 × 1032 for iPad Pro 13")
-///   - `physicalSize` = portrait hardware viewport in points (e.g. 1032 × 1376)
-///
-/// Returns `(scale, offsetX, offsetY)`.
 private func letterboxParameters(
     logicalW: Double, logicalH: Double,
     physicalW: Double, physicalH: Double
 ) -> (scale: Double, offsetX: Double, offsetY: Double) {
-    let scale   = min(physicalW / logicalW, physicalH / logicalH)
-    let offsetX = (physicalW - logicalW * scale) / 2
-    let offsetY = (physicalH - logicalH * scale) / 2
-    return (scale, offsetX, offsetY)
+    OrientationCoordinateMath.letterboxParameters(
+        logicalWidth: logicalW,
+        logicalHeight: logicalH,
+        physicalWidth: physicalW,
+        physicalHeight: physicalH
+    )
 }
-
 // MARK: - Tests
 
 private let iPadPro13PortraitWidth = 1032.0

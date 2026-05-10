@@ -194,6 +194,12 @@ axe tap --label "Safari" --udid SIMULATOR_UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
 axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --delta 25 --udid SIMULATOR_UDID
 
+# Orientation-aware coordinates
+# AXe automatically maps logical UI coordinates for rotated landscape and letterboxed landscape-only apps.
+# Use the coordinates from describe-ui directly; AXe detects the simulator orientation.
+axe tap -x 100 -y 200 --udid SIMULATOR_UDID
+axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
+
 # Advanced touch control
 axe touch -x 150 -y 250 --down --udid SIMULATOR_UDID
 axe touch -x 150 -y 250 --up --udid SIMULATOR_UDID
