@@ -137,6 +137,40 @@ struct AccessibilityTargetResolverTests {
         #expect(point.y == 30)
     }
 
+    @Test("Elements with same type and frame but different roles are distinct")
+    func elementsWithSameTypeAndFrameButDifferentRolesAreDistinct() throws {
+        let roots = try decodeElements(
+            """
+            [
+              {
+                "type": "Cell",
+                "frame": { "x": 0, "y": 100, "width": 390, "height": 60 },
+                "children": [
+                  {
+                    "type": "StaticText",
+                    "frame": { "x": 16, "y": 120, "width": 140, "height": 20 },
+                    "AXValue": "1"
+                  },
+                  {
+                    "type": "CheckBox",
+                    "role_description": "switch",
+                    "subrole": "AXSwitch",
+                    "frame": { "x": 300, "y": 110, "width": 50, "height": 30 },
+                    "AXValue": "0"
+                  }
+                ]
+              }
+            ]
+            """
+        )
+
+        let resolution = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .value("1"))
+
+        #expect(resolution.point.x == 86)
+        #expect(resolution.point.y == 130)
+        #expect(!resolution.isSwitchLikeControl)
+    }
+
     private func decodeElements(_ json: String) throws -> [AccessibilityElement] {
         let data = try #require(json.data(using: .utf8))
         return try JSONDecoder().decode([AccessibilityElement].self, from: data)
