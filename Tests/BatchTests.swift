@@ -59,6 +59,48 @@ struct BatchTests {
         }
     }
 
+    @Test("Batch landscape coordinates preserve translated tap and swipe points", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeCoordinatesPreserveTranslatedTapAndSwipePoints() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            try await TestHelpers.setSimulatorOrientationLandscapeRight()
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let tapTarget = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Target"),
+                  let tapFrame = tapTarget.frame,
+                  let swipeStart = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe Start"),
+                  let swipeStartFrame = swipeStart.frame,
+                  let swipeEnd = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Swipe End"),
+                  let swipeEndFrame = swipeEnd.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-batch-targets")
+            }
+
+            let tapX = Int(tapFrame.x + tapFrame.width / 2)
+            let tapY = Int(tapFrame.y + tapFrame.height / 2)
+            let startX = Int(swipeStartFrame.x + swipeStartFrame.width / 2)
+            let startY = Int(swipeStartFrame.y + swipeStartFrame.height / 2)
+            let endX = Int(swipeEndFrame.x + swipeEndFrame.width / 2)
+            let endY = Int(swipeEndFrame.y + swipeEndFrame.height / 2)
+
+            try await TestHelpers.runAxeCommand(
+                "batch --step \"tap -x \(tapX) -y \(tapY)\" --step \"swipe --start-x \(startX) --start-y \(startY) --end-x \(endX) --end-y \(endY) --duration 0.3 --delta 10\"",
+                simulatorUDID: defaultSimulatorUDID
+            )
+
+            _ = try await waitForLabel(containing: "Landscape Hit Count:", timeout: 3) { $0 == "Landscape Hit Count: 1" }
+            _ = try await waitForLabel(containing: "Landscape Swipe Hit Count:", timeout: 3) { $0 == "Landscape Swipe Hit Count: 1" }
+            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: tapX, expectedY: tapY, timeout: 3)
+            try await assertLastNamedCoordinate(containing: "Last Swipe Start:", expectedX: startX, expectedY: startY, timeout: 3)
+            try await assertLastNamedCoordinate(containing: "Last Swipe End:", expectedX: endX, expectedY: endY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
     @Test("Batch continue-on-error runs later steps and reports failures")
     func continueOnError() async throws {
         try await TestHelpers.launchPlaygroundApp(to: "batch-test")
@@ -207,5 +249,32 @@ struct BatchTests {
     private func extractInt(from label: String) -> Int? {
         let digits = label.filter { $0.isNumber }
         return Int(digits)
+    }
+
+    private func assertLastNamedCoordinate(
+        containing text: String,
+        expectedX: Int,
+        expectedY: Int,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
+                lastValue = label
+                if let point = CoordinateParser.parseNamedCoordinates(from: label),
+                   abs(point.x - expectedX) <= 1,
+                   abs(point.y - expectedY) <= 1 {
+                    return
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState(
+            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
+        )
     }
 }

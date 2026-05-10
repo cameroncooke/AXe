@@ -53,6 +53,8 @@ struct ContentView: View {
             TouchControlView()
         case "gesture-presets":
             GesturePresetsView()
+        case "landscape-coordinate-test":
+            LandscapeCoordinateTestView()
             
         // Input & Text
         case "text-input":
@@ -84,7 +86,8 @@ struct MainMenuView: View {
             ("tap-test", "Tap Test", "Displays coordinates of CLI taps"),
             ("touch-control", "Touch Control", "Touch down/up events"),
             ("swipe-test", "Swipe Test", "Shows CLI swipe paths"),
-            ("gesture-presets", "Gesture Presets", "Multi-touch gesture display")
+            ("gesture-presets", "Gesture Presets", "Multi-touch gesture display"),
+            ("landscape-coordinate-test", "Landscape Coordinates", "Verifies orientation-aware taps")
         ]),
         ("Input & Text", [
             ("text-input", "Text Input", "Text typed by CLI commands"),

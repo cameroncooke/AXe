@@ -23,6 +23,39 @@ private func buildDelayedEvent(
     return events.count == 1 ? events[0] : FBSimulatorHIDEvent(events: events)
 }
 
+private func resolveBatchTapPoint(
+    query: AccessibilityQuery,
+    context: BatchContext,
+    elementType: String?,
+    logger: AxeLogger
+) async throws -> (point: (x: Double, y: Double), roots: [AccessibilityElement]) {
+    let roots = try await context.accessibilityRoots(logger: logger)
+    do {
+        let point = try AccessibilityTargetResolver.resolveCenterPoint(roots: roots, query: query, elementType: elementType)
+        return (point, roots)
+    } catch let error as ElementResolutionError where error.isNotFound && context.waitTimeout > 0 {
+        let clock = ContinuousClock()
+        let deadline = clock.now + .seconds(context.waitTimeout)
+        var lastError = error
+
+        while clock.now < deadline {
+            logger.info().log("Element not found, retrying in \(context.pollInterval)s…")
+            try await Task.sleep(for: .seconds(context.pollInterval))
+
+            let freshRoots = try await context.accessibilityRoots(logger: logger, forceRefresh: true)
+            do {
+                let point = try AccessibilityTargetResolver.resolveCenterPoint(roots: freshRoots, query: query, elementType: elementType)
+                return (point, freshRoots)
+            } catch let retryError as ElementResolutionError where retryError.isNotFound {
+                lastError = retryError
+                continue
+            }
+        }
+
+        throw lastError
+    }
+}
+
 func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws -> [Int] {
     let rawTokens = rawValue
         .split(separator: ",", omittingEmptySubsequences: false)
@@ -41,9 +74,11 @@ func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws
 extension Tap: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let resolvedPoint: (x: Double, y: Double)
+        let resolvedRoots: [AccessibilityElement]?
 
         if let pointX, let pointY {
             resolvedPoint = (pointX, pointY)
+            resolvedRoots = nil
         } else {
             let query: AccessibilityQuery
             if let elementID {
@@ -56,17 +91,33 @@ extension Tap: BatchConvertible {
                 throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
             }
 
-            resolvedPoint = try await AccessibilityPoller.resolveWithPolling(
+            let resolved = try await resolveBatchTapPoint(
                 query: query,
-                simulatorUDID: context.simulatorUDID,
-                waitTimeout: context.waitTimeout,
-                pollInterval: context.pollInterval,
+                context: context,
                 elementType: elementType,
+                logger: logger
+            )
+            resolvedPoint = resolved.point
+            resolvedRoots = resolved.roots
+        }
+
+        let physicalPoint: (x: Double, y: Double)
+        if let resolvedRoots {
+            physicalPoint = try await OrientationAwareCoordinates.translate(
+                point: resolvedPoint,
+                roots: resolvedRoots,
+                for: context.simulatorUDID,
+                logger: logger
+            )
+        } else {
+            physicalPoint = try await OrientationAwareCoordinates.translate(
+                point: resolvedPoint,
+                for: context.simulatorUDID,
                 logger: logger
             )
         }
 
-        let tapEvent = FBSimulatorHIDEvent.tapAt(x: resolvedPoint.x, y: resolvedPoint.y)
+        let tapEvent = FBSimulatorHIDEvent.tapAt(x: physicalPoint.x, y: physicalPoint.y)
         return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: tapEvent, postDelay: postDelay))]
     }
 }
@@ -75,11 +126,19 @@ extension Swipe: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let swipeDuration = duration ?? 1.0
         let swipeDelta = delta ?? 50.0
+        let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
+            points: [(x: startX, y: startY), (x: endX, y: endY)],
+            for: context.simulatorUDID,
+            logger: logger
+        )
+        let physicalStart = physicalPoints[0]
+        let physicalEnd = physicalPoints[1]
+
         let swipeEvent = FBSimulatorHIDEvent.swipe(
-            startX,
-            yStart: startY,
-            xEnd: endX,
-            yEnd: endY,
+            physicalStart.x,
+            yStart: physicalStart.y,
+            xEnd: physicalEnd.x,
+            yEnd: physicalEnd.y,
             delta: swipeDelta,
             duration: swipeDuration
         )
@@ -110,8 +169,14 @@ extension Gesture: BatchConvertible {
 
 extension Touch: BatchConvertible {
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let touchDownEvent = FBSimulatorHIDEvent.touchDownAt(x: pointX, y: pointY)
-        let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: pointX, y: pointY)
+        let physicalPoint = try await OrientationAwareCoordinates.translate(
+            point: (x: pointX, y: pointY),
+            for: context.simulatorUDID,
+            logger: logger
+        )
+
+        let touchDownEvent = FBSimulatorHIDEvent.touchDownAt(x: physicalPoint.x, y: physicalPoint.y)
+        let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y)
 
         if touchDown && touchUp {
             let holdDelay = delay ?? 0.1

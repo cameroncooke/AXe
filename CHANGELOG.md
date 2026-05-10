@@ -9,11 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed `tap`, `touch`, and `swipe` dispatching logical UI coordinates directly to FBSimulatorHIDEvent without rotation correction, causing taps to land in the wrong location when the simulator was in any non-portrait orientation ([#5](https://github.com/cameroncooke/AXe/issues/5) by [@Nitewriter](https://github.com/Nitewriter))
-
-### Added
-
-- Added `--landscape-flipped` flag to `tap`, `touch`, and `swipe` for simulators in landscape-flipped orientation (home button left / 90° CCW), since the two landscape variants cannot be distinguished from the accessibility tree alone ([#5](https://github.com/cameroncooke/AXe/issues/5) by [@Nitewriter](https://github.com/Nitewriter))
+- Fixed `tap`, `touch`, `swipe`, and matching batch steps dispatching logical UI coordinates directly to FBSimulatorHIDEvent without landscape rotation or letterbox correction, causing interactions to land in the wrong location in rotated landscape simulators and portrait-hardware landscape-only apps. AXe now detects the simulator UI orientation automatically instead of requiring callers to pass landscape flags ([#5](https://github.com/cameroncooke/AXe/issues/5) by [@Nitewriter](https://github.com/Nitewriter))
 
 ## [v1.6.0] - 2026-04-05
 

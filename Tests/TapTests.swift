@@ -20,6 +20,64 @@ struct TapTests {
         #expect(tapLocationElement?.label == "Tap Location: (200, 400)", "Tap location should be (200, 400)")
     }
 
+    @Test("Landscape coordinate tap hits shifted target", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeCoordinateTapHitsShiftedTarget() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            try await TestHelpers.setSimulatorOrientationLandscapeLeft()
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let target = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Target"),
+                  let frame = target.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-target")
+            }
+
+            let logicalX = Int(frame.x + frame.width / 2)
+            let logicalY = Int(frame.y + frame.height / 2)
+
+            try await TestHelpers.runAxeCommand("tap -x \(logicalX) -y \(logicalY)", simulatorUDID: defaultSimulatorUDID)
+
+            let hitCount = try await waitForLandscapeHitCount(expected: "Landscape Hit Count: 1", timeout: 3)
+            #expect(hitCount == "Landscape Hit Count: 1")
+            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
+    @Test("Landscape-right coordinate tap preserves translated point", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeRightCoordinateTapPreservesTranslatedPoint() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            try await TestHelpers.setSimulatorOrientationLandscapeRight()
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let target = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Target"),
+                  let frame = target.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-target")
+            }
+
+            let logicalX = Int(frame.x + frame.width / 2)
+            let logicalY = Int(frame.y + frame.height / 2)
+
+            try await TestHelpers.runAxeCommand("tap -x \(logicalX) -y \(logicalY)", simulatorUDID: defaultSimulatorUDID)
+
+            let hitCount = try await waitForLandscapeHitCount(expected: "Landscape Hit Count: 1", timeout: 3)
+            #expect(hitCount == "Landscape Hit Count: 1")
+            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
     @Test("Tap by AXUniqueId navigates back to home")
     func tapByIDNavigatesBack() async throws {
         // Arrange
@@ -93,6 +151,52 @@ struct TapTests {
         #expect(tapCountElement?.label == "Tap Count: 1", "Tap should still register with delays")
     }
     
+    private func waitForLandscapeHitCount(expected: String, timeout: TimeInterval) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let element = UIStateParser.findElementContainingLabel(in: uiState, containing: "Landscape Hit Count:"),
+               let label = element.label {
+                lastValue = label
+                if label == expected {
+                    return label
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Timed out waiting for \(expected). Last value: \(lastValue ?? "none")")
+    }
+
+    private func assertLastNamedCoordinate(
+        containing text: String,
+        expectedX: Int,
+        expectedY: Int,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
+                lastValue = label
+                if let point = CoordinateParser.parseNamedCoordinates(from: label),
+                   abs(point.x - expectedX) <= 1,
+                   abs(point.y - expectedY) <= 1 {
+                    return
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState(
+            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
+        )
+    }
+
     @Test("At least one tap registers at screen edges")
     func tapAtEdgesRegistersAtLeastOne() async throws {
         // Arrange

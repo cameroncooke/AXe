@@ -12,7 +12,7 @@ The `test-runner.sh` script provides a comprehensive, automated solution for bui
 ✅ **Comprehensive Testing**
 - Runs individual test suites or entire test plan
 - Sequential execution to prevent state conflicts
-- Proper environment variable setup (`SIMULATOR_UDID`, `AXE_E2E=1`)
+- Proper environment variable setup (`SIMULATOR_UDID`, `AXE_E2E=1`, optional `AXE_LANDSCAPE_E2E=1`)
 
 ✅ **Flexible Options**
 - Build-only mode for CI/CD pipelines
@@ -60,6 +60,9 @@ chmod +x test-runner.sh
 
 # Run all tests with verbose output
 ./test-runner.sh --verbose
+
+# Run landscape orientation precision tests when Simulator menu automation is available
+AXE_LANDSCAPE_E2E=1 ./test-runner.sh
 ```
 
 ### Build-Only Workflows
@@ -83,6 +86,7 @@ chmod +x test-runner.sh
 | `ButtonTests` | Hardware button press simulation |
 | `GestureTests` | Predefined gesture patterns |
 | `ListSimulatorsTests` | Simulator discovery and listing |
+| `BatchTests` | Batch workflow execution |
 
 ## Command Line Options
 
@@ -109,6 +113,7 @@ To change these settings, edit the configuration section at the top of `test-run
 The script automatically sets up the following environment:
 - `SIMULATOR_UDID`: Set to the configured iPhone 16 simulator
 - `AXE_E2E=1`: Enables simulator E2E tests
+- `AXE_LANDSCAPE_E2E=0`: Landscape orientation precision tests are skipped by default. Set `AXE_LANDSCAPE_E2E=1` to run them; the runner preflights Simulator menu automation and skips them if the menu is unavailable.
 - Sequential test execution (prevents state conflicts)
 - Clean app state between test suites
 

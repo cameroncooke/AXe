@@ -33,6 +33,7 @@ HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe c
 ## Step 4: Apply timing and input best practices
 - Use `--pre-delay` / `--post-delay` on tap, swipe, and gesture commands for fixed delays around actions.
 - Use `--duration` to control how long a swipe, gesture, button press, or key press lasts.
+- Coordinate-based `tap`, `swipe`, and `touch` accept coordinates from `describe-ui` directly; AXe detects rotated landscape simulator orientation and letterboxed landscape-only app layouts automatically.
 - For text with shell-sensitive characters, prefer `--stdin` or `--file` over inline quotes.
 - Use single quotes for inline text arguments to avoid shell expansion issues.
 

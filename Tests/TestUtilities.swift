@@ -9,6 +9,10 @@ let isE2EEnabled = {
     let raw = ProcessInfo.processInfo.environment["AXE_E2E"]?.lowercased() ?? ""
     return raw == "1" || raw == "true" || raw == "yes"
 }()
+let isLandscapeE2EEnabled = {
+    let raw = ProcessInfo.processInfo.environment["AXE_LANDSCAPE_E2E"]?.lowercased() ?? ""
+    return isE2EEnabled && (raw == "1" || raw == "true" || raw == "yes")
+}()
 
 struct CommandOutput {
     let output: String
@@ -301,6 +305,52 @@ struct TestHelpers {
         throw TestError.unexpectedState("axe binary not found at \(axePath). Please run 'swift build'.")
     }
     
+    static func setSimulatorOrientationPortrait() async throws {
+        try await setSimulatorOrientation(menuItem: "Portrait")
+    }
+
+    static func setSimulatorOrientationLandscapeLeft() async throws {
+        try await setSimulatorOrientation(menuItem: "Landscape Left")
+    }
+
+    static func setSimulatorOrientationLandscapeRight() async throws {
+        try await setSimulatorOrientation(menuItem: "Landscape Right")
+    }
+
+    static func rotateSimulatorLeft() async throws {
+        try await selectSimulatorDeviceMenuItem("Rotate Left")
+    }
+
+    private static func setSimulatorOrientation(menuItem: String) async throws {
+        let script = """
+        tell application "Simulator" to activate
+        delay 0.5
+        tell application "System Events"
+            tell process "Simulator"
+                click menu item "\(menuItem)" of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1
+            end tell
+        end tell
+        """
+        let escapedScript = script.replacingOccurrences(of: "'", with: "'\\''")
+        _ = try await CommandRunner.run("osascript -e '\(escapedScript)'", timeout: 10)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+    }
+
+    private static func selectSimulatorDeviceMenuItem(_ menuItem: String) async throws {
+        let script = """
+        tell application "Simulator" to activate
+        delay 0.5
+        tell application "System Events"
+            tell process "Simulator"
+                click menu item "\(menuItem)" of menu "Device" of menu bar 1
+            end tell
+        end tell
+        """
+        let escapedScript = script.replacingOccurrences(of: "'", with: "'\\''")
+        _ = try await CommandRunner.run("osascript -e '\(escapedScript)'", timeout: 10)
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+    }
+
     static func launchPlaygroundApp(to screen: String, simulatorUDID: String? = nil) async throws {
         let udid: String
         if let simulatorUDID {
@@ -333,6 +383,39 @@ struct TestHelpers {
         }
                 
         return try UIStateParser.parseDescribeUIOutput(result.output)
+    }
+
+    static func waitForLandscapeCoordinateFixtureLayout(timeout: TimeInterval) async throws -> UIElement {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            let uiState = try await getUIState()
+            if UIStateParser.findElement(in: uiState, matching: { element in
+                element.label == "Layout: landscape" && element.value == "landscape"
+            }) != nil {
+                return uiState
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Timed out waiting for landscape fixture layout")
+    }
+
+    static func resetLandscapeCoordinateFixtureToPortrait() async throws {
+        try await setSimulatorOrientationPortrait()
+
+        let deadline = Date().addingTimeInterval(3)
+        while Date() < deadline {
+            let uiState = try await getUIState()
+            if UIStateParser.findElement(in: uiState, matching: { element in
+                element.label == "Layout: portrait" && element.value == "portrait"
+            }) != nil {
+                return
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Unable to reset simulator to portrait fixture layout")
     }
     
     @discardableResult
@@ -447,6 +530,23 @@ struct CoordinateParser {
             return nil
         }
         
+        return (x, y)
+    }
+
+    static func parseNamedCoordinates(from string: String) -> (x: Int, y: Int)? {
+        let pattern = #"x:(\d+),y:(\d+)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: string, range: NSRange(string.startIndex..., in: string)) else {
+            return nil
+        }
+
+        guard let xRange = Range(match.range(at: 1), in: string),
+              let yRange = Range(match.range(at: 2), in: string),
+              let x = Int(string[xRange]),
+              let y = Int(string[yRange]) else {
+            return nil
+        }
+
         return (x, y)
     }
 }

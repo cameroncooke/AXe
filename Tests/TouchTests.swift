@@ -27,6 +27,16 @@ struct TouchTests {
         #expect(touchUpElement?.label == "Last touch up: (200, 400)", "Touch up coordinates should be recorded")
     }
     
+    @Test("Landscape coordinate touch preserves translated point", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeCoordinateTouchPreservesTranslatedPoint() async throws {
+        try await runLandscapeTouchPrecisionTest(orientation: .left)
+    }
+
+    @Test("Landscape-right coordinate touch preserves translated point", .enabled(if: isLandscapeE2EEnabled))
+    func landscapeRightCoordinateTouchPreservesTranslatedPoint() async throws {
+        try await runLandscapeTouchPrecisionTest(orientation: .right)
+    }
+
     @Test("Touch move")
     func touchMove() async throws {
         // Arrange
@@ -132,6 +142,93 @@ struct TouchTests {
         
         #expect(touchDownElement?.label == "Last touch down: (200, 300)", "Touch down should register with delays")
         #expect(touchUpElement?.label == "Last touch up: (200, 300)", "Touch up should register with delays")
+    }
+
+    private enum LandscapeTestOrientation {
+        case left
+        case right
+    }
+
+    private func runLandscapeTouchPrecisionTest(orientation: LandscapeTestOrientation) async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "landscape-coordinate-test")
+        do {
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            switch orientation {
+            case .left:
+                try await TestHelpers.setSimulatorOrientationLandscapeLeft()
+            case .right:
+                try await TestHelpers.setSimulatorOrientationLandscapeRight()
+            }
+
+            let initialState = try await TestHelpers.waitForLandscapeCoordinateFixtureLayout(timeout: 6)
+
+            guard let target = UIStateParser.findElementByLabel(in: initialState, label: "Landscape Target"),
+                  let frame = target.frame else {
+                throw TestError.elementNotFound("landscape-coordinate-target")
+            }
+
+            let logicalX = Int(frame.x + frame.width / 2)
+            let logicalY = Int(frame.y + frame.height / 2)
+
+            try await TestHelpers.runAxeCommand(
+                "touch -x \(logicalX) -y \(logicalY) --down --up",
+                simulatorUDID: defaultSimulatorUDID
+            )
+
+            let hitCount = try await waitForLandscapeHitCount(expected: "Landscape Hit Count: 1", timeout: 3)
+            #expect(hitCount == "Landscape Hit Count: 1")
+            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
+            try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+        } catch {
+            try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
+            throw error
+        }
+    }
+
+    private func waitForLandscapeHitCount(expected: String, timeout: TimeInterval) async throws -> String {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let element = UIStateParser.findElementContainingLabel(in: uiState, containing: "Landscape Hit Count:"),
+               let label = element.label {
+                lastValue = label
+                if label == expected {
+                    return label
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState("Timed out waiting for \(expected). Last value: \(lastValue ?? "none")")
+    }
+
+    private func assertLastNamedCoordinate(
+        containing text: String,
+        expectedX: Int,
+        expectedY: Int,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await TestHelpers.getUIState()
+            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
+                lastValue = label
+                if let point = CoordinateParser.parseNamedCoordinates(from: label),
+                   abs(point.x - expectedX) <= 1,
+                   abs(point.y - expectedY) <= 1 {
+                    return
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState(
+            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
+        )
     }
 
     @Test("Touch delay triggers long press recognition")

@@ -1,4 +1,6 @@
+import Darwin
 import Foundation
+import AXeCore
 import FBControlCore
 import FBSimulatorControl
 
@@ -19,7 +21,20 @@ enum SimulatorOrientation: String, CaseIterable {
 
     /// True when the logical screen width is wider than tall.
     var isLandscape: Bool {
-        self == .landscape || self == .landscapeFlipped
+        coreOrientation.isLandscape
+    }
+
+    var coreOrientation: OrientationCoordinateMath.Orientation {
+        switch self {
+        case .portrait:
+            return .portrait
+        case .portraitUpsideDown:
+            return .portraitUpsideDown
+        case .landscape:
+            return .landscape
+        case .landscapeFlipped:
+            return .landscapeFlipped
+        }
     }
 }
 
@@ -34,9 +49,9 @@ enum SimulatorOrientation: String, CaseIterable {
 ///     orientations. iOS scales + centers the landscape UI inside the portrait
 ///     viewport. Scale + offset math applies.
 ///
-/// Detection: compare screenshot pixel aspect ratio to AX frame aspect ratio.
-/// If screenshot is taller-than-wide while AX frame is wider-than-tall →
-/// letterbox case. Otherwise → rotated device case.
+/// Detection: read SimulatorKit's private screen `uiOrientation` when available,
+/// then fall back to screenshot pixel aspect ratio to distinguish portrait-hardware
+/// letterboxing from a rotated simulator.
 enum CoordinateMapping {
     /// Portrait device, portrait app — pass coordinates through unchanged.
     case passthrough
@@ -67,16 +82,13 @@ enum CoordinateMapping {
 ///
 /// ## Two landscape cases
 /// Both a rotated device and a portrait device running a landscape-only app produce
-/// a landscape-shaped AX application frame. Detection uses screenshot pixel
-/// dimensions via `xcrun simctl io <udid> screenshot -`: if the screenshot is
-/// taller than wide while the AX frame is wider than tall, the device hardware is
-/// portrait (letterbox case). If both are landscape-shaped, the hardware is rotated.
-///
-/// ## Orientation detection (rotated case)
-/// Portrait vs upside-down and landscape vs landscape-flipped cannot be
-/// distinguished from element geometry alone.  The caller may supply an explicit
-/// orientation override (e.g. from a `--landscape-flipped` flag) for the rotated
-/// case when the default landscape-home-right assumption is incorrect.
+/// a landscape-shaped AX application frame. AXe first asks the simulator's private
+/// screen properties for the current UI orientation so it can distinguish landscape
+/// left from landscape right automatically. If that private probe is unavailable,
+/// screenshot dimensions are used only to distinguish rotated hardware from a
+/// portrait device running a letterboxed landscape-only app. If the screenshot
+/// confirms rotated hardware but private orientation is unavailable, AXe fails
+/// clearly instead of guessing landscape direction.
 ///
 /// ## Portrait dimensions
 /// The short side of the device in points is the portrait width; the long side
@@ -92,18 +104,18 @@ struct OrientationAwareCoordinates {
     ///
     /// Detection flow:
     /// 1. Fetch AX application frame.
-    /// 2. If portrait-shaped → passthrough.
-    /// 3. If landscape-shaped → probe screenshot pixel dimensions.
+    /// 2. If an explicit override was supplied → rotation case.
+    /// 3. Otherwise read SimulatorKit private UI orientation.
+    /// 4. If private orientation is unavailable and the AX frame is portrait-shaped → passthrough.
+    /// 5. If unavailable and landscape-shaped, probe screenshot dimensions.
     ///    - Screenshot portrait-shaped (taller than wide) → letterbox case.
     ///    - Screenshot landscape-shaped (wider than tall) → rotated device case.
-    /// 4. Apply orientation override (landscape-flipped flag) only in the rotated case.
     ///
     /// - Parameters:
     ///   - simulatorUDID: Target simulator UDID.
-    ///   - orientationOverride: Forces a specific `SimulatorOrientation` for the rotated
-    ///     device case. Has no effect in the letterbox case. Pass `.landscapeFlipped` when
-    ///     the device is rotated counter-clockwise and the default (landscape home-right)
-    ///     is wrong.
+    ///   - orientationOverride: Forces a specific rotated-device `SimulatorOrientation`.
+    ///     Intended for internal tests or future explicit callers; normal CLI commands
+    ///     rely on automatic private orientation detection.
     ///   - logger: AXe logger instance.
     /// - Returns: The `CoordinateMapping` that applies to the current simulator state.
     static func detectMapping(
@@ -116,20 +128,62 @@ struct OrientationAwareCoordinates {
             logger: logger
         )
 
+        return try await detectMapping(
+            from: roots,
+            simulatorUDID: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
+    }
+
+    static func detectMapping(
+        from roots: [AccessibilityElement],
+        simulatorUDID: String,
+        orientationOverride: SimulatorOrientation? = nil,
+        logger: AxeLogger
+    ) async throws -> CoordinateMapping {
         guard let appFrame = applicationFrame(from: roots) else {
-            logger.info().log("Could not read application frame; assuming portrait passthrough")
-            return .passthrough
+            throw CLIError(errorDescription: "Unable to determine coordinate mapping because the accessibility application frame is unavailable.")
+        }
+
+        if let orientationOverride {
+            logger.info().log("Using explicit orientation override: \(orientationOverride.rawValue)")
+            guard let portraitSize = portraitDimensions(from: roots, orientation: orientationOverride) else {
+                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.")
+            }
+            return .rotation(orientationOverride, portraitSize: portraitSize)
+        }
+
+        // Prefer the simulator's private UI orientation state when available; this
+        // distinguishes landscape-left from landscape-right and catches upside-down portrait.
+        let simulatorOrientation = await SimulatorOrientationReader.currentOrientation(
+            simulatorUDID: simulatorUDID,
+            logger: logger
+        )
+
+        if let simulatorOrientation {
+            logger.info().log("Detected simulator UI orientation: \(simulatorOrientation.rawValue)")
+            guard let portraitSize = portraitDimensions(from: roots, orientation: simulatorOrientation) else {
+                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.")
+            }
+
+            switch simulatorOrientation {
+            case .portrait:
+                return .passthrough
+            case .portraitUpsideDown, .landscape, .landscapeFlipped:
+                return .rotation(simulatorOrientation, portraitSize: portraitSize)
+            }
         }
 
         guard appFrame.width > appFrame.height else {
-            // Portrait-shaped AX frame — no translation needed.
             logger.info().log(
                 "AX frame \(Int(appFrame.width))×\(Int(appFrame.height)) is portrait; passthrough"
             )
             return .passthrough
         }
 
-        // Landscape-shaped AX frame. Distinguish rotated hardware from letterboxed app.
+        // Fall back to screenshot aspect ratio to distinguish rotated hardware from a
+        // portrait device running a landscape-only app.
         logger.info().log(
             "AX frame \(Int(appFrame.width))×\(Int(appFrame.height)) is landscape; probing screenshot dimensions"
         )
@@ -161,34 +215,16 @@ struct OrientationAwareCoordinates {
             return .letterbox(scale: scale, offsetX: offsetX, offsetY: offsetY)
         }
 
-        // Screenshot is landscape-shaped (or unavailable) — hardware is rotated.
-        if screenshotDims == nil {
-            logger.info().log("Screenshot probe unavailable; assuming rotated hardware")
-        } else {
-            logger.info().log(
-                "Screenshot \(screenshotDims!.width)×\(screenshotDims!.height)px is landscape-shaped; using rotation mapping"
-            )
+        guard let screenshotDims else {
+            throw CLIError(errorDescription: "Unable to determine coordinate mapping because screenshot probing failed for a landscape accessibility frame.")
         }
 
-        let orientation: SimulatorOrientation
-        if let override = orientationOverride {
-            logger.info().log("Using explicit orientation override: \(override.rawValue)")
-            orientation = override
-        } else {
-            // Default: landscape home-right (most common iOS landscape orientation).
-            // Pass `--landscape-flipped` when the device is rotated counter-clockwise.
-            orientation = .landscape
-            logger.info().log("Defaulting to landscape (home right) orientation")
-        }
+        // Screenshot is landscape-shaped — hardware is rotated.
+        logger.info().log(
+            "Screenshot \(screenshotDims.width)×\(screenshotDims.height)px is landscape-shaped; using rotation mapping"
+        )
 
-        guard let portraitSize = portraitDimensions(from: roots, orientation: orientation) else {
-            logger.info().log(
-                "Could not determine portrait dimensions; falling back to passthrough"
-            )
-            return .passthrough
-        }
-
-        return .rotation(orientation, portraitSize: portraitSize)
+        throw CLIError(errorDescription: "Unable to determine rotated simulator orientation. AXe can read landscape coordinates only when SimulatorKit reports the current UI orientation; the screenshot confirms the simulator is rotated, but the private orientation probe was unavailable.")
     }
 
     // MARK: - Screenshot Dimension Probe
@@ -204,13 +240,16 @@ struct OrientationAwareCoordinates {
         for simulatorUDID: String,
         logger: AxeLogger
     ) async -> (width: Int, height: Int)? {
+        let tempURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("axe-screenshot-probe-\(UUID().uuidString)")
+            .appendingPathExtension("png")
+        defer { try? FileManager.default.removeItem(at: tempURL) }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["simctl", "io", simulatorUDID, "screenshot", "--type", "png", "-"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()  // suppress simctl stderr
+        process.arguments = ["simctl", "io", simulatorUDID, "screenshot", "--type", "png", tempURL.path]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
 
         do {
             try process.run()
@@ -219,16 +258,19 @@ struct OrientationAwareCoordinates {
             return nil
         }
 
-        // Read just the first 24 bytes — enough for PNG signature (8) + IHDR (16).
-        // PNG spec: bytes 16-19 = width (big-endian uint32), 20-23 = height.
-        var headerData = Data()
-        let fileHandle = pipe.fileHandleForReading
-        while headerData.count < 24 {
-            let chunk = fileHandle.availableData
-            if chunk.isEmpty { break }
-            headerData.append(chunk)
+        guard waitForProcessExit(process, timeout: 3.0, logger: logger), process.terminationStatus == 0 else {
+            logger.info().log("Screenshot probe: simctl screenshot failed or timed out")
+            return nil
         }
-        process.terminate()
+
+        let headerData: Data
+        do {
+            let data = try Data(contentsOf: tempURL)
+            headerData = Data(data.prefix(24))
+        } catch {
+            logger.info().log("Screenshot probe: could not read temp PNG: \(error)")
+            return nil
+        }
 
         guard headerData.count >= 24 else {
             logger.info().log("Screenshot probe: PNG header too short (\(headerData.count) bytes)")
@@ -253,6 +295,34 @@ struct OrientationAwareCoordinates {
         return (width: width, height: height)
     }
 
+    private static func waitForProcessExit(
+        _ process: Process,
+        timeout: TimeInterval,
+        logger: AxeLogger
+    ) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        guard process.isRunning else { return true }
+
+        logger.info().log("Screenshot probe: timed out waiting for simctl screenshot")
+        process.terminate()
+
+        let terminateDeadline = Date().addingTimeInterval(0.5)
+        while process.isRunning && Date() < terminateDeadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        if process.isRunning {
+            logger.info().log("Screenshot probe: force-killing unresponsive simctl screenshot process")
+            kill(process.processIdentifier, SIGKILL)
+        }
+        process.waitUntilExit()
+        return false
+    }
+
     // MARK: - Coordinate Translation
 
     /// Translates a logical point (as reported by the accessibility tree) to the
@@ -268,28 +338,13 @@ struct OrientationAwareCoordinates {
         orientation: SimulatorOrientation,
         portraitSize: (width: Double, height: Double)
     ) -> (x: Double, y: Double) {
-        let pw = portraitSize.width   // short side (portrait width)
-        let ph = portraitSize.height  // long side  (portrait height)
-
-        switch orientation {
-        case .portrait:
-            return point
-
-        case .portraitUpsideDown:
-            // 180° rotation: mirror both axes
-            return (x: pw - point.x, y: ph - point.y)
-
-        case .landscape:
-            // 90° CW from portrait (home button to the right)
-            // Logical origin = physical top-left; logical x-axis = physical y-axis (downward)
-            // px = ly, py = ph - lx
-            return (x: point.y, y: ph - point.x)
-
-        case .landscapeFlipped:
-            // 90° CCW from portrait (home button to the left)
-            // px = pw - ly, py = lx
-            return (x: pw - point.y, y: point.x)
-        }
+        OrientationCoordinateMath.translateToPhysical(
+            x: point.x,
+            y: point.y,
+            orientation: orientation.coreOrientation,
+            portraitWidth: portraitSize.width,
+            portraitHeight: portraitSize.height
+        )
     }
 
     /// Translates a logical point to a physical point using letterbox scale + offset math.
@@ -312,9 +367,12 @@ struct OrientationAwareCoordinates {
         offsetX: Double,
         offsetY: Double
     ) -> (x: Double, y: Double) {
-        return (
-            x: offsetX + point.x * scale,
-            y: offsetY + point.y * scale
+        OrientationCoordinateMath.letterboxToPhysical(
+            x: point.x,
+            y: point.y,
+            scale: scale,
+            offsetX: offsetX,
+            offsetY: offsetY
         )
     }
 
@@ -355,9 +413,9 @@ struct OrientationAwareCoordinates {
     /// - Parameters:
     ///   - point: Logical (x, y) as supplied by the caller.
     ///   - simulatorUDID: Target simulator UDID.
-    ///   - orientationOverride: Optional explicit orientation for the rotated device case.
-    ///     Pass `.landscapeFlipped` when the device is rotated counter-clockwise. Has no
-    ///     effect when the letterbox case is detected.
+    ///   - orientationOverride: Optional explicit rotated-device orientation. Pass
+    ///     `.landscapeFlipped` when the device is rotated counter-clockwise. Leave nil for
+    ///     automatic letterbox detection in portrait-hardware landscape-only apps.
     ///   - logger: AXe logger instance.
     /// - Returns: Physical (x, y) ready for FBSimulatorHIDEvent.
     static func translate(
@@ -368,6 +426,23 @@ struct OrientationAwareCoordinates {
     ) async throws -> (x: Double, y: Double) {
         let mapping = try await detectMapping(
             for: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
+
+        return applyMapping(mapping, to: point, logger: logger)
+    }
+
+    static func translate(
+        point: (x: Double, y: Double),
+        roots: [AccessibilityElement],
+        for simulatorUDID: String,
+        orientationOverride: SimulatorOrientation? = nil,
+        logger: AxeLogger
+    ) async throws -> (x: Double, y: Double) {
+        let mapping = try await detectMapping(
+            from: roots,
+            simulatorUDID: simulatorUDID,
             orientationOverride: orientationOverride,
             logger: logger
         )
@@ -394,6 +469,23 @@ struct OrientationAwareCoordinates {
     ) async throws -> [(x: Double, y: Double)] {
         let mapping = try await detectMapping(
             for: simulatorUDID,
+            orientationOverride: orientationOverride,
+            logger: logger
+        )
+
+        return points.map { applyMapping(mapping, to: $0, logger: logger) }
+    }
+
+    static func translateBatch(
+        points: [(x: Double, y: Double)],
+        roots: [AccessibilityElement],
+        for simulatorUDID: String,
+        orientationOverride: SimulatorOrientation? = nil,
+        logger: AxeLogger
+    ) async throws -> [(x: Double, y: Double)] {
+        let mapping = try await detectMapping(
+            from: roots,
+            simulatorUDID: simulatorUDID,
             orientationOverride: orientationOverride,
             logger: logger
         )

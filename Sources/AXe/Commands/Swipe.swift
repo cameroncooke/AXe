@@ -35,8 +35,6 @@ struct Swipe: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
-    @Flag(name: .customLong("landscape-flipped"), help: "Treat coordinates as logical landscape-flipped (home button left / 90° CCW). Use when the device is rotated counter-clockwise and the default landscape detection is incorrect.")
-    var landscapeFlipped: Bool = false
 
     func validate() throws {
         // Validate coordinates are non-negative
@@ -90,11 +88,9 @@ struct Swipe: AsyncParsableCommand {
         logger.info().log("Performing swipe from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
-        let orientationOverride: SimulatorOrientation? = landscapeFlipped ? .landscapeFlipped : nil
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
             points: [(x: startX, y: startY), (x: endX, y: endY)],
             for: simulatorUDID,
-            orientationOverride: orientationOverride,
             logger: logger
         )
         let physicalStart = physicalPoints[0]
