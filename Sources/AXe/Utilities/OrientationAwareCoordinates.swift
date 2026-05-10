@@ -169,7 +169,12 @@ struct OrientationAwareCoordinates {
 
             switch simulatorOrientation {
             case .portrait:
-                return .passthrough
+                guard appFrame.width > appFrame.height else {
+                    return .passthrough
+                }
+                logger.info().log(
+                    "Simulator reports portrait but AX frame \(Int(appFrame.width))×\(Int(appFrame.height)) is landscape; probing for letterbox mapping"
+                )
             case .portraitUpsideDown, .landscape, .landscapeFlipped:
                 return .rotation(simulatorOrientation, portraitSize: portraitSize)
             }
