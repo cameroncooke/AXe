@@ -10,7 +10,26 @@ struct AccessibilityPoller {
         elementType: String? = nil,
         logger: AxeLogger
     ) async throws -> TapResolution {
-        let roots = try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
+        try await pollForResolution(
+            query: query,
+            waitTimeout: waitTimeout,
+            pollInterval: pollInterval,
+            elementType: elementType,
+            logger: logger
+        ) {
+            try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
+        }
+    }
+
+    static func pollForResolution(
+        query: AccessibilityQuery,
+        waitTimeout: TimeInterval,
+        pollInterval: TimeInterval,
+        elementType: String?,
+        logger: AxeLogger,
+        rootsFetcher: () async throws -> [AccessibilityElement]
+    ) async throws -> TapResolution {
+        let roots = try await rootsFetcher()
         do {
             return try AccessibilityTargetResolver.resolveTap(roots: roots, query: query, elementType: elementType)
         } catch let error as ElementResolutionError where error.isNotFound && waitTimeout > 0 {
@@ -22,7 +41,7 @@ struct AccessibilityPoller {
                 logger.info().log("Element not found, retrying in \(pollInterval)s…")
                 try await Task.sleep(for: .seconds(pollInterval))
 
-                let freshRoots = try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
+                let freshRoots = try await rootsFetcher()
                 do {
                     return try AccessibilityTargetResolver.resolveTap(roots: freshRoots, query: query, elementType: elementType)
                 } catch let retryError as ElementResolutionError where retryError.isNotFound {
