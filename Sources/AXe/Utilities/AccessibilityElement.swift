@@ -55,7 +55,11 @@ struct AccessibilityElement: Decodable {
     }
 
     var normalizedUniqueId: String? {
-        trimmed(AXUniqueId) ?? trimmed(AXIdentifier)
+        normalizedStableUniqueId ?? trimmed(AXIdentifier)
+    }
+
+    var normalizedStableUniqueId: String? {
+        trimmed(AXUniqueId)
     }
 
     var normalizedValue: String? {

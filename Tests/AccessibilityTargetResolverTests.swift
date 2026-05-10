@@ -93,6 +93,44 @@ struct AccessibilityTargetResolverTests {
         #expect(resolution.isSwitchLikeControl)
     }
 
+    @Test("Matched label ignores nested sibling switch descendants")
+    func matchedLabelIgnoresNestedSiblingSwitchDescendants() throws {
+        let roots = try decodeElements(
+            """
+            [
+              {
+                "type": "Cell",
+                "frame": { "x": 0, "y": 100, "width": 390, "height": 100 },
+                "children": [
+                  {
+                    "type": "StaticText",
+                    "frame": { "x": 16, "y": 120, "width": 140, "height": 20 },
+                    "AXLabel": "Weather Alerts"
+                  },
+                  {
+                    "type": "Cell",
+                    "frame": { "x": 220, "y": 110, "width": 150, "height": 60 },
+                    "children": [
+                      {
+                        "type": "Switch",
+                        "frame": { "x": 300, "y": 125, "width": 50, "height": 30 },
+                        "AXLabel": "Unrelated Nested Switch"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+            """
+        )
+
+        let resolution = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .label("Weather Alerts"))
+
+        #expect(resolution.point.x == 86)
+        #expect(resolution.point.y == 130)
+        #expect(!resolution.isSwitchLikeControl)
+    }
+
     @Test("Wide switch-like rows use trailing activation point")
     func wideSwitchLikeRowsUseTrailingActivationPoint() throws {
         let roots = try decodeElements(
@@ -135,6 +173,56 @@ struct AccessibilityTargetResolverTests {
 
         #expect(point.x == 30)
         #expect(point.y == 30)
+    }
+
+    @Test("Duplicate AXIdentifier does not identify a different ancestor")
+    func duplicateAXIdentifierDoesNotIdentifyDifferentAncestor() throws {
+        let roots = try decodeElements(
+            """
+            [
+              {
+                "type": "Cell",
+                "frame": { "x": 0, "y": 100, "width": 390, "height": 60 },
+                "children": [
+                  {
+                    "type": "StaticText",
+                    "frame": { "x": 16, "y": 120, "width": 140, "height": 20 },
+                    "AXLabel": "Unrelated Label",
+                    "AXIdentifier": "shared-label-id"
+                  },
+                  {
+                    "type": "Switch",
+                    "frame": { "x": 300, "y": 110, "width": 50, "height": 30 },
+                    "AXLabel": "Unrelated Switch"
+                  }
+                ]
+              },
+              {
+                "type": "Cell",
+                "frame": { "x": 0, "y": 200, "width": 390, "height": 60 },
+                "children": [
+                  {
+                    "type": "StaticText",
+                    "frame": { "x": 16, "y": 220, "width": 140, "height": 20 },
+                    "AXLabel": "Weather Alerts",
+                    "AXIdentifier": "shared-label-id"
+                  },
+                  {
+                    "type": "Switch",
+                    "frame": { "x": 100, "y": 210, "width": 50, "height": 30 },
+                    "AXLabel": "Weather Alerts Switch"
+                  }
+                ]
+              }
+            ]
+            """
+        )
+
+        let resolution = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .label("Weather Alerts"))
+
+        #expect(resolution.point.x == 125)
+        #expect(resolution.point.y == 225)
+        #expect(resolution.isSwitchLikeControl)
     }
 
     @Test("Elements with same type and frame but different roles are distinct")

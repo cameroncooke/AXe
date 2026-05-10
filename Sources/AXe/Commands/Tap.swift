@@ -5,7 +5,7 @@ import FBSimulatorControl
 
 struct Tap: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Tap on a specific point on the screen, or locate an element by accessibility and tap its center."
+        abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
     )
 
     @Option(name: .customShort("x"), help: "The X coordinate of the point to tap.")
@@ -14,13 +14,13 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customShort("y"), help: "The Y coordinate of the point to tap.")
     var pointY: Double?
 
-    @Option(name: [.customLong("id")], help: "Tap the center of the element matching AXUniqueId (accessibilityIdentifier). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("id")], help: "Tap the activation point of the element matching AXUniqueId (accessibilityIdentifier). Ignored if -x and -y are provided.")
     var elementID: String?
 
-    @Option(name: [.customLong("label")], help: "Tap the center of the element matching AXLabel (accessibilityLabel). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("label")], help: "Tap the activation point of the element matching AXLabel (accessibilityLabel). Ignored if -x and -y are provided.")
     var elementLabel: String?
 
-    @Option(name: [.customLong("value")], help: "Tap the center of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("value")], help: "Tap the activation point of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
     var elementValue: String?
 
     @Option(name: [.customLong("element-type")], help: "Filter matches to elements of this accessibility type (e.g. Button, TextField, Switch). Narrows --id/--label/--value results when multiple elements match.")
