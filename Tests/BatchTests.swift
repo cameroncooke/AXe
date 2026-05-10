@@ -198,10 +198,10 @@ struct BatchTests {
             simulatorUDID: defaultSimulatorUDID
         )
 
-        let swiftUIState = try await TestHelpers.waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
+        let swiftUIState = try await waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
             $0 == "SwiftUI Weather Alerts: On"
         }
-        let uiKitState = try await TestHelpers.waitForLabel(containing: "UIKit Weather Alerts:", timeout: 3) {
+        let uiKitState = try await waitForLabel(containing: "UIKit Weather Alerts:", timeout: 3) {
             $0 == "UIKit Weather Alerts: On"
         }
         #expect(swiftUIState == "SwiftUI Weather Alerts: On")
@@ -217,7 +217,7 @@ struct BatchTests {
             simulatorUDID: defaultSimulatorUDID
         )
 
-        let swiftUIState = try await TestHelpers.waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
+        let swiftUIState = try await waitForLabel(containing: "SwiftUI Weather Alerts:", timeout: 3) {
             $0 == "SwiftUI Weather Alerts: On"
         }
         #expect(swiftUIState == "SwiftUI Weather Alerts: On")

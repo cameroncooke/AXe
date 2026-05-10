@@ -34,7 +34,7 @@ enum ElementResolutionError: LocalizedError {
         case .invalidFrame(let reason):
             return "\(reason) \(tip)"
         case .multipleSwitchDescendants(let count, let selectorDescription):
-            return "Matched element for \(selectorDescription) contains multiple (\(count)) switch/toggle controls. Target the switch more specifically with --id, --element-type Switch, or coordinates. \(tip)"
+            return "Matched element for \(selectorDescription) contains multiple (\(count)) switch/toggle controls. Target the switch more specifically with --id when available, or use coordinates. Use --element-type only when describe-ui reports a specific target type like Switch or Toggle. \(tip)"
         }
     }
 
@@ -46,6 +46,9 @@ enum ElementResolutionError: LocalizedError {
 
 struct AccessibilityTargetResolver {
     static let describeUITip = "Make sure the app is on the expected screen, then run `axe describe-ui --udid <SIMULATOR_UDID>` and prefer --id when available."
+
+    private static let wideSwitchActivationWidthThreshold = 100.0
+    private static let switchTrailingActivationInset = 31.0
 
     static func resolveTapPoint(
         roots: [AccessibilityElement],
@@ -113,8 +116,7 @@ struct AccessibilityTargetResolver {
     ) -> (x: Double, y: Double) {
         let centerY = frame.y + (frame.height / 2.0)
 
-        if element.isSwitchLikeControl, frame.width > 100 {
-            let switchTrailingActivationInset = 31.0
+        if element.isSwitchLikeControl, frame.width > wideSwitchActivationWidthThreshold {
             return (x: frame.x + frame.width - switchTrailingActivationInset, y: centerY)
         }
 
@@ -190,13 +192,17 @@ struct AccessibilityTargetResolver {
         }
 
         if allowSiblingRedirection, let ancestor = nearestAncestor(of: matchedElement, in: roots) {
-            let siblingSwitches = ancestor.switchLikeDescendantsIncludingSelf()
+            let siblingSwitches = directSwitchLikeChildren(of: ancestor)
             if siblingSwitches.count == 1 {
                 return siblingSwitches[0]
             }
         }
 
         return matchedElement
+    }
+
+    private static func directSwitchLikeChildren(of element: AccessibilityElement) -> [AccessibilityElement] {
+        element.children?.filter(\.isSwitchLikeControl) ?? []
     }
 
     private static func nearestAncestor(
@@ -229,7 +235,7 @@ struct AccessibilityTargetResolver {
     }
 
     private static func sameElement(_ lhs: AccessibilityElement, _ rhs: AccessibilityElement) -> Bool {
-        if let lhsID = lhs.normalizedUniqueId, let rhsID = rhs.normalizedUniqueId {
+        if let lhsID = lhs.normalizedStableUniqueId, let rhsID = rhs.normalizedStableUniqueId {
             return lhsID == rhsID
         }
 
