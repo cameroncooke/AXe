@@ -29,31 +29,22 @@ private func resolveBatchTapPoint(
     elementType: String?,
     logger: AxeLogger
 ) async throws -> (resolution: TapResolution, roots: [AccessibilityElement]) {
-    let roots = try await context.accessibilityRoots(logger: logger)
-    do {
-        let resolution = try AccessibilityTargetResolver.resolveTap(roots: roots, query: query, elementType: elementType)
-        return (resolution, roots)
-    } catch let error as ElementResolutionError where error.isNotFound && context.waitTimeout > 0 {
-        let clock = ContinuousClock()
-        let deadline = clock.now + .seconds(context.waitTimeout)
-        var lastError = error
-
-        while clock.now < deadline {
-            logger.info().log("Element not found, retrying in \(context.pollInterval)s…")
-            try await Task.sleep(for: .seconds(context.pollInterval))
-
-            let freshRoots = try await context.accessibilityRoots(logger: logger, forceRefresh: true)
-            do {
-                let resolution = try AccessibilityTargetResolver.resolveTap(roots: freshRoots, query: query, elementType: elementType)
-                return (resolution, freshRoots)
-            } catch let retryError as ElementResolutionError where retryError.isNotFound {
-                lastError = retryError
-                continue
-            }
-        }
-
-        throw lastError
+    var isFirstFetch = true
+    var latestRoots: [AccessibilityElement] = []
+    let resolution = try await AccessibilityPoller.pollForResolution(
+        query: query,
+        waitTimeout: context.waitTimeout,
+        pollInterval: context.pollInterval,
+        elementType: elementType,
+        logger: logger
+    ) {
+        let forceRefresh = !isFirstFetch
+        isFirstFetch = false
+        let roots = try await context.accessibilityRoots(logger: logger, forceRefresh: forceRefresh)
+        latestRoots = roots
+        return roots
     }
+    return (resolution, latestRoots)
 }
 
 func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws -> [Int] {

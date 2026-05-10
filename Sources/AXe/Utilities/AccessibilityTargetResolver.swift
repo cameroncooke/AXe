@@ -4,6 +4,15 @@ enum AccessibilityQuery {
     case id(String)
     case label(String)
     case value(String)
+
+    var allowsSiblingRedirection: Bool {
+        switch self {
+        case .label:
+            return true
+        case .id, .value:
+            return false
+        }
+    }
 }
 
 enum ElementResolutionError: LocalizedError {
@@ -81,7 +90,8 @@ struct AccessibilityTargetResolver {
         let activationElement = try selectActivationElement(
             from: matchedElement,
             roots: roots,
-            selectorDescription: selectorDescription
+            selectorDescription: selectorDescription,
+            allowSiblingRedirection: query.allowsSiblingRedirection
         )
 
         guard let frame = activationElement.frame else {
@@ -157,7 +167,8 @@ struct AccessibilityTargetResolver {
     private static func selectActivationElement(
         from matchedElement: AccessibilityElement,
         roots: [AccessibilityElement],
-        selectorDescription: String
+        selectorDescription: String,
+        allowSiblingRedirection: Bool
     ) throws -> AccessibilityElement {
         if matchedElement.isSwitchLikeControl {
             return matchedElement
@@ -178,7 +189,7 @@ struct AccessibilityTargetResolver {
             return matchedElement
         }
 
-        if let ancestor = nearestAncestor(of: matchedElement, in: roots) {
+        if allowSiblingRedirection, let ancestor = nearestAncestor(of: matchedElement, in: roots) {
             let siblingSwitches = ancestor.switchLikeDescendantsIncludingSelf()
             if siblingSwitches.count == 1 {
                 return siblingSwitches[0]
