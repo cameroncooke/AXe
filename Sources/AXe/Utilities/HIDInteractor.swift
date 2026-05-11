@@ -1,6 +1,7 @@
 import Foundation
 import FBControlCore
 import FBSimulatorControl
+import ObjectiveC
 
 // MARK: - HID Interactor
 @MainActor
@@ -103,13 +104,26 @@ struct HIDInteractor {
             let x = start.x + ((end.x - start.x) * progress)
             let y = start.y + ((end.y - start.y) * progress)
             events.append(.delay(stepDelay))
-            events.append(.touchMoveAt(x: x, y: y))
+            events.append(try touchMoveEvent(x: x, y: y))
         }
 
         events.append(.delay(finalHold))
         events.append(.touchUpAt(x: end.x, y: end.y))
 
         return FBSimulatorHIDEvent(events: events)
+    }
+
+    private static func touchMoveEvent(x: Double, y: Double) throws -> FBSimulatorHIDEvent {
+        typealias TouchMoveIMP = @convention(c) (AnyClass, Selector, Double, Double) -> FBSimulatorHIDEvent
+
+        let selector = NSSelectorFromString("touchMoveAtX:y:")
+        guard let method = class_getClassMethod(FBSimulatorHIDEvent.self, selector) else {
+            throw CLIError(errorDescription: "FBSimulatorHIDEvent does not support touch move events.")
+        }
+
+        let implementation = method_getImplementation(method)
+        let touchMove = unsafeBitCast(implementation, to: TouchMoveIMP.self)
+        return touchMove(FBSimulatorHIDEvent.self, selector, x, y)
     }
 
     static func performCompositeDrag(
