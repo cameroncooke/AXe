@@ -224,6 +224,9 @@ struct Slider: AsyncParsableCommand {
             )
             if observedValue.isWithinTolerance {
                 try await Task.sleep(for: .seconds(Self.verificationStabilityDelay))
+                if clock.now >= deadline {
+                    return observedValue
+                }
                 let stableMatch = try await resolveSliderElement(query: query, logger: logger)
                 let stableRawValue = stableMatch.element.normalizedValue
                 let stableNormalizedValue = try parseNormalizedAXValue(stableRawValue)
