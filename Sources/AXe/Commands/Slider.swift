@@ -13,8 +13,8 @@ struct Slider: AsyncParsableCommand {
     private static let verificationTimeout: TimeInterval = 1.5
     private static let verificationPollInterval: TimeInterval = 0.1
     private static let verificationStabilityDelay: TimeInterval = 0.3
-    private static let alreadyAtTargetTolerance = 0.00005
     private static let valueTolerance = 0.0007
+    private static let alreadyAtTargetTolerance = valueTolerance
     private static let lowRangeCoordinateOffset = 0.0268
     private static let highRangeCoordinateOffset = 0.0271
 
