@@ -197,6 +197,31 @@ struct TapTests {
         )
     }
 
+    @Test("Selector tap switches SwiftUI TabView tab")
+    func selectorTapSwitchesSwiftUITabViewTab() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "tab-view-test")
+
+        let initialState = try await TestHelpers.waitForLabel(containing: "Current Tab:", timeout: 3) {
+            $0 == "Current Tab: Home"
+        }
+        #expect(initialState == "Current Tab: Home")
+
+        let uiState = try await TestHelpers.getUIState()
+        let homeTab = UIStateParser.findElementByLabel(in: uiState, label: "Home")
+        let settingsTab = UIStateParser.findElementByLabel(in: uiState, label: "Settings")
+
+        #expect(homeTab?.type == "RadioButton")
+        #expect(settingsTab?.type == "RadioButton")
+        #expect(settingsTab?.frame != nil)
+
+        try await TestHelpers.runAxeCommand("tap --label Settings --element-type RadioButton", simulatorUDID: defaultSimulatorUDID)
+
+        let selectedState = try await TestHelpers.waitForLabel(containing: "Current Tab:", timeout: 3) {
+            $0 == "Current Tab: Settings"
+        }
+        #expect(selectedState == "Current Tab: Settings")
+    }
+
     @Test("Selector tap toggles SwiftUI Toggle")
     func selectorTapTogglesSwiftUIToggle() async throws {
         try await TestHelpers.launchPlaygroundApp(to: "switch-test")

@@ -97,7 +97,7 @@ struct CommandRunner {
 
 // MARK: - UI State Parsing
 
-struct UIElement: Codable {
+struct UIElement: Decodable {
     let type: String
     let frame: Frame?
     let children: [UIElement]?
@@ -135,8 +135,54 @@ struct UIElement: Codable {
         case AXUniqueId
         case AXIdentifier
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        type = try container.decode(String.self, forKey: .type)
+        frame = try container.decodeIfPresent(Frame.self, forKey: .frame)
+        children = try container.decodeIfPresent([UIElement].self, forKey: .children)
+        role = try Self.decodeOptionalScalarString(from: container, forKey: .role)
+        enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+        title = try Self.decodeOptionalScalarString(from: container, forKey: .title)
+        subrole = try Self.decodeOptionalScalarString(from: container, forKey: .subrole)
+        contentRequired = try container.decodeIfPresent(Bool.self, forKey: .contentRequired)
+        roleDescription = try Self.decodeOptionalScalarString(from: container, forKey: .roleDescription)
+        helpText = try Self.decodeOptionalScalarString(from: container, forKey: .helpText)
+        AXFrame = try Self.decodeOptionalScalarString(from: container, forKey: .AXFrame)
+        customActions = try container.decodeIfPresent([String].self, forKey: .customActions)
+        AXLabel = try Self.decodeOptionalScalarString(from: container, forKey: .AXLabel)
+        AXValue = try Self.decodeOptionalScalarString(from: container, forKey: .AXValue)
+        AXUniqueId = try Self.decodeOptionalScalarString(from: container, forKey: .AXUniqueId)
+        AXIdentifier = try Self.decodeOptionalScalarString(from: container, forKey: .AXIdentifier)
+    }
+
+    private static func decodeOptionalScalarString(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> String? {
+        if !container.contains(key) {
+            return nil
+        }
+        if try container.decodeNil(forKey: key) {
+            return nil
+        }
+        if let value = try? container.decode(String.self, forKey: key) {
+            return value
+        }
+        if let value = try? container.decode(Int.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decode(Double.self, forKey: key) {
+            return String(value)
+        }
+        if let value = try? container.decode(Bool.self, forKey: key) {
+            return String(value)
+        }
+        return nil
+    }
     
-    struct Frame: Codable {
+    struct Frame: Decodable {
         let x: Double
         let y: Double
         let width: Double

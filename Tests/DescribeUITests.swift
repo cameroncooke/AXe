@@ -51,6 +51,20 @@ struct DescribeUITests {
         #expect(uiState.children?.count ?? 0 > 0, "Should have at least one child element")
     }
 
+    @Test("Describe-ui exposes SwiftUI TabView tabs as real elements")
+    func describeUIExposesSwiftUITabViewTabsAsRealElements() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "tab-view-test")
+
+        let uiState = try await TestHelpers.getUIState()
+        let homeTab = UIStateParser.findElementByLabel(in: uiState, label: "Home")
+        let settingsTab = UIStateParser.findElementByLabel(in: uiState, label: "Settings")
+
+        #expect(homeTab?.type == "RadioButton")
+        #expect(homeTab?.frame != nil)
+        #expect(settingsTab?.type == "RadioButton")
+        #expect(settingsTab?.frame != nil)
+    }
+
     @Test("Describe-ui --point returns the targeted element")
     func describeUIAtPoint() async throws {
         let simulatorUDID = try TestHelpers.requireSimulatorUDID()
