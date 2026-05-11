@@ -1,23 +1,22 @@
 import ArgumentParser
 import Foundation
-import FBControlCore
-import FBSimulatorControl
 
 struct Slider: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Set a slider to a deterministic value from 0 to 100 using accessibility selector targeting."
     )
 
-    private static let dragDuration = 0.6
-    private static let dragStepDelta = 2.0
-    private static let dragInitialHold: TimeInterval = 0.05
-    private static let dragFinalHold: TimeInterval = 0.2
+    private static let directDragSteps = 120
+    private static let directDragDuration: TimeInterval = 2.4
+    private static let directDragInitialHold: TimeInterval = 0.05
+    private static let directDragFinalHold: TimeInterval = 0.2
     private static let verificationTimeout: TimeInterval = 1.5
     private static let verificationPollInterval: TimeInterval = 0.1
     private static let verificationStabilityDelay: TimeInterval = 0.3
-    private static let maxAdjustmentAttempts = 8
-    private static let valueTolerance = 0.004
-    private static let minimumCorrectionStep = 0.005
+    private static let alreadyAtTargetTolerance = 0.00005
+    private static let valueTolerance = 0.0007
+    private static let lowRangeCoordinateOffset = 0.0268
+    private static let highRangeCoordinateOffset = 0.0271
 
     @Option(name: [.customLong("id")], help: "Set the slider matching AXUniqueId (accessibilityIdentifier).")
     var elementID: String?
@@ -104,10 +103,10 @@ struct Slider: AsyncParsableCommand {
         throw CLIError(errorDescription: "Unexpected state: no slider selector.")
     }
 
-    private func makeAdjustment(
+    private func makeDragPlan(
         for element: AccessibilityElement,
         targetNormalized: Double
-    ) throws -> SliderAdjustment {
+    ) throws -> SliderDragPlan {
         guard element.isSliderLikeControl else {
             let typeDescription = element.type ?? element.role ?? "unknown"
             throw CLIError(errorDescription: "Matched element is not a slider (type: \(typeDescription)). Use --element-type Slider or a more specific --id/--label selector.")
@@ -121,12 +120,24 @@ struct Slider: AsyncParsableCommand {
 
         let currentNormalized = try parseNormalizedAXValue(element.normalizedValue)
         let centerY = frame.y + (frame.height / 2.0)
-        let thumbCenterRange = thumbCenterRange(for: frame)
-        return SliderAdjustment(
-            logicalStart: (x: frame.x + (frame.width * currentNormalized), y: centerY),
-            logicalEnd: (x: thumbCenterRange.x(for: targetNormalized), y: centerY),
+        let commandedNormalized = commandedNormalizedValue(
             currentNormalized: currentNormalized,
             targetNormalized: targetNormalized
+        )
+        let nominalStartX = frame.x + (frame.width * currentNormalized)
+        let startX = dragStartX(
+            frame: frame,
+            nominalStartX: nominalStartX,
+            currentNormalized: currentNormalized,
+            targetNormalized: targetNormalized
+        )
+        let fingerOffsetFromNominalStart = startX - nominalStartX
+        return SliderDragPlan(
+            logicalStart: (x: startX, y: centerY),
+            logicalEnd: (x: frame.x + (frame.width * commandedNormalized) + fingerOffsetFromNominalStart, y: centerY),
+            currentNormalized: currentNormalized,
+            targetNormalized: targetNormalized,
+            commandedNormalized: commandedNormalized
         )
     }
 
@@ -136,87 +147,47 @@ struct Slider: AsyncParsableCommand {
         targetNormalized: Double,
         logger: AxeLogger
     ) async throws -> String {
-        var match = initialMatch
-        let initialNormalized = try parseNormalizedAXValue(match.element.normalizedValue)
-        var commandedNormalized = initialCommandedNormalized(currentNormalized: initialNormalized, targetNormalized: targetNormalized)
-        var lastRawValue = match.element.normalizedValue
-        var lowerBound = initialNormalized < targetNormalized ? SliderCommandObservation(commanded: initialNormalized, observed: initialNormalized) : nil
-        var upperBound = initialNormalized > targetNormalized ? SliderCommandObservation(commanded: initialNormalized, observed: initialNormalized) : nil
+        let dragPlan = try makeDragPlan(for: initialMatch.element, targetNormalized: targetNormalized)
+        logger.info().log(
+            "Setting slider \(initialMatch.selectorDescription) from AXValue \(formatNormalized(dragPlan.currentNormalized)) toward \(formatNormalized(dragPlan.targetNormalized)) with low-level HID drag"
+        )
 
-        for attempt in 1...Self.maxAdjustmentAttempts {
-            let adjustment = try makeAdjustment(for: match.element, targetNormalized: commandedNormalized)
-            lastRawValue = match.element.normalizedValue
-
-            logger.info().log(
-                "Setting slider \(match.selectorDescription) attempt \(attempt) from AXValue \(formatNormalized(adjustment.currentNormalized)) toward \(formatNormalized(targetNormalized))"
-            )
-
-            try await performSliderDrag(adjustment, logger: logger)
-
-            let observedValue = try await pollObservedSliderValue(
-                query: query,
-                targetNormalized: targetNormalized,
-                logger: logger
-            )
-            match = observedValue.match
-            lastRawValue = observedValue.rawValue
-
-            if observedValue.isWithinTolerance {
-                return lastRawValue ?? formatNormalized(observedValue.normalizedValue)
-            }
-
-            let observedNormalized = observedValue.normalizedValue
-
-            let observation = SliderCommandObservation(commanded: commandedNormalized, observed: observedNormalized)
-            if observedNormalized < targetNormalized {
-                lowerBound = observation
-            } else {
-                upperBound = observation
-            }
-            commandedNormalized = nextCommandedNormalized(
-                targetNormalized: targetNormalized,
-                currentCommandedNormalized: commandedNormalized,
-                observedNormalized: observedNormalized,
-                lowerBound: lowerBound,
-                upperBound: upperBound
-            )
+        if abs(dragPlan.currentNormalized - targetNormalized) > Self.alreadyAtTargetTolerance {
+            try await performSliderDrag(dragPlan, logger: logger)
         }
 
-        throw CLIError(
-            errorDescription: "Slider value did not reach requested value \(formatPercent(value)). Observed AXValue: \(lastRawValue ?? "none")."
+        let observedValue = try await pollObservedSliderValue(
+            query: query,
+            targetNormalized: targetNormalized,
+            logger: logger
         )
+        guard observedValue.isWithinTolerance else {
+            throw CLIError(
+                errorDescription: "Slider value did not reach requested value \(formatPercent(value)) after direct drag. Observed AXValue: \(observedValue.rawValue ?? "none")."
+            )
+        }
+        return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
     }
 
-    private func performSliderDrag(_ adjustment: SliderAdjustment, logger: AxeLogger) async throws {
+    private func performSliderDrag(_ dragPlan: SliderDragPlan, logger: AxeLogger) async throws {
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
-            points: [adjustment.logicalStart, adjustment.logicalEnd],
+            points: [dragPlan.logicalStart, dragPlan.logicalEnd],
             for: simulatorUDID,
             logger: logger
         )
         let physicalStart = physicalPoints[0]
         let physicalEnd = physicalPoints[1]
 
-        let distance = hypot(physicalEnd.x - physicalStart.x, physicalEnd.y - physicalStart.y)
-        let steps = max(1, Int(ceil(distance / Self.dragStepDelta)))
-        let stepDelay = Self.dragDuration / Double(steps)
-
-        var events: [FBSimulatorHIDEvent] = [
-            .touchDownAt(x: physicalStart.x, y: physicalStart.y),
-            .delay(Self.dragInitialHold)
-        ]
-
-        for step in 1...steps {
-            let progress = Double(step) / Double(steps)
-            let x = physicalStart.x + ((physicalEnd.x - physicalStart.x) * progress)
-            let y = physicalStart.y + ((physicalEnd.y - physicalStart.y) * progress)
-            events.append(.touchDownAt(x: x, y: y))
-            events.append(.delay(stepDelay))
-        }
-
-        events.append(.delay(Self.dragFinalHold))
-        events.append(.touchUpAt(x: physicalEnd.x, y: physicalEnd.y))
-
-        try await HIDInteractor.performHIDEvent(FBSimulatorHIDEvent(events: events), for: simulatorUDID, logger: logger)
+        try await HIDInteractor.performCompositeDrag(
+            from: physicalStart,
+            to: physicalEnd,
+            duration: Self.directDragDuration,
+            steps: Self.directDragSteps,
+            initialHold: Self.directDragInitialHold,
+            finalHold: Self.directDragFinalHold,
+            for: simulatorUDID,
+            logger: logger
+        )
     }
 
     private func resolveSliderElement(query: AccessibilityQuery, logger: AxeLogger) async throws -> AccessibilityMatch {
@@ -281,53 +252,26 @@ struct Slider: AsyncParsableCommand {
         throw CLIError(errorDescription: "Slider value could not be verified because AXValue was unavailable after dragging.")
     }
 
-    private func initialCommandedNormalized(currentNormalized: Double, targetNormalized: Double) -> Double {
-        let distance = targetNormalized - currentNormalized
-        guard abs(distance) > 0.25 else {
-            return targetNormalized
-        }
-        return clampedNormalized(targetNormalized - (distance * 0.1))
-    }
-
-    private func nextCommandedNormalized(
-        targetNormalized: Double,
-        currentCommandedNormalized: Double,
-        observedNormalized: Double,
-        lowerBound: SliderCommandObservation?,
-        upperBound: SliderCommandObservation?
+    private func dragStartX(
+        frame: AccessibilityElement.Frame,
+        nominalStartX: Double,
+        currentNormalized: Double,
+        targetNormalized: Double
     ) -> Double {
-        let correction = targetNormalized - observedNormalized
-
-        if let lowerBound,
-           let upperBound,
-           abs(upperBound.observed - lowerBound.observed) > .ulpOfOne {
-            let observedRange = upperBound.observed - lowerBound.observed
-            let commandedRange = upperBound.commanded - lowerBound.commanded
-            let interpolated = lowerBound.commanded + ((targetNormalized - lowerBound.observed) * commandedRange / observedRange)
-            if interpolated.isFinite {
-                return clampedNormalized(interpolated)
-            }
+        guard currentNormalized >= 1.0 - Self.valueTolerance, targetNormalized < currentNormalized else {
+            return nominalStartX
         }
-
-        if observedNormalized < targetNormalized {
-            let corrected = max(currentCommandedNormalized + correction, currentCommandedNormalized + Self.minimumCorrectionStep)
-            return clampedNormalized(min(corrected, upperBound?.commanded ?? 1.0))
-        }
-
-        let corrected = min(currentCommandedNormalized + correction, currentCommandedNormalized - Self.minimumCorrectionStep)
-        return clampedNormalized(max(corrected, lowerBound?.commanded ?? 0.0))
+        return nominalStartX - (frame.height / 2.0)
     }
 
-    private func thumbCenterRange(for frame: AccessibilityElement.Frame) -> SliderThumbCenterRange {
-        let thumbRadius = frame.height / 2.0
-        return SliderThumbCenterRange(
-            minX: frame.x - thumbRadius,
-            maxX: frame.x + frame.width + thumbRadius
-        )
-    }
-
-    private func clampedNormalized(_ value: Double) -> Double {
-        min(max(value, 0.0), 1.0)
+    private func commandedNormalizedValue(currentNormalized: Double, targetNormalized: Double) -> Double {
+        if abs(currentNormalized - targetNormalized) <= Self.alreadyAtTargetTolerance {
+            return currentNormalized
+        }
+        if targetNormalized < currentNormalized {
+            return targetNormalized - Self.lowRangeCoordinateOffset
+        }
+        return targetNormalized + Self.highRangeCoordinateOffset
     }
 
     private func parseNormalizedAXValue(_ rawValue: String?) throws -> Double {
@@ -365,25 +309,12 @@ struct Slider: AsyncParsableCommand {
     }
 }
 
-private struct SliderThumbCenterRange {
-    let minX: Double
-    let maxX: Double
-
-    func x(for normalizedValue: Double) -> Double {
-        minX + ((maxX - minX) * normalizedValue)
-    }
-}
-
-private struct SliderAdjustment {
+private struct SliderDragPlan {
     let logicalStart: (x: Double, y: Double)
     let logicalEnd: (x: Double, y: Double)
     let currentNormalized: Double
     let targetNormalized: Double
-}
-
-private struct SliderCommandObservation {
-    let commanded: Double
-    let observed: Double
+    let commandedNormalized: Double
 }
 
 private struct SliderObservedValue {

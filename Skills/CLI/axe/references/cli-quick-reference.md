@@ -37,7 +37,7 @@ axe slider --id "volume-slider" --value 75 --udid <UDID>
 axe slider --label "Volume" --value 40 --element-type Slider --udid <UDID>
 ```
 
-`slider` resolves the matched accessibility slider, uses its frame/current AXValue for the drag start and end points, and re-reads AXValue to verify the requested value was reached.
+`slider` resolves the matched accessibility slider, uses its frame/current AXValue for one calibrated low-level HID drag through the same composite touch-move path as `drag`, and re-reads AXValue. Since iOS slider controls quantize values to their rendered track resolution, AXe verifies that the observed value is within tolerance rather than retrying correction gestures to chase unreachable decimals. If the observed value remains outside tolerance, the command fails clearly.
 
 ## Swipe
 
@@ -50,6 +50,15 @@ axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --de
 # With timing
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --pre-delay 1.0 --post-delay 0.5 --udid <UDID>
 ```
+
+## Drag (low-level)
+
+```bash
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid <UDID>
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --duration 0.4 --steps 40 --udid <UDID>
+```
+
+`drag` emits one composite low-level HID event: touch down at the start point, a sequence of explicit touch move events, then touch up at the end point.
 
 ## Touch (low-level)
 
@@ -225,14 +234,15 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 
 | Parameter | Range | Description | Available on |
 |---|---|---|---|
-| `--pre-delay` | 0–10s | Delay before action | tap, swipe, gesture |
-| `--post-delay` | 0–10s | Delay after action | tap, swipe, gesture |
-| `--duration` | 0–10s | Action duration | swipe, gesture, button, key |
+| `--pre-delay` | 0–10s | Delay before action | tap, swipe, drag, gesture |
+| `--post-delay` | 0–10s | Delay after action | tap, swipe, drag, gesture |
+| `--duration` | 0–10s | Action duration | swipe, drag, gesture, button, key |
+| `--steps` | 1–1000 | Touch move event count | drag |
 | `--value` | 0–100 | Target slider percentage | slider |
 | `--delay` | 0–5s | Between-item delay | key-sequence, touch |
 
 ## Best practices
-- Prefer `--id` / `--label` selectors over coordinates for resilience; use `slider` for slider values instead of raw swipe coordinates.
+- Prefer `--id` / `--label` selectors over coordinates for resilience; use `slider` for selector-resolved low-level HID slider dragging with AXValue tolerance verification instead of raw swipe coordinates, and use `drag` when you specifically need raw point-to-point HID drag behavior.
 - Selector taps activate a contained UIKit `UISwitch` or SwiftUI `Toggle` when the matched row or label contains exactly one switch/toggle.
 - Default `--tap-style automatic` uses physical touch for matched switches/toggles and simulator `tapAt` for normal taps; use `--tap-style physical|simulator` to override.
 - Use single quotes for inline text to avoid shell expansion.

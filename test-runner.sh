@@ -59,6 +59,7 @@ show_usage() {
     echo ""
     echo "Test Filters (optional):"
     echo "  SwipeTests          Run only swipe tests"
+    echo "  DragTests           Run only drag tests"
     echo "  SliderTests         Run only slider tests"
     echo "  TapTests            Run only tap tests"
     echo "  KeyTests            Run only key tests"
@@ -71,6 +72,7 @@ show_usage() {
     echo "Examples:"
     echo "  $0                  # Build everything and run all tests"
     echo "  $0 SwipeTests       # Build everything and run only swipe tests"
+    echo "  $0 DragTests        # Build everything and run only drag tests"
     echo "  $0 -t SwipeTests    # Skip building, run only swipe tests"
     echo "  $0 -b               # Only build, skip tests"
     echo "  $0 -c               # Clean build and run all tests"
@@ -110,7 +112,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|SwipeTests|SliderTests|TapTests|KeyTests|TouchTests|TypeTests|ButtonTests|GestureTests|ListSimulatorsTests)
+        BatchTests|SwipeTests|DragTests|SliderTests|TapTests|KeyTests|TouchTests|TypeTests|ButtonTests|GestureTests|ListSimulatorsTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -340,6 +342,7 @@ run_tests() {
             "StreamVideoDebugTests"
             "StreamVideoTests"
             "SwipeTests"
+            "DragTests"
             "SliderTests"
             "TapTests"
             "TouchTests"

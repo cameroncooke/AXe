@@ -46,8 +46,9 @@ AXe provides complete iOS Simulator automation capabilities:
 ### Touch & Gestures
 - **Tap**: Precise touch events at specific coordinates with timing controls
 - **Swipe**: Multi-touch gestures with configurable duration and delta
+- **Drag**: Raw point-to-point low-level HID drags with explicit touch move events
 - **Touch Control**: Low-level touch down/up events for advanced gesture control
-- **Sliders**: Set slider controls to an exact 0-100 percentage by accessibility identifier or label
+- **Sliders**: Set slider controls to a verified 0-100 percentage tolerance by accessibility identifier or label
 - **Gesture Presets**: Common gesture patterns (scroll-up, scroll-down, scroll-left, scroll-right, edge swipes)
 - **Batch Chaining**: Execute ordered multi-step interaction workflows in one invocation
 
@@ -149,6 +150,7 @@ axe tap -x 320 -y 780 --tap-style physical --udid $UDID  # Force physical touch 
 axe slider --id "volume-slider" --value 75 --udid $UDID
 axe type 'Hello World!' --udid $UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid $UDID
 axe button home --udid $UDID
 
 # Screenshot
@@ -202,11 +204,16 @@ axe tap -x 320 -y 780 --tap-style physical --udid SIMULATOR_UDID  # Force touch 
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
 axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --delta 25 --udid SIMULATOR_UDID
 
+# Raw low-level drag using explicit touch move events
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid SIMULATOR_UDID
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --duration 0.4 --steps 40 --udid SIMULATOR_UDID
+
 # Orientation-aware coordinates
 # AXe automatically maps logical UI coordinates for rotated landscape and letterboxed landscape-only apps.
 # Use the coordinates from describe-ui directly; AXe detects the simulator orientation.
 axe tap -x 100 -y 200 --udid SIMULATOR_UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid SIMULATOR_UDID
 
 # Advanced touch control
 axe touch -x 150 -y 250 --down --udid SIMULATOR_UDID
@@ -219,14 +226,14 @@ axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID
 ### **Sliders**
 
 ```bash
-# Set a slider by accessibility identifier to a 0-100 percentage
+# Set a slider by accessibility identifier to a verified 0-100 percentage
 axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
 
 # Set a slider by label and narrow matching to slider elements
 axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
 ```
 
-`slider` resolves the real accessibility slider element, drags from its current AXValue-derived position to the requested percentage, then re-reads AXValue to verify the result.
+`slider` resolves the real accessibility slider element, performs one calibrated low-level HID drag from its current AXValue-derived position toward the requested percentage using the same composite touch-move path as `drag`, and re-reads AXValue to verify the result. Since iOS slider controls quantize values to their rendered track resolution, AXe verifies that the observed value is within tolerance rather than retrying correction gestures to chase unreachable decimals. If the observed AXValue remains outside tolerance after that drag, the command fails clearly.
 
 ### **Gesture Presets**
 

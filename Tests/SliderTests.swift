@@ -32,24 +32,27 @@ struct SliderCommandSurfaceTests {
 
 @Suite("Slider Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct SliderTests {
-    private let exactValueTolerance = 0.004
+    private let observableValueTolerance = 0.0007
 
-    @Test("Slider command sets value by accessibility identifier")
-    func sliderCommandSetsValueByAccessibilityIdentifier() async throws {
+    @Test("Slider command reaches observable AXValue tolerance with one command execution", arguments: [
+        0.0,
+        0.1,
+        1.50,
+        40.0,
+        75.0,
+        78.25,
+        100.0
+    ])
+    func sliderCommandReachesObservableAXValueToleranceWithOneCommand(requestedPercent: Double) async throws {
         try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
 
-        let initial = try await TestHelpers.waitForLabel(containing: "Slider Position:", timeout: 3) {
-            $0 == "Slider Position: 0.25"
-        }
-        #expect(initial == "Slider Position: 0.25")
-
-        try await TestHelpers.runAxeCommand(
-            "slider --id slider-value-slider --value 75 --element-type Slider",
+        _ = try await TestHelpers.runAxeCommand(
+            "slider --id slider-value-slider --value \(formatCommandValue(requestedPercent)) --element-type Slider",
             simulatorUDID: defaultSimulatorUDID
         )
 
-        let slider = try await waitForSliderState(expectedLabel: "Slider Position: 0.75", expectedNormalizedValue: 0.75)
-        #expect(slider.type == "Slider")
+        let state = try await waitForSliderState(requestedPercent: requestedPercent)
+        #expect(state.slider.type == "Slider")
     }
 
     @Test("Slider command sets value by accessibility label")
@@ -61,34 +64,62 @@ struct SliderTests {
             simulatorUDID: defaultSimulatorUDID
         )
 
-        let slider = try await waitForSliderState(expectedLabel: "Slider Position: 0.40", expectedNormalizedValue: 0.40)
-        #expect(slider.type == "Slider")
+        let state = try await waitForSliderState(requestedPercent: 40)
+        #expect(state.slider.type == "Slider")
     }
 
-    private func waitForSliderState(expectedLabel: String, expectedNormalizedValue: Double) async throws -> UIElement {
+    @Test("Slider command reaches observable AXValue tolerance across sequential moves")
+    func sliderCommandReachesObservableAXValueToleranceAcrossSequentialMoves() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
+
+        for requestedPercent in [0.0, 0.1, 1.50, 100.0, 78.25, 40.0, 75.0] {
+            try await TestHelpers.runAxeCommand(
+                "slider --id slider-value-slider --value \(formatCommandValue(requestedPercent)) --element-type Slider",
+                simulatorUDID: defaultSimulatorUDID
+            )
+
+            let state = try await waitForSliderState(requestedPercent: requestedPercent)
+            #expect(state.slider.type == "Slider")
+        }
+    }
+
+    private func waitForSliderState(requestedPercent: Double) async throws -> SliderVerificationState {
+        let expectedNormalizedValue = requestedPercent / 100.0
         let deadline = Date().addingTimeInterval(3)
-        var lastLabel: String?
+        var lastPercentText: String?
+        var lastExactText: String?
         var lastSliderValue: String?
 
         while Date() < deadline {
             let uiState = try await TestHelpers.getUIState()
-            let positionLabel = UIStateParser.findElementByLabel(in: uiState, label: expectedLabel)?.label
-            lastLabel = UIStateParser.findElementContainingLabel(in: uiState, containing: "Slider Position:")?.label
+            let percentElement = UIStateParser.findElement(in: uiState, withIdentifier: "slider-percent-state")
+            let exactElement = UIStateParser.findElement(in: uiState, withIdentifier: "slider-exact-value-state")
+            let slider = UIStateParser.findElement(in: uiState, withIdentifier: "slider-value-slider")
 
-            if let slider = UIStateParser.findElement(in: uiState, withIdentifier: "slider-value-slider") {
-                lastSliderValue = slider.value
-                if positionLabel == expectedLabel,
-                   let observedValue = normalizedSliderValue(slider.value),
-                   abs(observedValue - expectedNormalizedValue) <= exactValueTolerance {
-                    return slider
-                }
+            lastPercentText = percentElement?.label
+            lastExactText = exactElement?.label
+            lastSliderValue = slider?.value
+
+            if let slider,
+               let observedSliderValue = normalizedSliderValue(slider.value),
+               let observedPercent = numericLabelValue(percentElement?.label, prefix: "Slider Percent State:"),
+               let observedExactValue = numericLabelValue(exactElement?.label, prefix: "Slider Exact Value:"),
+               abs(observedSliderValue - expectedNormalizedValue) <= observableValueTolerance,
+               abs(observedExactValue - expectedNormalizedValue) <= observableValueTolerance,
+               abs((observedPercent / 100.0) - expectedNormalizedValue) <= observableValueTolerance {
+                return SliderVerificationState(
+                    slider: slider,
+                    observedNormalizedValue: observedSliderValue,
+                    observedExactValue: observedExactValue,
+                    observedPercent: observedPercent
+                )
             }
 
             try await Task.sleep(nanoseconds: 200_000_000)
         }
 
         throw TestError.unexpectedState(
-            "Timed out waiting for \(expectedLabel) and slider AXValue near \(expectedNormalizedValue). Last label: \(lastLabel ?? "none"), last AXValue: \(lastSliderValue ?? "none")"
+            "Timed out waiting for requested slider target \(formatCommandValue(requestedPercent))% (normalized \(formatNormalized(expectedNormalizedValue))). Last percent text: \(lastPercentText ?? "none"), last exact text: \(lastExactText ?? "none"), last AXValue: \(lastSliderValue ?? "none")"
         )
     }
 
@@ -104,4 +135,27 @@ struct SliderTests {
 
         return isPercent || parsedValue > 1.0 ? parsedValue / 100.0 : parsedValue
     }
+
+    private func numericLabelValue(_ label: String?, prefix: String) -> Double? {
+        guard let label, label.hasPrefix(prefix) else { return nil }
+        return Double(label.dropFirst(prefix.count).trimmingCharacters(in: .whitespacesAndNewlines))
+    }
+
+    private func formatCommandValue(_ value: Double) -> String {
+        if value.rounded() == value {
+            return String(Int(value))
+        }
+        return String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
+
+    private func formatNormalized(_ value: Double) -> String {
+        String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), value)
+    }
+}
+
+private struct SliderVerificationState {
+    let slider: UIElement
+    let observedNormalizedValue: Double
+    let observedExactValue: Double
+    let observedPercent: Double
 }

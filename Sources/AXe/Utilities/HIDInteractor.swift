@@ -74,6 +74,65 @@ struct HIDInteractor {
         try await performHIDEvent(event, in: session, logger: logger)
     }
 
+    static func makeCompositeDragEvent(
+        from start: (x: Double, y: Double),
+        to end: (x: Double, y: Double),
+        duration: TimeInterval,
+        steps: Int,
+        initialHold: TimeInterval,
+        finalHold: TimeInterval
+    ) throws -> FBSimulatorHIDEvent {
+        guard duration >= 0 else {
+            throw CLIError(errorDescription: "Drag duration must be non-negative.")
+        }
+        guard steps > 0 else {
+            throw CLIError(errorDescription: "Drag steps must be greater than 0.")
+        }
+        guard initialHold >= 0, finalHold >= 0 else {
+            throw CLIError(errorDescription: "Drag hold durations must be non-negative.")
+        }
+
+        let stepDelay = duration / Double(steps)
+        var events: [FBSimulatorHIDEvent] = [
+            .touchDownAt(x: start.x, y: start.y),
+            .delay(initialHold)
+        ]
+
+        for step in 1...steps {
+            let progress = Double(step) / Double(steps)
+            let x = start.x + ((end.x - start.x) * progress)
+            let y = start.y + ((end.y - start.y) * progress)
+            events.append(.delay(stepDelay))
+            events.append(.touchMoveAt(x: x, y: y))
+        }
+
+        events.append(.delay(finalHold))
+        events.append(.touchUpAt(x: end.x, y: end.y))
+
+        return FBSimulatorHIDEvent(events: events)
+    }
+
+    static func performCompositeDrag(
+        from start: (x: Double, y: Double),
+        to end: (x: Double, y: Double),
+        duration: TimeInterval,
+        steps: Int,
+        initialHold: TimeInterval,
+        finalHold: TimeInterval,
+        for simulatorUDID: String,
+        logger: AxeLogger
+    ) async throws {
+        let event = try makeCompositeDragEvent(
+            from: start,
+            to: end,
+            duration: duration,
+            steps: steps,
+            initialHold: initialHold,
+            finalHold: finalHold
+        )
+        try await performHIDEvent(event, for: simulatorUDID, logger: logger)
+    }
+
     static func performPhysicalTap(
         at point: (x: Double, y: Double),
         preDelay: Double?,
