@@ -65,6 +65,34 @@ struct DescribeUITests {
         #expect(settingsTab?.frame != nil)
     }
 
+    @Test("Describe-ui exposes navigation searchable field")
+    func describeUIExposesNavigationSearchableField() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "searchable-test")
+
+        let uiState = try await TestHelpers.getUIState()
+        let searchField = UIStateParser.findElement(in: uiState) { element in
+            element.type == "TextField" && element.value == "Search Books"
+        }
+
+        #expect(searchField?.frame != nil)
+    }
+
+    @Test("Describe-ui exposes toolbar segmented picker and navigation back button")
+    func describeUIExposesToolbarPickerAndBackButton() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "toolbar-picker-test")
+
+        let uiState = try await TestHelpers.getUIState()
+        let backButton = UIStateParser.findElement(in: uiState, withIdentifier: "BackButton")
+        let allOption = UIStateParser.findElementByLabel(in: uiState, label: "All")
+        let unreadOption = UIStateParser.findElementByLabel(in: uiState, label: "Unread")
+        let readOption = UIStateParser.findElementByLabel(in: uiState, label: "Read")
+
+        #expect(backButton?.type == "Button")
+        #expect(allOption?.type == "RadioButton")
+        #expect(unreadOption?.type == "RadioButton")
+        #expect(readOption?.type == "RadioButton")
+    }
+
     @Test("Describe-ui --point returns the targeted element")
     func describeUIAtPoint() async throws {
         let simulatorUDID = try TestHelpers.requireSimulatorUDID()
