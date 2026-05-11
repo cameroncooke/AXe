@@ -169,6 +169,37 @@ struct TypeTests {
         #expect(textFieldElement?.value == textToType, "Text should still be typed with manual delays")
     }
     
+    @Test("Typing into navigation searchable field filters visible state")
+    func typingIntoNavigationSearchableFieldFiltersVisibleState() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "searchable-test")
+
+        let initialState = try await TestHelpers.waitForLabel(containing: "Search Query:", timeout: 3) {
+            $0 == "Search Query: empty"
+        }
+        #expect(initialState == "Search Query: empty")
+
+        let uiState = try await TestHelpers.getUIState()
+        let searchField = UIStateParser.findElement(in: uiState) { element in
+            element.type == "TextField" && element.value == "Search Books"
+        }
+        #expect(searchField?.frame != nil)
+
+        try await TestHelpers.runAxeCommand("tap --value 'Search Books' --element-type TextField", simulatorUDID: defaultSimulatorUDID)
+        try await Task.sleep(nanoseconds: 400_000_000)
+        try await TestHelpers.runAxeCommand("type Alpha", simulatorUDID: defaultSimulatorUDID)
+
+        let filteredState = try await TestHelpers.waitForLabel(containing: "Search Query:", timeout: 3) {
+            $0 == "Search Query: Alpha"
+        }
+        #expect(filteredState == "Search Query: Alpha")
+
+        let filteredUIState = try await TestHelpers.getUIState()
+        let alphaRow = UIStateParser.findElementByLabel(in: filteredUIState, label: "Alpha Row")
+        let betaRow = UIStateParser.findElementByLabel(in: filteredUIState, label: "Beta Row")
+        #expect(alphaRow != nil)
+        #expect(betaRow == nil)
+    }
+
     @Test("Unsupported characters throw error")
     func unsupportedCharactersError() async throws {
         // Arrange
