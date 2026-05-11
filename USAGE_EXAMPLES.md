@@ -74,8 +74,13 @@ axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
 axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --delta 25 --udid SIMULATOR_UDID
 
-# Swipe with timing controls
+# Raw low-level drag using explicit touch move events
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid SIMULATOR_UDID
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --duration 0.4 --steps 40 --udid SIMULATOR_UDID
+
+# Swipe and drag with timing controls
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
+axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 
 # Advanced touch control
 axe touch -x 150 -y 250 --down --udid SIMULATOR_UDID         # Touch down only
@@ -86,14 +91,14 @@ axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID  # Touch w
 ### **3. Sliders**
 
 ```bash
-# Set a slider by accessibility identifier to a 0-100 percentage
+# Set a slider by accessibility identifier to a verified 0-100 percentage
 axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
 
 # Set a slider by accessibility label and narrow matching to slider elements
 axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
 ```
 
-The `slider` command uses the slider's accessibility frame and current AXValue, performs an orientation-aware HID drag, then verifies the new AXValue. Use `describe-ui` first to find reliable `--id` or `--label` selectors.
+The `slider` command uses the slider's accessibility frame and current AXValue to perform one calibrated low-level HID drag through the same composite touch-move path as `drag`, then verifies the new AXValue. Since iOS slider controls quantize values to their rendered track resolution, AXe verifies that the observed value is within tolerance rather than retrying correction gestures to chase unreachable decimals. If the observed AXValue remains outside tolerance after that drag, the command fails clearly. Use `describe-ui` first to find reliable `--id` or `--label` selectors.
 
 ### **4. Gesture Presets** 🆕
 
@@ -450,9 +455,10 @@ done
 
 | Parameter | Range | Description | Available On |
 |-----------|-------|-------------|--------------|
-| `--pre-delay` | 0-10 seconds | Delay before action | tap, swipe, gesture |
-| `--post-delay` | 0-10 seconds | Delay after action | tap, swipe, gesture |
-| `--duration` | 0-10 seconds | Action duration | swipe, gesture, button, key |
+| `--pre-delay` | 0-10 seconds | Delay before action | tap, swipe, drag, gesture |
+| `--post-delay` | 0-10 seconds | Delay after action | tap, swipe, drag, gesture |
+| `--duration` | 0-10 seconds | Action duration | swipe, drag, gesture, button, key |
+| `--steps` | 1-1000 | Touch move event count | drag |
 | `--delay` | 0-5 seconds | Between-key delay | key-sequence, touch |
 
 ## Benchmarking Batch vs Non-Batch
@@ -476,7 +482,7 @@ This benchmark compares equivalent two-tap workflows and reports per-iteration l
 5. **No Shell Escaping**: Use `--stdin` or `--file` for complex text
 6. **Automation-Friendly**: Perfect for CI/CD and testing scripts
 7. **Flexible Input Methods**: Multiple ways to provide input and control timing
-8. **Deterministic Slider Setting**: Slider controls can be set by selector with AXValue verification
+8. **Slider Verification**: Slider controls use selector-resolved low-level HID dragging with AXValue tolerance verification
 9. **Comprehensive Validation**: Built-in parameter validation and error handling
 
 ## Common Keycodes Reference

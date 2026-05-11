@@ -11,6 +11,7 @@ Each AXe command has its own dedicated test file:
 - `TapTests.swift` - Tests for `tap` command
 - `SliderTests.swift` - Tests for `slider` command
 - `SwipeTests.swift` - Tests for `swipe` command
+- `DragTests.swift` - Tests for `drag` command
 - `TypeTests.swift` - Tests for `type` command
 - `KeyTests.swift` - Tests for `key` and `key-sequence` commands
 - `TouchTests.swift` - Tests for `touch` command
@@ -33,6 +34,7 @@ AXE_E2E=1 SIMULATOR_UDID=<UDID> swift test
 swift test --filter TapTests
 swift test --filter SliderTests
 swift test --filter SwipeTests
+swift test --filter DragTests
 swift test --filter TypeTests
 swift test --filter KeyTests
 swift test --filter TouchTests
@@ -70,6 +72,7 @@ Each test file can be run directly:
 swift test --filter TapTests
 swift test --filter SliderTests
 swift test --filter SwipeTests
+swift test --filter DragTests
 ```
 
 ## Test Coverage

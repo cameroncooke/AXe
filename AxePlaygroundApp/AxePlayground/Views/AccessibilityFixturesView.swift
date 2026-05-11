@@ -1,8 +1,17 @@
+import Foundation
 import SwiftUI
 
 struct SliderValueTestView: View {
     @State private var sliderValue = 0.25
     @State private var state = "Initial"
+
+    private var percentText: String {
+        String(format: "%.2f", locale: Locale(identifier: "en_US_POSIX"), sliderValue * 100.0)
+    }
+
+    private var exactValueText: String {
+        String(format: "%.4f", locale: Locale(identifier: "en_US_POSIX"), sliderValue)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
@@ -19,6 +28,14 @@ struct SliderValueTestView: View {
             Text("Slider Position: \(sliderValue.formatted(.number.precision(.fractionLength(2))))")
                 .accessibilityIdentifier("slider-position-value")
                 .accessibilityValue(sliderValue.formatted(.number.precision(.fractionLength(2))))
+
+            Text("Slider Percent State: \(percentText)")
+                .accessibilityIdentifier("slider-percent-state")
+                .accessibilityValue(percentText)
+
+            Text("Slider Exact Value: \(exactValueText)")
+                .accessibilityIdentifier("slider-exact-value-state")
+                .accessibilityValue(exactValueText)
 
             Slider(value: $sliderValue, in: 0...1)
                 .accessibilityIdentifier("slider-value-slider")

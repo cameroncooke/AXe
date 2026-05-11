@@ -11,7 +11,7 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 
 ## Step 2: Choose the right command
 
-Available commands: `init`, `tap`, `slider`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `batch`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`. Run `axe --help` or `axe <command> --help` for full options.
+Available commands: `init`, `tap`, `slider`, `swipe`, `drag`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `batch`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`. Run `axe --help` or `axe <command> --help` for full options.
 
 Common examples:
 ```bash
@@ -20,6 +20,7 @@ axe tap --label <text> --udid <UDID>
 axe tap --label 'Weather Alerts' --udid <UDID>
 axe slider --id <identifier> --value 75 --udid <UDID>
 axe slider --label <text> --value 40 --element-type Slider --udid <UDID>
+axe drag --start-x <X1> --start-y <Y1> --end-x <X2> --end-y <Y2> --udid <UDID>
 axe tap -x <X> -y <Y> --tap-style physical --udid <UDID>
 axe tap -x <X> -y <Y> --udid <UDID>
 axe type 'text' --udid <UDID>
@@ -30,15 +31,15 @@ axe screenshot --udid <UDID> --output screenshot.png
 
 ## Step 3: Understand the execution model
 
-Most HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe confirms the event was dispatched to the simulator but cannot verify the app actually processed it. A tap may land before a view is interactive, or during a transition. `slider` is the exception: it re-reads the matched slider AXValue and fails if the requested 0-100 value was not reached. This means:
+Most HID commands (`tap`, `swipe`, `drag`, `type`, `key`, etc.) are fire-and-forget — AXe confirms the event was dispatched to the simulator but cannot verify the app actually processed it. A tap may land before a view is interactive, or during a transition. `slider` is the exception: it performs one selector-resolved low-level HID drag, re-reads the matched slider AXValue, and fails if the observed 0-100 value is outside tolerance. iOS slider controls quantize values to their rendered track resolution, so AXe does not retry correction gestures to chase unreachable decimals. This means:
 - Always verify outcomes separately with `describe-ui` or `screenshot` when app behavior matters beyond the direct command result.
 - Use `--wait-timeout` in batch to wait for tap elements to appear, and `sleep` steps or `--pre-delay` / `--post-delay` to allow animations to settle.
 
 ## Step 4: Apply timing and input best practices
 - Use `--pre-delay` / `--post-delay` on tap, swipe, and gesture commands for fixed delays around actions.
 - Use `--duration` to control how long a swipe, gesture, button press, or key press lasts.
-- Coordinate-based `tap`, `swipe`, and `touch` accept coordinates from `describe-ui` directly; AXe detects rotated landscape simulator orientation and letterboxed landscape-only app layouts automatically.
-- Use `axe slider --id <identifier> --value <0-100>` for sliders instead of approximating with raw swipe coordinates; it uses the slider frame/current AXValue and verifies the result.
+- Coordinate-based `tap`, `swipe`, `drag`, and `touch` accept coordinates from `describe-ui` directly; AXe detects rotated landscape simulator orientation and letterboxed landscape-only app layouts automatically.
+- Use `axe slider --id <identifier> --value <0-100>` for sliders instead of approximating with raw swipe coordinates; it uses one calibrated low-level HID drag from the resolved slider frame/current AXValue, through the same composite touch-move path as `drag`, verifies the result within tolerance, and fails clearly if the observed AXValue remains outside tolerance.
 - For text with shell-sensitive characters, prefer `--stdin` or `--file` over inline quotes.
 - Use single quotes for inline text arguments to avoid shell expansion issues.
 
@@ -51,7 +52,7 @@ Most HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — 
 
 **Fall back to discrete commands** when:
 - A step's parameters depend on runtime inspection of a previous step's result (e.g. parsing `describe-ui` JSON to choose coordinates dynamically).
-- Setting a slider value with `slider`; batch steps do not support slider verification.
+- Using `slider`; batch steps do not support slider verification.
 
 **Handling animations and transitions in batch:**
 - Use `--wait-timeout <seconds>` so selector taps (`--id` / `--label`) poll the accessibility tree until the element appears or the timeout expires. This is the primary mechanism for multi-screen flows.
