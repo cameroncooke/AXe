@@ -15,7 +15,28 @@ struct AccessibilityPoller {
             waitTimeout: waitTimeout,
             pollInterval: pollInterval,
             elementType: elementType,
-            logger: logger
+            logger: logger,
+            resolver: AccessibilityTargetResolver.resolveTap
+        ) {
+            try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
+        }
+    }
+
+    static func resolveElementWithPolling(
+        query: AccessibilityQuery,
+        simulatorUDID: String,
+        waitTimeout: TimeInterval,
+        pollInterval: TimeInterval,
+        elementType: String? = nil,
+        logger: AxeLogger
+    ) async throws -> AccessibilityMatch {
+        try await pollForResolution(
+            query: query,
+            waitTimeout: waitTimeout,
+            pollInterval: pollInterval,
+            elementType: elementType,
+            logger: logger,
+            resolver: AccessibilityTargetResolver.resolveElement
         ) {
             try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
         }
@@ -29,9 +50,29 @@ struct AccessibilityPoller {
         logger: AxeLogger,
         rootsFetcher: () async throws -> [AccessibilityElement]
     ) async throws -> TapResolution {
+        try await pollForResolution(
+            query: query,
+            waitTimeout: waitTimeout,
+            pollInterval: pollInterval,
+            elementType: elementType,
+            logger: logger,
+            resolver: AccessibilityTargetResolver.resolveTap,
+            rootsFetcher: rootsFetcher
+        )
+    }
+
+    private static func pollForResolution<T>(
+        query: AccessibilityQuery,
+        waitTimeout: TimeInterval,
+        pollInterval: TimeInterval,
+        elementType: String?,
+        logger: AxeLogger,
+        resolver: ([AccessibilityElement], AccessibilityQuery, String?) throws -> T,
+        rootsFetcher: () async throws -> [AccessibilityElement]
+    ) async throws -> T {
         let roots = try await rootsFetcher()
         do {
-            return try AccessibilityTargetResolver.resolveTap(roots: roots, query: query, elementType: elementType)
+            return try resolver(roots, query, elementType)
         } catch let error as ElementResolutionError where error.isNotFound && waitTimeout > 0 {
             let clock = ContinuousClock()
             let deadline = clock.now + .seconds(waitTimeout)
@@ -43,7 +84,7 @@ struct AccessibilityPoller {
 
                 let freshRoots = try await rootsFetcher()
                 do {
-                    return try AccessibilityTargetResolver.resolveTap(roots: freshRoots, query: query, elementType: elementType)
+                    return try resolver(freshRoots, query, elementType)
                 } catch let retryError as ElementResolutionError where retryError.isNotFound {
                     lastError = retryError
                     continue
