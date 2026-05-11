@@ -259,6 +259,31 @@ struct AccessibilityTargetResolverTests {
         #expect(!resolution.isSwitchLikeControl)
     }
 
+    @Test("Resolved element preserves slider frame and AXValue")
+    func resolvedElementPreservesSliderFrameAndAXValue() throws {
+        let roots = try decodeElements(
+            """
+            [
+              {
+                "type": "Slider",
+                "role": "AXSlider",
+                "frame": { "x": 40, "y": 200, "width": 300, "height": 40 },
+                "AXLabel": "Volume",
+                "AXUniqueId": "volume-slider",
+                "AXValue": "0.25"
+              }
+            ]
+            """
+        )
+
+        let match = try AccessibilityTargetResolver.resolveElement(roots: roots, query: .label("Volume"), elementType: "Slider")
+
+        #expect(match.selectorDescription == "--label 'Volume'")
+        #expect(match.element.isSliderLikeControl)
+        #expect(match.element.frame?.x == 40)
+        #expect(match.element.normalizedValue == "0.25")
+    }
+
     private func decodeElements(_ json: String) throws -> [AccessibilityElement] {
         let data = try #require(json.data(using: .utf8))
         return try JSONDecoder().decode([AccessibilityElement].self, from: data)

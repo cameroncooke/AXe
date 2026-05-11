@@ -11,6 +11,7 @@ struct AccessibilityElement: Decodable {
         "RadioButton",
         "SecureTextField",
         "SegmentedControl",
+        "Slider",
         "Switch",
         "Tab",
         "TabBarButton",
@@ -107,7 +108,21 @@ struct AccessibilityElement: Decodable {
     }
 
     var isActionable: Bool {
-        isSwitchLikeControl || type.map(Self.actionableTypes.contains) == true
+        isSwitchLikeControl || isSliderLikeControl || type.map(Self.actionableTypes.contains) == true
+    }
+
+    var isSliderLikeControl: Bool {
+        if type == "Slider" {
+            return true
+        }
+        if role == "AXSlider" || subrole == "AXSlider" {
+            return true
+        }
+        if let roleDescription = trimmed(roleDescription)?.lowercased(),
+           roleDescription.contains("slider") {
+            return true
+        }
+        return false
     }
 
     var isSwitchLikeControl: Bool {

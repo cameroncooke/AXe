@@ -29,6 +29,16 @@ axe tap -x 320 -y 780 --tap-style physical --udid <UDID>
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid <UDID>
 ```
 
+## Slider
+
+```bash
+# Value is a percentage from 0 to 100
+axe slider --id "volume-slider" --value 75 --udid <UDID>
+axe slider --label "Volume" --value 40 --element-type Slider --udid <UDID>
+```
+
+`slider` resolves the matched accessibility slider, uses its frame/current AXValue for the drag start and end points, and re-reads AXValue to verify the requested value was reached.
+
 ## Swipe
 
 ```bash
@@ -218,10 +228,11 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 | `--pre-delay` | 0–10s | Delay before action | tap, swipe, gesture |
 | `--post-delay` | 0–10s | Delay after action | tap, swipe, gesture |
 | `--duration` | 0–10s | Action duration | swipe, gesture, button, key |
+| `--value` | 0–100 | Target slider percentage | slider |
 | `--delay` | 0–5s | Between-item delay | key-sequence, touch |
 
 ## Best practices
-- Prefer `--id` / `--label` taps over coordinates for resilience.
+- Prefer `--id` / `--label` selectors over coordinates for resilience; use `slider` for slider values instead of raw swipe coordinates.
 - Selector taps activate a contained UIKit `UISwitch` or SwiftUI `Toggle` when the matched row or label contains exactly one switch/toggle.
 - Default `--tap-style automatic` uses physical touch for matched switches/toggles and simulator `tapAt` for normal taps; use `--tap-style physical|simulator` to override.
 - Use single quotes for inline text to avoid shell expansion.

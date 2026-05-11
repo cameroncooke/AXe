@@ -44,6 +44,11 @@ enum ElementResolutionError: LocalizedError {
     }
 }
 
+struct AccessibilityMatch {
+    let element: AccessibilityElement
+    let selectorDescription: String
+}
+
 struct AccessibilityTargetResolver {
     static let describeUITip = "Make sure the app is on the expected screen, then run `axe describe-ui --udid <SIMULATOR_UDID>` and prefer --id when available."
 
@@ -58,11 +63,11 @@ struct AccessibilityTargetResolver {
         try resolveTap(roots: roots, query: query, elementType: elementType).point
     }
 
-    static func resolveTap(
+    static func resolveElement(
         roots: [AccessibilityElement],
         query: AccessibilityQuery,
         elementType: String? = nil
-    ) throws -> TapResolution {
+    ) throws -> AccessibilityMatch {
         var allElements = roots.flatMap { $0.flattened() }
 
         if let elementType {
@@ -90,10 +95,20 @@ struct AccessibilityTargetResolver {
             selectorDescription = "--value '\(rawValue)'"
         }
 
+        return AccessibilityMatch(element: matchedElement, selectorDescription: selectorDescription)
+    }
+
+    static func resolveTap(
+        roots: [AccessibilityElement],
+        query: AccessibilityQuery,
+        elementType: String? = nil
+    ) throws -> TapResolution {
+        let match = try resolveElement(roots: roots, query: query, elementType: elementType)
+
         let activationElement = try selectActivationElement(
-            from: matchedElement,
+            from: match.element,
             roots: roots,
-            selectorDescription: selectorDescription,
+            selectorDescription: match.selectorDescription,
             allowSiblingRedirection: query.allowsSiblingRedirection
         )
 

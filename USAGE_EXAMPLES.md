@@ -83,7 +83,19 @@ axe touch -x 150 -y 250 --up --udid SIMULATOR_UDID           # Touch up only
 axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID  # Touch with delay
 ```
 
-### **3. Gesture Presets** 🆕
+### **3. Sliders**
+
+```bash
+# Set a slider by accessibility identifier to a 0-100 percentage
+axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
+
+# Set a slider by accessibility label and narrow matching to slider elements
+axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
+```
+
+The `slider` command uses the slider's accessibility frame and current AXValue, performs an orientation-aware HID drag, then verifies the new AXValue. Use `describe-ui` first to find reliable `--id` or `--label` selectors.
+
+### **4. Gesture Presets** 🆕
 
 ```bash
 # Scrolling gestures
@@ -111,7 +123,7 @@ axe gesture scroll-down --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 axe gesture swipe-from-left-edge --pre-delay 2.0 --duration 0.8 --post-delay 1.0 --udid SIMULATOR_UDID
 ```
 
-### **4. Hardware Buttons**
+### **5. Hardware Buttons**
 
 ```bash
 # Available buttons: home, lock, side-button, siri, apple-pay
@@ -129,7 +141,7 @@ axe button siri --udid SIMULATOR_UDID
 axe button apple-pay --udid SIMULATOR_UDID
 ```
 
-### **5. Keyboard Control**
+### **6. Keyboard Control**
 
 ```bash
 # Individual key presses by keycode
@@ -148,7 +160,7 @@ axe key-combo --modifiers 227 --key 25 --udid SIMULATOR_UDID             # Cmd+V
 axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID          # Cmd+Shift+A
 ```
 
-### **6. Batch Workflows**
+### **7. Batch Workflows**
 
 ```bash
 # Chain steps with one simulator/HID session
@@ -283,6 +295,9 @@ axe gesture swipe-from-right-edge --pre-delay 1.0 --duration 0.3 --udid SIMULATO
 ```bash
 # Get accessibility info
 axe describe-ui --point 100,200 --udid SIMULATOR_UDID
+
+# Set a discovered slider control
+axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
 
 # Navigate with presets and keyboard
 axe gesture scroll-down --post-delay 1.0 --udid SIMULATOR_UDID         # Scroll to content
@@ -461,7 +476,8 @@ This benchmark compares equivalent two-tap workflows and reports per-iteration l
 5. **No Shell Escaping**: Use `--stdin` or `--file` for complex text
 6. **Automation-Friendly**: Perfect for CI/CD and testing scripts
 7. **Flexible Input Methods**: Multiple ways to provide input and control timing
-8. **Comprehensive Validation**: Built-in parameter validation and error handling
+8. **Deterministic Slider Setting**: Slider controls can be set by selector with AXValue verification
+9. **Comprehensive Validation**: Built-in parameter validation and error handling
 
 ## Common Keycodes Reference
 
