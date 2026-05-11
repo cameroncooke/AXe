@@ -121,9 +121,10 @@ struct Slider: AsyncParsableCommand {
 
         let currentNormalized = try parseNormalizedAXValue(element.normalizedValue)
         let centerY = frame.y + (frame.height / 2.0)
+        let thumbCenterRange = thumbCenterRange(for: frame)
         return SliderAdjustment(
             logicalStart: (x: frame.x + (frame.width * currentNormalized), y: centerY),
-            logicalEnd: (x: frame.x + (frame.width * targetNormalized), y: centerY),
+            logicalEnd: (x: thumbCenterRange.x(for: targetNormalized), y: centerY),
             currentNormalized: currentNormalized,
             targetNormalized: targetNormalized
         )
@@ -296,9 +297,6 @@ struct Slider: AsyncParsableCommand {
         upperBound: SliderCommandObservation?
     ) -> Double {
         let correction = targetNormalized - observedNormalized
-        if abs(correction) <= 0.02 {
-            return targetNormalized
-        }
 
         if let lowerBound,
            let upperBound,
@@ -318,6 +316,14 @@ struct Slider: AsyncParsableCommand {
 
         let corrected = min(currentCommandedNormalized + correction, currentCommandedNormalized - Self.minimumCorrectionStep)
         return clampedNormalized(max(corrected, lowerBound?.commanded ?? 0.0))
+    }
+
+    private func thumbCenterRange(for frame: AccessibilityElement.Frame) -> SliderThumbCenterRange {
+        let thumbRadius = frame.height / 2.0
+        return SliderThumbCenterRange(
+            minX: frame.x - thumbRadius,
+            maxX: frame.x + frame.width + thumbRadius
+        )
     }
 
     private func clampedNormalized(_ value: Double) -> Double {
@@ -356,6 +362,15 @@ struct Slider: AsyncParsableCommand {
 
     private func formatNormalized(_ value: Double) -> String {
         String(format: "%.3f", value)
+    }
+}
+
+private struct SliderThumbCenterRange {
+    let minX: Double
+    let maxX: Double
+
+    func x(for normalizedValue: Double) -> Double {
+        minX + ((maxX - minX) * normalizedValue)
     }
 }
 
