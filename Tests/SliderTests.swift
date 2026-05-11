@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+@testable import AXe
 
 @Suite("Slider Command Surface Tests")
 struct SliderCommandSurfaceTests {
@@ -27,6 +28,15 @@ struct SliderCommandSurfaceTests {
 
         #expect(result.exitCode != 0)
         #expect(result.output.contains("Use exactly one of --id or --label to target a slider."))
+    }
+
+    @Test("Slider drag endpoints stay within the application frame")
+    func sliderDragEndpointsStayWithinApplicationFrame() {
+        let applicationFrame = AccessibilityElement.Frame(x: 0, y: 0, width: 390, height: 844)
+
+        #expect(Slider.clampedDragEndX(-12, applicationFrame: applicationFrame) == 0)
+        #expect(Slider.clampedDragEndX(402, applicationFrame: applicationFrame) == 390)
+        #expect(Slider.clampedDragEndX(120, applicationFrame: applicationFrame) == 120)
     }
 }
 
