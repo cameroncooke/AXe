@@ -18,6 +18,7 @@ struct Axe: AsyncParsableCommand {
             ListSimulators.self,
             Init.self,
             Tap.self,
+            Slider.self,
             Type.self,
             Swipe.self,
             Button.self,

@@ -21,6 +21,7 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
   - [Install AXe Skill](#install-axe-skill)
 - [Commands Overview](#commands-overview)
   - [**Touch \& Gestures**](#touch--gestures-1)
+  - [**Sliders**](#sliders)
   - [**Gesture Presets**](#gesture-presets)
   - [**Text Input**](#text-input)
   - [**Hardware Buttons**](#hardware-buttons-1)
@@ -46,6 +47,7 @@ AXe provides complete iOS Simulator automation capabilities:
 - **Tap**: Precise touch events at specific coordinates with timing controls
 - **Swipe**: Multi-touch gestures with configurable duration and delta
 - **Touch Control**: Low-level touch down/up events for advanced gesture control
+- **Sliders**: Set slider controls to an exact 0-100 percentage by accessibility identifier or label
 - **Gesture Presets**: Common gesture patterns (scroll-up, scroll-down, scroll-left, scroll-right, edge swipes)
 - **Batch Chaining**: Execute ordered multi-step interaction workflows in one invocation
 
@@ -144,6 +146,7 @@ axe tap --id "Safari" --udid $UDID
 axe tap --label "Safari" --udid $UDID
 axe tap --label "Weather Alerts" --udid $UDID  # Auto-uses physical touch for matched switches/toggles
 axe tap -x 320 -y 780 --tap-style physical --udid $UDID  # Force physical touch for coordinate taps
+axe slider --id "volume-slider" --value 75 --udid $UDID
 axe type 'Hello World!' --udid $UDID
 axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
 axe button home --udid $UDID
@@ -212,6 +215,18 @@ axe touch -x 150 -y 250 --down --up --udid SIMULATOR_UDID
 # Long press (hold for 1 second)
 axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID
 ```
+
+### **Sliders**
+
+```bash
+# Set a slider by accessibility identifier to a 0-100 percentage
+axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
+
+# Set a slider by label and narrow matching to slider elements
+axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
+```
+
+`slider` resolves the real accessibility slider element, drags from its current AXValue-derived position to the requested percentage, then re-reads AXValue to verify the result.
 
 ### **Gesture Presets**
 
@@ -366,6 +381,9 @@ axe screenshot --output ~/Desktop/ --udid SIMULATOR_UDID
 # Get accessibility information
 axe describe-ui --udid SIMULATOR_UDID                    # Full screen
 axe describe-ui --point 100,200 --udid SIMULATOR_UDID    # Specific point
+
+# Set slider controls discovered via describe-ui
+axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
 
 # List simulators
 axe list-simulators

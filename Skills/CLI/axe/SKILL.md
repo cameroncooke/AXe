@@ -1,23 +1,25 @@
 ---
 name: axe
-description: Provides agent-ready AXe CLI usage guidance for iOS Simulator automation. Use when asked to "use AXe", "automate a simulator", "tap/swipe/type on simulator", "describe UI", "take a screenshot", "record video", "batch steps", or "interact with an iOS app". Covers all commands including touch, gestures, text input, keyboard, buttons, accessibility, screenshots, video, and batch workflows.
+description: Provides agent-ready AXe CLI usage guidance for iOS Simulator automation. Use when asked to "use AXe", "automate a simulator", "tap/swipe/type on simulator", "set a slider", "describe UI", "take a screenshot", "record video", "batch steps", or "interact with an iOS app". Covers all commands including touch, gestures, sliders, text input, keyboard, buttons, accessibility, screenshots, video, and batch workflows.
 ---
 
 ## Step 1: Confirm runtime context
 1. Identify simulator UDID target first (`axe list-simulators`).
 2. Simulator-interaction AXe commands require `--udid <UDID>`. Commands like `list-simulators` and `init` do not.
-3. Run `axe describe-ui --udid <UDID>` to inspect the full current screen. Use `axe describe-ui --point <X,Y> --udid <UDID>` to inspect the element at a specific coordinate. Use the output to discover available `--id` and `--label` values for selector taps, and to confirm coordinates for coordinate-based taps.
-4. Prefer selector taps (`tap --id` / `tap --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting (`--wait-timeout`) in batch flows. For UIKit `UISwitch` and SwiftUI `Toggle` rows, selector taps activate the contained switch/toggle when the match contains exactly one such control. Default tap style is `automatic`: switches/toggles use physical touch down/up, while normal taps use simulator `tapAt`.
+3. Run `axe describe-ui --udid <UDID>` to inspect the full current screen. Use `axe describe-ui --point <X,Y> --udid <UDID>` to inspect the element at a specific coordinate. Use the output to discover available `--id` and `--label` values for selector taps and slider setting, and to confirm coordinates for coordinate-based taps.
+4. Prefer selectors (`tap --id` / `tap --label`, `slider --id` / `slider --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting where documented. For UIKit `UISwitch` and SwiftUI `Toggle` rows, selector taps activate the contained switch/toggle when the match contains exactly one such control. Default tap style is `automatic`: switches/toggles use physical touch down/up, while normal taps use simulator `tapAt`.
 
 ## Step 2: Choose the right command
 
-Available commands: `init`, `tap`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `batch`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`. Run `axe --help` or `axe <command> --help` for full options.
+Available commands: `init`, `tap`, `slider`, `swipe`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `batch`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`. Run `axe --help` or `axe <command> --help` for full options.
 
 Common examples:
 ```bash
 axe tap --id <identifier> --udid <UDID>
 axe tap --label <text> --udid <UDID>
 axe tap --label 'Weather Alerts' --udid <UDID>
+axe slider --id <identifier> --value 75 --udid <UDID>
+axe slider --label <text> --value 40 --element-type Slider --udid <UDID>
 axe tap -x <X> -y <Y> --tap-style physical --udid <UDID>
 axe tap -x <X> -y <Y> --udid <UDID>
 axe type 'text' --udid <UDID>
@@ -28,14 +30,15 @@ axe screenshot --udid <UDID> --output screenshot.png
 
 ## Step 3: Understand the execution model
 
-HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe confirms the event was dispatched to the simulator but cannot verify the app actually processed it. A tap may land before a view is interactive, or during a transition. This means:
-- Always verify outcomes separately with `describe-ui` or `screenshot`.
-- Use `--wait-timeout` in batch to wait for elements to appear, and `sleep` steps or `--pre-delay` / `--post-delay` to allow animations to settle.
+Most HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe confirms the event was dispatched to the simulator but cannot verify the app actually processed it. A tap may land before a view is interactive, or during a transition. `slider` is the exception: it re-reads the matched slider AXValue and fails if the requested 0-100 value was not reached. This means:
+- Always verify outcomes separately with `describe-ui` or `screenshot` when app behavior matters beyond the direct command result.
+- Use `--wait-timeout` in batch to wait for tap elements to appear, and `sleep` steps or `--pre-delay` / `--post-delay` to allow animations to settle.
 
 ## Step 4: Apply timing and input best practices
 - Use `--pre-delay` / `--post-delay` on tap, swipe, and gesture commands for fixed delays around actions.
 - Use `--duration` to control how long a swipe, gesture, button press, or key press lasts.
 - Coordinate-based `tap`, `swipe`, and `touch` accept coordinates from `describe-ui` directly; AXe detects rotated landscape simulator orientation and letterboxed landscape-only app layouts automatically.
+- Use `axe slider --id <identifier> --value <0-100>` for sliders instead of approximating with raw swipe coordinates; it uses the slider frame/current AXValue and verifies the result.
 - For text with shell-sensitive characters, prefer `--stdin` or `--file` over inline quotes.
 - Use single quotes for inline text arguments to avoid shell expansion issues.
 
@@ -48,6 +51,7 @@ HID commands (`tap`, `swipe`, `type`, `key`, etc.) are fire-and-forget — AXe c
 
 **Fall back to discrete commands** when:
 - A step's parameters depend on runtime inspection of a previous step's result (e.g. parsing `describe-ui` JSON to choose coordinates dynamically).
+- Setting a slider value with `slider`; batch steps do not support slider verification.
 
 **Handling animations and transitions in batch:**
 - Use `--wait-timeout <seconds>` so selector taps (`--id` / `--label`) poll the accessibility tree until the element appears or the timeout expires. This is the primary mechanism for multi-screen flows.

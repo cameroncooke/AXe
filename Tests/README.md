@@ -9,6 +9,7 @@ Each AXe command has its own dedicated test file:
 - `ListSimulatorsTests.swift` - Tests for `list-simulators` command
 - `DescribeUITests.swift` - Tests for `describe-ui` command  
 - `TapTests.swift` - Tests for `tap` command
+- `SliderTests.swift` - Tests for `slider` command
 - `SwipeTests.swift` - Tests for `swipe` command
 - `TypeTests.swift` - Tests for `type` command
 - `KeyTests.swift` - Tests for `key` and `key-sequence` commands
@@ -30,6 +31,7 @@ AXE_E2E=1 SIMULATOR_UDID=<UDID> swift test
 
 # Run specific test files
 swift test --filter TapTests
+swift test --filter SliderTests
 swift test --filter SwipeTests
 swift test --filter TypeTests
 swift test --filter KeyTests
@@ -66,6 +68,7 @@ Each test file can be run directly:
 
 ```bash
 swift test --filter TapTests
+swift test --filter SliderTests
 swift test --filter SwipeTests
 ```
 
