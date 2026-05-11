@@ -38,6 +38,13 @@ struct SliderCommandSurfaceTests {
         #expect(Slider.clampedDragEndX(402, applicationFrame: applicationFrame) == 390)
         #expect(Slider.clampedDragEndX(120, applicationFrame: applicationFrame) == 120)
     }
+
+    @Test("Slider command skips overdrive when already within verification tolerance")
+    func sliderCommandSkipsOverdriveWhenAlreadyWithinVerificationTolerance() {
+        #expect(Slider.commandedNormalizedValue(currentNormalized: 0.3994, targetNormalized: 0.4) == 0.3994)
+        #expect(Slider.commandedNormalizedValue(currentNormalized: 0.4006, targetNormalized: 0.4) == 0.4006)
+        #expect(Slider.commandedNormalizedValue(currentNormalized: 0.398, targetNormalized: 0.4) > 0.4)
+    }
 }
 
 @Suite("Slider Command Tests", .serialized, .enabled(if: isE2EEnabled))
