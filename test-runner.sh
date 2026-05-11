@@ -61,6 +61,10 @@ show_usage() {
     echo "  SwipeTests          Run only swipe tests"
     echo "  DragTests           Run only drag tests"
     echo "  SliderTests         Run only slider tests"
+    echo "  DescribeUITests     Run only describe-ui tests"
+    echo "  InitTests           Run only init tests"
+    echo "  KeyComboTests       Run only key-combo tests"
+    echo "  KeySequenceTests    Run only key-sequence tests"
     echo "  TapTests            Run only tap tests"
     echo "  KeyTests            Run only key tests"
     echo "  TouchTests          Run only touch tests"
@@ -68,6 +72,9 @@ show_usage() {
     echo "  ButtonTests         Run only button tests"
     echo "  GestureTests        Run only gesture tests"
     echo "  ListSimulatorsTests Run only list simulators tests"
+    echo "  RecordVideoTests    Run only record video tests"
+    echo "  StreamVideoDebugTests Run only stream video debug tests"
+    echo "  StreamVideoTests    Run only stream video tests"
     echo ""
     echo "Examples:"
     echo "  $0                  # Build everything and run all tests"
@@ -112,7 +119,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|SwipeTests|DragTests|SliderTests|TapTests|KeyTests|TouchTests|TypeTests|ButtonTests|GestureTests|ListSimulatorsTests)
+        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests)
             TEST_FILTER="$1"
             shift
             ;;

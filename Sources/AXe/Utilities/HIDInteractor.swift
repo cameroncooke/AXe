@@ -93,24 +93,40 @@ struct HIDInteractor {
             throw CLIError(errorDescription: "Drag hold durations must be non-negative.")
         }
 
+        let movePoints = try compositeDragMovePoints(from: start, to: end, steps: steps)
         let stepDelay = duration / Double(steps)
         var events: [FBSimulatorHIDEvent] = [
             .touchDownAt(x: start.x, y: start.y),
             .delay(initialHold)
         ]
 
-        for step in 1...steps {
-            let progress = Double(step) / Double(steps)
-            let x = start.x + ((end.x - start.x) * progress)
-            let y = start.y + ((end.y - start.y) * progress)
+        for point in movePoints {
             events.append(.delay(stepDelay))
-            events.append(try touchMoveEvent(x: x, y: y))
+            events.append(try touchMoveEvent(x: point.x, y: point.y))
         }
 
         events.append(.delay(finalHold))
         events.append(.touchUpAt(x: end.x, y: end.y))
 
         return FBSimulatorHIDEvent(events: events)
+    }
+
+    static func compositeDragMovePoints(
+        from start: (x: Double, y: Double),
+        to end: (x: Double, y: Double),
+        steps: Int
+    ) throws -> [(x: Double, y: Double)] {
+        guard steps > 0 else {
+            throw CLIError(errorDescription: "Drag steps must be greater than 0.")
+        }
+
+        return (1...steps).map { step in
+            let progress = Double(step) / Double(steps)
+            return (
+                x: start.x + ((end.x - start.x) * progress),
+                y: start.y + ((end.y - start.y) * progress)
+            )
+        }
     }
 
     private static func touchMoveEvent(x: Double, y: Double) throws -> FBSimulatorHIDEvent {
