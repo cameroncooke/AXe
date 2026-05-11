@@ -105,6 +105,7 @@ struct Slider: AsyncParsableCommand {
 
     private func makeDragPlan(
         for element: AccessibilityElement,
+        applicationFrame: AccessibilityElement.Frame?,
         targetNormalized: Double
     ) throws -> SliderDragPlan {
         guard element.isSliderLikeControl else {
@@ -120,7 +121,7 @@ struct Slider: AsyncParsableCommand {
 
         let currentNormalized = try parseNormalizedAXValue(element.normalizedValue)
         let centerY = frame.y + (frame.height / 2.0)
-        let commandedNormalized = commandedNormalizedValue(
+        let commandedNormalized = Self.commandedNormalizedValue(
             currentNormalized: currentNormalized,
             targetNormalized: targetNormalized
         )
@@ -132,9 +133,11 @@ struct Slider: AsyncParsableCommand {
             targetNormalized: targetNormalized
         )
         let fingerOffsetFromNominalStart = startX - nominalStartX
+        let rawEndX = frame.x + (frame.width * commandedNormalized) + fingerOffsetFromNominalStart
+        let endX = Self.clampedDragEndX(rawEndX, applicationFrame: applicationFrame)
         return SliderDragPlan(
             logicalStart: (x: startX, y: centerY),
-            logicalEnd: (x: frame.x + (frame.width * commandedNormalized) + fingerOffsetFromNominalStart, y: centerY),
+            logicalEnd: (x: endX, y: centerY),
             currentNormalized: currentNormalized,
             targetNormalized: targetNormalized,
             commandedNormalized: commandedNormalized
@@ -147,7 +150,11 @@ struct Slider: AsyncParsableCommand {
         targetNormalized: Double,
         logger: AxeLogger
     ) async throws -> String {
-        let dragPlan = try makeDragPlan(for: initialMatch.element, targetNormalized: targetNormalized)
+        let dragPlan = try makeDragPlan(
+            for: initialMatch.element,
+            applicationFrame: initialMatch.applicationFrame,
+            targetNormalized: targetNormalized
+        )
         logger.info().log(
             "Setting slider \(initialMatch.selectorDescription) from AXValue \(formatNormalized(dragPlan.currentNormalized)) toward \(formatNormalized(dragPlan.targetNormalized)) with low-level HID drag"
         )
@@ -267,7 +274,7 @@ struct Slider: AsyncParsableCommand {
         return nominalStartX - (frame.height / 2.0)
     }
 
-    private func commandedNormalizedValue(currentNormalized: Double, targetNormalized: Double) -> Double {
+    static func commandedNormalizedValue(currentNormalized: Double, targetNormalized: Double) -> Double {
         if abs(currentNormalized - targetNormalized) <= Self.alreadyAtTargetTolerance {
             return currentNormalized
         }
@@ -275,6 +282,16 @@ struct Slider: AsyncParsableCommand {
             return targetNormalized - Self.lowRangeCoordinateOffset
         }
         return targetNormalized + Self.highRangeCoordinateOffset
+    }
+
+    static func clampedDragEndX(
+        _ x: Double,
+        applicationFrame: AccessibilityElement.Frame?
+    ) -> Double {
+        guard let applicationFrame, applicationFrame.width > 0 else {
+            return x
+        }
+        return min(max(x, applicationFrame.x), applicationFrame.x + applicationFrame.width)
     }
 
     private func parseNormalizedAXValue(_ rawValue: String?) throws -> Double {

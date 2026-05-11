@@ -47,6 +47,7 @@ enum ElementResolutionError: LocalizedError {
 struct AccessibilityMatch {
     let element: AccessibilityElement
     let selectorDescription: String
+    let applicationFrame: AccessibilityElement.Frame?
 }
 
 struct AccessibilityTargetResolver {
@@ -95,7 +96,11 @@ struct AccessibilityTargetResolver {
             selectorDescription = "--value '\(rawValue)'"
         }
 
-        return AccessibilityMatch(element: matchedElement, selectorDescription: selectorDescription)
+        return AccessibilityMatch(
+            element: matchedElement,
+            selectorDescription: selectorDescription,
+            applicationFrame: applicationFrame(from: roots)
+        )
     }
 
     static func resolveTap(
@@ -136,6 +141,10 @@ struct AccessibilityTargetResolver {
         }
 
         return (x: frame.x + (frame.width / 2.0), y: centerY)
+    }
+
+    private static func applicationFrame(from roots: [AccessibilityElement]) -> AccessibilityElement.Frame? {
+        roots.first { $0.type == "Application" }?.frame ?? roots.first?.frame
     }
 
     private static func selectUniqueMatch(
