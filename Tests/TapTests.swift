@@ -222,6 +222,64 @@ struct TapTests {
         #expect(selectedState == "Current Tab: Settings")
     }
 
+    @Test("Selector tap works when the accessibility tree contains numeric AXValue")
+    func selectorTapWorksWhenAccessibilityTreeContainsNumericAXValue() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
+
+        let initialState = try await TestHelpers.waitForLabel(containing: "Slider Value State:", timeout: 3) {
+            $0 == "Slider Value State: Initial"
+        }
+        #expect(initialState == "Slider Value State: Initial")
+
+        let uiState = try await TestHelpers.getUIState()
+        let positionText = UIStateParser.findElementByLabel(in: uiState, label: "Slider Position: 0.25")
+        let slider = UIStateParser.findElement(in: uiState) { element in
+            element.type == "Slider" && element.value == "0.25"
+        }
+        #expect(positionText?.value == "0.25")
+        #expect(slider != nil)
+
+        try await TestHelpers.runAxeCommand("tap --id slider-value-button", simulatorUDID: defaultSimulatorUDID)
+
+        let tappedState = try await TestHelpers.waitForLabel(containing: "Slider Value State:", timeout: 3) {
+            $0 == "Slider Value State: Tapped"
+        }
+        #expect(tappedState == "Slider Value State: Tapped")
+    }
+
+    @Test("Selector tap switches toolbar segmented picker")
+    func selectorTapSwitchesToolbarSegmentedPicker() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "toolbar-picker-test")
+
+        let initialState = try await TestHelpers.waitForLabel(containing: "Toolbar Picker State:", timeout: 3) {
+            $0 == "Toolbar Picker State: All"
+        }
+        #expect(initialState == "Toolbar Picker State: All")
+
+        try await TestHelpers.runAxeCommand("tap --label Unread --element-type RadioButton", simulatorUDID: defaultSimulatorUDID)
+
+        let selectedState = try await TestHelpers.waitForLabel(containing: "Toolbar Picker State:", timeout: 3) {
+            $0 == "Toolbar Picker State: Unread"
+        }
+        #expect(selectedState == "Toolbar Picker State: Unread")
+    }
+
+    @Test("Selector tap activates generated navigation back button")
+    func selectorTapActivatesGeneratedNavigationBackButton() async throws {
+        try await TestHelpers.launchPlaygroundApp(to: "toolbar-picker-test")
+
+        let uiState = try await TestHelpers.getUIState()
+        let backButton = UIStateParser.findElement(in: uiState, withIdentifier: "BackButton")
+        #expect(backButton?.type == "Button")
+
+        try await TestHelpers.runAxeCommand("tap --id BackButton", simulatorUDID: defaultSimulatorUDID)
+
+        let menuState = try await TestHelpers.waitForLabel(containing: "Touch & Gestures", timeout: 3) {
+            $0 == "Touch & Gestures"
+        }
+        #expect(menuState == "Touch & Gestures")
+    }
+
     @Test("Selector tap toggles SwiftUI Toggle")
     func selectorTapTogglesSwiftUIToggle() async throws {
         try await TestHelpers.launchPlaygroundApp(to: "switch-test")

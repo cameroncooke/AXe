@@ -59,6 +59,12 @@ struct ContentView: View {
             SwitchTestView()
         case "tab-view-test":
             TabViewTestView()
+        case "slider-value-test":
+            SliderValueTestView()
+        case "searchable-test":
+            SearchableTestView()
+        case "toolbar-picker-test":
+            ToolbarPickerTestView()
             
         // Input & Text
         case "text-input":
@@ -106,6 +112,11 @@ struct MainMenuView: View {
         ("Batch", [
             ("batch-test", "Batch Test", "State changes + delayed element appearance"),
             ("batch-login-flow", "Batch Login Flow", "Multi-step login + loading + post-login action")
+        ]),
+        ("Accessibility", [
+            ("slider-value-test", "Slider Value Test", "Numeric AXValue with selector tap"),
+            ("searchable-test", "Searchable Test", "Navigation search field targeting"),
+            ("toolbar-picker-test", "Toolbar Picker Test", "Toolbar segmented picker targeting")
         ])
     ]
     
