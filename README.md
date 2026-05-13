@@ -5,451 +5,52 @@ AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple'
 [![CI](https://github.com/cameroncooke/AXe/actions/workflows/release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/release.yml)
 [![Licence: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-![AxeDemo](https://github.com/user-attachments/assets/9eafa5d5-3cef-4e39-82c5-7b9d41fe4548)
-
-- [Features](#features)
-  - [Touch \& Gestures](#touch--gestures)
-  - [Input \& Text](#input--text)
-  - [Hardware Buttons](#hardware-buttons)
-  - [Timing Controls](#timing-controls)
-  - [Accessibility](#accessibility)
-- [Quick Start](#quick-start)
-  - [Installation](#installation)
-    - [Install via Homebrew](#install-via-homebrew)
-    - [Build from source](#build-from-source)
-  - [Basic Usage](#basic-usage)
-  - [Install AXe Skill](#install-axe-skill)
-- [Commands Overview](#commands-overview)
-  - [**Touch \& Gestures**](#touch--gestures-1)
-  - [**Sliders**](#sliders)
-  - [**Gesture Presets**](#gesture-presets)
-  - [**Text Input**](#text-input)
-  - [**Hardware Buttons**](#hardware-buttons-1)
-  - [**Keyboard Control**](#keyboard-control)
-  - [**Batch Chaining**](#batch-chaining)
-  - [**Video Streaming**](#video-streaming)
-  - [**Screenshot**](#screenshot)
-  - [**Accessibility \& Info**](#accessibility--info)
-- [Architecture](#architecture)
-  - [Why AXe?](#why-axe)
-- [Gesture Presets Reference](#gesture-presets-reference)
-- [Benchmarking](#benchmarking)
-- [Batch Guide](#batch-guide)
-- [Contributing](#contributing)
-- [Licence](#licence)
-
-
-## Features
-
-AXe provides complete iOS Simulator automation capabilities:
-
-### Touch & Gestures
-- **Tap**: Precise touch events at specific coordinates with timing controls
-- **Swipe**: Multi-touch gestures with configurable duration and delta
-- **Drag**: Raw point-to-point low-level HID drags with explicit touch move events
-- **Touch Control**: Low-level touch down/up events for advanced gesture control
-- **Sliders**: Set slider controls to a verified 0-100 percentage tolerance by accessibility identifier or label
-- **Gesture Presets**: Common gesture patterns (scroll-up, scroll-down, scroll-left, scroll-right, edge swipes)
-- **Batch Chaining**: Execute ordered multi-step interaction workflows in one invocation
-
-### Input & Text
-- **Text Input**: Comprehensive text typing with automatic shift key handling
-- **Key Presses**: Individual key presses by HID keycode
-- **Key Sequences**: Multi-key sequences with timing control
-- **Key Combos**: Atomic modifier+key combinations (e.g., Cmd+A, Cmd+Shift+Z)
-- **Multiple Input Methods**: Direct text, stdin, or file input
-
-### Hardware Buttons
-- **Home Button**: iOS home button simulation
-- **Lock/Power Button**: Power button with duration control
-- **Side Button**: iPhone X+ side button
-- **Siri Button**: Siri activation button
-- **Apple Pay Button**: Apple Pay button simulation
-
-### Timing Controls
-- **Pre/Post Delays**: Configurable delays before and after actions
-- **Duration Control**: Precise timing for gestures and button presses
-- **Sequence Timing**: Custom delays between key sequences
-- **Complex Automation**: Multi-step workflows with precise timing
-
-### Video & Screenshots
-- **Screenshot Capture**: Capture simulator display as PNG with automatic or custom filenames
-- **Screenshot-based Streaming**: Capture simulator video at 1-30 FPS
-- **Multiple Output Formats**: MJPEG, raw JPEG, ffmpeg-compatible, BGRA
-- **H.264 Recording**: Use the `record-video` command to write MP4 files with hardware-friendly encoding
-- **Configurable Quality**: Adjust JPEG quality and scale factor
-- **Real-time Performance**: Efficient frame timing for smooth playback
-
-### Accessibility
-- **UI Description**: Extract accessibility information from any point or full screen
-- **Simulator Management**: List available simulators
-
-## Quick Start
-
-### Installation
-
-#### Install via Homebrew
+## Install
 
 ```bash
-# Install via Homebrew
 brew tap cameroncooke/axe
 brew install axe
+```
 
-# Or single liner
+Or install in one command:
+
+```bash
 brew install cameroncooke/axe/axe
+```
 
-# Use directly
+Verify the CLI:
+
+```bash
 axe --help
-```
-
-#### Build from source
-
-For development work:
-
-```bash
-# Clone the repository
-git clone https://github.com/cameroncooke/AXe.git
-cd AXe
-
-# Build required XCFrameworks (not checked into the repo)
-./scripts/build.sh dev
-
-# Run directly with Swift after frameworks are built
-swift run axe --help
-swift run axe list-simulators
-
-# Build for development
-swift build
-.build/debug/axe --help
-```
-
-#### Makefile shortcuts
-
-```bash
-make build   # swift build
-make test    # default tests (non-E2E)
-make e2e     # full simulator E2E flow via test-runner.sh
-make clean
-```
-
-### Basic Usage
-
-```bash
-# List available simulators
-axe list-simulators
-
-# Get simulator UDID
-UDID="B34FF305-5EA8-412B-943F-1D0371CA17FF"
-
-# Basic interactions
-axe tap -x 100 -y 200 --udid $UDID
-axe tap --id "Safari" --udid $UDID
-axe tap --label "Safari" --udid $UDID
-axe tap --label "Weather Alerts" --udid $UDID  # Auto-uses physical touch for matched switches/toggles
-axe tap -x 320 -y 780 --tap-style physical --udid $UDID  # Force physical touch for coordinate taps
-axe slider --id "volume-slider" --value 75 --udid $UDID
-axe type 'Hello World!' --udid $UDID
-axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid $UDID
-axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid $UDID
-axe button home --udid $UDID
-
-# Screenshot
-axe screenshot --udid $UDID
-
-# Gesture presets
-axe gesture scroll-up --udid $UDID
-axe gesture swipe-from-left-edge --udid $UDID
-
-# With timing controls (NEW!)
-axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid $UDID
-axe gesture scroll-down --pre-delay 0.5 --post-delay 1.0 --udid $UDID
-```
-
-### Install AXe Skill
-
-```bash
-# Auto-detect installed clients (~/.claude or ~/.agents)
-axe init
-
-# Non-interactive usage: pass an explicit target
-axe init --client claude
-
-# Install directly to a custom skills directory
-axe init --dest ~/.claude/skills
-
-# Print bundled skill content only
-axe init --print
-
-# Remove installed AXe skill directory
-axe init --uninstall --client agents
-```
-
-## Commands Overview
-
-### **Touch & Gestures**
-
-```bash
-# Tap at coordinates
-axe tap -x 100 -y 200 --udid SIMULATOR_UDID
-axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
-
-# Tap by element (uses describe-ui view tree)
-axe tap --id "Safari" --udid SIMULATOR_UDID
-axe tap --label "Safari" --udid SIMULATOR_UDID
-axe tap --label "Weather Alerts" --udid SIMULATOR_UDID  # Switches/toggles use their activation point and physical touch when matched
-axe tap --label "Submit" --tap-style simulator --udid SIMULATOR_UDID  # Force FBSimulator tapAt
-axe tap -x 320 -y 780 --tap-style physical --udid SIMULATOR_UDID  # Force touch down/up
-
-# Swipe gestures
-axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
-axe swipe --start-x 50 --start-y 500 --end-x 350 --end-y 500 --duration 2.0 --delta 25 --udid SIMULATOR_UDID
-
-# Raw low-level drag using explicit touch move events
-axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid SIMULATOR_UDID
-axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --duration 0.4 --steps 40 --udid SIMULATOR_UDID
-
-# Orientation-aware coordinates
-# AXe automatically maps logical UI coordinates for rotated landscape and letterboxed landscape-only apps.
-# Use the coordinates from describe-ui directly; AXe detects the simulator orientation.
-axe tap -x 100 -y 200 --udid SIMULATOR_UDID
-axe swipe --start-x 100 --start-y 300 --end-x 300 --end-y 100 --udid SIMULATOR_UDID
-axe drag --start-x 100 --start-y 400 --end-x 300 --end-y 400 --udid SIMULATOR_UDID
-
-# Advanced touch control
-axe touch -x 150 -y 250 --down --udid SIMULATOR_UDID
-axe touch -x 150 -y 250 --up --udid SIMULATOR_UDID
-axe touch -x 150 -y 250 --down --up --udid SIMULATOR_UDID
-# Long press (hold for 1 second)
-axe touch -x 150 -y 250 --down --up --delay 1.0 --udid SIMULATOR_UDID
-```
-
-### **Sliders**
-
-```bash
-# Set a slider by accessibility identifier to a verified 0-100 percentage
-axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
-
-# Set a slider by label and narrow matching to slider elements
-axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
-```
-
-### **Gesture Presets**
-
-```bash
-# Scrolling gestures
-axe gesture scroll-up --udid SIMULATOR_UDID
-axe gesture scroll-down --udid SIMULATOR_UDID
-axe gesture scroll-left --udid SIMULATOR_UDID
-axe gesture scroll-right --udid SIMULATOR_UDID
-
-# Navigation gestures
-axe gesture swipe-from-left-edge --udid SIMULATOR_UDID
-axe gesture swipe-from-right-edge --udid SIMULATOR_UDID
-axe gesture swipe-from-top-edge --udid SIMULATOR_UDID
-axe gesture swipe-from-bottom-edge --udid SIMULATOR_UDID
-
-# With custom screen dimensions
-axe gesture scroll-up --screen-width 430 --screen-height 932 --udid SIMULATOR_UDID
-
-# With timing controls
-axe gesture scroll-down --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
-```
-
-### **Text Input**
-
-```bash
-# Simple text input (use single quotes for special characters)
-axe type 'Hello World!' --udid SIMULATOR_UDID
-
-# From stdin (best for automation)
-echo "Complex text" | axe type --stdin --udid SIMULATOR_UDID
-
-# From file
-axe type --file input.txt --udid SIMULATOR_UDID
-```
-
-### **Hardware Buttons**
-
-```bash
-# Available buttons: home, lock, side-button, siri, apple-pay
-axe button home --udid SIMULATOR_UDID
-axe button lock --duration 2.0 --udid SIMULATOR_UDID
-axe button siri --udid SIMULATOR_UDID
-```
-
-### **Keyboard Control**
-
-```bash
-# Individual key presses (by HID keycode)
-axe key 40 --udid SIMULATOR_UDID                    # Enter key
-axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace
-
-# Key sequences
-axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
-
-# Key combos (modifier + key as atomic operation)
-axe key-combo --modifiers 227 --key 4 --udid SIMULATOR_UDID          # Cmd+A (Select All)
-axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID          # Cmd+C (Copy)
-axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID      # Cmd+Shift+A
-```
-
-### **Batch Chaining**
-
-```bash
-# Execute multiple interaction steps in one command
-axe batch --udid SIMULATOR_UDID \
-  --step "tap --id SearchField" \
-  --step "type 'hello world'" \
-  --step "key 40"
-
-# Toggle a switch by its label
-axe batch --udid SIMULATOR_UDID \
-  --step "tap --label 'Weather Alerts'"
-
-# Add explicit timing between steps
-axe batch --udid SIMULATOR_UDID \
-  --step "tap -x 200 -y 400" \
-  --step "sleep 0.5" \
-  --step "tap -x 200 -y 500"
-
-# Read steps from a file (one step per line)
-axe batch --udid SIMULATOR_UDID --file steps.txt
-```
-
-`batch` behavior in plain terms:
-- Runs steps in order in a single invocation.
-- Accepts exactly one-step source: `--step`, `--file`, or `--stdin`.
-- Uses fail-fast by default (stops on first error).
-- `--continue-on-error` switches to best-effort mode.
-- `--ax-cache perBatch` is default for faster selector-based taps.
-- `--type-submission chunked` is default for safer long text typing.
-
-> [!TIP]
-> Keep verification out-of-band by running `axe describe-ui` or `axe screenshot` after batch execution.
-
-### **Video Streaming**
-
-```bash
-# Stream MJPEG frames over stdout (default format)
-axe stream-video --udid SIMULATOR_UDID --fps 10 --format mjpeg > stream.mjpeg
-
-# Pipe JPEG frames directly into ffmpeg
-axe stream-video --udid SIMULATOR_UDID --fps 30 --format ffmpeg | \
-  ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
-
-# Stream raw JPEG frames with length prefixes for custom servers
-axe stream-video --udid SIMULATOR_UDID --fps 12 --format raw | custom-stream-consumer
-
-# Legacy BGRA stream for backward compatibility
-axe stream-video --udid SIMULATOR_UDID --format bgra | \
-  ffmpeg -f rawvideo -pixel_format bgra -video_size 393x852 -i - output.mp4
-
-# Record directly to MP4 using the dedicated recorder
-axe record-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
-```
-
-### **Video Recording**
-
-```bash
-# Record the simulator to an MP4 file (QuickTime compatible)
-axe record-video --udid SIMULATOR_UDID --fps 15 --output recording.mp4
-
-# Let AXe pick a timestamped filename in the current directory
-axe record-video --udid SIMULATOR_UDID --fps 20
-
-# Tweak quality/scale to reduce file size
-axe record-video --udid SIMULATOR_UDID --fps 10 --quality 60 --scale 0.5 --output low-bandwidth.mp4
-```
-
-> [!TIP]
-> Press `Ctrl+C` to stop recording. AXe finalises the MP4 before exiting and prints the file path to stdout.
-
-### **Screenshot**
-
-```bash
-# Capture screenshot with auto-generated filename
-axe screenshot --udid SIMULATOR_UDID
-
-# Save to specific file
-axe screenshot --output ~/Desktop/my-screenshot.png --udid SIMULATOR_UDID
-
-# Save to directory (auto-generates timestamped filename)
-axe screenshot --output ~/Desktop/ --udid SIMULATOR_UDID
-```
-
-> [!TIP]
-> The screenshot path is printed to stdout for easy scripting. Progress messages go to stderr.
-
-### **Accessibility & Info**
-
-```bash
-# Get accessibility information
-axe describe-ui --udid SIMULATOR_UDID                    # Full screen
-axe describe-ui --point 100,200 --udid SIMULATOR_UDID    # Specific point
-
-# Set slider controls discovered via describe-ui
-axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
-
-# List simulators
 axe list-simulators
 ```
 
-## Architecture
-
-### Why AXe?
-
-AXe directly utilises the lower-level frameworks provided by [idb](https://github.com/facebook/idb), Facebook's open-source suite for automating iOS Simulators and Devices.
-
-While `idb` offers a powerful client/server architecture and a broad set of device automation features via an RPC protocol, **AXe takes a different approach**:
-
-- **Single Binary:** AXe is distributed as a single, standalone CLI tool—no server or client setup required.
-- **Focused Scope:** AXe is purpose-built for UI automation, streamlining accessibility testing and automation tasks.
-- **Simple Integration:** With no external dependencies or daemons, AXe can be easily scripted and embedded into other tools or systems running on the same host.
-- **Complete HID Coverage:** Full feature parity with idb's HID functionality plus gesture presets and timing controls.
-- **Intelligent Automation:** Built-in gesture presets and coordinate helpers for common use cases.
-
-This makes AXe a lightweight and easily adoptable alternative for projects that need direct, scriptable access to Simulator automation.
-
-## Benchmarking
-
-Compare batched vs non-batched latency on AxePlayground:
+## Basic usage
 
 ```bash
-# Build AXe first
-swift build
+# Find a booted simulator UDID
+axe list-simulators
+export UDID=<UDID>
 
-# Use a booted simulator UDID
-scripts/benchmark_batch.sh --udid SIMULATOR_UDID --iterations 20 --rounds 5
+# Inspect the current UI
+axe describe-ui --udid "$UDID"
+
+# Interact with the simulator
+axe tap --label "Continue" --udid "$UDID"
+axe type 'Hello world' --udid "$UDID"
+axe screenshot --output ./screen.png --udid "$UDID"
 ```
 
-The benchmark runs equivalent two-tap workflows in both modes and prints mean/median speedup.
+## Documentation
 
-## Batch Guide
-
-For a full behavior-first explanation of every batch argument with practical examples, see [`BATCHING.md`](BATCHING.md).
-
-## Gesture Presets Reference
-
-| Preset | Description | Use Case |
-|--------|-------------|----------|
-| `scroll-up` | Scroll up in center of screen | Content navigation |
-| `scroll-down` | Scroll down in center of screen | Content navigation |
-| `scroll-left` | Scroll left in center of screen | Horizontal scrolling |
-| `scroll-right` | Scroll right in center of screen | Horizontal scrolling |
-| `swipe-from-left-edge` | Left edge to right edge | Back navigation |
-| `swipe-from-right-edge` | Right edge to left edge | Forward navigation |
-| `swipe-from-top-edge` | Top to bottom | Dismiss/close |
-| `swipe-from-bottom-edge` | Bottom to top | Open/reveal |
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+Full documentation is available at [axe-cli.com/docs](https://axe-cli.com/docs).
 
 ## Disclaimer
 
-AXe is an independent open-source iOS simulator automation project and is not affiliated with, endorsed by, or associated with Deque Systems or its axe® accessibility products.
+AXe is an independent open-source iOS Simulator automation project and is not affiliated with, endorsed by, or associated with Deque Systems or its axe® accessibility products.
 
 ## Licence
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-Third-party licensing notices (including Meta's IDB MIT attribution) are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+Third-party licensing notices, including Meta's IDB MIT attribution, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).

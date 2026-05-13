@@ -56,10 +56,7 @@ let package = Package(
         .testTarget(
             name: "AXeTests",
             dependencies: ["AXe", "AXeCore"],
-            path: "Tests",
-            resources: [
-                .copy("README.md")
-            ]
+            path: "Tests"
         ),
         .plugin(
             name: "VersionPlugin",
