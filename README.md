@@ -1,6 +1,6 @@
 <img src="banner.png" alt="AXe" width="600"/>
 
-AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple's Accessibility APIs and HID (Human Interface Device) functionality.
+AXe is a comprehensive CLI tool for interacting with iOS Simulators using Apple's HID (Human Interface Device) functionality.
 
 [![CI](https://github.com/cameroncooke/AXe/actions/workflows/release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/release.yml)
 [![Licence: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -193,7 +193,7 @@ axe init --uninstall --client agents
 axe tap -x 100 -y 200 --udid SIMULATOR_UDID
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid SIMULATOR_UDID
 
-# Tap by accessibility element (uses describe-ui accessibility tree)
+# Tap by element (uses describe-ui view tree)
 axe tap --id "Safari" --udid SIMULATOR_UDID
 axe tap --label "Safari" --udid SIMULATOR_UDID
 axe tap --label "Weather Alerts" --udid SIMULATOR_UDID  # Switches/toggles use their activation point and physical touch when matched
@@ -232,8 +232,6 @@ axe slider --id slider-value-slider --value 75 --udid SIMULATOR_UDID
 # Set a slider by label and narrow matching to slider elements
 axe slider --label "Volume" --value 40 --element-type Slider --udid SIMULATOR_UDID
 ```
-
-`slider` resolves the real accessibility slider element, performs one calibrated low-level HID drag from its current AXValue-derived position toward the requested percentage using the same composite touch-move path as `drag`, and re-reads AXValue to verify the result. Since iOS slider controls quantize values to their rendered track resolution, AXe verifies that the observed value is within tolerance rather than retrying correction gestures to chase unreachable decimals. If the observed AXValue remains outside tolerance after that drag, the command fails clearly.
 
 ### **Gesture Presets**
 
@@ -446,6 +444,10 @@ For a full behavior-first explanation of every batch argument with practical exa
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Disclaimer
+
+AXe is an independent open-source iOS simulator automation project and is not affiliated with, endorsed by, or associated with Deque Systems or its axe® accessibility products.
 
 ## Licence
 
