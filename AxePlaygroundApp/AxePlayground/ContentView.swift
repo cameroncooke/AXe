@@ -65,6 +65,16 @@ struct ContentView: View {
             SearchableTestView()
         case "toolbar-picker-test":
             ToolbarPickerTestView()
+        case "alert-test":
+            AlertTestView()
+        case "sheet-test":
+            SheetTestView()
+        case "context-menu-test":
+            ContextMenuTestView()
+        case "modal-navigation-test":
+            ModalNavigationTestView()
+        case "long-scroll-test":
+            LongScrollTestView()
             
         // Input & Text
         case "text-input":
@@ -117,6 +127,13 @@ struct MainMenuView: View {
             ("slider-value-test", "Slider Value Test", "Numeric AXValue with selector tap"),
             ("searchable-test", "Searchable Test", "Navigation search field targeting"),
             ("toolbar-picker-test", "Toolbar Picker Test", "Toolbar segmented picker targeting")
+        ]),
+        ("Presentation", [
+            ("alert-test", "Alert Test", "Alert presentation and button targeting"),
+            ("sheet-test", "Sheet Test", "Sheet presentation and actions"),
+            ("context-menu-test", "Context Menu Test", "Long press menu targeting"),
+            ("modal-navigation-test", "Modal Navigation Test", "Modal route and nested navigation refresh"),
+            ("long-scroll-test", "Long Scroll Test", "Dedicated long scroll coverage")
         ])
     ]
     
