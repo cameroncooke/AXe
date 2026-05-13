@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 struct SliderValueTestView: View {
     @State private var sliderValue = 0.25
@@ -202,20 +203,23 @@ struct ContextMenuTestView: View {
                 .accessibilityIdentifier("context-menu-test-state")
                 .accessibilityValue(state)
 
-            Text("Long Press Target")
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
-                .accessibilityIdentifier("context-menu-test-target")
-                .contextMenu {
-                    Button("Favorite") {
-                        state = "Favorited"
-                    }
-                    Button("Archive") {
-                        state = "Archived"
-                    }
+            Button("Long Press Target") {
+                state = "Tapped"
+            }
+            .font(.headline)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(.blue.opacity(0.15), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("context-menu-test-target")
+            .contextMenu {
+                Button("Favorite") {
+                    state = "Favorited"
                 }
+                Button("Archive") {
+                    state = "Archived"
+                }
+            }
         }
         .padding()
         .navigationTitle("Context Menu")
@@ -281,24 +285,92 @@ struct ModalNavigationTestView: View {
 
 struct LongScrollTestView: View {
     private let rows = Array(1...80)
+    @State private var selectedRow = "None"
 
     var body: some View {
-        List {
-            Text("Long Scroll Start")
-                .font(.headline)
-                .accessibilityIdentifier("long-scroll-test-start")
+        VStack(spacing: 0) {
+            Text("Long Scroll Selected: \(selectedRow)")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .accessibilityIdentifier("long-scroll-test-state")
+                .accessibilityValue(selectedRow)
 
-            ForEach(rows, id: \.self) { row in
-                Text("Long Scroll Row \(row)")
-                    .accessibilityIdentifier("long-scroll-test-row-\(row)")
-            }
-
-            Text("Long Scroll End")
-                .font(.headline)
-                .accessibilityIdentifier("long-scroll-test-end")
+            LongScrollTableView(rows: rows, selectedRow: $selectedRow)
         }
         .navigationTitle("Long Scroll")
         .navigationBarTitleDisplayMode(.inline)
-        .accessibilityIdentifier("long-scroll-test-list")
+    }
+}
+
+private struct LongScrollTableView: UIViewRepresentable {
+    let rows: [Int]
+    @Binding var selectedRow: String
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selectedRow: $selectedRow)
+    }
+
+    func makeUIView(context: Context) -> UITableView {
+        let tableView = UITableView(frame: .zero, style: .plain)
+        tableView.dataSource = context.coordinator
+        tableView.delegate = context.coordinator
+        tableView.rowHeight = 64
+        tableView.accessibilityIdentifier = "long-scroll-test-scroll-view"
+        tableView.register(UITableViewCell.self, forCellReuseIdentifier: Coordinator.cellReuseIdentifier)
+        return tableView
+    }
+
+    func updateUIView(_ tableView: UITableView, context: Context) {
+        context.coordinator.rows = rows
+        context.coordinator.selectedRow = $selectedRow
+        tableView.reloadData()
+    }
+
+    final class Coordinator: NSObject, UITableViewDataSource, UITableViewDelegate {
+        static let cellReuseIdentifier = "LongScrollRowCell"
+
+        var rows: [Int] = []
+        var selectedRow: Binding<String>
+
+        init(selectedRow: Binding<String>) {
+            self.selectedRow = selectedRow
+        }
+
+        func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+            rows.count + 2
+        }
+
+        func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+            let cell = tableView.dequeueReusableCell(withIdentifier: Self.cellReuseIdentifier, for: indexPath)
+            let title = title(for: indexPath.row)
+            cell.textLabel?.text = title
+            cell.accessibilityLabel = title
+            cell.accessibilityIdentifier = identifier(for: indexPath.row)
+            cell.accessibilityTraits.insert(.button)
+            return cell
+        }
+
+        func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+            tableView.deselectRow(at: indexPath, animated: true)
+            guard let row = rowNumber(for: indexPath.row) else { return }
+            selectedRow.wrappedValue = "Row \(row)"
+        }
+
+        private func title(for index: Int) -> String {
+            if index == 0 { return "Long Scroll Start" }
+            if index == rows.count + 1 { return "Long Scroll End" }
+            return "Long Scroll Row \(rows[index - 1])"
+        }
+
+        private func identifier(for index: Int) -> String {
+            if index == 0 { return "long-scroll-test-start" }
+            if index == rows.count + 1 { return "long-scroll-test-end" }
+            return "long-scroll-test-row-\(rows[index - 1])"
+        }
+
+        private func rowNumber(for index: Int) -> Int? {
+            guard index > 0, index <= rows.count else { return nil }
+            return rows[index - 1]
+        }
     }
 }
