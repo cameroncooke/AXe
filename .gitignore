@@ -46,6 +46,9 @@ Temporary Items
 .vscode
 /.cursorrules
 
+# Claude AI
+.claude
+
 # Other
 /keys
 /buildServer.json
