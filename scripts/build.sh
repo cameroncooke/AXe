@@ -111,6 +111,24 @@ function verify_macho_has_arch() {
   fi
 }
 
+function verify_fbsimulatorcontrol_has_xctest_client_type_patch() {
+  local binary_path="$1"
+
+  if [[ ! -f "$binary_path" ]]; then
+    echo "❌ Error: FBSimulatorControl binary not found for accessibility patch verification: $binary_path"
+    exit 1
+  fi
+
+  local client_type_references
+  client_type_references=$(strings -a "$binary_path" | grep -F "setClientType:" || true)
+  if [[ -z "$client_type_references" ]]; then
+    echo "❌ Error: FBSimulatorControl is missing the XCTest accessibility client type patch"
+    echo "   Expected to find selector reference 'setClientType:' in: $binary_path"
+    echo "   Rebuild IDB frameworks after applying patches/idb/accessibility-client-type-for-xctest.patch."
+    exit 1
+  fi
+}
+
 # Function to invoke xcodebuild, optionally with xcpretty
 function invoke_xcodebuild() {
   local arguments=("$@")
@@ -575,6 +593,9 @@ function verify_xcframework_inputs() {
     fi
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
+    if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
+      verify_fbsimulatorcontrol_has_xctest_client_type_patch "${framework_binary}"
+    fi
   done
 
   print_success "XCFramework inputs include arm64 and x86_64 slices"
@@ -609,6 +630,9 @@ function verify_release_architectures() {
     fi
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
+    if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
+      verify_fbsimulatorcontrol_has_xctest_client_type_patch "${framework_binary}"
+    fi
   done
 
   print_success "Release artifacts include arm64 and x86_64 slices"

@@ -52,19 +52,26 @@ jobs:
             --run-number "${{ github.run_number }}" \
             >> "$GITHUB_OUTPUT"
 
+      - name: Resolve IDB cache inputs
+        id: idb_inputs
+        run: |
+          set -euo pipefail
+          PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
+          PATCH_HASH=$(find patches/idb -name '*.patch' -type f | sort | xargs shasum -a 256 | shasum -a 256 | awk '{print $1}')
+          echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "patch_hash=$PATCH_HASH" >> "$GITHUB_OUTPUT"
+
       - name: Restore IDB repository cache
         uses: actions/cache/restore@v4
         with:
           path: idb_checkout
-          key: idb-repo-${{ runner.os }}-dummy
-          restore-keys: |
-            idb-repo-${{ runner.os }}-
+          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Check IDB repository freshness
         id: idb_check
         run: |
           set -euo pipefail
-          PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
+          PINNED_IDB_COMMIT="${{ steps.idb_inputs.outputs.idb_commit }}"
           echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
 
           if [ -d "idb_checkout/.git" ]; then
@@ -81,13 +88,13 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Restore XCFramework cache
         uses: actions/cache/restore@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Check XCFramework outputs
         id: xcframework_check
@@ -195,21 +202,21 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: idb_checkout
-          key: idb-repo-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: idb-repo-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Save runtime Frameworks cache
         if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Save XCFramework cache
         if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
 
       - name: Prepare - Clean Swift build environment
         run: |
