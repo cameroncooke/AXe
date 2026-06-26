@@ -1,0 +1,19 @@
+diff --git a/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.m b/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.m
+index 0d09ee653..80db7d89d 100644
+--- a/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.m
++++ b/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.m
+@@ -22,7 +22,13 @@ + (instancetype)CoreSimulator
+ 
+ + (instancetype)SimulatorKit
+ {
+-  return [FBWeakFramework xcodeFrameworkWithRelativePath:@"Library/PrivateFrameworks/SimulatorKit.framework" requiredClassNames:@[]];
++  NSString *legacyRelativePath = @"Library/PrivateFrameworks/SimulatorKit.framework";
++  NSString *sharedRelativePath = @"../SharedFrameworks/SimulatorKit.framework";
++  NSString *sharedPath = [FBXcodeConfiguration.developerDirectory stringByAppendingPathComponent:sharedRelativePath];
++  NSString *relativePath = [NSFileManager.defaultManager fileExistsAtPath:sharedPath]
++    ? sharedRelativePath
++    : legacyRelativePath;
++  return [FBWeakFramework xcodeFrameworkWithRelativePath:relativePath requiredClassNames:@[]];
+ }
+ 
+ + (instancetype)DTXConnectionServices
