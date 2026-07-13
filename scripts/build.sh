@@ -4,6 +4,48 @@
 set -e
 set -o pipefail
 
+# Resolve paths relative to this script so the build works from any CWD.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+# --- Local environment overrides (.env) ---
+# Load KEY=VALUE pairs from a local, git-ignored .env file (repo root by
+# default; override with AXE_ENV_FILE). This is where per-machine constants
+# such as the code-signing identity live. Values already present in the
+# environment win over the file, so `AXE_CODESIGN_IDENTITY=... ./build.sh`
+# still works. See .env.example for the supported keys.
+ENV_FILE="${AXE_ENV_FILE:-${REPO_ROOT}/.env}"
+
+function load_env_file() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  local line key value
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Trim leading whitespace and an optional `export ` prefix.
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line#export }"
+    # Skip blank lines and comments.
+    [[ -z "$line" || "$line" == \#* ]] && continue
+    # Require a KEY=VALUE shape.
+    [[ "$line" == *=* ]] || continue
+    key="${line%%=*}"
+    value="${line#*=}"
+    # Normalise the key and strip one optional pair of surrounding quotes.
+    key="${key//[[:space:]]/}"
+    [[ -z "$key" ]] && continue
+    if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+    # Only fill values that are not already set in the environment.
+    if [[ -z "${!key+x}" ]]; then
+      export "${key}=${value}"
+    fi
+  done < "$file"
+  return 0
+}
+
+load_env_file "${ENV_FILE}"
+
 # Environment and Configuration
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
 IDB_GIT_REF="${IDB_GIT_REF:-76639e4d0e1741adf391cab36f19fbc59378153e}"
@@ -16,19 +58,32 @@ TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
 
 # Shared payload helper
 # shellcheck source=./release-payload.sh
-source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-payload.sh"
+source "${SCRIPT_DIR}/release-payload.sh"
 
 FRAMEWORK_SDK="macosx"
 FRAMEWORK_CONFIGURATION="Release"
 
-# Codesigning configuration (override by exporting AXE_CODESIGN_IDENTITY)
-DEFAULT_CODESIGN_IDENTITY="Developer ID Application: Cameron Cooke (BR6WD3M6ZD)"
-CODESIGN_IDENTITY="${AXE_CODESIGN_IDENTITY:-$DEFAULT_CODESIGN_IDENTITY}"
+# Codesigning configuration.
+# Provided via AXE_CODESIGN_IDENTITY (from .env locally, or the environment / CI
+# secrets) — there is intentionally no baked-in default. Must be a
+# "Developer ID Application" identity for notarizable release builds; an
+# "Apple Development" identity is fine for local `dev` builds only.
+CODESIGN_IDENTITY="${AXE_CODESIGN_IDENTITY:-}"
 
-# Notarization Configuration
-NOTARIZATION_API_KEY_PATH="${NOTARIZATION_API_KEY_PATH:-./keys/AuthKey_8TJYVXVDQ6.p8}"
-NOTARIZATION_KEY_ID="${NOTARIZATION_KEY_ID:-8TJYVXVDQ6}"
-NOTARIZATION_ISSUER_ID="${NOTARIZATION_ISSUER_ID:-69a6de8e-e388-47e3-e053-5b8c7c11a4d1}"
+# Notarization configuration (provided via the environment / .env / CI secrets).
+NOTARIZATION_API_KEY_PATH="${NOTARIZATION_API_KEY_PATH:-}"
+NOTARIZATION_KEY_ID="${NOTARIZATION_KEY_ID:-}"
+NOTARIZATION_ISSUER_ID="${NOTARIZATION_ISSUER_ID:-}"
+
+# Fail fast with an actionable message when a required value is missing, rather
+# than letting codesign/notarytool fail obscurely later.
+function require_config() {
+  local name="$1" value="$2"
+  if [[ -z "${value}" ]]; then
+    echo "❌ Error: ${name} is not set. Set it in ${ENV_FILE} (copy .env.example) or export it in the environment." >&2
+    exit 1
+  fi
+}
 
 # --- Helper Functions ---
 
@@ -725,6 +780,11 @@ function notarize_package() {
 
   print_subsection "🍎" "Submitting for Apple notarization"
 
+  # Ensure the notarization credentials are configured
+  require_config "NOTARIZATION_API_KEY_PATH" "${NOTARIZATION_API_KEY_PATH}"
+  require_config "NOTARIZATION_KEY_ID" "${NOTARIZATION_KEY_ID}"
+  require_config "NOTARIZATION_ISSUER_ID" "${NOTARIZATION_ISSUER_ID}"
+
   # Check if API key exists
   if [ ! -f "${NOTARIZATION_API_KEY_PATH}" ]; then
     echo "❌ Error: Notarization API key not found at ${NOTARIZATION_API_KEY_PATH}"
@@ -942,14 +1002,19 @@ Commands:
   build (default)
     Run all steps from setup through notarization.
 
-Environment Variables:
+Environment Variables (set inline, exported, or via a git-ignored .env file):
+  AXE_ENV_FILE           Path to the .env file to load (default: <repo-root>/.env)
+  AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
   TEMP_DIR               Temporary directory for final packages (default: system temp)
-  NOTARIZATION_API_KEY_PATH  Path to notarization API key (default: ./keys/AuthKey_8TJYVXVDQ6.p8)
-  NOTARIZATION_KEY_ID    Notarization key ID (default: 8TJYVXVDQ6)
-  NOTARIZATION_ISSUER_ID Notarization issuer ID (default: 69a6de8e-e388-47e3-e053-5b8c7c11a4d1)
+  NOTARIZATION_API_KEY_PATH  Path to notarization API key (required to notarize; no default)
+  NOTARIZATION_KEY_ID    Notarization key ID (required to notarize; no default)
+  NOTARIZATION_ISSUER_ID Notarization issuer ID (required to notarize; no default)
+
+  Values already set in the environment take precedence over .env.
+  Copy .env.example to .env and fill in the values for your machine.
 
 Examples:
   ./build.sh                    # Build everything (default)
@@ -1004,6 +1069,7 @@ function cmd_strip() {
 
 function cmd_sign_frameworks() {
   print_section "🔒" "Resigning Frameworks"
+  require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
   print_info "Resigning frameworks..."
   sanitize_framework_rpaths "${BUILD_OUTPUT_DIR}/Frameworks"
   resign_framework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.framework"
@@ -1023,6 +1089,7 @@ function cmd_xcframeworks() {
 
 function cmd_sign_xcframeworks() {
   print_section "🔒" "Resigning XCFrameworks"
+  require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
   print_info "Resigning XCFrameworks with Developer ID..."
   resign_xcframework "${BUILD_OUTPUT_DIR}" "FBControlCore.xcframework"
   resign_xcframework "${BUILD_OUTPUT_DIR}" "XCTestBootstrap.xcframework"
@@ -1038,6 +1105,7 @@ function cmd_executable() {
 
 function cmd_sign_executable() {
   print_section "🔒" "Signing AXe Executable"
+  require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
   sign_axe_executable "${BUILD_OUTPUT_DIR}"
 }
 

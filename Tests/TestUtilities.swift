@@ -332,6 +332,14 @@ struct TestHelpers {
 
     /// Get the path to the axe binary using #file to find source root
     static func getAxePath(testFile: String = #file) throws -> String {
+        if let axeBinPath = ProcessInfo.processInfo.environment["AXE_BIN_PATH"], !axeBinPath.isEmpty {
+            if FileManager.default.fileExists(atPath: axeBinPath) {
+                return axeBinPath
+            }
+
+            throw TestError.unexpectedState("AXE_BIN_PATH points to a missing axe binary at \(axeBinPath). Please run 'swift build'.")
+        }
+
         let sourceRoot: String
         if let srcRoot = ProcessInfo.processInfo.environment["SRC_ROOT"] {
             sourceRoot = srcRoot

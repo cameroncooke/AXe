@@ -49,6 +49,10 @@ Temporary Items
 # Claude AI
 .claude
 
+# Local environment overrides
+.env
+!.env.example
+
 # Other
 /keys
 /buildServer.json

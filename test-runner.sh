@@ -223,6 +223,37 @@ build_axe() {
     fi
 }
 
+ensure_test_framework_rpaths() {
+    local build_dir
+    build_dir="$(swift build --show-bin-path)"
+
+    local package_frameworks_dir="$build_dir/PackageFrameworks"
+    mkdir -p "$package_frameworks_dir"
+
+    local framework_names=(
+        "FBControlCore.framework"
+        "FBDeviceControl.framework"
+        "FBSimulatorControl.framework"
+        "XCTestBootstrap.framework"
+    )
+
+    local framework
+    for framework in "$build_dir"/*.framework "$build_dir"/ExecutableModules/*.framework; do
+        [[ -d "$framework" ]] || continue
+        framework_names+=("$(basename "$framework")")
+    done
+
+    local framework_name
+    for framework_name in "${framework_names[@]}"; do
+        local link_path="$package_frameworks_dir/$framework_name"
+        if [[ -e "$link_path" || -L "$link_path" ]]; then
+            continue
+        fi
+
+        ln -s "../$framework_name" "$link_path"
+    done
+}
+
 # Function to build and install playground app
 build_playground_app() {
     print_header "Building and Installing Playground App"
@@ -287,9 +318,17 @@ landscape_orientation_menu_available() {
 run_tests() {
     print_header "Running Tests"
 
+    ensure_test_framework_rpaths
+
     # Set up environment
     export SIMULATOR_UDID="$SIMULATOR_UDID"
     export AXE_E2E=1
+    export AXE_BIN_PATH="$(swift build --show-bin-path)/axe"
+    if [[ ! -f "$AXE_BIN_PATH" ]]; then
+        print_error "AXe executable not found at $AXE_BIN_PATH. Run without --tests-only or run swift build first."
+        exit 1
+    fi
+
     local requested_landscape_e2e="${AXE_LANDSCAPE_E2E:-0}"
     local normalized_landscape_e2e
     normalized_landscape_e2e=$(printf '%s' "$requested_landscape_e2e" | tr '[:upper:]' '[:lower:]')
@@ -307,7 +346,7 @@ run_tests() {
             ;;
     esac
 
-    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E, AXE_LANDSCAPE_E2E=$AXE_LANDSCAPE_E2E"
+    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E, AXE_LANDSCAPE_E2E=$AXE_LANDSCAPE_E2E, AXE_BIN_PATH=$AXE_BIN_PATH"
 
     run_swift_test() {
         local filter="$1"
@@ -425,6 +464,7 @@ main() {
     if [[ "$TESTS_ONLY" != true ]]; then
         clean_build
         build_axe
+        ensure_test_framework_rpaths
         build_playground_app
     fi
 

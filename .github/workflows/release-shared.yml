@@ -141,6 +141,7 @@ jobs:
         env:
           DEVELOPER_ID_APPLICATION_P12: ${{ secrets.DEVELOPER_ID_APPLICATION_P12 }}
           DEVELOPER_ID_APPLICATION_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_PASSWORD }}
+          AXE_CODESIGN_IDENTITY: ${{ secrets.DEVELOPER_ID_APPLICATION_IDENTITY }}
         run: |
           set -euo pipefail
           if [ -z "$DEVELOPER_ID_APPLICATION_P12" ]; then
@@ -170,6 +171,11 @@ jobs:
           done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"//; s/"$//')
           security list-keychains -d user -s "$KEYCHAIN_PATH" "${EXISTING_KEYCHAINS[@]}"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          if [ -z "${AXE_CODESIGN_IDENTITY:-}" ]; then
+            echo "❌ DEVELOPER_ID_APPLICATION_IDENTITY secret is required when a signing certificate is provided"
+            exit 1
+          fi
+          echo "AXE_CODESIGN_IDENTITY=$AXE_CODESIGN_IDENTITY" >> "$GITHUB_ENV"
           echo "has_certificate=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup - Prepare notarization API key

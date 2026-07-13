@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed SimulatorKit loading with Xcode 27 beta by checking Xcode's `Contents/SharedFrameworks` layout before falling back to the legacy private-framework path.
+- Fixed `test-runner.sh` loading AXe's binary target frameworks with newer SwiftPM layouts while remaining compatible with Xcode 26.
+- Fixed E2E test hangs by resolving the `axe` executable path before `swift test` starts instead of invoking SwiftPM from inside test cases.
 
 ## [v1.7.1] - 2026-06-02
 
