@@ -1,0 +1,15 @@
+OVERVIEW: Record the simulator display to an MP4 file using H.264 encoding
+
+USAGE: axe record-video --udid <udid> [--fps <fps>] [--quality <quality>] [--scale <scale>] [--output <output>]
+
+OPTIONS:
+  --udid <udid>           The UDID of the simulator.
+  --fps <fps>             Frames per second (1-30, default: 10) (default: 10)
+  --quality <quality>     Quality factor (1-100) controlling bitrate (default:
+                          80) (default: 80)
+  --scale <scale>         Scale factor (0.1-1.0, default: 1.0) (default: 1.0)
+  --output <output>       Output MP4 file path. Defaults to
+                          axe-video-<timestamp>.mp4 in the current directory.
+  --version               Show the version.
+  -h, --help              Show help information.
+

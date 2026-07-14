@@ -1,0 +1,4 @@
+Error: Missing expected argument '--udid <udid>'
+Help:  --udid <udid>  The UDID of the simulator.
+Usage: axe stream-video --udid <udid> [--format <format>] [--fps <fps>] [--quality <quality>] [--scale <scale>]
+  See 'axe stream-video --help' for more information.

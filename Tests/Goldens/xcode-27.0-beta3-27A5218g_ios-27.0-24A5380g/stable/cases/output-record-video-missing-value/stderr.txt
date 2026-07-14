@@ -1,0 +1,4 @@
+Error: Missing value for '--output <output>'
+Help:  --output <output>  Output MP4 file path. Defaults to axe-video-<timestamp>.mp4 in the current directory.
+Usage: axe record-video --udid <udid> [--fps <fps>] [--quality <quality>] [--scale <scale>] [--output <output>]
+  See 'axe record-video --help' for more information.

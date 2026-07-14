@@ -1,0 +1,4 @@
+Error: Missing expected argument '--udid <udid>'
+Help:  --udid <udid>  The UDID of the simulator.
+Usage: axe record-video --udid <udid> [--fps <fps>] [--quality <quality>] [--scale <scale>] [--output <output>]
+  See 'axe record-video --help' for more information.

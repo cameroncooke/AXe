@@ -76,7 +76,8 @@ let package = Package(
         .testTarget(
             name: "AXeTests",
             dependencies: ["AXe", "AXeCore"],
-            path: "Tests"
+            path: "Tests",
+            exclude: ["Goldens"]
         ),
         .plugin(
             name: "VersionPlugin",

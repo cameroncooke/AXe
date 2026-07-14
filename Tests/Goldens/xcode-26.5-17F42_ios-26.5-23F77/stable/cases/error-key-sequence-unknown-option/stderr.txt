@@ -1,0 +1,4 @@
+Error: Missing expected argument '--keycodes <keycodes>'
+Help:  --keycodes <keycodes>  Comma-separated list of HID keycodes to press in sequence.
+Usage: axe key-sequence --keycodes <keycodes> [--delay <delay>] --udid <udid>
+  See 'axe key-sequence --help' for more information.

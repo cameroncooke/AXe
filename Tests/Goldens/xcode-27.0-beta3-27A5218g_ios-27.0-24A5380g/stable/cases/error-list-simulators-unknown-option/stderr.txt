@@ -1,0 +1,3 @@
+Error: Unknown option '--axe-invalid-option'
+Usage: axe list-simulators
+  See 'axe list-simulators --help' for more information.

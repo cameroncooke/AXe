@@ -1,0 +1,3 @@
+Error: FPS must be between 1 and 30
+Usage: axe record-video --udid <udid> [--fps <fps>] [--quality <quality>] [--scale <scale>] [--output <output>]
+  See 'axe record-video --help' for more information.

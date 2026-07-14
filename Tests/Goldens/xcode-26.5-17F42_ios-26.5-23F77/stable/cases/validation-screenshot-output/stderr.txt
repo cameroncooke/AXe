@@ -1,0 +1,4 @@
+Error: Missing value for '--output <output>'
+Help:  --output <output>  Output PNG file path. Defaults to 'Simulator Screenshot - <device name> - <timestamp>.png' in the current directory.
+Usage: axe screenshot --udid <udid> [--output <output>]
+  See 'axe screenshot --help' for more information.

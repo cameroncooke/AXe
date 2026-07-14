@@ -1,0 +1,13 @@
+OVERVIEW: Capture a screenshot from the simulator display and save it as a PNG
+file
+
+USAGE: axe screenshot --udid <udid> [--output <output>]
+
+OPTIONS:
+  --udid <udid>           The UDID of the simulator.
+  --output <output>       Output PNG file path. Defaults to 'Simulator
+                          Screenshot - <device name> - <timestamp>.png' in the
+                          current directory.
+  --version               Show the version.
+  -h, --help              Show help information.
+

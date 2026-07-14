@@ -1,0 +1,4 @@
+Error: Missing expected argument '--value <value>'
+Help:  --value <value>  Target slider value as a percentage from 0 to 100.
+Usage: axe slider [--id <id>] [--label <label>] [--element-type <element-type>] --value <value> [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+  See 'axe slider --help' for more information.

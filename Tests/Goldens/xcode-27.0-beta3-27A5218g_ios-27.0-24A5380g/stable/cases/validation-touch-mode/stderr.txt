@@ -1,0 +1,3 @@
+Error: At least one of --down or --up must be specified.
+Usage: axe touch -x <x> -y <y> [--down] [--up] [--delay <delay>] --udid <udid>
+  See 'axe touch --help' for more information.

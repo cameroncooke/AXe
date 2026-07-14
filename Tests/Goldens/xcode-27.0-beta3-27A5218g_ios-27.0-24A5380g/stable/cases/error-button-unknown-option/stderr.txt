@@ -1,0 +1,4 @@
+Error: Missing expected argument '<button-type>'
+Help:  <button-type>  The button to press.
+Usage: axe button <button-type> [--duration <duration>] --udid <udid>
+  See 'axe button --help' for more information.

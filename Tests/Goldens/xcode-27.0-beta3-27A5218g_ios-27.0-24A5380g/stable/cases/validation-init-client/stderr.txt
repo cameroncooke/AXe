@@ -1,0 +1,4 @@
+Error: The value 'invalid-client' is invalid for '--client <client>'. Please provide one of 'auto', 'claude' or 'agents'.
+Help:  --client <client>  Target client: auto, claude, or agents. Defaults to auto-detect.
+Usage: axe init [--client <client>] [--dest <dest>] [--force] [--uninstall] [--print]
+  See 'axe init --help' for more information.

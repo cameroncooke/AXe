@@ -1,0 +1,3 @@
+Error: --value must be a finite number between 0 and 100.
+Usage: axe slider [--id <id>] [--label <label>] [--element-type <element-type>] --value <value> [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+  See 'axe slider --help' for more information.

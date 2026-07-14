@@ -1,0 +1,24 @@
+OVERVIEW: Set a slider to a deterministic value from 0 to 100 using
+accessibility selector targeting.
+
+USAGE: axe slider [--id <id>] [--label <label>] [--element-type <element-type>] --value <value> [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+
+OPTIONS:
+  --id <id>               Set the slider matching AXUniqueId
+                          (accessibilityIdentifier).
+  --label <label>         Set the slider matching AXLabel (accessibilityLabel).
+  --element-type <element-type>
+                          Filter matches to this accessibility type, usually
+                          Slider.
+  --value <value>         Target slider value as a percentage from 0 to 100.
+  --wait-timeout <wait-timeout>
+                          Maximum seconds to poll for the slider before failing
+                          (0 = no waiting, default). (default: 0.0)
+  --poll-interval <poll-interval>
+                          Seconds between accessibility tree polls when
+                          --wait-timeout is active (default: 0.25). (default:
+                          0.25)
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

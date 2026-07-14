@@ -1,0 +1,4 @@
+Error: Missing expected argument '<preset>'
+Help:  <preset>  The gesture preset to perform.
+Usage: axe gesture <preset> [--screen-width <screen-width>] [--screen-height <screen-height>] [--duration <duration>] [--delta <delta>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] --udid <udid>
+  See 'axe gesture --help' for more information.

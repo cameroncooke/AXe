@@ -1,0 +1,8 @@
+OVERVIEW: Lists all available simulators.
+
+USAGE: axe list-simulators
+
+OPTIONS:
+  --version               Show the version.
+  -h, --help              Show help information.
+

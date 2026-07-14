@@ -1,0 +1,4 @@
+Error: Missing expected argument '--udid <udid>'
+Help:  --udid <udid>  The UDID of the simulator.
+Usage: axe tap [-x <x>] [-y <y>] [--id <id>] [--label <label>] [--value <value>] [--element-type <element-type>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] [--tap-style <tap-style>] [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+  See 'axe tap --help' for more information.

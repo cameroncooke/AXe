@@ -1,0 +1,14 @@
+OVERVIEW: Stream simulator frames to stdout using screenshot capture
+
+USAGE: axe stream-video --udid <udid> [--format <format>] [--fps <fps>] [--quality <quality>] [--scale <scale>]
+
+OPTIONS:
+  --udid <udid>           The UDID of the simulator.
+  --format <format>       Output format: mjpeg, raw, ffmpeg, bgra (default:
+                          mjpeg) (default: mjpeg)
+  --fps <fps>             Frames per second (1-30, default: 10) (default: 10)
+  --quality <quality>     JPEG quality (1-100, default: 80) (default: 80)
+  --scale <scale>         Scale factor (0.1-1.0, default: 1.0) (default: 1.0)
+  --version               Show the version.
+  -h, --help              Show help information.
+

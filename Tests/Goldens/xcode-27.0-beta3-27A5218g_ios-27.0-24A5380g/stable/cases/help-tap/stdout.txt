@@ -1,0 +1,42 @@
+OVERVIEW: Tap a point on the screen, or locate an element by accessibility and
+tap its activation point.
+
+USAGE: axe tap [-x <x>] [-y <y>] [--id <id>] [--label <label>] [--value <value>] [--element-type <element-type>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] [--tap-style <tap-style>] [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+
+OPTIONS:
+  -x <x>                  The X coordinate of the point to tap.
+  -y <y>                  The Y coordinate of the point to tap.
+  --id <id>               Tap the activation point of the element matching
+                          AXUniqueId (accessibilityIdentifier). Ignored if -x
+                          and -y are provided.
+  --label <label>         Tap the activation point of the element matching
+                          AXLabel (accessibilityLabel). Ignored if -x and -y
+                          are provided.
+  --value <value>         Tap the activation point of the element matching
+                          AXValue (the current value of a control). Ignored if
+                          -x and -y are provided.
+  --element-type <element-type>
+                          Filter matches to elements of this accessibility type
+                          (e.g. Button, TextField, Switch). Narrows
+                          --id/--label/--value results when multiple elements
+                          match.
+  --pre-delay <pre-delay> Delay before tapping in seconds.
+  --post-delay <post-delay>
+                          Delay after tapping in seconds.
+  --tap-style <tap-style> Tap event style: automatic uses physical touch for
+                          switches/toggles and simulator tap for other targets;
+                          simulator always uses FBSimulator tapAt; physical
+                          uses touch down/up. (values: automatic, simulator,
+                          physical)
+  --wait-timeout <wait-timeout>
+                          Maximum seconds to poll for the element before
+                          failing (0 = no waiting, default). Only applies to
+                          --id/--label/--value targeting. (default: 0.0)
+  --poll-interval <poll-interval>
+                          Seconds between accessibility tree polls when
+                          --wait-timeout is active (default: 0.25). (default:
+                          0.25)
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

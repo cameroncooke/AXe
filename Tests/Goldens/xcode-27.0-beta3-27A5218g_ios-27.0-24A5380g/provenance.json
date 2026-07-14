@@ -1,0 +1,9 @@
+{
+  "axe_payload_sha256": "583bc18685e9e8f57b8ddb00366c5659f2ed8998d918b6eef2172c4139eb30fd",
+  "schema_version": 1,
+  "simulator": {
+    "device_name": "iPhone 17 Pro",
+    "udid": "16A85326-0CD4-4B64-A568-C331BCB0B274"
+  },
+  "stable_contract_sha256": "5c4c59576d3250d3229b2a4bfedd4880014c886d4d632fcf22992dda76b60aa7"
+}

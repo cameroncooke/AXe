@@ -1,0 +1,12 @@
+OVERVIEW: Describes the UI hierarchy of a booted simulator using accessibility
+information.
+
+USAGE: axe describe-ui --udid <udid> [--point <x,y>]
+
+OPTIONS:
+  --udid <udid>           The UDID of the simulator.
+  --point <x,y>           Describe only the accessibility element at screen
+                          coordinates x,y.
+  --version               Show the version.
+  -h, --help              Show help information.
+

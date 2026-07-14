@@ -1,0 +1,3 @@
+Error: Unknown option '--axe-invalid-option'
+Usage: axe init [--client <client>] [--dest <dest>] [--force] [--uninstall] [--print]
+  See 'axe init --help' for more information.

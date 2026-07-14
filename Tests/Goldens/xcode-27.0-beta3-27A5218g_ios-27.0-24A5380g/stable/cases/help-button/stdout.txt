@@ -1,0 +1,21 @@
+OVERVIEW: Press a hardware button on the simulator.
+
+Available buttons: apple-pay, home, lock, side-button, siri
+
+Examples:
+  axe button home --udid SIMULATOR_UDID
+  axe button lock --duration 2.0 --udid SIMULATOR_UDID
+  axe button siri --udid SIMULATOR_UDID
+
+USAGE: axe button <button-type> [--duration <duration>] --udid <udid>
+
+ARGUMENTS:
+  <button-type>           The button to press. (values: apple-pay, home, lock,
+                          side-button, siri)
+
+OPTIONS:
+  --duration <duration>   Duration to hold the button in seconds (optional).
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

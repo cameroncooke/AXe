@@ -1,0 +1,1 @@
+axe drag --start-x 0 --start-y 0 --end-x 1 --end-y 1 --duration -1 --udid invalid 
