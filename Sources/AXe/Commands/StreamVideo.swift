@@ -165,7 +165,7 @@ struct StreamVideo: AsyncParsableCommand {
         }
     }
 
-    // MARK: - Legacy BGRA streaming
+    // MARK: - BGRA streaming
 
     private func streamBGRA(
         to simulator: FBSimulator,
@@ -177,27 +177,23 @@ struct StreamVideo: AsyncParsableCommand {
         FileHandle.standardError.write(Data("  axe stream-video --format bgra --udid <UDID> | ffmpeg -f rawvideo -pixel_format bgra -video_size WIDTHxHEIGHT -i - output.mp4\n".utf8))
         FileHandle.standardError.write(Data("Press Ctrl+C to stop streaming\n".utf8))
 
+        let config = FBVideoStreamConfiguration(
+            format: .bgra(),
+            framesPerSecond: NSNumber(value: fps),
+            rateControl: .quality(NSNumber(value: Double(quality) / 100.0)),
+            scaleFactor: NSNumber(value: scale),
+            keyFrameRate: nil
+        )
+
+        let stdoutConsumer = FBFileWriter.syncWriter(withFileDescriptor: STDOUT_FILENO, closeOnEndOfFile: false)
+        var videoStream: (any FBVideoStream)?
+        var isStreaming = false
+
         do {
-            let config = FBVideoStreamConfiguration(
-                encoding: .BGRA,
-                framesPerSecond: nil,
-                compressionQuality: NSNumber(value: Double(quality) / 100.0),
-                scaleFactor: NSNumber(value: scale),
-                avgBitrate: nil,
-                keyFrameRate: nil
-            )
-
-            let stdoutConsumer = FBFileWriter.syncWriter(withFileDescriptor: STDOUT_FILENO, closeOnEndOfFile: false)
-            let videoStreamFuture = simulator.createStream(with: config)
-            let videoStream = try await FutureBridge.value(videoStreamFuture)
-            let startFuture = videoStream.startStreaming(stdoutConsumer)
-
-            startFuture.onQueue(BridgeQueues.videoStreamQueue, notifyOfCompletion: { future in
-                if let error = future.error {
-                    FileHandle.standardError.write(Data("Stream initialization error: \(error)\n".utf8))
-                }
-            })
-
+            let stream = try await simulator.createStream(configuration: config)
+            videoStream = stream
+            try await stream.startStreamingAsync(stdoutConsumer)
+            isStreaming = true
             try await Task.sleep(nanoseconds: 1_000_000_000)
             FileHandle.standardError.write(Data("BGRA stream is now running...\n".utf8))
 
@@ -212,20 +208,14 @@ struct StreamVideo: AsyncParsableCommand {
             }
 
             FileHandle.standardError.write(Data("\nStopping BGRA stream...\n".utf8))
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                BridgeQueues.videoStreamQueue.async {
-                    let stopFuture = videoStream.stopStreaming()
-                    stopFuture.onQueue(BridgeQueues.videoStreamQueue, notifyOfCompletion: { future in
-                        FileHandle.standardError.write(Data("BGRA stream stopped\n".utf8))
-                        if let error = future.error {
-                            continuation.resume(throwing: error)
-                        } else {
-                            continuation.resume(returning: ())
-                        }
-                    })
-                }
-            }
+            isStreaming = false
+            try await stream.stopStreamingAsync()
+            FileHandle.standardError.write(Data("BGRA stream stopped\n".utf8))
         } catch {
+            if isStreaming, let videoStream {
+                isStreaming = false
+                try? await videoStream.stopStreamingAsync()
+            }
             throw CLIError(errorDescription: "Failed to stream BGRA video: \(error.localizedDescription)")
         }
     }

@@ -85,7 +85,7 @@ struct KeySequence: AsyncParsableCommand {
         }
         
         // Create composite event
-        let sequenceEvent = FBSimulatorHIDEvent(events: events)
+        let sequenceEvent = FBSimulatorHIDEvent.composite(events)
         
         // Perform the key sequence event
         try await HIDInteractor

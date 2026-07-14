@@ -66,11 +66,11 @@ struct Key: AsyncParsableCommand {
         
         if let duration = duration {
             // For duration-based presses, we need to create separate down/up events with delay
-            let keyDownEvent = FBSimulatorHIDEvent.keyDown(UInt32(keycode))
+            let keyDownEvent = FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: UInt32(keycode))
             let delayEvent = FBSimulatorHIDEvent.delay(duration)
-            let keyUpEvent = FBSimulatorHIDEvent.keyUp(UInt32(keycode))
-            
-            keyEvent = FBSimulatorHIDEvent(events: [
+            let keyUpEvent = FBSimulatorHIDEvent.keyboard(direction: .up, keyCode: UInt32(keycode))
+
+            keyEvent = FBSimulatorHIDEvent.composite([
                 keyDownEvent,
                 delayEvent,
                 keyUpEvent

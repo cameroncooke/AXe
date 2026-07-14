@@ -48,19 +48,13 @@ final class SignalObserver {
 }
 
 enum VideoProcessingError: Error {
-    case emptyScreenshot
     case failedToDecodeImage
     case failedToAllocatePixelBuffer
 }
 
 struct VideoFrameUtilities {
     static func captureScreenshotData(from simulator: FBSimulator) async throws -> Data {
-        let screenshotFuture = simulator.takeScreenshot(.PNG)
-        let nsData = try await FutureBridge.value(screenshotFuture)
-        guard let data = nsData as Data? else {
-            throw VideoProcessingError.emptyScreenshot
-        }
-        return data
+        try await simulator.takeScreenshot(format: .png)
     }
 
     static func makeCGImage(from data: Data) -> CGImage? {
@@ -89,27 +83,12 @@ struct VideoFrameUtilities {
 
     private static func scaleJPEGData(_ data: Data, scale: Double, quality: Int) async throws -> Data {
         #if os(macOS)
-        guard let image = NSImage(data: data) else {
+        guard let image = makeCGImage(from: data) else {
             throw VideoProcessingError.failedToDecodeImage
         }
-
-        let newSize = NSSize(
-            width: image.size.width * scale,
-            height: image.size.height * scale
-        )
-
-        let newImage = NSImage(size: newSize)
-        newImage.lockFocus()
-        image.draw(in: NSRect(origin: .zero, size: newSize))
-        newImage.unlockFocus()
-
-        guard let tiffData = newImage.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let jpegData = bitmap.representation(using: .jpeg, properties: [NSBitmapImageRep.PropertyKey.compressionFactor: Double(quality) / 100.0]) else {
-            throw VideoProcessingError.failedToDecodeImage
-        }
-
-        return jpegData
+        let width = max(1, Int(Double(image.width) * scale))
+        let height = max(1, Int(Double(image.height) * scale))
+        return try encodeJPEG(image, width: width, height: height, quality: quality)
         #else
         return data
         #endif
@@ -117,18 +96,53 @@ struct VideoFrameUtilities {
 
     private static func reencodeJPEGData(_ data: Data, quality: Int) async throws -> Data {
         #if os(macOS)
-        guard let image = NSImage(data: data),
-              let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData),
-              let jpegData = bitmap.representation(using: .jpeg, properties: [NSBitmapImageRep.PropertyKey.compressionFactor: Double(quality) / 100.0]) else {
+        guard let image = makeCGImage(from: data) else {
             throw VideoProcessingError.failedToDecodeImage
         }
-
-        return jpegData
+        return try encodeJPEG(image, width: image.width, height: image.height, quality: quality)
         #else
         return data
         #endif
     }
+
+    #if os(macOS)
+    private static func encodeJPEG(
+        _ image: CGImage,
+        width: Int,
+        height: Int,
+        quality: Int
+    ) throws -> Data {
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+            throw VideoProcessingError.failedToAllocatePixelBuffer
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        context.cgContext.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        guard let data = bitmap.representation(
+            using: .jpeg,
+            properties: [.compressionFactor: Double(quality) / 100.0]
+        ) else {
+            throw VideoProcessingError.failedToDecodeImage
+        }
+        return data
+    }
+    #endif
 }
 
 final class H264StreamRecorder: @unchecked Sendable {

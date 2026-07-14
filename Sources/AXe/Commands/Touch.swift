@@ -78,49 +78,31 @@ struct Touch: AsyncParsableCommand {
             logger: logger
         )
 
+        var primitives: [HIDBrokerPrimitive] = []
         if touchDown && touchUp {
             // Send down and up as separate HID submissions so iOS recognizers
             // observe a real hold duration for long-press gestures.
             let touchDelay = delay ?? TapTiming.defaultHoldDuration
 
             logger.info().log("Touch down")
-            try await HIDInteractor
-                .performHIDEvent(
-                    FBSimulatorHIDEvent.touchDownAt(x: physicalPoint.x, y: physicalPoint.y),
-                    for: simulatorUDID,
-                    logger: logger
-                )
+            primitives.append(.touch(.down, x: physicalPoint.x, y: physicalPoint.y))
 
             if touchDelay > 0 {
                 logger.info().log("Delay: \(touchDelay) seconds")
-                let delayNanoseconds = UInt64(touchDelay * 1_000_000_000)
-                try await Task.sleep(nanoseconds: delayNanoseconds)
+                primitives.append(.delay(touchDelay))
             }
 
             logger.info().log("Touch up")
-            try await HIDInteractor
-                .performHIDEvent(
-                    FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y),
-                    for: simulatorUDID,
-                    logger: logger
-                )
+            primitives.append(.touch(.up, x: physicalPoint.x, y: physicalPoint.y))
         } else if touchDown {
             logger.info().log("Touch down")
-            try await HIDInteractor
-                .performHIDEvent(
-                    FBSimulatorHIDEvent.touchDownAt(x: physicalPoint.x, y: physicalPoint.y),
-                    for: simulatorUDID,
-                    logger: logger
-                )
+            primitives.append(.touch(.down, x: physicalPoint.x, y: physicalPoint.y))
         } else {
             logger.info().log("Touch up")
-            try await HIDInteractor
-                .performHIDEvent(
-                    FBSimulatorHIDEvent.touchUpAt(x: physicalPoint.x, y: physicalPoint.y),
-                    for: simulatorUDID,
-                    logger: logger
-                )
+            primitives.append(.touch(.up, x: physicalPoint.x, y: physicalPoint.y))
         }
+
+        try HIDBroker.sendTouchPrimitives(primitives, simulatorUDID: simulatorUDID)
         
         logger.info().log("Touch events completed successfully")
     }

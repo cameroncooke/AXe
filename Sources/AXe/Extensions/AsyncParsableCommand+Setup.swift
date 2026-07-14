@@ -7,8 +7,8 @@ extension AsyncParsableCommand {
     func setup(logger: AxeLogger) async throws {
         // Check Xcode availability
         do {
-            let isXcodeAvailable: NSString = try await FutureBridge.value(FBXcodeDirectory.xcodeSelectDeveloperDirectory())
-            if isXcodeAvailable.length == 0 {
+            let developerDirectory = try FBXcodeDirectory.resolveDeveloperDirectory()
+            if developerDirectory.isEmpty {
                 logger.error().log("Xcode is not available, idb will not be able to use Simulators")
                 throw CLIError(errorDescription: "Xcode is not available, idb will not be able to use Simulators")
             }

@@ -1,5 +1,25 @@
 // swift-tools-version:5.10
+import Foundation
 import PackageDescription
+
+let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+let idbCheckoutDirectory = ProcessInfo.processInfo.environment["IDB_CHECKOUT_DIR"]
+    .map { URL(fileURLWithPath: $0) }
+    ?? packageRoot.appendingPathComponent("idb_checkout", isDirectory: true)
+let idbPrivateHeadersDirectory = idbCheckoutDirectory.appendingPathComponent(
+    "PrivateHeaders",
+    isDirectory: true
+)
+// Compile-only module-map inputs: never copy these headers into release artifacts or runtime rpaths.
+let idbPrivateHeaderSearchFlags = [
+    idbPrivateHeadersDirectory,
+    idbPrivateHeadersDirectory.appendingPathComponent("AccessibilityPlatformTranslation", isDirectory: true),
+    idbPrivateHeadersDirectory.appendingPathComponent("AXRuntime", isDirectory: true),
+    idbPrivateHeadersDirectory.appendingPathComponent("CoreSimDeviceIO", isDirectory: true),
+    idbPrivateHeadersDirectory.appendingPathComponent("CoreSimulator", isDirectory: true),
+    idbPrivateHeadersDirectory.appendingPathComponent("CoreSimulatorUtilities", isDirectory: true),
+    idbPrivateHeadersDirectory.appendingPathComponent("SimulatorKit", isDirectory: true),
+].flatMap { ["-I", $0.path] }
 
 let package = Package(
     name: "AXe",
@@ -39,7 +59,7 @@ let package = Package(
                 .copy("Resources/skills")
             ],
             swiftSettings: [
-                .unsafeFlags(["-parse-as-library"])
+                .unsafeFlags(["-parse-as-library"] + idbPrivateHeaderSearchFlags)
             ],
             linkerSettings: [
                 // For XCFrameworks, rpath can often be just @executable_path

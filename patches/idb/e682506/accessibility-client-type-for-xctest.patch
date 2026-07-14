@@ -1,0 +1,12 @@
+diff --git a/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift b/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift
+index 53a6d67cb..d7d3e209f 100644
+--- a/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift
++++ b/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift
+@@ -130,6 +130,7 @@ public final class FBAXTranslationDispatcher: NSObject, AXPTranslationTokenDeleg
+       let box = AXPResponseBox()
+ 
+       let xpcStart = CFAbsoluteTimeGetCurrent()
++      axRequest?.clientType = 2
+       device?.sendAccessibilityRequestAsync(axRequest, completionQueue: callbackQueue) { innerResponse in
+         box.response = innerResponse
+         group.leave()
