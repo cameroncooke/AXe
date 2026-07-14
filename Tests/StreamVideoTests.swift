@@ -1,5 +1,19 @@
-import Testing
+import Darwin
 import Foundation
+import Testing
+
+private final class ProcessIdentifierBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue: pid_t?
+
+    var value: pid_t? {
+        lock.withLock { storedValue }
+    }
+
+    func store(_ value: pid_t) {
+        lock.withLock { storedValue = value }
+    }
+}
 
 @Suite("Stream Video Command Tests", .serialized, .enabled(if: isE2EEnabled))
 struct StreamVideoTests {
@@ -64,13 +78,22 @@ struct StreamVideoTests {
 
     @Test("Stream video can be cancelled gracefully")
     func streamVideoCancellation() async throws {
+        let processIdentifier = ProcessIdentifierBox()
         let task = Task {
-            try await streamVideoForDuration(format: "mjpeg", fps: 30, duration: 60.0)
+            try await streamVideoForDuration(
+                format: "mjpeg",
+                fps: 30,
+                duration: 60.0,
+                onStart: { processIdentifier.store($0) }
+            )
         }
 
         try await Task.sleep(nanoseconds: 500_000_000)
         task.cancel()
         _ = await task.result
+
+        let pid = try #require(processIdentifier.value, "Stream process should have started")
+        #expect(kill(pid, 0) == -1 && errno == ESRCH, "Cancelling the test task must not leak the AXe subprocess")
     }
 
     @Test("Stream video rejects invalid formats")
@@ -102,21 +125,22 @@ struct StreamVideoTests {
         fps: Int = 10,
         quality: Int = 80,
         scale: Double = 1.0,
-        duration: TimeInterval = 2.0
+        duration: TimeInterval = 2.0,
+        onStart: @escaping @Sendable (pid_t) -> Void = { _ in }
     ) async throws -> (output: String, data: Data, dataString: String, dataSize: Int, exitCode: Int32) {
-        var command = "stream-video"
-        command += " --format \(format)"
-        command += " --fps \(fps)"
-        command += " --quality \(quality) --scale \(scale)"
-
         let udid = try TestHelpers.requireSimulatorUDID()
 
         let axePath = try TestHelpers.getAxePath()
-        let fullCommand = "\(axePath) \(command) --udid \(udid)"
-
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/bash")
-        process.arguments = ["-c", fullCommand]
+        process.executableURL = URL(fileURLWithPath: axePath)
+        process.arguments = [
+            "stream-video",
+            "--format", format,
+            "--fps", String(fps),
+            "--quality", String(quality),
+            "--scale", String(scale),
+            "--udid", udid,
+        ]
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -128,8 +152,23 @@ struct StreamVideoTests {
         }
 
         try process.run()
+        onStart(process.processIdentifier)
 
-        try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+        do {
+            try await Task.sleep(nanoseconds: UInt64(duration * 1_000_000_000))
+        } catch {
+            process.terminate()
+            let cleanupTask = Task {
+                try await TestHelpers.waitForProcessExit(
+                    process,
+                    timeout: 10.0,
+                    description: "cancelled stream-video process did not exit"
+                )
+            }
+            try await cleanupTask.value
+            _ = try? await stdoutReadTask.value
+            throw error
+        }
 
         process.terminate()
 

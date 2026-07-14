@@ -129,14 +129,13 @@ struct Type: AsyncParsableCommand {
         
         logger.info().log("Performing HID event sequence for text typing")
         
-        // Perform HID events sequentially
-        for event in hidEvents {
-        try await HIDInteractor
-            .performHIDEvent(
-                event,
-                for: simulatorUDID,
-                logger: logger
-            )
+        if !hidEvents.isEmpty {
+            try await HIDInteractor
+                .performHIDEvent(
+                    .composite(hidEvents),
+                    for: simulatorUDID,
+                    logger: logger
+                )
         }
         
         logger.info().log("Text typing completed successfully")

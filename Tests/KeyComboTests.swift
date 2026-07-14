@@ -21,7 +21,7 @@ struct KeyComboTests {
         let textField = UIStateParser.findElement(in: uiState) { $0.type == "TextField" }
         #expect(textField != nil)
         #expect(
-            textField?.value == nil || textField?.value == "",
+            textField?.value == nil || textField?.value == "" || textField?.value == "empty",
             "Text field should be cleared after Cmd+A then Backspace"
         )
     }

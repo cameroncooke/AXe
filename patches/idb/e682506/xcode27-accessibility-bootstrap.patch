@@ -1,0 +1,365 @@
+diff --git a/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.swift b/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.swift
+index 3a119597..7fe4f7ee 100644
+--- a/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.swift
++++ b/FBControlCore/Utility/FBWeakFramework+ApplePrivateFrameworks.swift
+@@ -27,6 +27,14 @@ extension FBWeakFramework {
+     FBWeakFramework.xcodeFramework(withRelativePath: "../SharedFrameworks/DTXConnectionServices.framework", requiredClassNames: ["DTXConnection", "DTXRemoteInvocationReceipt"])
+   }
+ 
++  @objc(XCTDaemonControl) public class var xctDaemonControl: FBWeakFramework {
++    FBWeakFramework.xcodeFramework(withRelativePath: "../SharedFrameworks/XCTDaemonControl.framework", requiredClassNames: ["XCTDaemonConnectionConfiguration"])
++  }
++
++  @objc(XCUIAutomation) public class var xcuiAutomation: FBWeakFramework {
++    FBWeakFramework.xcodeFramework(withRelativePath: "../SharedFrameworks/XCUIAutomation.framework", requiredClassNames: ["XCUIDeviceRemoteDaemonConnectionProvider", "XCUIDeviceRemoteAutomationSession"])
++  }
++
+   @objc(XCTest) public class var xcTest: FBWeakFramework {
+     FBWeakFramework.xcodeFramework(withRelativePath: "Platforms/MacOSX.platform/Developer/Library/Frameworks/XCTest.framework", requiredClassNames: ["XCTestConfiguration"])
+   }
+diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
+index b54a6b9c..d153f42d 100644
+--- a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
++++ b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
+@@ -116,6 +116,13 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+       throw FBAccessibilityError.accessibilityUnavailable
+     }
+     try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
++    if FBXcodeConfiguration.xcodeVersion.majorVersion >= 27 {
++      try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
++        forSimulatorDevice: simulator.device,
++        timeout: 5,
++        logger: simulator.logger
++      )
++    }
+   }
+ 
+   // Returns an FBAccessibilityElement wrapping the platform element for the given request.
+diff --git a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
+index be9d601d..a9e8a838 100644
+--- a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
++++ b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
+@@ -24,6 +24,19 @@
+  */
+ @property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityFrameworks;
+ 
++/**
++ The Xcode frameworks needed to bootstrap simulator Accessibility on Xcode 27+.
++ */
++@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityAutomationFrameworks;
++
++/**
++ Starts a short-lived remote automation session and asks it to load Accessibility.
++ */
+++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(nonnull id)simulatorDevice
++                                         timeout:(NSTimeInterval)timeout
++                                          logger:(nullable id<FBControlCoreLogger>)logger
++                                           error:(NSError * _Nullable * _Nullable)error;
++
+ /**
+  All of the Frameworks for operations involving the HID and Framebuffer.
+  */
+diff --git a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
+index b7bd9def..02bbe138 100644
+--- a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
++++ b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
+@@ -9,6 +9,125 @@
+ 
+ #import <CoreSimulatorUtilities/NSUserDefaults-SimDefaults.h>
+ #import <FBControlCore/FBControlCore.h>
++#import <objc/message.h>
++
++static NSString *const FBSimulatorAccessibilityBootstrapErrorDomain = @"com.facebook.FBSimulatorControl.AccessibilityBootstrap";
++
++static NSError *FBSimulatorAccessibilityBootstrapError(NSInteger code, NSString *description)
++{
++  return [NSError errorWithDomain:FBSimulatorAccessibilityBootstrapErrorDomain
++                             code:code
++                         userInfo:@{NSLocalizedDescriptionKey: description}];
++}
++
++static void FBSimulatorInvalidateAutomationSession(id session)
++{
++  SEL invalidateSelector = NSSelectorFromString(@"invalidate");
++  if ([session respondsToSelector:invalidateSelector]) {
++    ((void (*)(id, SEL))objc_msgSend)(session, invalidateSelector);
++  }
++}
++
++@interface FBSimulatorAccessibilityBootstrapAttempt : NSObject
++
++@property (nonatomic, strong, readonly) dispatch_group_t group;
++@property (nonatomic, assign) BOOL success;
++@property (nonatomic, copy, nullable) NSError *error;
++
++@end
++
++@implementation FBSimulatorAccessibilityBootstrapAttempt
++
++- (instancetype)init
++{
++  self = [super init];
++  if (!self) {
++    return nil;
++  }
++  _group = dispatch_group_create();
++  dispatch_group_enter(_group);
++  return self;
++}
++
++@end
++
++@interface FBSimulatorAccessibilitySessionRequest : NSObject
++
++- (void)completeWithSession:(nullable id)session error:(nullable NSError *)error;
++- (nullable id)sessionByMarkingTimedOut;
++- (nullable id)session;
++- (nullable NSError *)error;
++
++@end
++
++@implementation FBSimulatorAccessibilitySessionRequest
++{
++  NSLock *_lock;
++  id _session;
++  NSError *_error;
++  BOOL _timedOut;
++}
++
++- (instancetype)init
++{
++  self = [super init];
++  if (!self) {
++    return nil;
++  }
++  _lock = [NSLock new];
++  return self;
++}
++
++- (void)completeWithSession:(id)session error:(NSError *)error
++{
++  [_lock lock];
++  BOOL timedOut = _timedOut;
++  if (!timedOut) {
++    _session = session;
++    _error = error;
++  }
++  [_lock unlock];
++  if (timedOut && session) {
++    FBSimulatorInvalidateAutomationSession(session);
++  }
++}
++
++- (id)sessionByMarkingTimedOut
++{
++  [_lock lock];
++  _timedOut = YES;
++  id session = _session;
++  _session = nil;
++  [_lock unlock];
++  return session;
++}
++
++- (id)session
++{
++  [_lock lock];
++  id session = _session;
++  [_lock unlock];
++  return session;
++}
++
++- (NSError *)error
++{
++  [_lock lock];
++  NSError *error = _error;
++  [_lock unlock];
++  return error;
++}
++
++@end
++
++@interface FBSimulatorControlFrameworkLoader ()
++
+++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice
++                                                 timeout:(NSTimeInterval)timeout
++                                                  logger:(nullable id<FBControlCoreLogger>)logger
++                                                   error:(NSError **)error;
++
++@end
+ 
+ static void FBSimulatorControl_SimLogHandler(int level, const char *function, int lineNumber, NSString *format, ...)
+ {
+@@ -54,6 +173,173 @@ + (FBSimulatorControlFrameworkLoader *)accessibilityFrameworks
+   return loader;
+ }
+ 
+++ (FBSimulatorControlFrameworkLoader *)accessibilityAutomationFrameworks
++{
++  static dispatch_once_t onceToken;
++  static FBSimulatorControlFrameworkLoader *loader;
++  dispatch_once(&onceToken, ^{
++    loader = [FBSimulatorControlFrameworkLoader loaderWithName:@"FBSimulatorControl"
++                                                    frameworks:@[
++                FBWeakFramework.XCTDaemonControl,
++                FBWeakFramework.XCUIAutomation,
++              ]];
++  });
++  return loader;
++}
++
+++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
++{
++  static dispatch_once_t onceToken;
++  static dispatch_queue_t stateQueue;
++  static NSMapTable *states;
++  dispatch_once(&onceToken, ^{
++    stateQueue = dispatch_queue_create("com.facebook.FBSimulatorControl.AccessibilityBootstrap", DISPATCH_QUEUE_SERIAL);
++    states = [NSMapTable weakToStrongObjectsMapTable];
++  });
++
++  __block FBSimulatorAccessibilityBootstrapAttempt *attempt;
++  __block BOOL ownsAttempt = NO;
++  dispatch_sync(stateQueue, ^{
++    id state = [states objectForKey:simulatorDevice];
++    if ([state isKindOfClass:FBSimulatorAccessibilityBootstrapAttempt.class]) {
++      attempt = state;
++    } else {
++      attempt = [FBSimulatorAccessibilityBootstrapAttempt new];
++      [states setObject:attempt forKey:simulatorDevice];
++      ownsAttempt = YES;
++    }
++  });
++  if (!ownsAttempt) {
++    dispatch_group_wait(attempt.group, DISPATCH_TIME_FOREVER);
++    if (!attempt.success && error) {
++      *error = attempt.error;
++    }
++    return attempt.success;
++  }
++
++  NSError *bootstrapError = nil;
++  BOOL success = [self performAccessibilityBootstrapForSimulatorDevice:simulatorDevice
++                                                               timeout:timeout
++                                                                logger:logger
++                                                                 error:&bootstrapError];
++  attempt.success = success;
++  attempt.error = bootstrapError;
++  dispatch_sync(stateQueue, ^{
++    if ([states objectForKey:simulatorDevice] == attempt) {
++      [states removeObjectForKey:simulatorDevice];
++    }
++  });
++  dispatch_group_leave(attempt.group);
++  if (!success && error) {
++    *error = bootstrapError;
++  }
++  return success;
++}
++
+++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
++{
++  if (![self.accessibilityAutomationFrameworks loadPrivateFrameworks:logger error:error]) {
++    return NO;
++  }
++
++  Class providerClass = NSClassFromString(@"XCUIDeviceRemoteDaemonConnectionProvider");
++  SEL providerSelector = NSSelectorFromString(@"connectionProviderForSimDevice:");
++  if (![providerClass respondsToSelector:providerSelector]) {
++    if (error) {
++      *error = FBSimulatorAccessibilityBootstrapError(1, @"XCUIDeviceRemoteDaemonConnectionProvider.connectionProviderForSimDevice: is unavailable");
++    }
++    return NO;
++  }
++  id provider = ((id (*)(id, SEL, id))objc_msgSend)(providerClass, providerSelector, simulatorDevice);
++  if (!provider) {
++    if (error) {
++      *error = FBSimulatorAccessibilityBootstrapError(2, @"Could not create the simulator remote daemon connection provider");
++    }
++    return NO;
++  }
++
++  Class sessionClass = NSClassFromString(@"XCUIDeviceRemoteAutomationSession");
++  SEL requestSelector = NSSelectorFromString(@"requestSessionWithDaemonConnectionProvider:completion:");
++  if (![sessionClass respondsToSelector:requestSelector]) {
++    if (error) {
++      *error = FBSimulatorAccessibilityBootstrapError(3, @"XCUIDeviceRemoteAutomationSession request API is unavailable");
++    }
++    return NO;
++  }
++
++  dispatch_semaphore_t sessionSemaphore = dispatch_semaphore_create(0);
++  FBSimulatorAccessibilitySessionRequest *sessionRequest = [FBSimulatorAccessibilitySessionRequest new];
++  id sessionCompletion = ^(id returnedSession, NSError *returnedError) {
++    [sessionRequest completeWithSession:returnedSession error:returnedError];
++    dispatch_semaphore_signal(sessionSemaphore);
++  };
++  ((void (*)(id, SEL, id, id))objc_msgSend)(sessionClass, requestSelector, provider, sessionCompletion);
++  if (dispatch_semaphore_wait(sessionSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) != 0) {
++    id lateSession = [sessionRequest sessionByMarkingTimedOut];
++    if (lateSession) {
++      FBSimulatorInvalidateAutomationSession(lateSession);
++    }
++    if (error) {
++      *error = FBSimulatorAccessibilityBootstrapError(4, @"Timed out creating the simulator remote automation session");
++    }
++    return NO;
++  }
++  id session = sessionRequest.session;
++  if (!session) {
++    if (error) {
++      *error = sessionRequest.error ?: FBSimulatorAccessibilityBootstrapError(5, @"Could not create the simulator remote automation session");
++    }
++    return NO;
++  }
++
++  @try {
++    SEL enableSelector = NSSelectorFromString(@"enableAutomationModeWithError:");
++    if ([session respondsToSelector:enableSelector]) {
++      NSError *enableError = nil;
++      BOOL enabled = ((BOOL (*)(id, SEL, NSError **))objc_msgSend)(session, enableSelector, &enableError);
++      if (!enabled) {
++        if (error) {
++          *error = enableError ?: FBSimulatorAccessibilityBootstrapError(6, @"Could not enable simulator automation mode");
++        }
++        return NO;
++      }
++    }
++
++    SEL loadSelector = NSSelectorFromString(@"loadAccessibilityWithTimeout:reply:");
++    if (![session respondsToSelector:loadSelector]) {
++      if (error) {
++        *error = FBSimulatorAccessibilityBootstrapError(7, @"Remote automation session cannot load Accessibility");
++      }
++      return NO;
++    }
++    dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(0);
++    __block BOOL loaded = NO;
++    __block NSError *loadError = nil;
++    id loadReply = ^(BOOL returnedLoaded, NSError *returnedError) {
++      loaded = returnedLoaded;
++      loadError = returnedError;
++      dispatch_semaphore_signal(loadSemaphore);
++    };
++    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, timeout, loadReply);
++    if (dispatch_semaphore_wait(loadSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 1) * NSEC_PER_SEC))) != 0) {
++      if (error) {
++        *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out loading simulator Accessibility");
++      }
++      return NO;
++    }
++    if (!loaded) {
++      if (error) {
++        *error = loadError ?: FBSimulatorAccessibilityBootstrapError(9, @"The simulator rejected the Accessibility load request");
++      }
++      return NO;
++    }
++    [logger log:@"Bootstrapped simulator Accessibility through a short-lived remote automation session"];
++    return YES;
++  } @finally {
++    FBSimulatorInvalidateAutomationSession(session);
++  }
++}
++
+ + (FBSimulatorControlFrameworkLoader *)xcodeFrameworks
+ {
+   static dispatch_once_t onceToken;

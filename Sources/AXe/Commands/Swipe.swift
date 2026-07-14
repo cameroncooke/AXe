@@ -137,7 +137,7 @@ struct Swipe: AsyncParsableCommand {
         }
         
         // Execute the swipe sequence
-        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent(events: events)
+        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent.composite(events)
         
         // Perform the swipe event
         try await HIDInteractor

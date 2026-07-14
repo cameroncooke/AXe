@@ -1,7 +1,6 @@
 import Foundation
 import FBControlCore
 import FBSimulatorControl
-import ObjectiveC
 
 // MARK: - HID Interactor
 @MainActor
@@ -13,11 +12,8 @@ struct HIDInteractor {
         let hid: FBSimulatorHID
     }
 
-
-
     // Cache for HID connections per simulator
     private static var hidConnections: [String: FBSimulatorHID] = [:]
-
     /// Configurable stabilization delay to ensure HID events are fully processed
     /// Can be set via AXE_HID_STABILIZATION_MS environment variable
     private static var stabilizationDelayMs: UInt64 {
@@ -54,14 +50,28 @@ struct HIDInteractor {
         }
         logger.info().log("Simulator state verified: booted")
 
+        let bootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
         let hid = try await getOrCreateHIDConnection(for: simulator, logger: logger)
+        let connectedBootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
+        guard HIDBroker.shouldReuseSession(
+            sessionBootIdentity: bootIdentity,
+            currentBootIdentity: connectedBootIdentity
+        ) else {
+            hidConnections.removeValue(forKey: simulatorUDID)
+            throw CLIError(errorDescription: "Simulator rebooted while AXe was connecting to HID.")
+        }
+        try await HIDBroker.waitForHIDReadiness(
+            bootIdentity: connectedBootIdentity,
+            isDTUHIDSelected: hid.transportType == .dtuhid,
+            now: Date.init,
+            sleep: { delay in try await Task.sleep(for: .seconds(delay)) }
+        )
         return Session(simulatorUDID: simulatorUDID, simulator: simulator, hid: hid)
     }
 
     static func performHIDEvent(_ event: FBSimulatorHIDEvent, in session: Session, logger: AxeLogger) async throws {
         logger.info().log("Performing HID event...")
-        let eventFuture = event.perform(on: session.hid)
-        _ = try await FutureBridge.value(eventFuture)
+        try await session.hid.send(event: event, logger: logger)
         logger.info().log("HID event performed successfully.")
 
         if stabilizationDelayMs > 0 {
@@ -96,19 +106,19 @@ struct HIDInteractor {
         let movePoints = try compositeDragMovePoints(from: start, to: end, steps: steps)
         let stepDelay = duration / Double(steps)
         var events: [FBSimulatorHIDEvent] = [
-            .touchDownAt(x: start.x, y: start.y),
+            .touch(direction: .down, x: start.x, y: start.y),
             .delay(initialHold)
         ]
 
         for point in movePoints {
             events.append(.delay(stepDelay))
-            events.append(try touchMoveEvent(x: point.x, y: point.y))
+            events.append(.touch(direction: .down, x: point.x, y: point.y))
         }
 
         events.append(.delay(finalHold))
-        events.append(.touchUpAt(x: end.x, y: end.y))
+        events.append(.touch(direction: .up, x: end.x, y: end.y))
 
-        return FBSimulatorHIDEvent(events: events)
+        return .composite(events)
     }
 
     static func compositeDragMovePoints(
@@ -127,19 +137,6 @@ struct HIDInteractor {
                 y: start.y + ((end.y - start.y) * progress)
             )
         }
-    }
-
-    private static func touchMoveEvent(x: Double, y: Double) throws -> FBSimulatorHIDEvent {
-        typealias TouchMoveIMP = @convention(c) (AnyClass, Selector, Double, Double) -> FBSimulatorHIDEvent
-
-        let selector = NSSelectorFromString("touchMoveAtX:y:")
-        guard let method = class_getClassMethod(FBSimulatorHIDEvent.self, selector) else {
-            throw CLIError(errorDescription: "FBSimulatorHIDEvent does not support touch move events.")
-        }
-
-        let implementation = method_getImplementation(method)
-        let touchMove = unsafeBitCast(implementation, to: TouchMoveIMP.self)
-        return touchMove(FBSimulatorHIDEvent.self, selector, x, y)
     }
 
     static func performCompositeDrag(
@@ -186,8 +183,8 @@ struct HIDInteractor {
             try await Task.sleep(for: .seconds(preDelay))
         }
 
-        let touchDownEvent = FBSimulatorHIDEvent.touchDownAt(x: point.x, y: point.y)
-        let touchUpEvent = FBSimulatorHIDEvent.touchUpAt(x: point.x, y: point.y)
+        let touchDownEvent = FBSimulatorHIDEvent.touch(direction: .down, x: point.x, y: point.y)
+        let touchUpEvent = FBSimulatorHIDEvent.touch(direction: .up, x: point.x, y: point.y)
         var didTouchDown = false
 
         do {
@@ -209,7 +206,6 @@ struct HIDInteractor {
         }
     }
 
-
     // Get or create a cached HID connection (matching CompanionLib's connectToHID behavior)
     private static func getOrCreateHIDConnection(for simulator: FBSimulator, logger: AxeLogger) async throws -> FBSimulatorHID {
         if let existingHID = hidConnections[simulator.udid] {
@@ -218,8 +214,7 @@ struct HIDInteractor {
         }
 
         logger.info().log("Creating new HID connection for simulator \(simulator.udid)...")
-        let hidFuture = simulator.connectToHID()
-        let hid = try await FutureBridge.value(hidFuture)
+        let hid = try await simulator.connectToHID()
 
         hidConnections[simulator.udid] = hid
         logger.info().log("HID connection created and cached for simulator \(simulator.udid)")
@@ -230,4 +225,4 @@ struct HIDInteractor {
     static func clearHIDConnections() {
         hidConnections.removeAll()
     }
-} 
+}

@@ -48,13 +48,21 @@ load_env_file "${ENV_FILE}"
 
 # Environment and Configuration
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
-IDB_GIT_REF="${IDB_GIT_REF:-76639e4d0e1741adf391cab36f19fbc59378153e}"
-IDB_PATCHES_DIR="${IDB_PATCHES_DIR:-./patches/idb}"
+IDB_GIT_REF="${IDB_GIT_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
+IDB_PATCHES_DIR="${IDB_PATCHES_DIR:-./patches/idb/e682506}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
 FBSIMCONTROL_PROJECT="${IDB_CHECKOUT_DIR}/FBSimulatorControl.xcodeproj"
 TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
+IDB_REQUIRED_PATCHES=(
+  "accessibility-client-type-for-xctest.patch"
+  "developer-dir-environment-precedence.patch"
+  "expose-selected-hid-transport.patch"
+  "hide-accessibility-private-framework-types.patch"
+  "xcode27-accessibility-bootstrap.patch"
+  "dtuhid-event-semantics.patch"
+)
 
 # Shared payload helper
 # shellcheck source=./release-payload.sh
@@ -166,22 +174,74 @@ function verify_macho_has_arch() {
   fi
 }
 
-function verify_fbsimulatorcontrol_has_xctest_client_type_patch() {
+function verify_fbsimulatorcontrol_candidate_patches() {
   local binary_path="$1"
 
   if [[ ! -f "$binary_path" ]]; then
-    echo "❌ Error: FBSimulatorControl binary not found for accessibility patch verification: $binary_path"
+    echo "❌ Error: FBSimulatorControl binary not found for candidate patch verification: $binary_path"
     exit 1
   fi
 
-  local client_type_references
-  client_type_references=$(strings -a "$binary_path" | grep -F "setClientType:" || true)
-  if [[ -z "$client_type_references" ]]; then
-    echo "❌ Error: FBSimulatorControl is missing the XCTest accessibility client type patch"
-    echo "   Expected to find selector reference 'setClientType:' in: $binary_path"
-    echo "   Rebuild IDB frameworks after applying patches/idb/accessibility-client-type-for-xctest.patch."
+  local required_references=(
+    "setClientType:"
+    "XCUIDeviceRemoteAutomationSession"
+    "enableAutomationModeWithError:"
+    "loadAccessibilityWithTimeout:reply:"
+    "transportType"
+  )
+  local reference
+  for reference in "${required_references[@]}"; do
+    if ! strings -a "$binary_path" | grep -F "$reference" >/dev/null; then
+      echo "❌ Error: FBSimulatorControl is missing candidate patch evidence: ${reference}"
+      echo "   Checked binary: $binary_path"
+      echo "   Expected patch set: ${IDB_PATCHES_DIR}"
+      echo "   Re-run setup, generation, and the framework build at ${IDB_GIT_REF}."
+      exit 1
+    fi
+  done
+
+  local framework_contents
+  framework_contents=$(dirname "$binary_path")
+  local public_module_artifacts=(
+    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/arm64-apple-macos.swiftinterface"
+    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/x86_64-apple-macos.swiftinterface"
+    "${framework_contents}/Headers/FBSimulatorControl-Swift.h"
+  )
+  local compiled_swift_modules=(
+    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/arm64-apple-macos.swiftmodule"
+    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/x86_64-apple-macos.swiftmodule"
+  )
+  local compiled_swift_module
+  for compiled_swift_module in "${compiled_swift_modules[@]}"; do
+    if [[ ! -f "${compiled_swift_module}" ]]; then
+      echo "❌ Error: FBSimulatorControl compiled Swift module is missing: ${compiled_swift_module}"
+      echo "   Textual reconstruction is not viable because the module and public class share a name."
+      exit 1
+    fi
+  done
+  local artifact
+  for artifact in "${public_module_artifacts[@]}"; do
+    if [[ ! -f "$artifact" ]]; then
+      echo "❌ Error: FBSimulatorControl public module artifact is missing: ${artifact}"
+      exit 1
+    fi
+    if grep -E 'AccessibilityPlatformTranslation|AXP[A-Za-z]' "$artifact" >/dev/null; then
+      echo "❌ Error: FBSimulatorControl leaks AccessibilityPlatformTranslation through its public interface"
+      echo "   Leaking artifact: ${artifact}"
+      echo "   Rebuild after applying hide-accessibility-private-framework-types.patch."
+      exit 1
+    fi
+  done
+
+  if ! grep -F 'FBAccessibilityElement' "${public_module_artifacts[0]}" >/dev/null ||
+    ! grep -F 'accessibilityElementForFrontmostApplication' "${public_module_artifacts[0]}" >/dev/null
+  then
+    echo "❌ Error: FBSimulatorControl lost the public AXe accessibility command surface"
+    echo "   Checked: ${public_module_artifacts[0]}"
     exit 1
   fi
+
+  print_success "FBSimulatorControl contains candidate diagnostics without leaking private accessibility framework types"
 }
 
 # Function to invoke xcodebuild, optionally with xcpretty
@@ -235,15 +295,15 @@ function copy_resource_bundle() {
 }
 
 function clone_idb_repo() {
-  if [ ! -d $IDB_CHECKOUT_DIR ]; then
-    print_info "Creating $IDB_DIRECTORY directory and cloning idb repository..."
-    git clone https://github.com/facebook/idb.git $IDB_CHECKOUT_DIR
-    (cd $IDB_CHECKOUT_DIR && git checkout "$IDB_GIT_REF")
+  if [ ! -d "$IDB_CHECKOUT_DIR/.git" ]; then
+    print_info "Creating $IDB_CHECKOUT_DIR directory and cloning idb repository..."
+    git clone https://github.com/facebook/idb.git "$IDB_CHECKOUT_DIR"
+    (cd "$IDB_CHECKOUT_DIR" && git checkout --detach "$IDB_GIT_REF")
     print_success "idb repository cloned at $IDB_GIT_REF."
     apply_idb_patches
   else
     print_info "Updating idb repository to $IDB_GIT_REF..."
-    (cd $IDB_CHECKOUT_DIR && git fetch --all --tags --prune && git reset --hard "$IDB_GIT_REF")
+    (cd "$IDB_CHECKOUT_DIR" && git fetch --all --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF")
     print_success "idb repository updated to $IDB_GIT_REF."
     apply_idb_patches
   fi
@@ -254,19 +314,13 @@ function apply_idb_patches() {
     return
   fi
 
-  shopt -s nullglob
-  local patches=("$IDB_PATCHES_DIR"/*.patch)
-  if [ ${#patches[@]} -eq 0 ]; then
-    shopt -u nullglob
-    return
-  fi
-
   print_info "Applying local patches to idb repository..."
   # Ensure we start from a clean working tree so patches apply consistently.
   (cd "$IDB_CHECKOUT_DIR" && git checkout -- . >/dev/null 2>&1 && git clean -fd >/dev/null 2>&1) || true
 
-  local patch_file
-  for patch_file in "${patches[@]}"; do
+  local patch_name patch_file
+  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
+    patch_file="${IDB_PATCHES_DIR}/${patch_name}"
     local patch_abs
     patch_abs="$(cd "$(dirname "$patch_file")" && pwd)/$(basename "$patch_file")"
     print_info "  → $(basename "$patch_file")"
@@ -282,7 +336,91 @@ function apply_idb_patches() {
       exit 1
     fi
   done
-  shopt -u nullglob
+  verify_idb_source_state
+}
+
+function verify_idb_source_state() {
+  local actual_ref
+  actual_ref=$(git -C "$IDB_CHECKOUT_DIR" rev-parse HEAD)
+  if [[ "$actual_ref" != "$IDB_GIT_REF" ]]; then
+    echo "❌ Error: IDB checkout SHA mismatch"
+    echo "   Expected: $IDB_GIT_REF"
+    echo "   Actual:   $actual_ref"
+    exit 1
+  fi
+
+  local patch_name
+  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
+    if [[ ! -f "${IDB_PATCHES_DIR}/${patch_name}" ]]; then
+      echo "❌ Error: Required candidate patch is missing: ${IDB_PATCHES_DIR}/${patch_name}"
+      exit 1
+    fi
+  done
+
+  local source_checks=(
+    "FBControlCore/Utility/FBXcodeDirectory.swift|environment[\"DEVELOPER_DIR\"]"
+    "FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift|clientType = 2"
+    "FBSimulatorControl/Commands/FBAXTranslationRequest.swift|@_implementationOnly import AccessibilityPlatformTranslation"
+    "FBSimulatorControl/HID/FBSimulatorHID.swift|public let transportType"
+    "FBSimulatorControl/HID/FBSimulatorHIDEvent.swift|event.event(for: transportType)"
+    "FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m|XCUIDeviceRemoteAutomationSession"
+  )
+  local check source_file source_marker
+  for check in "${source_checks[@]}"; do
+    source_file="${check%%|*}"
+    source_marker="${check#*|}"
+    if ! grep -Fq "$source_marker" "${IDB_CHECKOUT_DIR}/${source_file}"; then
+      echo "❌ Error: Candidate patch verification failed"
+      echo "   Missing '${source_marker}' in ${source_file}"
+      echo "   Patch directory: ${IDB_PATCHES_DIR}"
+      exit 1
+    fi
+  done
+
+  if ! git -C "$IDB_CHECKOUT_DIR" diff --check; then
+    echo "❌ Error: Candidate IDB patch set introduced whitespace errors"
+    exit 1
+  fi
+
+  print_success "Verified IDB source SHA ${actual_ref} and candidate patch set ${IDB_PATCHES_DIR}"
+  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
+    print_info "  $(shasum -a 256 "${IDB_PATCHES_DIR}/${patch_name}" | awk '{print $1}')  ${patch_name}"
+  done
+}
+
+function generate_idb_projects() {
+  if ! command -v xcodegen >/dev/null 2>&1; then
+    echo "❌ Error: XcodeGen is required to generate the candidate IDB projects."
+    echo "   Install XcodeGen or make an existing installation available in PATH."
+    exit 1
+  fi
+
+  verify_idb_source_state
+  print_info "Generating candidate IDB projects with $(xcodegen --version)..."
+  (cd "$IDB_CHECKOUT_DIR" && ./build.sh generate)
+  if [[ ! -f "${FBSIMCONTROL_PROJECT}/project.pbxproj" ]]; then
+    echo "❌ Error: Candidate project generation did not produce ${FBSIMCONTROL_PROJECT}/project.pbxproj"
+    exit 1
+  fi
+  print_success "Generated candidate IDB projects before framework compilation"
+}
+
+function write_idb_build_evidence() {
+  local evidence_path="${BUILD_XCFRAMEWORK_DIR}/IDB_BUILD_EVIDENCE.txt"
+  mkdir -p "$BUILD_XCFRAMEWORK_DIR"
+  {
+    echo "IDB_SHA=${IDB_GIT_REF}"
+    echo "IDB_PATCH_DIRECTORY=${IDB_PATCHES_DIR}"
+    echo "DEVELOPER_DIR=${DEVELOPER_DIR:-<not set>}"
+    echo "XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')"
+    echo "SWIFT_VERSION=$(swiftc --version 2>&1 | head -1)"
+    echo "XCODEGEN_VERSION=$(xcodegen --version)"
+    local patch_name
+    for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
+      echo "PATCH_SHA256=$(shasum -a 256 "${IDB_PATCHES_DIR}/${patch_name}" | awk '{print $1}') ${patch_name}"
+    done
+  } > "$evidence_path"
+  print_success "Recorded candidate build evidence at ${evidence_path}"
 }
 
 # Function to build a single framework
@@ -372,6 +510,22 @@ function create_xcframework() {
   local xcframework_exit_code=$?
 
   if [ $xcframework_exit_code -eq 0 ]; then
+    local source_swiftmodule_dir="${signed_framework_path}/Modules/${scheme_name}.swiftmodule"
+    if [[ -d "${source_swiftmodule_dir}" ]]; then
+      local library_identifier
+      library_identifier=$(/usr/libexec/PlistBuddy \
+        -c "Print :AvailableLibraries:0:LibraryIdentifier" \
+        "${xcframework_path}/Info.plist")
+      local packaged_swiftmodule_dir="${xcframework_path}/${library_identifier}/${scheme_name}.framework/Modules/${scheme_name}.swiftmodule"
+      mkdir -p "${packaged_swiftmodule_dir}"
+
+      local compiled_swiftmodule
+      for compiled_swiftmodule in "${source_swiftmodule_dir}"/*.swiftmodule; do
+        [[ -f "${compiled_swiftmodule}" ]] || continue
+        cp "${compiled_swiftmodule}" "${packaged_swiftmodule_dir}/"
+      done
+      print_info "Preserved compiled Swift modules for ${scheme_name}.xcframework"
+    fi
     print_success "XCFramework ${scheme_name}.xcframework created at ${xcframework_path}"
   else
     echo "❌ Error: XCFramework creation for ${scheme_name} failed with exit code ${xcframework_exit_code}"
@@ -649,7 +803,7 @@ function verify_xcframework_inputs() {
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_has_xctest_client_type_patch "${framework_binary}"
+      verify_fbsimulatorcontrol_candidate_patches "${framework_binary}"
     fi
   done
 
@@ -686,7 +840,7 @@ function verify_release_architectures() {
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_has_xctest_client_type_patch "${framework_binary}"
+      verify_fbsimulatorcontrol_candidate_patches "${framework_binary}"
     fi
   done
 
@@ -964,7 +1118,10 @@ Commands:
     Clean previous build products and derived data.
 
   frameworks
-    Build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
+    Generate the candidate project, then build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
+
+  generate
+    Verify the pinned candidate and patches, then regenerate IDB projects using XcodeGen.
 
   install
     Install built frameworks to the Frameworks directory.
@@ -1006,6 +1163,8 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
   AXE_ENV_FILE           Path to the .env file to load (default: <repo-root>/.env)
   AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
+  IDB_GIT_REF            Exact IDB revision (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
+  IDB_PATCHES_DIR        Candidate patch directory (default: ./patches/idb/e682506)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
   TEMP_DIR               Temporary directory for final packages (default: system temp)
@@ -1044,6 +1203,7 @@ function cmd_clean() {
 
 function cmd_frameworks() {
   print_section "🔧" "Building Frameworks"
+  generate_idb_projects
   framework_build "FBControlCore" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
   framework_build "XCTestBootstrap" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
   framework_build "FBSimulatorControl" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
@@ -1085,6 +1245,12 @@ function cmd_xcframeworks() {
   create_xcframework "XCTestBootstrap" "${BUILD_OUTPUT_DIR}"
   create_xcframework "FBSimulatorControl" "${BUILD_OUTPUT_DIR}"
   create_xcframework "FBDeviceControl" "${BUILD_OUTPUT_DIR}"
+  write_idb_build_evidence
+}
+
+function cmd_generate() {
+  print_section "🧬" "Generating Candidate IDB Projects"
+  generate_idb_projects
 }
 
 function cmd_sign_xcframeworks() {
@@ -1184,6 +1350,8 @@ case $COMMAND in
     exit 0;;
   setup)
     cmd_setup;;
+  generate)
+    cmd_generate;;
   clean)
     cmd_clean;;
   frameworks)

@@ -76,7 +76,7 @@ struct KeyCombo: AsyncParsableCommand {
 
         // Press modifiers down in order
         for modifier in parsedModifiers {
-            events.append(FBSimulatorHIDEvent.keyDown(UInt32(modifier)))
+            events.append(FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: UInt32(modifier)))
         }
 
         // Press and release the target key
@@ -84,10 +84,10 @@ struct KeyCombo: AsyncParsableCommand {
 
         // Release modifiers in reverse order
         for modifier in parsedModifiers.reversed() {
-            events.append(FBSimulatorHIDEvent.keyUp(UInt32(modifier)))
+            events.append(FBSimulatorHIDEvent.keyboard(direction: .up, keyCode: UInt32(modifier)))
         }
 
-        let comboEvent = FBSimulatorHIDEvent(events: events)
+        let comboEvent = FBSimulatorHIDEvent.composite(events)
 
         try await HIDInteractor
             .performHIDEvent(

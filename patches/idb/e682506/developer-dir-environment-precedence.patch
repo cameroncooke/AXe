@@ -1,0 +1,68 @@
+diff --git a/FBControlCore/Utility/FBXcodeDirectory.swift b/FBControlCore/Utility/FBXcodeDirectory.swift
+index fcf2a61a7..e3fd12a14 100644
+--- a/FBControlCore/Utility/FBXcodeDirectory.swift
++++ b/FBControlCore/Utility/FBXcodeDirectory.swift
+@@ -12,6 +12,18 @@ public struct FBXcodeDirectory {
+   // MARK: Public
+ 
+   public static func resolveDeveloperDirectory() throws -> String {
++    try resolveDeveloperDirectory(environment: ProcessInfo.processInfo.environment)
++  }
++
++  static func resolveDeveloperDirectory(environment: [String: String]) throws -> String {
++    if let directory = environment["DEVELOPER_DIR"],
++      !directory.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
++    {
++      let resolved = (directory as NSString).resolvingSymlinksInPath
++      try validateXcodeDirectory(resolved)
++      return resolved
++    }
++
+     let directory: String
+     do {
+       directory = try symlinkedDeveloperDirectory()
+diff --git a/FBControlCoreTests/Tests/Unit/FBXcodeDirectoryTests.swift b/FBControlCoreTests/Tests/Unit/FBXcodeDirectoryTests.swift
+index 1ed675985..ecf99e552 100644
+--- a/FBControlCoreTests/Tests/Unit/FBXcodeDirectoryTests.swift
++++ b/FBControlCoreTests/Tests/Unit/FBXcodeDirectoryTests.swift
+@@ -9,6 +9,40 @@
+ import XCTest
+ 
+ final class FBXcodeDirectoryTests: XCTestCase {
++  func testResolveUsesProcessDeveloperDirectoryEnvironment() throws {
++    guard let directory = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] else {
++      throw XCTSkip("DEVELOPER_DIR is not set")
++    }
++
++    XCTAssertEqual(
++      try FBXcodeDirectory.resolveDeveloperDirectory(),
++      (directory as NSString).resolvingSymlinksInPath)
++  }
++
++  func testDeveloperDirectoryEnvironmentTakesPrecedence() throws {
++    let directory = FileManager.default.temporaryDirectory
++      .appendingPathComponent(UUID().uuidString, isDirectory: true)
++    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
++    defer { try? FileManager.default.removeItem(at: directory) }
++
++    let resolved = try FBXcodeDirectory.resolveDeveloperDirectory(
++      environment: ["DEVELOPER_DIR": directory.path])
++
++    XCTAssertEqual(resolved, directory.path)
++  }
++
++  func testResolveWithoutEnvironmentRetainsLegacyPrecedence() throws {
++    let expected: String
++    do {
++      expected = try FBXcodeDirectory.symlinkedDeveloperDirectory()
++    } catch {
++      expected = try FBXcodeDirectory.xcodeSelectDeveloperDirectory()
++    }
++    let fallback = try FBXcodeDirectory.resolveDeveloperDirectory(environment: [:])
++
++    XCTAssertEqual(fallback, expected)
++  }
++
+   func testXcodeSelect() throws {
+     let directory = try FBXcodeDirectory.xcodeSelectDeveloperDirectory()
+     assertDirectory(directory)

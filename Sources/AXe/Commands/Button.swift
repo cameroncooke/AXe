@@ -91,11 +91,11 @@ struct Button: AsyncParsableCommand {
         
         if let duration = duration {
             // For duration-based presses, we need to create separate down/up events with delay
-            let buttonDownEvent = FBSimulatorHIDEvent.buttonDown(buttonType.hidButton)
+            let buttonDownEvent = FBSimulatorHIDEvent.button(direction: .down, button: buttonType.hidButton)
             let delayEvent = FBSimulatorHIDEvent.delay(duration)
-            let buttonUpEvent = FBSimulatorHIDEvent.buttonUp(buttonType.hidButton)
-            
-            buttonEvent = FBSimulatorHIDEvent(events: [
+            let buttonUpEvent = FBSimulatorHIDEvent.button(direction: .up, button: buttonType.hidButton)
+
+            buttonEvent = FBSimulatorHIDEvent.composite([
                 buttonDownEvent,
                 delayEvent,
                 buttonUpEvent

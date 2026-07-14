@@ -212,7 +212,7 @@ struct Gesture: AsyncParsableCommand {
         }
         
         // Execute the gesture sequence
-        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent(events: events)
+        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent.composite(events)
         
         try await HIDInteractor
             .performHIDEvent(
