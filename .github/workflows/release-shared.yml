@@ -28,10 +28,23 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: '26.2'
+          xcode-version: '26.5'
+
+      - name: Resolve Xcode cache identity
+        id: xcode_identity
+        run: |
+          set -euo pipefail
+          XCODE_VERSION=$(xcodebuild -version | awk 'NR == 1 { print $2 }')
+          XCODE_BUILD=$(xcodebuild -version | awk 'NR == 2 { print $3 }')
+          if [ "$XCODE_VERSION" != "26.5" ] || [ "$XCODE_BUILD" != "17F42" ]; then
+            echo "Expected Xcode 26.5 (17F42), got Xcode $XCODE_VERSION ($XCODE_BUILD)"
+            exit 1
+          fi
+          CACHE_IDENTITY=$(printf 'xcode-%s-%s' "$XCODE_VERSION" "$XCODE_BUILD" | tr -c 'A-Za-z0-9._-' '-')
+          echo "cache_identity=$CACHE_IDENTITY" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
-        run: brew install jq
+        run: brew install jq xcodegen
 
       - name: Make release scripts executable
         run: |
@@ -58,8 +71,10 @@ jobs:
           set -euo pipefail
           PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
           PATCH_HASH=$(find patches/idb -name '*.patch' -type f | sort | xargs shasum -a 256 | shasum -a 256 | awk '{print $1}')
+          BUILD_PIPELINE_HASH=$(shasum -a 256 scripts/build.sh Package.swift | shasum -a 256 | awk '{print $1}')
           echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
           echo "patch_hash=$PATCH_HASH" >> "$GITHUB_OUTPUT"
+          echo "build_pipeline_hash=$BUILD_PIPELINE_HASH" >> "$GITHUB_OUTPUT"
 
       - name: Restore IDB repository cache
         uses: actions/cache/restore@v4
@@ -88,19 +103,23 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
+          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Restore XCFramework cache
         uses: actions/cache/restore@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Check XCFramework outputs
         id: xcframework_check
         run: |
           set -euo pipefail
           REQUIRED=(
+            "build_products/Frameworks/FBControlCore.framework"
+            "build_products/Frameworks/XCTestBootstrap.framework"
+            "build_products/Frameworks/FBSimulatorControl.framework"
+            "build_products/Frameworks/FBDeviceControl.framework"
             "build_products/XCFrameworks/FBControlCore.xcframework"
             "build_products/XCFrameworks/XCTestBootstrap.xcframework"
             "build_products/XCFrameworks/FBSimulatorControl.xcframework"
@@ -114,7 +133,12 @@ jobs:
             fi
           done
 
-          echo "needs_build=false" >> "$GITHUB_OUTPUT"
+          if scripts/build.sh verify-xcframeworks >/dev/null 2>&1; then
+            echo "needs_build=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cached XCFramework verification failed; rebuilding framework artifacts"
+            echo "needs_build=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup - Clone IDB repository
         if: steps.idb_check.outputs.needs_setup == 'true'
@@ -215,14 +239,14 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
+          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Save XCFramework cache
         if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.patch_hash }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Prepare - Clean Swift build environment
         run: |
