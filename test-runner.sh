@@ -5,6 +5,8 @@
 
 set -e  # Exit on any error
 
+source "$(dirname "${BASH_SOURCE[0]}")/scripts/e2e-environment.sh"
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -55,6 +57,8 @@ show_usage() {
     echo "  -v, --verbose       Verbose output"
     echo ""
     echo "Environment:"
+    echo "  DEVELOPER_DIR           Runtime Xcode (Xcode 27 uses Device Hub)"
+    echo "  AXE_BUILD_DEVELOPER_DIR Pinned Xcode 26.5 build toolchain override"
     echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
     echo "Test Filters (optional):"
@@ -153,6 +157,19 @@ check_prerequisites() {
         exit 1
     fi
 
+    if ! command -v jq &> /dev/null; then
+        print_error "jq not found. Install jq to select the matching simulator runtime."
+        exit 1
+    fi
+
+    if ! configure_e2e_environment; then
+        print_error "Xcode 26.5 ($EXPECTED_BUILD_XCODE_BUILD) is required to build AXe. Set AXE_BUILD_DEVELOPER_DIR to its Contents/Developer directory."
+        exit 1
+    fi
+
+    print_info "Build toolchain: Xcode $EXPECTED_BUILD_XCODE_VERSION ($EXPECTED_BUILD_XCODE_BUILD)"
+    print_info "Runtime toolchain: Xcode $RUNTIME_XCODE_VERSION ($RUNTIME_XCODE_BUILD)"
+
     print_success "All prerequisites satisfied"
 }
 
@@ -160,9 +177,7 @@ check_prerequisites() {
 boot_simulator() {
     print_header "Setting Up Simulator"
 
-    if [[ -z "$SIMULATOR_UDID" ]]; then
-        SIMULATOR_UDID=$(xcrun simctl list devices | grep "$SIMULATOR_NAME" | grep -oE '[A-F0-9-]{36}' | head -1)
-    fi
+    select_e2e_simulator
 
     print_info "Checking simulator status..."
     SIMULATOR_STATUS=$(xcrun simctl list devices | grep "$SIMULATOR_UDID" | grep -o "Booted\|Shutdown" || echo "NotFound")
@@ -190,7 +205,7 @@ clean_build() {
         print_header "Cleaning Build"
 
         print_info "Cleaning Swift build..."
-        swift package clean
+        build_swift package clean
 
         print_info "Cleaning Xcode build..."
         xcodebuild clean -project "$PLAYGROUND_PROJECT" -scheme "$PLAYGROUND_SCHEME" -destination "id=$SIMULATOR_UDID"
@@ -205,13 +220,15 @@ build_axe() {
 
     print_info "Building AXe CLI tool..."
     if [[ "$VERBOSE" == true ]]; then
-        swift build
-    else
-        swift build > /dev/null 2>&1
+        build_swift build --build-tests
+    elif ! build_swift build --build-tests > /tmp/axe-e2e-swift-build.log 2>&1; then
+        print_error "Failed to build AXe with Xcode 26.5. Build output:"
+        tail -80 /tmp/axe-e2e-swift-build.log
+        exit 1
     fi
 
     local axe_bin_path
-    axe_bin_path="$(swift build --show-bin-path)/axe"
+    axe_bin_path="$(build_swift build --show-bin-path)/axe"
 
     # Verify the executable exists
     if [[ -f "$axe_bin_path" ]]; then
@@ -225,7 +242,7 @@ build_axe() {
 
 ensure_test_framework_rpaths() {
     local build_dir
-    build_dir="$(swift build --show-bin-path)"
+    build_dir="$(build_swift build --show-bin-path)"
 
     local package_frameworks_dir="$build_dir/PackageFrameworks"
     mkdir -p "$package_frameworks_dir"
@@ -323,7 +340,8 @@ run_tests() {
     # Set up environment
     export SIMULATOR_UDID="$SIMULATOR_UDID"
     export AXE_E2E=1
-    export AXE_BIN_PATH="$(swift build --show-bin-path)/axe"
+    AXE_BIN_PATH="$(build_swift build --show-bin-path)/axe"
+    export AXE_BIN_PATH
     if [[ ! -f "$AXE_BIN_PATH" ]]; then
         print_error "AXe executable not found at $AXE_BIN_PATH. Run without --tests-only or run swift build first."
         exit 1
@@ -350,14 +368,10 @@ run_tests() {
 
     run_swift_test() {
         local filter="$1"
-        local cmd="swift test --filter $filter"
-
-        if [[ "$VERBOSE" == true ]]; then
-            cmd="$cmd --verbose"
-        fi
-
-        print_info "Test command: $cmd"
-        eval "$cmd"
+        local args=(--filter "$filter")
+        [[ "$VERBOSE" == true ]] && args+=(--verbose)
+        print_info "Test command: pinned Swift test --skip-build --no-parallel --filter $filter"
+        run_runtime_swift_test "${args[@]}"
     }
 
     if [[ -n "$TEST_FILTER" ]]; then
@@ -409,14 +423,11 @@ run_tests() {
     fi
 
     print_info "Running all tests"
-    local test_cmd="swift test"
-    if [[ "$VERBOSE" == true ]]; then
-        test_cmd="$test_cmd --verbose"
-    fi
-
-    print_info "Test command: $test_cmd"
+    local args=()
+    [[ "$VERBOSE" == true ]] && args+=(--verbose)
+    print_info "Test command: pinned Swift test --skip-build --no-parallel"
     echo ""
-    if eval "$test_cmd"; then
+    if run_runtime_swift_test "${args[@]}"; then
         print_success "All tests passed"
     else
         print_error "Some tests failed"
@@ -430,7 +441,7 @@ show_summary() {
 
     if [[ "$BUILD_ONLY" == true ]]; then
         print_success "Build completed successfully"
-        print_info "AXe executable: $(swift build --show-bin-path)/axe"
+        print_info "AXe executable: $(build_swift build --show-bin-path)/axe"
         print_info "Playground app installed on: $SIMULATOR_NAME ($SIMULATOR_UDID)"
     elif [[ "$TESTS_ONLY" == true ]]; then
         if [[ -n "$TEST_FILTER" ]]; then
@@ -440,7 +451,7 @@ show_summary() {
         fi
     else
         print_success "Build and test cycle completed successfully"
-        print_info "AXe executable: $(swift build --show-bin-path)/axe"
+        print_info "AXe executable: $(build_swift build --show-bin-path)/axe"
         print_info "Playground app: Installed and tested on $SIMULATOR_NAME"
         if [[ -n "$TEST_FILTER" ]]; then
             print_info "Test suite: $TEST_FILTER"
@@ -457,6 +468,10 @@ main() {
 
     # Always check prerequisites
     check_prerequisites
+    ensure_e2e_runtime_host || {
+        print_error "Could not start the Xcode 27 Device Hub runtime host."
+        exit 1
+    }
 
     # Always boot simulator (needed for both building and testing)
     boot_simulator
