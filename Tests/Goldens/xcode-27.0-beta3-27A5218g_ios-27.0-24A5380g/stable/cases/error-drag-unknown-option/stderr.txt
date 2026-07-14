@@ -1,0 +1,4 @@
+Error: Missing expected argument '--start-x <start-x>'
+Help:  --start-x <start-x>  The X coordinate of the starting point.
+Usage: axe drag --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> [--duration <duration>] [--steps <steps>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] --udid <udid>
+  See 'axe drag --help' for more information.

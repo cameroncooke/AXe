@@ -1,0 +1,49 @@
+OVERVIEW: Execute ordered interaction steps using one simulator/HID session.
+
+Batch executes multiple interaction steps in one command to reduce overhead.
+Steps are executed in order.
+
+Supported step commands:
+  tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo
+
+Batch-only pseudo-step:
+  sleep <seconds>
+
+Examples:
+  axe batch --udid SIMULATOR_UDID --step "tap --id BackButton" --step "type
+'hello'"
+  axe batch --udid SIMULATOR_UDID --file steps.txt
+  cat steps.txt | axe batch --udid SIMULATOR_UDID --stdin
+
+USAGE: axe batch --udid <udid> [--step <step> ...] [--file <file>] [--stdin] [--ax-cache <ax-cache>] [--type-submission <type-submission>] [--type-chunk-size <type-chunk-size>] [--tap-style <tap-style>] [--continue-on-error] [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] [--verbose]
+
+OPTIONS:
+  --udid <udid>           The UDID of the simulator.
+  --step <step>           Step to execute. Repeat for multiple steps.
+  --file <file>           Read steps from a file (one step per line).
+  --stdin                 Read steps from stdin (one step per line).
+  --ax-cache <ax-cache>   Accessibility snapshot cache policy for
+                          selector-based taps. (values: perBatch, perStep,
+                          none; default: perBatch)
+  --type-submission <type-submission>
+                          Type step submission mode. (values: chunked,
+                          composite; default: chunked)
+  --type-chunk-size <type-chunk-size>
+                          Maximum HID events per chunk when type-submission is
+                          chunked. (default: 200)
+  --tap-style <tap-style> Default tap event style for tap steps: automatic uses
+                          physical touch for switches/toggles and simulator tap
+                          for other targets; simulator always uses FBSimulator
+                          tapAt; physical uses touch down/up. (values:
+                          automatic, simulator, physical; default: automatic)
+  --continue-on-error     Continue executing later steps even if one step fails.
+  --wait-timeout <wait-timeout>
+                          Maximum seconds to poll for selector-based elements
+                          before failing (0 = no waiting). (default: 0.0)
+  --poll-interval <poll-interval>
+                          Seconds between accessibility tree polls when
+                          --wait-timeout is active. (default: 0.25)
+  --verbose               Enable verbose logging to stderr.
+  --version               Show the version.
+  -h, --help              Show help information.
+

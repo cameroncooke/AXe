@@ -1,0 +1,4 @@
+Error: Missing expected argument '<keycode>'
+Help:  <keycode>  The HID keycode to press (0-255).
+Usage: axe key <keycode> [--duration <duration>] --udid <udid>
+  See 'axe key --help' for more information.

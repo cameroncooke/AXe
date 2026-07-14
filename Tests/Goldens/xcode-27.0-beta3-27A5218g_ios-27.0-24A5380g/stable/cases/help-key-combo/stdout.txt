@@ -1,0 +1,37 @@
+OVERVIEW: Press a key while holding one or more modifier keys on the simulator.
+
+Hold modifier keys and press another key as a single atomic operation.
+Modifier keys are held down, the target key is pressed and released,
+then modifier keys are released in reverse order (LIFO).
+
+Common modifier keycodes:
+  224 - Left Control
+  225 - Left Shift
+  226 - Left Alt/Option
+  227 - Left Command (GUI)
+  228 - Right Control
+  229 - Right Shift
+  230 - Right Alt/Option
+  231 - Right Command (GUI)
+
+Examples:
+  axe key-combo --modifiers 227 --key 4 --udid SIMULATOR_UDID          # Cmd+A
+(Select All)
+  axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID          # Cmd+C
+(Copy)
+  axe key-combo --modifiers 227 --key 25 --udid SIMULATOR_UDID         # Cmd+V
+(Paste)
+  axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID      #
+Cmd+Shift+A
+
+USAGE: axe key-combo --modifiers <modifiers> --key <key> --udid <udid>
+
+OPTIONS:
+  --modifiers <modifiers> Comma-separated list of modifier keycodes to hold
+                          (0-255).
+  --key <key>             The HID keycode to press while modifiers are held
+                          (0-255).
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

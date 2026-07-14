@@ -1,0 +1,4 @@
+Error: Missing expected argument '--udid <udid>'
+Help:  --udid <udid>  The UDID of the simulator.
+Usage: axe screenshot --udid <udid> [--output <output>]
+  See 'axe screenshot --help' for more information.

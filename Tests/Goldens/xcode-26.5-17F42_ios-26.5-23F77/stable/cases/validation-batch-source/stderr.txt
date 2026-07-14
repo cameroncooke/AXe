@@ -1,0 +1,3 @@
+Error: Specify exactly one step source: --step, --file, or --stdin.
+Usage: axe batch --udid <udid> [--step <step> ...] [--file <file>] [--stdin] [--ax-cache <ax-cache>] [--type-submission <type-submission>] [--type-chunk-size <type-chunk-size>] [--tap-style <tap-style>] [--continue-on-error] [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] [--verbose]
+  See 'axe batch --help' for more information.

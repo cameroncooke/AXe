@@ -1,0 +1,3 @@
+Error: Please specify only one input source: text argument, --stdin, or --file.
+Usage: axe type [<text>] [--stdin] [--file <file>] --udid <udid>
+  See 'axe type --help' for more information.

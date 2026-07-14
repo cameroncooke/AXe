@@ -1,0 +1,4 @@
+Error: The value 'invalid' is invalid for '--format <format>'
+Help:  --format <format>  Output format: mjpeg, raw, ffmpeg, bgra (default: mjpeg)
+Usage: axe stream-video --udid <udid> [--format <format>] [--fps <fps>] [--quality <quality>] [--scale <scale>]
+  See 'axe stream-video --help' for more information.

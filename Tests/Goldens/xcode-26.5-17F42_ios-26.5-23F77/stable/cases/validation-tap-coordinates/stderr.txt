@@ -1,0 +1,4 @@
+Error: The value 'not-a-number' is invalid for '-x <x>'
+Help:  -x <x>  The X coordinate of the point to tap.
+Usage: axe tap [-x <x>] [-y <y>] [--id <id>] [--label <label>] [--value <value>] [--element-type <element-type>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] [--tap-style <tap-style>] [--wait-timeout <wait-timeout>] [--poll-interval <poll-interval>] --udid <udid>
+  See 'axe tap --help' for more information.

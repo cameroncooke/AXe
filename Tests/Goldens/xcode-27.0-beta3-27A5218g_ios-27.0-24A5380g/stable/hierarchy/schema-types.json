@@ -1,0 +1,1086 @@
+[
+  {
+    "path": "$",
+    "type": "array"
+  },
+  {
+    "path": "$.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].AXLabel",
+    "type": "string"
+  },
+  {
+    "path": "$.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[]",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXFrame",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXLabel",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXUniqueId",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].AXValue",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].children.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].children.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].children.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].children.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].children.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].children.[].type",
+    "type": "string"
+  },
+  {
+    "path": "$.[].content_required",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].custom_actions",
+    "type": "array"
+  },
+  {
+    "path": "$.[].enabled",
+    "type": "boolean"
+  },
+  {
+    "path": "$.[].frame",
+    "type": "object"
+  },
+  {
+    "path": "$.[].frame.height",
+    "type": "number"
+  },
+  {
+    "path": "$.[].frame.width",
+    "type": "number"
+  },
+  {
+    "path": "$.[].frame.x",
+    "type": "number"
+  },
+  {
+    "path": "$.[].frame.y",
+    "type": "number"
+  },
+  {
+    "path": "$.[].help",
+    "type": "null"
+  },
+  {
+    "path": "$.[].pid",
+    "type": "number"
+  },
+  {
+    "path": "$.[].role",
+    "type": "string"
+  },
+  {
+    "path": "$.[].role_description",
+    "type": "string"
+  },
+  {
+    "path": "$.[].subrole",
+    "type": "null"
+  },
+  {
+    "path": "$.[].title",
+    "type": "null"
+  },
+  {
+    "path": "$.[].traits",
+    "type": "array"
+  },
+  {
+    "path": "$.[].type",
+    "type": "string"
+  }
+]

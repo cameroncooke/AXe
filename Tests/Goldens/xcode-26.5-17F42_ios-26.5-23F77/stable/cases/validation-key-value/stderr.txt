@@ -1,0 +1,3 @@
+Error: Keycode must be between 0 and 255.
+Usage: axe key <keycode> [--duration <duration>] --udid <udid>
+  See 'axe key --help' for more information.

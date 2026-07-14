@@ -1,0 +1,23 @@
+OVERVIEW: Press a sequence of keys by their keycodes on the simulator.
+
+Press multiple keys in sequence using their HID keycode values.
+Each key will be pressed and released before the next key is pressed.
+
+Examples:
+  axe key-sequence 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello" (h=11,
+e=8, l=15, l=15, o=18)
+  axe key-sequence 40,40,40 --udid SIMULATOR_UDID          # Press Enter 3
+times
+  axe key-sequence 224,4,225 --udid SIMULATOR_UDID        # Ctrl+A (Ctrl=224,
+A=4, release Ctrl=225)
+
+USAGE: axe key-sequence --keycodes <keycodes> [--delay <delay>] --udid <udid>
+
+OPTIONS:
+  --keycodes <keycodes>   Comma-separated list of HID keycodes to press in
+                          sequence.
+  --delay <delay>         Delay between key presses in seconds (default: 0.1).
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

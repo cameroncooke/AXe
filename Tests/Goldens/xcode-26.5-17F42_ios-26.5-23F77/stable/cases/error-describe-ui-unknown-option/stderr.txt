@@ -1,0 +1,4 @@
+Error: Missing expected argument '--udid <udid>'
+Help:  --udid <udid>  The UDID of the simulator.
+Usage: axe describe-ui --udid <udid> [--point <x,y>]
+  See 'axe describe-ui --help' for more information.

@@ -1,0 +1,3 @@
+Error: --point must be in the form x,y using non-negative numbers.
+Usage: axe describe-ui --udid <udid> [--point <x,y>]
+  See 'axe describe-ui --help' for more information.

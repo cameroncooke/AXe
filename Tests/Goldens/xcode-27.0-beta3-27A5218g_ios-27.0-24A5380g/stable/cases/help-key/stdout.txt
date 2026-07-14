@@ -1,0 +1,29 @@
+OVERVIEW: Press a single key by keycode on the simulator.
+
+Press individual keys using their HID keycode values.
+
+Common keycodes:
+  40 - Return/Enter
+  42 - Backspace
+  43 - Tab
+  44 - Space
+  58-67 - F1-F10
+  224-231 - Modifier keys (Ctrl, Shift, Alt, etc.)
+
+Examples:
+  axe key 40 --udid SIMULATOR_UDID                    # Press Enter
+  axe key 44 --udid SIMULATOR_UDID                    # Press Space
+  axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace for 1
+second
+
+USAGE: axe key <keycode> [--duration <duration>] --udid <udid>
+
+ARGUMENTS:
+  <keycode>               The HID keycode to press (0-255).
+
+OPTIONS:
+  --duration <duration>   Duration to hold the key in seconds (optional).
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

@@ -1,0 +1,42 @@
+OVERVIEW: A utility to interact with iOS Simulators and extract accessibility
+information.
+
+USAGE: axe <subcommand>
+
+OPTIONS:
+  --version               Show the version.
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  describe-ui             Describes the UI hierarchy of a booted simulator
+                          using accessibility information.
+  list-simulators         Lists all available simulators.
+  init                    Install AXe skill files for detected AI clients.
+  tap                     Tap a point on the screen, or locate an element by
+                          accessibility and tap its activation point.
+  slider                  Set a slider to a deterministic value from 0 to 100
+                          using accessibility selector targeting.
+  type                    Type text by entering a sequence of characters.
+  swipe                   Perform a swipe gesture from one point to another on
+                          the screen.
+  drag                    Perform a low-level point-to-point drag using
+                          explicit touch move events.
+  button                  Press a hardware button on the simulator.
+  key                     Press a single key by keycode on the simulator.
+  key-sequence            Press a sequence of keys by their keycodes on the
+                          simulator.
+  key-combo               Press a key while holding one or more modifier keys
+                          on the simulator.
+  touch                   Perform precise touch down/up events at specific
+                          coordinates.
+  gesture                 Perform preset gesture patterns on the simulator.
+  stream-video            Stream simulator frames to stdout using screenshot
+                          capture
+  record-video            Record the simulator display to an MP4 file using
+                          H.264 encoding
+  screenshot              Capture a screenshot from the simulator display and
+                          save it as a PNG file
+  batch                   Execute ordered interaction steps using one
+                          simulator/HID session.
+
+  See 'axe help <subcommand>' for detailed help.

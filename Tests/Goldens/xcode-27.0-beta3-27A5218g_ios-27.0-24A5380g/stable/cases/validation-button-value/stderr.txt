@@ -1,0 +1,4 @@
+Error: The value 'invalid-button' is invalid for '<button-type>'. Please provide one of 'apple-pay', 'home', 'lock', 'side-button' or 'siri'.
+Help:  <button-type>  The button to press.
+Usage: axe button <button-type> [--duration <duration>] --udid <udid>
+  See 'axe button --help' for more information.

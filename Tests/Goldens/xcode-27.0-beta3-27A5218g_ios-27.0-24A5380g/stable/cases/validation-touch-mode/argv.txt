@@ -1,0 +1,1 @@
+axe touch -x 1 -y 1 --udid invalid 

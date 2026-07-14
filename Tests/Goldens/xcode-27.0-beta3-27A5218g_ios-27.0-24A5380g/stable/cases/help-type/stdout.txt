@@ -1,0 +1,38 @@
+OVERVIEW: Type text by entering a sequence of characters.
+
+Input Methods:
+1. Direct text: axe type "Hello World" --udid UDID
+2. From stdin: echo "Hello World!" | axe type --stdin --udid UDID
+3. From file: axe type --file text.txt --udid UDID
+
+Examples:
+• Simple text: axe type "Hello World" --udid UDID
+• With spaces: axe type "Hello, how are you?" --udid UDID
+• Special characters: axe type 'Hello!' --udid UDID
+
+Shell Escaping Tips:
+• Use double quotes for text with spaces: "Hello World"
+• Use single quotes for text with special characters: 'Hello!'
+• For complex text or automation, prefer --stdin or --file methods
+
+Character Support:
+• Only US keyboard characters are supported via HID keycodes
+• Supported: A-Z, a-z, 0-9, and symbols: !@#$%^&*()_+-={}[]|\:";'<>?,./`~
+• Not supported: International characters (£€¥), accented letters (éñü), etc.
+• This is a limitation of the underlying HID keyboard protocol
+
+Note: iOS may apply smart punctuation spacing to some characters.
+
+USAGE: axe type [<text>] [--stdin] [--file <file>] --udid <udid>
+
+ARGUMENTS:
+  <text>                  The text to type. Use quotes for text with spaces or
+                          special characters.
+
+OPTIONS:
+  --stdin                 Read text from standard input.
+  --file <file>           Read text from the specified file.
+  --udid <udid>           The UDID of the simulator.
+  --version               Show the version.
+  -h, --help              Show help information.
+

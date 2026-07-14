@@ -1,0 +1,4 @@
+Error: Missing value for '--duration <duration>'
+Help:  --duration <duration>  Duration of the swipe in seconds.
+Usage: axe swipe --start-x <start-x> --start-y <start-y> --end-x <end-x> --end-y <end-y> [--duration <duration>] [--delta <delta>] [--pre-delay <pre-delay>] [--post-delay <post-delay>] --udid <udid>
+  See 'axe swipe --help' for more information.

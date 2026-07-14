@@ -1,0 +1,4 @@
+Error: Missing expected argument '-x <x>'
+Help:  -x <x>  The X coordinate of the touch point.
+Usage: axe touch -x <x> -y <y> [--down] [--up] [--delay <delay>] --udid <udid>
+  See 'axe touch --help' for more information.
