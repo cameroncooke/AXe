@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed SimulatorKit loading with Xcode 27 beta by checking Xcode's `Contents/SharedFrameworks` layout before falling back to the legacy private-framework path.
+- Fixed `make e2e` under Xcode 27 by separating the pinned Xcode 26.5 build toolchain from the selected runtime toolchain, selecting the matching iOS 27 simulator, and launching Device Hub before the tests run.
+- Fixed simulator automation with Xcode 27 Beta 3 (27A5218g) while retaining Xcode 26 support by updating the IDB integration, selecting the compatible HID transport, and bootstrapping accessibility through Xcode's current private-framework path.
 - Fixed `test-runner.sh` loading AXe's binary target frameworks with newer SwiftPM layouts while remaining compatible with Xcode 26.
 - Fixed E2E test hangs by resolving the `axe` executable path before `swift test` starts instead of invoking SwiftPM from inside test cases.
 
