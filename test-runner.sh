@@ -57,8 +57,8 @@ show_usage() {
     echo "  -v, --verbose       Verbose output"
     echo ""
     echo "Environment:"
-    echo "  DEVELOPER_DIR           Runtime Xcode (Xcode 27 uses Device Hub)"
-    echo "  AXE_BUILD_DEVELOPER_DIR Pinned Xcode 26.5 build toolchain override"
+    echo "  DEVELOPER_DIR         Xcode used to build and run tests (Xcode 27 uses Device Hub)"
+    echo "  AXE_BIN_PATH          Prebuilt AXe executable to test with --tests-only"
     echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
     echo "Test Filters (optional):"
@@ -163,12 +163,11 @@ check_prerequisites() {
     fi
 
     if ! configure_e2e_environment; then
-        print_error "Xcode 26.5 ($EXPECTED_BUILD_XCODE_BUILD) is required to build AXe. Set AXE_BUILD_DEVELOPER_DIR to its Contents/Developer directory."
+        print_error "Xcode 26 or later is required to build and test AXe. Set DEVELOPER_DIR to its Contents/Developer directory."
         exit 1
     fi
 
-    print_info "Build toolchain: Xcode $EXPECTED_BUILD_XCODE_VERSION ($EXPECTED_BUILD_XCODE_BUILD)"
-    print_info "Runtime toolchain: Xcode $RUNTIME_XCODE_VERSION ($RUNTIME_XCODE_BUILD)"
+    print_info "Selected toolchain: Xcode $SELECTED_XCODE_VERSION ($(e2e_xcode_build "$SELECTED_DEVELOPER_DIR"))"
 
     print_success "All prerequisites satisfied"
 }
@@ -205,7 +204,7 @@ clean_build() {
         print_header "Cleaning Build"
 
         print_info "Cleaning Swift build..."
-        build_swift package clean
+        run_selected_swift package clean
 
         print_info "Cleaning Xcode build..."
         xcodebuild clean -project "$PLAYGROUND_PROJECT" -scheme "$PLAYGROUND_SCHEME" -destination "id=$SIMULATOR_UDID"
@@ -214,21 +213,38 @@ clean_build() {
     fi
 }
 
+build_idb_xcframeworks() {
+    print_header "Building IDB Frameworks"
+
+    if ! command -v xcodegen &> /dev/null; then
+        print_error "XcodeGen is required to build IDB frameworks. Install it with 'brew install xcodegen'."
+        exit 1
+    fi
+
+    local command
+    for command in setup clean frameworks install strip xcframeworks; do
+        scripts/build.sh "$command"
+    done
+
+    run_selected_swift package clean
+    print_success "IDB frameworks built with Xcode $SELECTED_XCODE_VERSION"
+}
+
 # Function to build AXe executable
 build_axe() {
     print_header "Building AXe Executable"
 
     print_info "Building AXe CLI tool..."
     if [[ "$VERBOSE" == true ]]; then
-        build_swift build --build-tests
-    elif ! build_swift build --build-tests > /tmp/axe-e2e-swift-build.log 2>&1; then
-        print_error "Failed to build AXe with Xcode 26.5. Build output:"
+        run_selected_swift build --build-tests
+    elif ! run_selected_swift build --build-tests > /tmp/axe-e2e-swift-build.log 2>&1; then
+        print_error "Failed to build AXe with Xcode $SELECTED_XCODE_VERSION. Build output:"
         tail -80 /tmp/axe-e2e-swift-build.log
         exit 1
     fi
 
     local axe_bin_path
-    axe_bin_path="$(build_swift build --show-bin-path)/axe"
+    axe_bin_path="$(run_selected_swift build --show-bin-path)/axe"
 
     # Verify the executable exists
     if [[ -f "$axe_bin_path" ]]; then
@@ -242,7 +258,7 @@ build_axe() {
 
 ensure_test_framework_rpaths() {
     local build_dir
-    build_dir="$(build_swift build --show-bin-path)"
+    build_dir="$(run_selected_swift build --show-bin-path)"
 
     local package_frameworks_dir="$build_dir/PackageFrameworks"
     mkdir -p "$package_frameworks_dir"
@@ -340,10 +356,12 @@ run_tests() {
     # Set up environment
     export SIMULATOR_UDID="$SIMULATOR_UDID"
     export AXE_E2E=1
-    AXE_BIN_PATH="$(build_swift build --show-bin-path)/axe"
+    if [[ -z "${AXE_BIN_PATH:-}" ]]; then
+        AXE_BIN_PATH="$(run_selected_swift build --show-bin-path)/axe"
+    fi
     export AXE_BIN_PATH
     if [[ ! -f "$AXE_BIN_PATH" ]]; then
-        print_error "AXe executable not found at $AXE_BIN_PATH. Run without --tests-only or run swift build first."
+        print_error "AXe executable not found at $AXE_BIN_PATH. Run without --tests-only, run swift build first, or set AXE_BIN_PATH to a prebuilt payload."
         exit 1
     fi
 
@@ -370,8 +388,8 @@ run_tests() {
         local filter="$1"
         local args=(--filter "$filter")
         [[ "$VERBOSE" == true ]] && args+=(--verbose)
-        print_info "Test command: pinned Swift test --skip-build --no-parallel --filter $filter"
-        run_runtime_swift_test "${args[@]}"
+        print_info "Test command: swift test --skip-build --no-parallel --filter $filter"
+        run_selected_swift test --skip-build --no-parallel "${args[@]}"
     }
 
     if [[ -n "$TEST_FILTER" ]]; then
@@ -425,9 +443,9 @@ run_tests() {
     print_info "Running all tests"
     local args=()
     [[ "$VERBOSE" == true ]] && args+=(--verbose)
-    print_info "Test command: pinned Swift test --skip-build --no-parallel"
+    print_info "Test command: swift test --skip-build --no-parallel"
     echo ""
-    if run_runtime_swift_test "${args[@]}"; then
+    if run_selected_swift test --skip-build --no-parallel "${args[@]}"; then
         print_success "All tests passed"
     else
         print_error "Some tests failed"
@@ -441,7 +459,7 @@ show_summary() {
 
     if [[ "$BUILD_ONLY" == true ]]; then
         print_success "Build completed successfully"
-        print_info "AXe executable: $(build_swift build --show-bin-path)/axe"
+        print_info "AXe executable: $(run_selected_swift build --show-bin-path)/axe"
         print_info "Playground app installed on: $SIMULATOR_NAME ($SIMULATOR_UDID)"
     elif [[ "$TESTS_ONLY" == true ]]; then
         if [[ -n "$TEST_FILTER" ]]; then
@@ -451,7 +469,7 @@ show_summary() {
         fi
     else
         print_success "Build and test cycle completed successfully"
-        print_info "AXe executable: $(build_swift build --show-bin-path)/axe"
+        print_info "AXe executable: $(run_selected_swift build --show-bin-path)/axe"
         print_info "Playground app: Installed and tested on $SIMULATOR_NAME"
         if [[ -n "$TEST_FILTER" ]]; then
             print_info "Test suite: $TEST_FILTER"
@@ -477,6 +495,7 @@ main() {
     boot_simulator
 
     if [[ "$TESTS_ONLY" != true ]]; then
+        build_idb_xcframeworks
         clean_build
         build_axe
         ensure_test_framework_rpaths

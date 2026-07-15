@@ -77,7 +77,10 @@ let package = Package(
             name: "AXeTests",
             dependencies: ["AXe", "AXeCore"],
             path: "Tests",
-            exclude: ["Goldens"]
+            exclude: ["Goldens"],
+            swiftSettings: [
+                .unsafeFlags(idbPrivateHeaderSearchFlags)
+            ]
         ),
         .plugin(
             name: "VersionPlugin",

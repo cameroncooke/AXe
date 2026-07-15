@@ -36,10 +36,6 @@ jobs:
           set -euo pipefail
           XCODE_VERSION=$(xcodebuild -version | awk 'NR == 1 { print $2 }')
           XCODE_BUILD=$(xcodebuild -version | awk 'NR == 2 { print $3 }')
-          if [ "$XCODE_VERSION" != "26.5" ] || [ "$XCODE_BUILD" != "17F42" ]; then
-            echo "Expected Xcode 26.5 (17F42), got Xcode $XCODE_VERSION ($XCODE_BUILD)"
-            exit 1
-          fi
           CACHE_IDENTITY=$(printf 'xcode-%s-%s' "$XCODE_VERSION" "$XCODE_BUILD" | tr -c 'A-Za-z0-9._-' '-')
           echo "cache_identity=$CACHE_IDENTITY" >> "$GITHUB_OUTPUT"
 

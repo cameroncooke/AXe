@@ -47,7 +47,9 @@ function load_env_file() {
 load_env_file "${ENV_FILE}"
 
 # Environment and Configuration
-IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
+DEFAULT_IDB_CHECKOUT_DIR="${REPO_ROOT}/idb_checkout"
+IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-${DEFAULT_IDB_CHECKOUT_DIR}}"
+IDB_CHECKOUT_DIR="$(cd "$(dirname "$IDB_CHECKOUT_DIR")" && pwd)/$(basename "$IDB_CHECKOUT_DIR")"
 IDB_GIT_URL="${IDB_GIT_URL:-https://github.com/cameroncooke/idb.git}"
 IDB_GIT_REF="${IDB_GIT_REF:-1395103ca786ee990c70514e1f8bb75fa98cdd82}"
 IDB_UPSTREAM_BASE_REF="${IDB_UPSTREAM_BASE_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
@@ -287,17 +289,59 @@ function copy_resource_bundle() {
   print_success "AXe resource bundle installed to ${bundle_dest}"
 }
 
+function fresh_clone_idb_repo() {
+  if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
+    local existing_remote
+    existing_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" ||
+          ( ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" && "$existing_remote" != "$IDB_GIT_URL" ) ]]; then
+      echo "❌ Error: Refusing to replace an unmanaged IDB checkout: $IDB_CHECKOUT_DIR" >&2
+      echo "   Remove or repair that checkout manually, then retry." >&2
+      return 1
+    fi
+  fi
+
+  local replacement_root replacement_checkout
+  replacement_root="$(mktemp -d "$(dirname "$IDB_CHECKOUT_DIR")/.axe-idb-replacement.XXXXXX")"
+  replacement_checkout="${replacement_root}/checkout"
+  print_info "Cloning AXe's IDB fork into $IDB_CHECKOUT_DIR..."
+  if ! git clone --no-checkout "$IDB_GIT_URL" "$replacement_checkout" ||
+     ! git -C "$replacement_checkout" checkout --detach "$IDB_GIT_REF"; then
+    rm -r "$replacement_root"
+    return 1
+  fi
+  touch "$replacement_checkout/.git/axe-managed-checkout"
+  if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
+    rm -r "$IDB_CHECKOUT_DIR"
+  fi
+  mv "$replacement_checkout" "$IDB_CHECKOUT_DIR"
+  rm -r "$replacement_root"
+  print_success "IDB fork cloned at $IDB_GIT_REF."
+}
+
 function clone_idb_repo() {
-  if [ ! -d "$IDB_CHECKOUT_DIR/.git" ]; then
-    print_info "Creating $IDB_CHECKOUT_DIR directory and cloning AXe's IDB fork..."
-    git clone --no-checkout "$IDB_GIT_URL" "$IDB_CHECKOUT_DIR"
-    (cd "$IDB_CHECKOUT_DIR" && git checkout --detach "$IDB_GIT_REF")
-    print_success "IDB fork cloned at $IDB_GIT_REF."
+  if [[ ! -d "$IDB_CHECKOUT_DIR/.git" ]]; then
+    fresh_clone_idb_repo
   else
+    local actual_ref actual_remote
+    actual_ref="$(git -C "$IDB_CHECKOUT_DIR" rev-parse HEAD 2>/dev/null || true)"
+    actual_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
+    if [[ "$actual_ref" == "$IDB_GIT_REF" && "$actual_remote" == "$IDB_GIT_URL" ]] &&
+       git -C "$IDB_CHECKOUT_DIR" cat-file -e "${IDB_GIT_REF}^{tree}" 2>/dev/null; then
+      touch "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout"
+      print_info "Reusing pinned IDB fork checkout at $IDB_GIT_REF."
+      verify_idb_source_state
+      return
+    fi
+
     print_info "Updating AXe's IDB fork to $IDB_GIT_REF..."
     git -C "$IDB_CHECKOUT_DIR" remote set-url origin "$IDB_GIT_URL"
-    (cd "$IDB_CHECKOUT_DIR" && git fetch origin --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF")
-    print_success "IDB fork updated to $IDB_GIT_REF."
+    if ! (cd "$IDB_CHECKOUT_DIR" && git fetch origin --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF"); then
+      print_warning "The cached IDB checkout is incomplete; replacing it with a clean clone."
+      fresh_clone_idb_repo
+    else
+      print_success "IDB fork updated to $IDB_GIT_REF."
+    fi
   fi
   verify_idb_source_state
 }
