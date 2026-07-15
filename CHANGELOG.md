@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Changed the IDB integration to consume an immutable full-SHA-pinned AXe fork instead of applying local patches during builds.
+
 ### Fixed
 
 - Fixed `make e2e` under Xcode 27 by separating the pinned Xcode 26.5 build toolchain from the selected runtime toolchain, selecting the matching iOS 27 simulator, and launching Device Hub before the tests run.

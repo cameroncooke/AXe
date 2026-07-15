@@ -48,21 +48,14 @@ load_env_file "${ENV_FILE}"
 
 # Environment and Configuration
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-./idb_checkout}"
-IDB_GIT_REF="${IDB_GIT_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
-IDB_PATCHES_DIR="${IDB_PATCHES_DIR:-./patches/idb/e682506}"
+IDB_GIT_URL="${IDB_GIT_URL:-https://github.com/cameroncooke/idb.git}"
+IDB_GIT_REF="${IDB_GIT_REF:-1395103ca786ee990c70514e1f8bb75fa98cdd82}"
+IDB_UPSTREAM_BASE_REF="${IDB_UPSTREAM_BASE_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
 FBSIMCONTROL_PROJECT="${IDB_CHECKOUT_DIR}/FBSimulatorControl.xcodeproj"
 TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
-IDB_REQUIRED_PATCHES=(
-  "accessibility-client-type-for-xctest.patch"
-  "developer-dir-environment-precedence.patch"
-  "expose-selected-hid-transport.patch"
-  "hide-accessibility-private-framework-types.patch"
-  "xcode27-accessibility-bootstrap.patch"
-  "dtuhid-event-semantics.patch"
-)
 
 # Shared payload helper
 # shellcheck source=./release-payload.sh
@@ -174,11 +167,11 @@ function verify_macho_has_arch() {
   fi
 }
 
-function verify_fbsimulatorcontrol_candidate_patches() {
+function verify_fbsimulatorcontrol_fork_features() {
   local binary_path="$1"
 
   if [[ ! -f "$binary_path" ]]; then
-    echo "❌ Error: FBSimulatorControl binary not found for candidate patch verification: $binary_path"
+    echo "❌ Error: FBSimulatorControl binary not found for fork feature verification: $binary_path"
     exit 1
   fi
 
@@ -192,10 +185,10 @@ function verify_fbsimulatorcontrol_candidate_patches() {
   local reference
   for reference in "${required_references[@]}"; do
     if ! strings -a "$binary_path" | grep -F "$reference" >/dev/null; then
-      echo "❌ Error: FBSimulatorControl is missing candidate patch evidence: ${reference}"
+      echo "❌ Error: FBSimulatorControl is missing required fork feature evidence: ${reference}"
       echo "   Checked binary: $binary_path"
-      echo "   Expected patch set: ${IDB_PATCHES_DIR}"
-      echo "   Re-run setup, generation, and the framework build at ${IDB_GIT_REF}."
+      echo "   Expected fork revision: ${IDB_GIT_URL}@${IDB_GIT_REF}"
+      echo "   Re-run setup, generation, and the framework build."
       exit 1
     fi
   done
@@ -228,7 +221,7 @@ function verify_fbsimulatorcontrol_candidate_patches() {
     if grep -E 'AccessibilityPlatformTranslation|AXP[A-Za-z]' "$artifact" >/dev/null; then
       echo "❌ Error: FBSimulatorControl leaks AccessibilityPlatformTranslation through its public interface"
       echo "   Leaking artifact: ${artifact}"
-      echo "   Rebuild after applying hide-accessibility-private-framework-types.patch."
+      echo "   Rebuild from the pinned AXe IDB fork revision."
       exit 1
     fi
   done
@@ -241,7 +234,7 @@ function verify_fbsimulatorcontrol_candidate_patches() {
     exit 1
   fi
 
-  print_success "FBSimulatorControl contains candidate diagnostics without leaking private accessibility framework types"
+  print_success "FBSimulatorControl contains required fork features without leaking private accessibility framework types"
 }
 
 # Function to invoke xcodebuild, optionally with xcpretty
@@ -296,46 +289,16 @@ function copy_resource_bundle() {
 
 function clone_idb_repo() {
   if [ ! -d "$IDB_CHECKOUT_DIR/.git" ]; then
-    print_info "Creating $IDB_CHECKOUT_DIR directory and cloning idb repository..."
-    git clone https://github.com/facebook/idb.git "$IDB_CHECKOUT_DIR"
+    print_info "Creating $IDB_CHECKOUT_DIR directory and cloning AXe's IDB fork..."
+    git clone --no-checkout "$IDB_GIT_URL" "$IDB_CHECKOUT_DIR"
     (cd "$IDB_CHECKOUT_DIR" && git checkout --detach "$IDB_GIT_REF")
-    print_success "idb repository cloned at $IDB_GIT_REF."
-    apply_idb_patches
+    print_success "IDB fork cloned at $IDB_GIT_REF."
   else
-    print_info "Updating idb repository to $IDB_GIT_REF..."
-    (cd "$IDB_CHECKOUT_DIR" && git fetch --all --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF")
-    print_success "idb repository updated to $IDB_GIT_REF."
-    apply_idb_patches
+    print_info "Updating AXe's IDB fork to $IDB_GIT_REF..."
+    git -C "$IDB_CHECKOUT_DIR" remote set-url origin "$IDB_GIT_URL"
+    (cd "$IDB_CHECKOUT_DIR" && git fetch origin --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF")
+    print_success "IDB fork updated to $IDB_GIT_REF."
   fi
-}
-
-function apply_idb_patches() {
-  if [ ! -d "$IDB_PATCHES_DIR" ]; then
-    return
-  fi
-
-  print_info "Applying local patches to idb repository..."
-  # Ensure we start from a clean working tree so patches apply consistently.
-  (cd "$IDB_CHECKOUT_DIR" && git checkout -- . >/dev/null 2>&1 && git clean -fd >/dev/null 2>&1) || true
-
-  local patch_name patch_file
-  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
-    patch_file="${IDB_PATCHES_DIR}/${patch_name}"
-    local patch_abs
-    patch_abs="$(cd "$(dirname "$patch_file")" && pwd)/$(basename "$patch_file")"
-    print_info "  → $(basename "$patch_file")"
-    # First verify patch applies cleanly with git apply --check
-    if ! (cd "$IDB_CHECKOUT_DIR" && git apply --check "$patch_abs" 2>/dev/null); then
-      echo "❌ Error: Patch $(basename "$patch_file") does not apply cleanly."
-      echo "   The upstream IDB source may have changed. Please update the patch."
-      exit 1
-    fi
-    # Apply the patch
-    if ! (cd "$IDB_CHECKOUT_DIR" && git apply "$patch_abs"); then
-      echo "❌ Error: Failed to apply patch $(basename "$patch_file")"
-      exit 1
-    fi
-  done
   verify_idb_source_state
 }
 
@@ -349,13 +312,18 @@ function verify_idb_source_state() {
     exit 1
   fi
 
-  local patch_name
-  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
-    if [[ ! -f "${IDB_PATCHES_DIR}/${patch_name}" ]]; then
-      echo "❌ Error: Required candidate patch is missing: ${IDB_PATCHES_DIR}/${patch_name}"
-      exit 1
-    fi
-  done
+  local actual_remote
+  actual_remote=$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin)
+  if [[ "$actual_remote" != "$IDB_GIT_URL" ]]; then
+    echo "❌ Error: IDB checkout remote mismatch"
+    echo "   Expected: $IDB_GIT_URL"
+    echo "   Actual:   $actual_remote"
+    exit 1
+  fi
+  if ! git -C "$IDB_CHECKOUT_DIR" merge-base --is-ancestor "$IDB_UPSTREAM_BASE_REF" "$actual_ref"; then
+    echo "❌ Error: Pinned IDB fork revision is not based on $IDB_UPSTREAM_BASE_REF"
+    exit 1
+  fi
 
   local source_checks=(
     "FBControlCore/Utility/FBXcodeDirectory.swift|environment[\"DEVELOPER_DIR\"]"
@@ -370,39 +338,40 @@ function verify_idb_source_state() {
     source_file="${check%%|*}"
     source_marker="${check#*|}"
     if ! grep -Fq "$source_marker" "${IDB_CHECKOUT_DIR}/${source_file}"; then
-      echo "❌ Error: Candidate patch verification failed"
+      echo "❌ Error: Pinned IDB fork verification failed"
       echo "   Missing '${source_marker}' in ${source_file}"
-      echo "   Patch directory: ${IDB_PATCHES_DIR}"
+      echo "   Fork revision: ${IDB_GIT_URL}@${IDB_GIT_REF}"
       exit 1
     fi
   done
 
   if ! git -C "$IDB_CHECKOUT_DIR" diff --check; then
-    echo "❌ Error: Candidate IDB patch set introduced whitespace errors"
+    echo "❌ Error: Pinned IDB fork checkout contains uncommitted whitespace errors"
+    exit 1
+  fi
+  if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain)" ]]; then
+    echo "❌ Error: Pinned IDB fork checkout is not clean"
     exit 1
   fi
 
-  print_success "Verified IDB source SHA ${actual_ref} and candidate patch set ${IDB_PATCHES_DIR}"
-  for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
-    print_info "  $(shasum -a 256 "${IDB_PATCHES_DIR}/${patch_name}" | awk '{print $1}')  ${patch_name}"
-  done
+  print_success "Verified IDB fork ${IDB_GIT_URL}@${actual_ref} from upstream base ${IDB_UPSTREAM_BASE_REF}"
 }
 
 function generate_idb_projects() {
   if ! command -v xcodegen >/dev/null 2>&1; then
-    echo "❌ Error: XcodeGen is required to generate the candidate IDB projects."
+    echo "❌ Error: XcodeGen is required to generate the pinned IDB fork projects."
     echo "   Install XcodeGen or make an existing installation available in PATH."
     exit 1
   fi
 
   verify_idb_source_state
-  print_info "Generating candidate IDB projects with $(xcodegen --version)..."
+  print_info "Generating pinned IDB fork projects with $(xcodegen --version)..."
   (cd "$IDB_CHECKOUT_DIR" && ./build.sh generate)
   if [[ ! -f "${FBSIMCONTROL_PROJECT}/project.pbxproj" ]]; then
-    echo "❌ Error: Candidate project generation did not produce ${FBSIMCONTROL_PROJECT}/project.pbxproj"
+    echo "❌ Error: IDB project generation did not produce ${FBSIMCONTROL_PROJECT}/project.pbxproj"
     exit 1
   fi
-  print_success "Generated candidate IDB projects before framework compilation"
+  print_success "Generated pinned IDB fork projects before framework compilation"
 }
 
 function write_idb_build_evidence() {
@@ -410,17 +379,17 @@ function write_idb_build_evidence() {
   mkdir -p "$BUILD_XCFRAMEWORK_DIR"
   {
     echo "IDB_SHA=${IDB_GIT_REF}"
-    echo "IDB_PATCH_DIRECTORY=${IDB_PATCHES_DIR}"
+    echo "IDB_GIT_URL=${IDB_GIT_URL}"
+    echo "IDB_UPSTREAM_BASE_SHA=${IDB_UPSTREAM_BASE_REF}"
     echo "DEVELOPER_DIR=${DEVELOPER_DIR:-<not set>}"
     echo "XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')"
     echo "SWIFT_VERSION=$(swiftc --version 2>&1 | head -1)"
     echo "XCODEGEN_VERSION=$(xcodegen --version)"
-    local patch_name
-    for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
-      echo "PATCH_SHA256=$(shasum -a 256 "${IDB_PATCHES_DIR}/${patch_name}" | awk '{print $1}') ${patch_name}"
-    done
+    git -C "$IDB_CHECKOUT_DIR" log --reverse \
+      --format='IDB_DOWNSTREAM_COMMIT=%H %s' \
+      "${IDB_UPSTREAM_BASE_REF}..${IDB_GIT_REF}"
   } > "$evidence_path"
-  print_success "Recorded candidate build evidence at ${evidence_path}"
+  print_success "Recorded pinned IDB fork build evidence at ${evidence_path}"
 }
 
 # Function to build a single framework
@@ -803,7 +772,7 @@ function verify_xcframework_inputs() {
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_candidate_patches "${framework_binary}"
+      verify_fbsimulatorcontrol_fork_features "${framework_binary}"
     fi
   done
 
@@ -840,7 +809,7 @@ function verify_release_architectures() {
     verify_macho_has_arch "${framework_binary}" "arm64"
     verify_macho_has_arch "${framework_binary}" "x86_64"
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_candidate_patches "${framework_binary}"
+      verify_fbsimulatorcontrol_fork_features "${framework_binary}"
     fi
   done
 
@@ -1118,10 +1087,10 @@ Commands:
     Clean previous build products and derived data.
 
   frameworks
-    Generate the candidate project, then build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
+    Generate the pinned fork project, then build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
 
   generate
-    Verify the pinned candidate and patches, then regenerate IDB projects using XcodeGen.
+    Verify the pinned AXe IDB fork revision, then regenerate projects using XcodeGen.
 
   install
     Install built frameworks to the Frameworks directory.
@@ -1163,8 +1132,9 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
   AXE_ENV_FILE           Path to the .env file to load (default: <repo-root>/.env)
   AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
-  IDB_GIT_REF            Exact IDB revision (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
-  IDB_PATCHES_DIR        Candidate patch directory (default: ./patches/idb/e682506)
+  IDB_GIT_URL            AXe IDB fork URL (default: https://github.com/cameroncooke/idb.git)
+  IDB_GIT_REF            Exact fork revision (default: 1395103ca786ee990c70514e1f8bb75fa98cdd82)
+  IDB_UPSTREAM_BASE_REF  Verified upstream base (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
   TEMP_DIR               Temporary directory for final packages (default: system temp)

@@ -31,6 +31,8 @@ AXe supports Xcode 26.5 (build `17F42`) with iOS 26.5 (`23F77`) and Xcode 27 Bet
 
 Release artifacts remain built with the pinned Xcode 26.5 toolchain and run unchanged with either supported Xcode selected. The validated release-shaped payload has SHA-256 `583bc18685e9e8f57b8ddb00366c5659f2ed8998d918b6eef2172c4139eb30fd`.
 
+AXe builds IDB from the immutable fork revision `cameroncooke/idb@1395103ca786ee990c70514e1f8bb75fa98cdd82`, based on upstream IDB `e682506725e9efefb9c43b8b917c0b12eb2a5939`. The build does not apply a local patch queue.
+
 ## E2E development
 
 `make e2e` builds AXe with the pinned Xcode 26.5 toolchain and runs the simulator tests against the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
