@@ -45,12 +45,21 @@ enum HIDBroker {
     private static let serverIOTimeoutMilliseconds: Int = 2_000
     private static let clientWriteTimeoutMilliseconds: Int = 2_000
     private static let clientResponseTimeoutMilliseconds: Int = 30_000
-
+    private static let startupAttempts = 300
     static func sendTouchPrimitives(
         _ primitives: [HIDBrokerPrimitive],
         simulatorUDID: String
     ) throws {
         let endpoint = try endpointPath(simulatorUDID: simulatorUDID)
+        try sendTouchPrimitives(primitives) {
+            try connectToReadyBroker(simulatorUDID: simulatorUDID, endpoint: endpoint)
+        }
+    }
+
+    static func sendTouchPrimitives(
+        _ primitives: [HIDBrokerPrimitive],
+        descriptorProvider: () throws -> Int32
+    ) throws {
         let request = HIDBrokerRequest(primitives: primitives)
         var requestData = try JSONEncoder().encode(request)
         requestData.append(0x0A)
@@ -58,26 +67,11 @@ enum HIDBroker {
             throw CLIError(errorDescription: "HID broker request exceeds the maximum size.")
         }
 
-        var lastError: Error?
-        for _ in 0..<50 {
-            do {
-                let descriptor = try connect(to: endpoint)
-                defer { Darwin.close(descriptor) }
-                try writeAll(requestData, to: descriptor)
-                let responseData = try readMessage(from: descriptor)
-                let response = try JSONDecoder().decode(HIDBrokerResponse.self, from: responseData)
-                if let error = response.error {
-                    throw CLIError(errorDescription: error)
-                }
-                return
-            } catch {
-                lastError = error
-                try removeStaleEndpointIfSafe(endpoint)
-                try spawnBrokerIfNeeded(simulatorUDID: simulatorUDID, endpoint: endpoint)
-                usleep(100_000)
-            }
-        }
-        throw lastError ?? CLIError(errorDescription: "Unable to connect to the HID broker.")
+        // Recovery is limited to broker readiness. Once exchange starts, a lost response has an
+        // ambiguous outcome, so the request must never be reconnected or replayed.
+        let descriptor = try descriptorProvider()
+        defer { Darwin.close(descriptor) }
+        try exchange(requestData, on: descriptor)
     }
 
     @MainActor
@@ -177,12 +171,20 @@ enum HIDBroker {
     }
 
     static func endpointPath(simulatorUDID: String) throws -> String {
+        let developerDirectory = try FBXcodeDirectory.resolveDeveloperDirectory()
+        return try endpointPath(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory)
+    }
+
+    static func endpointPath(simulatorUDID: String, developerDirectory: String) throws -> String {
         let uid = getuid()
         let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .resolvingSymlinksInPath()
             .appendingPathComponent("axe-hid-\(uid)", isDirectory: true)
         try ensurePrivateDirectory(root.path, uid: uid)
-        let developerDirectory = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] ?? "default"
+        let developerDirectory = URL(fileURLWithPath: developerDirectory, isDirectory: true)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+            .path
         let identity = String(fnv1a64(developerDirectory), radix: 16)
         let simulatorIdentity = String(fnv1a64(simulatorUDID), radix: 16)
         let filename = "\(simulatorIdentity)-\(identity).sock"
@@ -284,12 +286,93 @@ enum HIDBroker {
         try process.run()
     }
 
-    private static func spawnBrokerIfNeeded(simulatorUDID: String, endpoint: String) throws {
+    private static func connectToReadyBroker(simulatorUDID: String, endpoint: String) throws -> Int32 {
+        try connectToReadyBroker(
+            simulatorUDID: simulatorUDID,
+            endpoint: endpoint,
+            connector: connect(to:),
+            spawner: spawnBroker(simulatorUDID:),
+            sleeper: { _ = usleep($0) }
+        )
+    }
+
+    static func connectToReadyBroker(
+        simulatorUDID: String,
+        endpoint: String,
+        connector: (String) throws -> Int32,
+        spawner: (String) throws -> Void,
+        sleeper: (useconds_t) -> Void
+    ) throws -> Int32 {
         do {
-            let descriptor = try connect(to: endpoint)
-            Darwin.close(descriptor)
+            return try connector(endpoint)
         } catch {
-            try spawnBroker(simulatorUDID: simulatorUDID)
+            guard isBrokerUnavailable(error) else { throw error }
+        }
+        // Hold the endpoint lock until the listener accepts connections so concurrent cold-start
+        // clients wait for this broker instead of spawning competitors.
+        let lockDescriptor = try acquireStartupLock(endpoint: endpoint)
+        defer {
+            _ = flock(lockDescriptor, LOCK_UN)
+            Darwin.close(lockDescriptor)
+        }
+        do {
+            return try connector(endpoint)
+        } catch {
+            guard isBrokerUnavailable(error) else { throw error }
+        }
+        try removeStaleEndpointIfSafe(endpoint)
+        try spawner(simulatorUDID)
+        var lastError: Error?
+        for _ in 0..<startupAttempts {
+            do {
+                return try connector(endpoint)
+            } catch {
+                guard isBrokerUnavailable(error) else { throw error }
+                lastError = error
+                sleeper(100_000)
+            }
+        }
+        throw lastError ?? CLIError(errorDescription: "Unable to connect to the HID broker.")
+    }
+
+    private static func acquireStartupLock(endpoint: String) throws -> Int32 {
+        let path = endpoint + ".lock"
+        let descriptor = Darwin.open(path, O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard descriptor >= 0 else { throw posixError("open startup lock") }
+        do {
+            var info = stat()
+            guard fstat(descriptor, &info) == 0 else { throw posixError("fstat startup lock") }
+            guard (info.st_mode & S_IFMT) == S_IFREG,
+                  info.st_uid == getuid(),
+                  info.st_mode & (S_IRWXG | S_IRWXO) == 0 else {
+                throw CLIError(errorDescription: "HID broker startup lock is not a private owned file.")
+            }
+            while flock(descriptor, LOCK_EX) != 0 {
+                guard errno == EINTR else { throw posixError("lock startup lock") }
+            }
+            return descriptor
+        } catch {
+            Darwin.close(descriptor)
+            throw error
+        }
+    }
+
+    private static func isBrokerUnavailable(_ error: Error) -> Bool {
+        let error = error as NSError
+        return error.domain == NSPOSIXErrorDomain &&
+            (error.code == Int(ECONNREFUSED) || error.code == Int(ENOENT))
+    }
+    static func exchange(_ requestData: Data, on descriptor: Int32) throws {
+        let response: HIDBrokerResponse
+        do {
+            try writeAll(requestData, to: descriptor)
+            let responseData = try readMessage(from: descriptor)
+            response = try JSONDecoder().decode(HIDBrokerResponse.self, from: responseData)
+        } catch {
+            throw CLIError(errorDescription: "HID request outcome is unknown and was not replayed: \(error.localizedDescription)")
+        }
+        if let error = response.error {
+            throw CLIError(errorDescription: error)
         }
     }
 
