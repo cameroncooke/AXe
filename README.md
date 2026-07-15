@@ -27,17 +27,17 @@ axe list-simulators
 
 ## Xcode compatibility
 
-AXe supports Xcode 26.5 (build `17F42`) with iOS 26.5 (`23F77`) and Xcode 27 Beta 3 (build `27A5218g`) with iOS 27 (`24A5380g`). Xcode 27 simulator automation is validated through Device Hub; Simulator.app is not required.
+AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hub; Simulator.app is not required.
 
-Release artifacts remain built with the pinned Xcode 26.5 toolchain and run unchanged with either supported Xcode selected. The validated release-shaped payload has SHA-256 `583bc18685e9e8f57b8ddb00366c5659f2ed8998d918b6eef2172c4139eb30fd`.
+Release artifacts are built once with the Xcode version selected by the release environment and run unchanged with either supported Xcode selected. Compatibility was validated with Xcode 26.5 (build `17F42`) and iOS 26.5 (`23F77`), and with Xcode 27 Beta 3 (build `27A5218g`) and iOS 27 (`24A5380g`).
 
 AXe builds IDB from the immutable fork revision `cameroncooke/idb@1395103ca786ee990c70514e1f8bb75fa98cdd82`, based on upstream IDB `e682506725e9efefb9c43b8b917c0b12eb2a5939`. The build does not apply a local patch queue.
 
 ## E2E development
 
-`make e2e` builds AXe with the pinned Xcode 26.5 toolchain and runs the simulator tests against the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
+`make e2e` rebuilds the local IDB XCFrameworks, builds AXe, and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDB projects. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
 
-Set `AXE_BUILD_DEVELOPER_DIR` to override the build toolchain location; it must point to Xcode 26.5 build `17F42`.
+To validate a release payload unchanged under another supported Xcode, first build the test bundle with that Xcode, then run `AXE_BIN_PATH=/path/to/release/axe ./test-runner.sh --tests-only`. The supplied executable must retain its packaged frameworks beside it.
 
 ## Basic usage
 
