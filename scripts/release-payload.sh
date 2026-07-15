@@ -20,6 +20,17 @@ resolve_framework_binary() {
   return 1
 }
 
+# AppleDouble (._*) files break the framework bundle seal: Gatekeeper rejects
+# them with "unsealed contents present in the root directory of an embedded
+# framework". Signatures are embedded in the Mach-O binaries and _CodeSignature
+# directories, so dropping xattrs is safe post-signing.
+sanitize_release_payload() {
+  local payload_dir="$1"
+
+  find "$payload_dir" -type f \( -name "._*" -o -name ".DS_Store" \) -delete
+  xattr -cr "$payload_dir"
+}
+
 copy_release_payload() {
   local source_dir="$1"
   local destination_dir="$2"
@@ -44,4 +55,5 @@ copy_release_payload() {
   cp "$source_dir/axe" "$destination_dir/"
   cp -R "$source_dir/Frameworks" "$destination_dir/"
   cp -R "$source_dir/AXe_AXe.bundle" "$destination_dir/"
+  sanitize_release_payload "$destination_dir"
 }
