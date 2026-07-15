@@ -1,10 +1,65 @@
 import Darwin
+import Dispatch
 import Foundation
 import Testing
 @testable import AXe
 
 @Suite("HID Broker Tests")
 struct HIDBrokerTests {
+    private final class StartupState: @unchecked Sendable {
+        private let condition = NSCondition()
+        private let expectedInitialConnections: Int
+        private var initialConnectionCount = 0
+        private var isReady = false
+        private(set) var spawnCount = 0
+        private(set) var successCount = 0
+        private(set) var errors: [Error] = []
+
+        init(expectedInitialConnections: Int) {
+            self.expectedInitialConnections = expectedInitialConnections
+        }
+
+        func connect() throws -> Int32 {
+            condition.lock()
+            if !isReady, initialConnectionCount < expectedInitialConnections {
+                initialConnectionCount += 1
+                condition.broadcast()
+                while initialConnectionCount < expectedInitialConnections {
+                    condition.wait()
+                }
+            }
+            let ready = isReady
+            condition.unlock()
+            guard ready else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))
+            }
+            let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard descriptor >= 0 else {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+            return descriptor
+        }
+
+        func spawn() {
+            condition.lock()
+            spawnCount += 1
+            isReady = true
+            condition.unlock()
+        }
+
+        func recordSuccess() {
+            condition.lock()
+            successCount += 1
+            condition.unlock()
+        }
+
+        func record(_ error: Error) {
+            condition.lock()
+            errors.append(error)
+            condition.unlock()
+        }
+    }
+
     @Test("Broker endpoint is deterministic, bounded, and simulator-specific")
     func endpointIdentity() throws {
         let first = try HIDBroker.endpointPath(simulatorUDID: "simulator-a")
@@ -32,6 +87,90 @@ struct HIDBrokerTests {
 
         let data = try JSONEncoder().encode(primitives)
         #expect(try JSONDecoder().decode([HIDBrokerPrimitive].self, from: data) == primitives)
+    }
+
+    @Test("Ambiguous broker responses are not replayed")
+    func ambiguousResponseIsNotReplayed() throws {
+        var descriptors = [Int32](repeating: -1, count: 2)
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { Darwin.close(descriptors[1]) }
+
+        try HIDBroker.writeAll(Data("not-json\n".utf8), to: descriptors[1])
+        var descriptorRequests = 0
+        do {
+            try HIDBroker.sendTouchPrimitives([]) {
+                descriptorRequests += 1
+                return descriptors[0]
+            }
+            Issue.record("An invalid response should fail with an ambiguous outcome")
+        } catch {
+            let cliError = error as? CLIError
+            #expect(cliError?.errorDescription.contains("outcome is unknown") == true)
+            #expect(cliError?.errorDescription.contains("was not replayed") == true)
+        }
+
+        let request = try HIDBroker.readMessage(from: descriptors[1])
+        #expect(descriptorRequests == 1)
+        #expect(String(decoding: request, as: UTF8.self) == #"{"primitives":[]}"#)
+    }
+
+    @Test("Concurrent cold starts spawn one broker")
+    func concurrentColdStartSpawnsOnce() throws {
+        let endpoint = try HIDBroker.endpointPath(
+            simulatorUDID: UUID().uuidString,
+            developerDirectory: FileManager.default.temporaryDirectory.path
+        )
+        defer { try? FileManager.default.removeItem(atPath: endpoint + ".lock") }
+        let clientCount = 8
+        let state = StartupState(expectedInitialConnections: clientCount)
+        let group = DispatchGroup()
+
+        for _ in 0..<clientCount {
+            group.enter()
+            Thread.detachNewThread {
+                defer { group.leave() }
+                do {
+                    let descriptor = try HIDBroker.connectToReadyBroker(
+                        simulatorUDID: "simulator-a",
+                        endpoint: endpoint,
+                        connector: { _ in try state.connect() },
+                        spawner: { _ in state.spawn() },
+                        sleeper: { _ = usleep($0) }
+                    )
+                    Darwin.close(descriptor)
+                    state.recordSuccess()
+                } catch {
+                    state.record(error)
+                }
+            }
+        }
+        group.wait()
+
+        #expect(state.spawnCount == 1)
+        #expect(state.successCount == clientCount)
+        #expect(state.errors.isEmpty)
+    }
+
+    @Test("Broker endpoints use the canonical developer directory")
+    func endpointUsesCanonicalDeveloperDirectory() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let developerDirectory = root.appendingPathComponent("Xcode.app/Contents/Developer", isDirectory: true)
+        let alias = root.appendingPathComponent("SelectedDeveloper", isDirectory: true)
+        try FileManager.default.createDirectory(at: developerDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: developerDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let canonical = try HIDBroker.endpointPath(
+            simulatorUDID: "simulator-a",
+            developerDirectory: developerDirectory.path
+        )
+        let selectedAlias = try HIDBroker.endpointPath(
+            simulatorUDID: "simulator-a",
+            developerDirectory: alias.path
+        )
+
+        #expect(canonical == selectedAlias)
     }
 
     @Test("Broker sessions are scoped to one simulator boot")

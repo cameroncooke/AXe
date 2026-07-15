@@ -21,6 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed E2E test hangs by resolving the `axe` executable path before `swift test` starts instead of invoking SwiftPM from inside test cases.
 - Fixed release archives embedding AppleDouble (`._*`) metadata files that broke strict Gatekeeper verification of the bundled frameworks by sanitizing staged payloads and excluding filesystem metadata from zip and tar packaging.
 - Fixed `build.sh` blocking on an interactive git pager during IDB checkout verification when run in a terminal.
+- Fixed Xcode 26 E2E setup and dirty managed IDB cache recovery.
+- Fixed HID broker crash recovery so concurrent cold starts spawn one broker, ambiguous touch requests are never replayed, and broker identity follows the selected Xcode.
 
 ## [v1.7.1] - 2026-06-02
 
