@@ -130,7 +130,7 @@ fi
 [[ "$IDB_UPSTREAM_BASE_SHA" == "$PINNED_IDB_UPSTREAM_BASE_SHA" ]] \
   || fail "IDB_UPSTREAM_BASE_REF must match the verified base: $PINNED_IDB_UPSTREAM_BASE_SHA"
 
-for command in codesign find gh git jq node shasum stat tee xcodebuild; do
+for command in codesign find gh git jq node shasum stat tar tee xcodebuild; do
   command -v "$command" >/dev/null 2>&1 || fail "Required command not found: $command"
 done
 
@@ -261,7 +261,9 @@ scripts/release-artifacts.sh smoke-test-archive --archive "$UNIVERSAL_ARCHIVE"
 scripts/release-artifacts.sh smoke-test-archive --archive "$HOMEBREW_ARCHIVE"
 
 ARTIFACT_SHA256="$(shasum -a 256 "$UNIVERSAL_ARCHIVE" | awk '{ print $1 }')"
+HOMEBREW_SHA256="$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{ print $1 }')"
 AXE_PAYLOAD_SHA256="$(shasum -a 256 "$STAGE_DIR/axe" | awk '{ print $1 }')"
+STAGE_SHA256="$(COPYFILE_DISABLE=1 tar -cf - -C "$STAGE_DIR" . | shasum -a 256 | awk '{ print $1 }')"
 
 AXE_BIN_PATH="$STAGE_DIR/axe" \
 AXE_STAGE_DIR="$STAGE_DIR" \
@@ -272,6 +274,18 @@ AXE_PAYLOAD_SHA256="$AXE_PAYLOAD_SHA256" \
 AXE_MATRIX_EVIDENCE_PATH="$MATRIX_EVIDENCE" \
 DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" \
   "$MATRIX_SCRIPT"
+
+scripts/release-artifacts.sh verify-stage --stage-dir "$STAGE_DIR"
+scripts/release-artifacts.sh smoke-test-archive --archive "$UNIVERSAL_ARCHIVE"
+scripts/release-artifacts.sh smoke-test-archive --archive "$HOMEBREW_ARCHIVE"
+[[ "$(shasum -a 256 "$UNIVERSAL_ARCHIVE" | awk '{ print $1 }')" == "$ARTIFACT_SHA256" ]] \
+  || fail "Matrix validation modified the universal archive"
+[[ "$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{ print $1 }')" == "$HOMEBREW_SHA256" ]] \
+  || fail "Matrix validation modified the Homebrew archive"
+[[ "$(shasum -a 256 "$STAGE_DIR/axe" | awk '{ print $1 }')" == "$AXE_PAYLOAD_SHA256" ]] \
+  || fail "Matrix validation modified the staged AXe payload"
+[[ "$(COPYFILE_DISABLE=1 tar -cf - -C "$STAGE_DIR" . | shasum -a 256 | awk '{ print $1 }')" == "$STAGE_SHA256" ]] \
+  || fail "Matrix validation modified the staged release payload"
 
 [[ -s "$MATRIX_EVIDENCE" ]] || fail "Matrix script did not create evidence at $MATRIX_EVIDENCE"
 jq -e \
@@ -330,7 +344,7 @@ jq -n -S \
   --arg universal_archive "$(basename "$UNIVERSAL_ARCHIVE")" \
   --arg universal_sha256 "$ARTIFACT_SHA256" \
   --arg homebrew_archive "$(basename "$HOMEBREW_ARCHIVE")" \
-  --arg homebrew_sha256 "$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{ print $1 }')" \
+  --arg homebrew_sha256 "$HOMEBREW_SHA256" \
   --slurpfile matrix "$MATRIX_EVIDENCE" \
   '{
     tag: $tag,

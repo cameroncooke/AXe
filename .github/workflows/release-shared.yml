@@ -69,27 +69,37 @@ jobs:
         id: idb_inputs
         run: |
           set -euo pipefail
+          PINNED_IDB_URL=$(grep '^IDB_GIT_URL=' scripts/build.sh | sed -E 's/^IDB_GIT_URL="\$\{IDB_GIT_URL:-([^}]*)\}"$/\1/')
           PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
-          BUILD_PIPELINE_HASH=$(shasum -a 256 scripts/build.sh Package.swift | shasum -a 256 | awk '{print $1}')
+          PINNED_IDB_UPSTREAM_BASE=$(grep '^IDB_UPSTREAM_BASE_REF=' scripts/build.sh | sed -E 's/^IDB_UPSTREAM_BASE_REF="\$\{IDB_UPSTREAM_BASE_REF:-([^}]*)\}"$/\1/')
+          SOURCE_IDENTITY=$(printf '%s\n%s\n%s\n' "$PINNED_IDB_URL" "$PINNED_IDB_COMMIT" "$PINNED_IDB_UPSTREAM_BASE" | shasum -a 256 | awk '{print $1}')
+          BUILD_PIPELINE_HASH=$(printf '%s\n%s\n' "$(shasum -a 256 scripts/build.sh Package.swift)" "$(xcodegen --version)" | shasum -a 256 | awk '{print $1}')
+          echo "idb_url=$PINNED_IDB_URL" >> "$GITHUB_OUTPUT"
           echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "idb_upstream_base=$PINNED_IDB_UPSTREAM_BASE" >> "$GITHUB_OUTPUT"
+          echo "source_identity=$SOURCE_IDENTITY" >> "$GITHUB_OUTPUT"
           echo "build_pipeline_hash=$BUILD_PIPELINE_HASH" >> "$GITHUB_OUTPUT"
 
       - name: Restore IDB repository cache
         uses: actions/cache/restore@v4
         with:
           path: idb_checkout
-          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.idb_commit }}
+          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.source_identity }}
 
       - name: Check IDB repository freshness
         id: idb_check
         run: |
           set -euo pipefail
+          PINNED_IDB_URL="${{ steps.idb_inputs.outputs.idb_url }}"
           PINNED_IDB_COMMIT="${{ steps.idb_inputs.outputs.idb_commit }}"
-          echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
+          PINNED_IDB_UPSTREAM_BASE="${{ steps.idb_inputs.outputs.idb_upstream_base }}"
 
           if [ -d "idb_checkout/.git" ]; then
             LOCAL_COMMIT=$(git -C idb_checkout rev-parse HEAD)
-            if [ "$LOCAL_COMMIT" = "$PINNED_IDB_COMMIT" ]; then
+            LOCAL_REMOTE=$(git -C idb_checkout remote get-url origin)
+            if [ "$LOCAL_COMMIT" = "$PINNED_IDB_COMMIT" ] \
+              && [ "$LOCAL_REMOTE" = "$PINNED_IDB_URL" ] \
+              && git -C idb_checkout merge-base --is-ancestor "$PINNED_IDB_UPSTREAM_BASE" "$LOCAL_COMMIT"; then
               echo "needs_setup=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
@@ -101,13 +111,13 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
+          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_inputs.outputs.source_identity }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Restore XCFramework cache
         uses: actions/cache/restore@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_inputs.outputs.source_identity }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Check XCFramework outputs
         id: xcframework_check
@@ -214,7 +224,7 @@ jobs:
           echo "$NOTARIZE_APP_STORE_CONNECT_API_KEY" | base64 --decode > keys/AuthKey_${{ secrets.NOTARIZE_APP_STORE_CONNECT_API_KEY_ID }}.p8
 
       - name: Sign - Framework binaries
-        if: steps.signing.outputs.has_certificate == 'true' && (steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true')
+        if: steps.signing.outputs.has_certificate == 'true'
         run: scripts/build.sh sign-frameworks
 
       - name: Create - XCFrameworks
@@ -222,7 +232,7 @@ jobs:
         run: scripts/build.sh xcframeworks
 
       - name: Sign - XCFramework bundles
-        if: steps.signing.outputs.has_certificate == 'true' && (steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true')
+        if: steps.signing.outputs.has_certificate == 'true'
         run: scripts/build.sh sign-xcframeworks
 
       - name: Save IDB repository cache
@@ -230,21 +240,21 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: idb_checkout
-          key: idb-repo-${{ runner.os }}-${{ steps.idb_check.outputs.idb_commit }}
+          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.source_identity }}
 
       - name: Save runtime Frameworks cache
         if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/Frameworks
-          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
+          key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_inputs.outputs.source_identity }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Save XCFramework cache
         if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/XCFrameworks
-          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_check.outputs.idb_commit }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
+          key: xcframeworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_inputs.outputs.source_identity }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Prepare - Clean Swift build environment
         run: |
