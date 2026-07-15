@@ -4,6 +4,11 @@
 set -e
 set -o pipefail
 
+# On a TTY, git eagerly spawns an interactive pager for diff/log commands —
+# even with empty output — blocking the build until 'q' is pressed. Force
+# plain output for this script and any child scripts.
+export GIT_PAGER=cat
+
 # Resolve paths relative to this script so the build works from any CWD.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
