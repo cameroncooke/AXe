@@ -99,7 +99,8 @@ jobs:
             LOCAL_REMOTE=$(git -C idb_checkout remote get-url origin)
             if [ "$LOCAL_COMMIT" = "$PINNED_IDB_COMMIT" ] \
               && [ "$LOCAL_REMOTE" = "$PINNED_IDB_URL" ] \
-              && git -C idb_checkout merge-base --is-ancestor "$PINNED_IDB_UPSTREAM_BASE" "$LOCAL_COMMIT"; then
+              && git -C idb_checkout merge-base --is-ancestor "$PINNED_IDB_UPSTREAM_BASE" "$LOCAL_COMMIT" \
+              && [ -z "$(git -C idb_checkout status --porcelain)" ]; then
               echo "needs_setup=false" >> "$GITHUB_OUTPUT"
               exit 0
             fi
