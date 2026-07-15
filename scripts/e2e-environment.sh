@@ -26,7 +26,7 @@ run_selected_swift() {
 }
 
 select_e2e_simulator() {
-    [[ -z "$SIMULATOR_UDID" ]] || return
+    [[ -z "$SIMULATOR_UDID" ]] || return 0
 
     local xcode_minor="${SELECTED_XCODE_VERSION#*.}"
     xcode_minor="${xcode_minor%%.*}"
@@ -42,10 +42,23 @@ select_e2e_simulator() {
           | select(.name == $name and .isAvailable == true)]
          | sort_by(if .state == "Booted" then 0 else 1 end)
          | .[0].udid // empty' <<< "$simulator_json")"
+    if [[ -z "$SIMULATOR_UDID" ]]; then
+        printf 'No available simulator named "%s" matched runtime %s. Available matching-runtime devices:\n' \
+            "$SIMULATOR_NAME" "$runtime_pattern" >&2
+        jq -r \
+            --arg runtime "$runtime_pattern" \
+            '.devices | to_entries[]
+             | select(.key | contains($runtime))
+             | .value[]
+             | select(.isAvailable == true)
+             | "  \(.name) (\(.udid), \(.state))"' <<< "$simulator_json" >&2
+        return 1
+    fi
+    return 0
 }
 
 ensure_e2e_runtime_host() {
-    [[ "$SELECTED_XCODE_MAJOR" -ge 27 ]] || return
+    [[ "$SELECTED_XCODE_MAJOR" -ge 27 ]] || return 0
 
     local device_hub_app="${SELECTED_DEVELOPER_DIR%/Contents/Developer}/Contents/Applications/DeviceHub.app"
     [[ -d "$device_hub_app" ]] || return 1
@@ -57,7 +70,7 @@ ensure_e2e_runtime_host() {
 
     local attempts_remaining=5
     while [[ "$attempts_remaining" -gt 0 ]]; do
-        pgrep -f "$device_hub_app/Contents/MacOS/DeviceHub" >/dev/null && return
+        pgrep -f "$device_hub_app/Contents/MacOS/DeviceHub" >/dev/null && return 0
         sleep 1
         attempts_remaining=$((attempts_remaining - 1))
     done
