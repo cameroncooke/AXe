@@ -1,8 +1,5 @@
 #!/bin/bash
 
-EXPECTED_BUILD_XCODE_VERSION="26.5"
-EXPECTED_BUILD_XCODE_BUILD="17F42"
-
 e2e_xcode_version() {
     DEVELOPER_DIR="$1" xcodebuild -version | awk 'NR == 1 { print $2 }'
 }
@@ -11,68 +8,29 @@ e2e_xcode_build() {
     DEVELOPER_DIR="$1" xcodebuild -version | awk '/Build version/ { print $3 }'
 }
 
-find_build_developer_dir() {
-    if [[ -n "${AXE_BUILD_DEVELOPER_DIR:-}" ]]; then
-        if [[ "$(e2e_xcode_version "$AXE_BUILD_DEVELOPER_DIR")" != "$EXPECTED_BUILD_XCODE_VERSION" ||
-              "$(e2e_xcode_build "$AXE_BUILD_DEVELOPER_DIR")" != "$EXPECTED_BUILD_XCODE_BUILD" ]]; then
-            return 1
-        fi
-        printf '%s\n' "$AXE_BUILD_DEVELOPER_DIR"
-        return
-    fi
-
-    if [[ "$RUNTIME_XCODE_VERSION" == "$EXPECTED_BUILD_XCODE_VERSION" &&
-          "$RUNTIME_XCODE_BUILD" == "$EXPECTED_BUILD_XCODE_BUILD" ]]; then
-        printf '%s\n' "$RUNTIME_DEVELOPER_DIR"
-        return
-    fi
-
-    local candidate
-    for candidate in /Applications/Xcode-26.5*.app/Contents/Developer; do
-        [[ -d "$candidate" ]] || continue
-        if [[ "$(e2e_xcode_version "$candidate")" == "$EXPECTED_BUILD_XCODE_VERSION" &&
-              "$(e2e_xcode_build "$candidate")" == "$EXPECTED_BUILD_XCODE_BUILD" ]]; then
-            printf '%s\n' "$candidate"
-            return
-        fi
-    done
-
-    return 1
-}
-
+# Build and run tests with the same selected Xcode; exact build IDs are provenance only.
 configure_e2e_environment() {
-    RUNTIME_DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
-    [[ -d "$RUNTIME_DEVELOPER_DIR" ]] || return 1
-    RUNTIME_DEVELOPER_DIR="$(cd "$RUNTIME_DEVELOPER_DIR" && pwd)"
-    RUNTIME_XCODE_VERSION="$(e2e_xcode_version "$RUNTIME_DEVELOPER_DIR")"
-    RUNTIME_XCODE_BUILD="$(e2e_xcode_build "$RUNTIME_DEVELOPER_DIR")"
-    RUNTIME_XCODE_MAJOR="${RUNTIME_XCODE_VERSION%%.*}"
+    SELECTED_DEVELOPER_DIR="${DEVELOPER_DIR:-$(xcode-select -p)}"
+    [[ -d "$SELECTED_DEVELOPER_DIR" ]] || return 1
+    SELECTED_DEVELOPER_DIR="$(cd "$SELECTED_DEVELOPER_DIR" && pwd)"
+    SELECTED_XCODE_VERSION="$(e2e_xcode_version "$SELECTED_DEVELOPER_DIR")"
+    SELECTED_XCODE_MAJOR="${SELECTED_XCODE_VERSION%%.*}"
+    [[ "$SELECTED_XCODE_MAJOR" -ge 26 ]] || return 1
 
-    BUILD_DEVELOPER_DIR="$(find_build_developer_dir)" || return 1
-    [[ -d "$BUILD_DEVELOPER_DIR" ]] || return 1
-    BUILD_DEVELOPER_DIR="$(cd "$BUILD_DEVELOPER_DIR" && pwd)"
-    BUILD_SWIFT="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" xcrun --find swift)"
-    BUILD_SDKROOT="$(DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" xcrun --sdk macosx --show-sdk-path)"
-    export DEVELOPER_DIR="$RUNTIME_DEVELOPER_DIR"
+    SELECTED_SWIFT="$(DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" xcrun --find swift)"
+    export DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR"
 }
 
-build_swift() {
-    DEVELOPER_DIR="$BUILD_DEVELOPER_DIR" "$BUILD_SWIFT" "$@"
-}
-
-run_runtime_swift_test() {
-    SDKROOT="$BUILD_SDKROOT" \
-    DEVELOPER_DIR="$RUNTIME_DEVELOPER_DIR" \
-        "$BUILD_SWIFT" test --skip-build --no-parallel "$@"
+run_selected_swift() {
+    DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" "$SELECTED_SWIFT" "$@"
 }
 
 select_e2e_simulator() {
     [[ -z "$SIMULATOR_UDID" ]] || return
 
-    local runtime_pattern="iOS-${RUNTIME_XCODE_MAJOR}-"
-    if [[ "$RUNTIME_XCODE_VERSION" == "26.5" ]]; then
-        runtime_pattern="iOS-26-5"
-    fi
+    local xcode_minor="${SELECTED_XCODE_VERSION#*.}"
+    xcode_minor="${xcode_minor%%.*}"
+    local runtime_pattern="iOS-${SELECTED_XCODE_MAJOR}-${xcode_minor}"
     local simulator_json
     simulator_json="$(xcrun simctl list devices available -j)"
     SIMULATOR_UDID="$(jq -r \
@@ -87,9 +45,9 @@ select_e2e_simulator() {
 }
 
 ensure_e2e_runtime_host() {
-    [[ "$RUNTIME_XCODE_MAJOR" -ge 27 ]] || return
+    [[ "$SELECTED_XCODE_MAJOR" -ge 27 ]] || return
 
-    local device_hub_app="${RUNTIME_DEVELOPER_DIR%/Contents/Developer}/Contents/Applications/DeviceHub.app"
+    local device_hub_app="${SELECTED_DEVELOPER_DIR%/Contents/Developer}/Contents/Applications/DeviceHub.app"
     [[ -d "$device_hub_app" ]] || return 1
     if pgrep -x Simulator >/dev/null; then
         printf 'Simulator.app is running; quit it before testing Xcode 27 through Device Hub.\n' >&2
