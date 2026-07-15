@@ -11,22 +11,18 @@ WORK_DIR=""
 PUBLISH=false
 PRERELEASE=true
 KEEP_WORK_DIR=true
-PINNED_IDB_SHA="e682506725e9efefb9c43b8b917c0b12eb2a5939"
+PINNED_IDB_GIT_URL="https://github.com/cameroncooke/idb.git"
+PINNED_IDB_SHA="1395103ca786ee990c70514e1f8bb75fa98cdd82"
+PINNED_IDB_UPSTREAM_BASE_SHA="e682506725e9efefb9c43b8b917c0b12eb2a5939"
+IDB_GIT_URL="${IDB_GIT_URL:-$PINNED_IDB_GIT_URL}"
 IDB_SHA="${IDB_GIT_REF:-$PINNED_IDB_SHA}"
+IDB_UPSTREAM_BASE_SHA="${IDB_UPSTREAM_BASE_REF:-$PINNED_IDB_UPSTREAM_BASE_SHA}"
 EXPECTED_XCODE_26_BUILD="17F42"
 EXPECTED_IOS_26_RUNTIME_BUILD="23F77"
 EXPECTED_XCODE_27_BUILD="27A5218g"
 EXPECTED_IOS_27_RUNTIME_BUILD="24A5380g"
 WORK_DIR_MARKER_VALUE=""
 WORK_DIR_IDENTITY=""
-IDB_REQUIRED_PATCHES=(
-  "accessibility-client-type-for-xctest.patch"
-  "developer-dir-environment-precedence.patch"
-  "expose-selected-hid-transport.patch"
-  "hide-accessibility-private-framework-types.patch"
-  "xcode27-accessibility-bootstrap.patch"
-  "dtuhid-event-semantics.patch"
-)
 
 usage() {
   printf '%s\n' \
@@ -128,7 +124,11 @@ if [[ -n "$WORK_DIR" && "$WORK_DIR" != /* ]]; then
   WORK_DIR="$PWD/$WORK_DIR"
 fi
 [[ "$IDB_SHA" == "$PINNED_IDB_SHA" ]] \
-  || fail "IDB_GIT_REF must match the pinned release candidate: $PINNED_IDB_SHA"
+  || fail "IDB_GIT_REF must match the pinned fork revision: $PINNED_IDB_SHA"
+[[ "$IDB_GIT_URL" == "$PINNED_IDB_GIT_URL" ]] \
+  || fail "IDB_GIT_URL must match the pinned fork: $PINNED_IDB_GIT_URL"
+[[ "$IDB_UPSTREAM_BASE_SHA" == "$PINNED_IDB_UPSTREAM_BASE_SHA" ]] \
+  || fail "IDB_UPSTREAM_BASE_REF must match the verified base: $PINNED_IDB_UPSTREAM_BASE_SHA"
 
 for command in codesign find gh git jq node shasum stat tee xcodebuild; do
   command -v "$command" >/dev/null 2>&1 || fail "Required command not found: $command"
@@ -196,29 +196,6 @@ MATRIX_EVIDENCE="$WORK_DIR/matrix-evidence.json"
 RELEASE_NOTES="$WORK_DIR/github-release-body.md"
 mkdir -p "$TEMP_DIR" "$ASSET_DIR"
 
-PATCH_DIR="$ROOT_DIR/patches/idb/${IDB_SHA:0:7}"
-[[ -d "$PATCH_DIR" && ! -L "$PATCH_DIR" ]] \
-  || fail "Pinned IDB patch directory not found or is a symlink: $PATCH_DIR"
-PATCH_FILES=()
-while IFS= read -r patch_path; do
-  PATCH_FILES+=("$patch_path")
-done < <(find "$PATCH_DIR" -maxdepth 1 -type f -name '*.patch' -print | sort)
-[[ "${#PATCH_FILES[@]}" -eq "${#IDB_REQUIRED_PATCHES[@]}" ]] \
-  || fail "Pinned IDB patch directory must contain exactly ${#IDB_REQUIRED_PATCHES[@]} patch files: $PATCH_DIR"
-for patch_name in "${IDB_REQUIRED_PATCHES[@]}"; do
-  [[ -f "$PATCH_DIR/$patch_name" && ! -L "$PATCH_DIR/$patch_name" ]] \
-    || fail "Required pinned IDB patch is missing or is a symlink: $PATCH_DIR/$patch_name"
-done
-
-EXPECTED_PATCHES_JSON="$WORK_DIR/expected-patches.json"
-for patch_path in "${PATCH_FILES[@]}"; do
-  relative_path="${patch_path#"$ROOT_DIR/"}"
-  jq -n \
-    --arg path "$relative_path" \
-    --arg sha256 "$(shasum -a 256 "$patch_path" | awk '{ print $1 }')" \
-    '{path: $path, sha256: $sha256}'
-done | jq -s 'sort_by(.path)' > "$EXPECTED_PATCHES_JSON"
-
 node scripts/generate-github-release-notes.mjs \
   --version "$VERSION" \
   --fallback none \
@@ -226,8 +203,8 @@ node scripts/generate-github-release-notes.mjs \
 
 export DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR"
 export BUILD_OUTPUT_DIR DERIVED_DATA_PATH IDB_CHECKOUT_DIR TEMP_DIR
-export IDB_GIT_REF="$IDB_SHA"
-export IDB_PATCHES_DIR="$PATCH_DIR"
+export IDB_GIT_URL IDB_GIT_REF="$IDB_SHA"
+export IDB_UPSTREAM_BASE_REF="$IDB_UPSTREAM_BASE_SHA"
 
 printf 'Building and notarizing with %s (%s)\n' \
   "$(xcodebuild -version | head -1)" \
@@ -245,20 +222,14 @@ IDB_BUILD_EVIDENCE="$BUILD_OUTPUT_DIR/XCFrameworks/IDB_BUILD_EVIDENCE.txt"
   || fail "IDB build evidence is missing or is a symlink: $IDB_BUILD_EVIDENCE"
 grep -Fxq "IDB_SHA=$IDB_SHA" "$IDB_BUILD_EVIDENCE" \
   || fail "IDB build evidence does not match the pinned SHA"
-grep -Fxq "IDB_PATCH_DIRECTORY=$PATCH_DIR" "$IDB_BUILD_EVIDENCE" \
-  || fail "IDB build evidence does not match the pinned patch directory"
+grep -Fxq "IDB_GIT_URL=$IDB_GIT_URL" "$IDB_BUILD_EVIDENCE" \
+  || fail "IDB build evidence does not match the pinned fork URL"
+grep -Fxq "IDB_UPSTREAM_BASE_SHA=$IDB_UPSTREAM_BASE_SHA" "$IDB_BUILD_EVIDENCE" \
+  || fail "IDB build evidence does not match the verified upstream base"
 grep -Fxq "DEVELOPER_DIR=$SELECTED_DEVELOPER_DIR" "$IDB_BUILD_EVIDENCE" \
   || fail "IDB build evidence does not match the selected developer directory"
 grep -Eq "^XCODE_VERSION=Xcode 26\\.5 Build version ${EXPECTED_XCODE_26_BUILD}[[:space:]]*$" "$IDB_BUILD_EVIDENCE" \
   || fail "IDB build evidence does not match Xcode 26.5 ($EXPECTED_XCODE_26_BUILD)"
-[[ "$(grep -c '^PATCH_SHA256=' "$IDB_BUILD_EVIDENCE")" -eq "${#IDB_REQUIRED_PATCHES[@]}" ]] \
-  || fail "IDB build evidence does not contain exactly ${#IDB_REQUIRED_PATCHES[@]} patch hashes"
-for patch_path in "${PATCH_FILES[@]}"; do
-  patch_name="$(basename "$patch_path")"
-  patch_sha256="$(shasum -a 256 "$patch_path" | awk '{ print $1 }')"
-  grep -Fxq "PATCH_SHA256=$patch_sha256 $patch_name" "$IDB_BUILD_EVIDENCE" \
-    || fail "IDB build evidence does not match pinned patch: $patch_name"
-done
 IDB_BUILD_EVIDENCE_SHA256="$(shasum -a 256 "$IDB_BUILD_EVIDENCE" | awk '{ print $1 }')"
 
 PACKAGE_ZIPS=()
@@ -305,14 +276,15 @@ DEVELOPER_DIR="$SELECTED_DEVELOPER_DIR" \
 [[ -s "$MATRIX_EVIDENCE" ]] || fail "Matrix script did not create evidence at $MATRIX_EVIDENCE"
 jq -e \
   --arg commit "$HEAD_SHA" \
+  --arg idb_fork_url "$IDB_GIT_URL" \
   --arg idb "$IDB_SHA" \
+  --arg idb_upstream_base "$IDB_UPSTREAM_BASE_SHA" \
   --arg artifact "$ARTIFACT_SHA256" \
   --arg payload "$AXE_PAYLOAD_SHA256" \
   --arg xcode26 "$EXPECTED_XCODE_26_BUILD" \
   --arg ios26 "$EXPECTED_IOS_26_RUNTIME_BUILD" \
   --arg xcode27 "$EXPECTED_XCODE_27_BUILD" \
   --arg ios27 "$EXPECTED_IOS_27_RUNTIME_BUILD" \
-  --slurpfile expected_patches "$EXPECTED_PATCHES_JSON" \
   '
     def sha256: type == "string" and test("^[0-9a-f]{64}$");
     def passed_artifact:
@@ -333,8 +305,11 @@ jq -e \
     .source == {axe_commit: $commit} and
     .payload == {sha256: $payload} and
     .archives.universal_sha256 == $artifact and
-    .idb.sha == $idb and
-    (.idb.retained_patches | sort_by(.path)) == $expected_patches[0] and
+    .idb == {
+      fork_url: $idb_fork_url,
+      sha: $idb,
+      upstream_base_sha: $idb_upstream_base
+    } and
     (.cells | type == "array" and length == 2) and
     ([.cells[] | select(exact_cell("26.5"; $xcode26; "26.5"; $ios26))] | length == 1) and
     ([.cells[] | select(exact_cell("27.0 Beta 3"; $xcode27; "27.0"; $ios27))] | length == 1)
@@ -344,7 +319,9 @@ MANIFEST="$ASSET_DIR/AXe-macOS-${TAG}-manifest.json"
 jq -n -S \
   --arg tag "$TAG" \
   --arg axe_commit "$HEAD_SHA" \
+  --arg idb_fork_url "$IDB_GIT_URL" \
   --arg idb_sha "$IDB_SHA" \
+  --arg idb_upstream_base_sha "$IDB_UPSTREAM_BASE_SHA" \
   --arg idb_build_evidence_sha256 "$IDB_BUILD_EVIDENCE_SHA256" \
   --arg build_xcode_version "$SELECTED_XCODE_VERSION" \
   --arg build_xcode_build "$SELECTED_XCODE_BUILD" \
@@ -354,7 +331,6 @@ jq -n -S \
   --arg universal_sha256 "$ARTIFACT_SHA256" \
   --arg homebrew_archive "$(basename "$HOMEBREW_ARCHIVE")" \
   --arg homebrew_sha256 "$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{ print $1 }')" \
-  --slurpfile expected_patches "$EXPECTED_PATCHES_JSON" \
   --slurpfile matrix "$MATRIX_EVIDENCE" \
   '{
     tag: $tag,
@@ -362,8 +338,9 @@ jq -n -S \
     idb_sha: $idb_sha,
     idb_build_evidence: {
       sha256: $idb_build_evidence_sha256,
-      xcode: {version: $build_xcode_version, build: $build_xcode_build},
-      retained_patches: $expected_patches[0]
+      fork_url: $idb_fork_url,
+      upstream_base_sha: $idb_upstream_base_sha,
+      xcode: {version: $build_xcode_version, build: $build_xcode_build}
     },
     notarized_package_sha256: $package_sha256,
     axe_payload_sha256: $axe_payload_sha256,

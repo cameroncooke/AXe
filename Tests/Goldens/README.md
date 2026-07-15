@@ -21,7 +21,7 @@ Each cell has three parts:
 - `stable/` records argv, stdout, stderr, stdin where applicable, and exit status. It covers help and unknown-option behavior for every public subcommand, plus command-specific typed validation, stdin, and output-path contracts. Hierarchy values are intentionally excluded because labels, frames, and identifiers can be fixture- or host-specific; `stable/hierarchy/schema-types.json` records normalized JSON paths and types.
 - `provenance.json` records volatile run identity: exact AXe payload SHA-256, simulator UDID/device name, and the SHA-256 of the stable contract. `--check` validates the newly generated provenance but compares only `contract.json` and `stable/`, so a different simulator or byte-identical rebuilt payload does not create golden churn.
 
-The local release matrix script must write `AXE_MATRIX_EVIDENCE_PATH` using schema version 1. The release gate accepts exactly the required Xcode 26.5/iOS 26.5 and Xcode 27 Beta 3/iOS 27 cells, binds them to `AXE_PAYLOAD_SHA256`, and verifies retained patch hashes against the repository:
+The local release matrix script must write `AXE_MATRIX_EVIDENCE_PATH` using schema version 1. The release gate accepts exactly the required Xcode 26.5/iOS 26.5 and Xcode 27 Beta 3/iOS 27 cells, binds them to `AXE_PAYLOAD_SHA256`, and verifies the immutable IDB fork revision and its upstream base:
 
 ```json
 {
@@ -31,10 +31,9 @@ The local release matrix script must write `AXE_MATRIX_EVIDENCE_PATH` using sche
   "payload": {"sha256": "64-character payload SHA-256"},
   "archives": {"universal_sha256": "64-character archive SHA-256"},
   "idb": {
-    "sha": "40-character pinned IDB SHA",
-    "retained_patches": [
-      {"path": "patches/idb/e682506/example.patch", "sha256": "64-character patch SHA-256"}
-    ]
+    "fork_url": "https://github.com/cameroncooke/idb.git",
+    "sha": "40-character pinned fork SHA",
+    "upstream_base_sha": "40-character upstream IDB SHA"
   },
   "cells": [
     {
