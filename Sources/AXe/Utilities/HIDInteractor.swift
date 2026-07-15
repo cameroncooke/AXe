@@ -149,6 +149,9 @@ struct HIDInteractor {
         for simulatorUDID: String,
         logger: AxeLogger
     ) async throws {
+        // Xcode 27 Beta 3 (27A5218g) Device Hub: live DragTests reached this IDB path and reported
+        // successful sends, but delivered no touch events. Forcing legacy Indigo produced the same
+        // silent result, so transport acknowledgement is not proof of guest-side touch delivery.
         let event = try makeCompositeDragEvent(
             from: start,
             to: end,
