@@ -921,9 +921,10 @@ function package_for_notarization() {
   print_info "Copying staged release payload to package..." >&2
   copy_release_payload "${output_base_dir}" "${package_dir}"
 
-  # Create zip package while preserving framework symlinks and metadata
+  # Create zip package preserving framework symlinks but excluding AppleDouble
+  # metadata, which breaks framework bundle seals when extracted
   print_info "Creating zip package: ${package_zip}" >&2
-  ditto -c -k --keepParent "${package_dir}" "${package_zip}" >&2
+  ditto -c -k --norsrc --noextattr --noqtn --keepParent "${package_dir}" "${package_zip}" >&2
 
   # Clean up temporary directory
   rm -rf "${package_dir}"

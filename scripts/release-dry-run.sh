@@ -52,13 +52,26 @@ cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBDeviceControl.framework/FBDeviceContr
 printf 'name: axe\n' > "$PACKAGE_ROOT/AXe_AXe.bundle/manifest.txt"
 
 PACKAGE_ZIP="$WORK_DIR/AXe-Final-dryrun.zip"
-ditto -c -k --keepParent "$PACKAGE_ROOT" "$PACKAGE_ZIP"
+ditto -c -k --norsrc --noextattr --noqtn --keepParent "$PACKAGE_ROOT" "$PACKAGE_ZIP"
 
 ./scripts/release-artifacts.sh extract-stage \
   --package-zip "$PACKAGE_ZIP" \
   --stage-dir "$STAGE_DIR"
 
 ./scripts/release-artifacts.sh verify-stage --stage-dir "$STAGE_DIR"
+
+echo "[release-dry-run] Verifying AppleDouble sanitization"
+CONTAMINATED_DIR="$WORK_DIR/contaminated-output"
+CONTAMINATED_STAGE="$WORK_DIR/contaminated-stage"
+cp -R "$PACKAGE_ROOT" "$CONTAMINATED_DIR"
+touch "$CONTAMINATED_DIR/._axe" \
+  "$CONTAMINATED_DIR/Frameworks/FBControlCore.framework/._FBControlCore"
+xattr -w com.example.axe-dry-run test "$CONTAMINATED_DIR/axe"
+./scripts/release-artifacts.sh stage-build-output \
+  --build-output-dir "$CONTAMINATED_DIR" \
+  --stage-dir "$CONTAMINATED_STAGE"
+./scripts/release-artifacts.sh verify-stage --stage-dir "$CONTAMINATED_STAGE"
+[[ -z "$(xattr -p com.example.axe-dry-run "$CONTAMINATED_STAGE/axe" 2>/dev/null)" ]]
 ./scripts/release-artifacts.sh create-universal-archive --stage-dir "$STAGE_DIR" --archive "$UNIVERSAL_ARCHIVE"
 ./scripts/release-artifacts.sh create-homebrew-archive --stage-dir "$STAGE_DIR" --archive "$HOMEBREW_ARCHIVE"
 

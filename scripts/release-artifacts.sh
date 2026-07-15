@@ -125,6 +125,10 @@ verify_stage() {
     verify_arch "$framework_binary" "x86_64"
   done
 
+  local appledouble_files
+  appledouble_files="$(find "$stage_dir" -type f -name "._*" | head -5)"
+  [[ -z "$appledouble_files" ]] || fail "AppleDouble metadata files in staged payload (break framework bundle seals): ${appledouble_files}"
+
   echo "✅ Verified staged payload contract and architectures"
 }
 
@@ -146,7 +150,7 @@ create_archive() {
 
   rm -f "$archive_path"
   mkdir -p "$(dirname "$archive_path")"
-  tar -czf "$archive_path" -C "$archive_root" .
+  COPYFILE_DISABLE=1 tar -czf "$archive_path" -C "$archive_root" .
   rm -rf "$archive_root"
   echo "✅ Created archive: $archive_path"
 }

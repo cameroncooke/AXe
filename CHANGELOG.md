@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed simulator automation with Xcode 27 Beta 3 (27A5218g) while retaining Xcode 26 support by updating the IDB integration, selecting the compatible HID transport, and bootstrapping accessibility through Xcode's current private-framework path.
 - Fixed `test-runner.sh` loading AXe's binary target frameworks with newer SwiftPM layouts while remaining compatible with Xcode 26.
 - Fixed E2E test hangs by resolving the `axe` executable path before `swift test` starts instead of invoking SwiftPM from inside test cases.
+- Fixed release archives embedding AppleDouble (`._*`) metadata files that broke strict Gatekeeper verification of the bundled frameworks by sanitizing staged payloads and excluding filesystem metadata from zip and tar packaging.
 
 ## [v1.7.1] - 2026-06-02
 
