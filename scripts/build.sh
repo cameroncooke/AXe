@@ -333,10 +333,28 @@ function clone_idb_repo() {
     actual_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
     if [[ "$actual_ref" == "$IDB_GIT_REF" && "$actual_remote" == "$IDB_GIT_URL" ]] &&
        git -C "$IDB_CHECKOUT_DIR" cat-file -e "${IDB_GIT_REF}^{tree}" 2>/dev/null; then
+      if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain)" ]]; then
+        if [[ "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" &&
+              ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" ]]; then
+          echo "Error: Refusing to repair an unmanaged IDB checkout: $IDB_CHECKOUT_DIR" >&2
+          echo "   Clean or repair that checkout manually, then retry." >&2
+          return 1
+        fi
+        print_warning "The pinned IDB checkout is dirty; repairing the managed checkout locally."
+        if ! git -C "$IDB_CHECKOUT_DIR" restore --source=HEAD --staged --worktree -- . ||
+           ! git -C "$IDB_CHECKOUT_DIR" clean -fd; then
+          if [[ "$IDB_CHECKOUT_DIR" == "$DEFAULT_IDB_CHECKOUT_DIR" ]]; then
+            fresh_clone_idb_repo
+          else
+            echo "Error: Unable to repair managed IDB checkout: $IDB_CHECKOUT_DIR" >&2
+            return 1
+          fi
+        fi
+      fi
       touch "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout"
       print_info "Reusing pinned IDB fork checkout at $IDB_GIT_REF."
       verify_idb_source_state
-      return
+      return 0
     fi
 
     print_info "Updating AXe's IDB fork to $IDB_GIT_REF..."
