@@ -217,53 +217,6 @@ struct TestHelpers {
         try await Task.sleep(nanoseconds: 1_500_000_000)
     }
 
-    static func launchPlaygroundApp(to screen: String, simulatorUDID: String? = nil) async throws {
-        let udid: String
-        if let simulatorUDID {
-            udid = simulatorUDID
-        } else {
-            udid = try requireSimulatorUDID()
-        }
-        
-        // Terminate existing instance
-        let _ = try? await CommandRunner.run("xcrun simctl terminate \(udid) com.cameroncooke.AxePlayground")
-        try await Task.sleep(nanoseconds: 500_000_000)
-        
-        // Launch to specific screen
-        _ = try await CommandRunner.run("xcrun simctl launch \(udid) com.cameroncooke.AxePlayground --launch-arg \"screen=\(screen)\"")
-        if screen == "text-input" {
-            let deadline = Date().addingTimeInterval(10)
-            var lastFocusRequest: Date?
-            while Date() < deadline {
-                if let state = try? await getUIState(simulatorUDID: udid) {
-                    let focusIndicator = UIStateParser.findElement(in: state) { element in
-                        element.identifier == "text-input-screen" && element.label == "✏️ Typing active"
-                    }
-                    if focusIndicator != nil {
-                        return
-                    }
-
-                    let shouldRequestFocus = lastFocusRequest.map {
-                        Date().timeIntervalSince($0) >= 1
-                    } ?? true
-                    if shouldRequestFocus,
-                       let textFieldFrame = UIStateParser.findElement(in: state, matching: { $0.type == "TextField" })?.frame {
-                        lastFocusRequest = Date()
-                        let centerX = textFieldFrame.x + (textFieldFrame.width / 2)
-                        let centerY = textFieldFrame.y + (textFieldFrame.height / 2)
-                        _ = try? await runAxeCommand(
-                            "tap -x \(centerX) -y \(centerY)",
-                            simulatorUDID: udid
-                        )
-                    }
-                }
-                try await Task.sleep(nanoseconds: 200_000_000)
-            }
-            throw TestError.unexpectedState("Text input fixture did not become focused and ready")
-        }
-        try await Task.sleep(nanoseconds: 2_000_000_000)
-    }
-    
     static func getUIState(simulatorUDID: String? = nil) async throws -> UIElement {
         let udid: String
         if let simulatorUDID {
