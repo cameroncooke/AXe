@@ -298,8 +298,8 @@ function fresh_clone_idb_repo() {
   if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
     local existing_remote
     existing_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
-    if [[ "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" ||
-          ( ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" && "$existing_remote" != "$IDB_GIT_URL" ) ]]; then
+    if [[ ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" &&
+          ( "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" || "$existing_remote" != "$IDB_GIT_URL" ) ]]; then
       echo "❌ Error: Refusing to replace an unmanaged IDB checkout: $IDB_CHECKOUT_DIR" >&2
       echo "   Remove or repair that checkout manually, then retry." >&2
       return 1
