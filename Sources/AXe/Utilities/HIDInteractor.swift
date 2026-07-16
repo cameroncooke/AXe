@@ -218,6 +218,8 @@ struct HIDInteractor {
             didTouchDown = false
         } catch {
             if didTouchDown {
+                // Never replay touch-down after an ambiguous failure. A best-effort touch-up can
+                // only release possible held state; it cannot produce a second tap by itself.
                 try? await performHIDEvent(touchUpEvent, in: session, logger: logger)
             }
             throw error
