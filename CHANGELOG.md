@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Changed the IDB integration to consume an immutable full-SHA-pinned AXe fork instead of applying local patches during builds.
 - Changed build and release validation to record Xcode build identifiers as provenance instead of requiring exact toolchain and runtime builds.
+- Changed BGRA video streams to honor the requested `--fps` value consistently with the other stream formats instead of using an uncapped native frame rate.
 
 ### Fixed
 
