@@ -63,6 +63,7 @@ DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
 FBSIMCONTROL_PROJECT="${IDB_CHECKOUT_DIR}/FBSimulatorControl.xcodeproj"
 TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
+IDB_REPLACEMENT_ROOT=""
 
 # Shared payload helper
 # shellcheck source=./release-payload.sh
@@ -135,6 +136,45 @@ function print_warning() {
   local message="$1"
   echo "⚠️  ${message}"
 }
+
+function remove_idb_replacement() {
+  local replacement_root="$1"
+  local checkout_parent
+  checkout_parent="$(dirname "$IDB_CHECKOUT_DIR")"
+
+  if [[ -L "$replacement_root" || ! -d "$replacement_root" ||
+        "$(dirname "$replacement_root")" != "$checkout_parent" ||
+        "$(basename "$replacement_root")" != .axe-idb-replacement.* ]]; then
+    print_warning "Refusing unsafe IDB replacement cleanup: $replacement_root"
+    return 0
+  fi
+
+  rm -r "$replacement_root"
+}
+
+function cleanup_current_idb_replacement() {
+  [[ -n "$IDB_REPLACEMENT_ROOT" ]] || return 0
+  remove_idb_replacement "$IDB_REPLACEMENT_ROOT"
+  IDB_REPLACEMENT_ROOT=""
+}
+
+function cleanup_stale_idb_replacements() {
+  local checkout_parent candidate owner_pid
+  checkout_parent="$(dirname "$IDB_CHECKOUT_DIR")"
+
+  for candidate in "$checkout_parent"/.axe-idb-replacement.*; do
+    [[ ! -L "$candidate" && -d "$candidate" ]] || continue
+    [[ ! -L "$candidate/.axe-owner-pid" && -f "$candidate/.axe-owner-pid" ]] || continue
+    owner_pid="$(< "$candidate/.axe-owner-pid")"
+    if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" 2>/dev/null; then
+      continue
+    fi
+    print_info "Removing stale managed IDB replacement directory: $candidate"
+    remove_idb_replacement "$candidate"
+  done
+}
+
+trap cleanup_current_idb_replacement EXIT
 
 function codesign_with_retry() {
   local max_attempts=5
@@ -306,13 +346,14 @@ function fresh_clone_idb_repo() {
     fi
   fi
 
-  local replacement_root replacement_checkout
-  replacement_root="$(mktemp -d "$(dirname "$IDB_CHECKOUT_DIR")/.axe-idb-replacement.XXXXXX")"
-  replacement_checkout="${replacement_root}/checkout"
+  IDB_REPLACEMENT_ROOT="$(mktemp -d "$(dirname "$IDB_CHECKOUT_DIR")/.axe-idb-replacement.XXXXXX")"
+  printf '%s\n' "$$" > "$IDB_REPLACEMENT_ROOT/.axe-owner-pid"
+  local replacement_checkout
+  replacement_checkout="${IDB_REPLACEMENT_ROOT}/checkout"
   print_info "Cloning AXe's IDB fork into $IDB_CHECKOUT_DIR..."
   if ! git clone --no-checkout "$IDB_GIT_URL" "$replacement_checkout" ||
      ! git -C "$replacement_checkout" checkout --detach "$IDB_GIT_REF"; then
-    rm -r "$replacement_root"
+    cleanup_current_idb_replacement
     return 1
   fi
   touch "$replacement_checkout/.git/axe-managed-checkout"
@@ -320,11 +361,12 @@ function fresh_clone_idb_repo() {
     rm -r "$IDB_CHECKOUT_DIR"
   fi
   mv "$replacement_checkout" "$IDB_CHECKOUT_DIR"
-  rm -r "$replacement_root"
+  cleanup_current_idb_replacement
   print_success "IDB fork cloned at $IDB_GIT_REF."
 }
 
 function clone_idb_repo() {
+  cleanup_stale_idb_replacements
   if [[ ! -d "$IDB_CHECKOUT_DIR/.git" ]]; then
     fresh_clone_idb_repo
   else
