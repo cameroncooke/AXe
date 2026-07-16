@@ -39,10 +39,11 @@ enum HIDBroker {
     private static let protocolVersion = 2
     static let maximumMessageBytes = 64 * 1024
     private static let idleTimeoutMilliseconds: Int32 = 60_000
-    private static let serverIOTimeoutMilliseconds: Int = 2_000
+    static let serverIOTimeoutMilliseconds: Int = 2_000
     static let clientWriteTimeoutMilliseconds: Int = 2_000
     static let clientResponseTimeoutMilliseconds: Int = 30_000
     static let startupAttempts = 300
+    static let startupTimeoutNanoseconds: UInt64 = 30_000_000_000
     static func sendTouchPrimitives(
         _ primitives: [HIDBrokerPrimitive],
         simulatorUDID: String
@@ -214,7 +215,17 @@ enum HIDBroker {
         }
         guard errno == ENOENT else { throw posixError("lstat") }
         guard mkdir(path, S_IRWXU) == 0 || errno == EEXIST else { throw posixError("mkdir") }
+        guard lstat(path, &info) == 0 else { throw posixError("lstat") }
+        guard (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == uid else {
+            throw CLIError(errorDescription: "HID broker directory is not a private owned directory.")
+        }
         guard chmod(path, S_IRWXU) == 0 else { throw posixError("chmod") }
+        guard lstat(path, &info) == 0 else { throw posixError("lstat") }
+        guard (info.st_mode & S_IFMT) == S_IFDIR,
+              info.st_uid == uid,
+              info.st_mode & (S_IRWXG | S_IRWXO) == 0 else {
+            throw CLIError(errorDescription: "HID broker directory is not a private owned directory.")
+        }
     }
 
     private static func spawnBroker(simulatorUDID: String) throws {
@@ -231,13 +242,18 @@ enum HIDBroker {
     }
 
     private static func connectToReadyBroker(simulatorUDID: String, endpoint: String) throws -> Int32 {
-        try connectToReadyBroker(
-            simulatorUDID: simulatorUDID,
-            endpoint: endpoint,
-            connector: connect(to:),
-            spawner: spawnBroker(simulatorUDID:),
-            sleeper: { _ = usleep($0) }
-        )
+        do {
+            return try connectToReadyBroker(
+                simulatorUDID: simulatorUDID,
+                endpoint: endpoint,
+                connector: connect(to:),
+                spawner: spawnBroker(simulatorUDID:),
+                sleeper: { _ = usleep($0) }
+            )
+        } catch {
+            logDiagnostic(error)
+            throw error
+        }
     }
 
     static func connectToReadyBroker(
@@ -245,42 +261,118 @@ enum HIDBroker {
         endpoint: String,
         connector: (String) throws -> Int32,
         spawner: (String) throws -> Void,
-        sleeper: (useconds_t) -> Void
+        sleeper: (useconds_t) -> Void,
+        monotonicNow: () -> UInt64 = monotonicTimeNanoseconds
     ) throws -> Int32 {
+        let startedAt = monotonicNow()
+        let deadlineResult = startedAt.addingReportingOverflow(startupTimeoutNanoseconds)
+        let deadline = deadlineResult.overflow ? UInt64.max : deadlineResult.partialValue
+        func handshakeTimeout() throws -> Int {
+            let now = monotonicNow()
+            guard now < deadline else {
+                throw HIDBrokerNotReadyError(diagnosticDescription: "The broker startup deadline expired.")
+            }
+            let remainingMilliseconds = max(1, Int((deadline - now) / 1_000_000))
+            return min(serverIOTimeoutMilliseconds, remainingMilliseconds)
+        }
+
         do {
-            return try connectAndAwaitHandshake(endpoint: endpoint, connector: connector)
+            return try connectAndAwaitHandshake(
+                endpoint: endpoint,
+                connector: connector,
+                timeoutMilliseconds: handshakeTimeout()
+            )
         } catch {
             guard isBrokerUnavailable(error) else { throw error }
         }
         // Hold the endpoint lock until the listener accepts connections so concurrent cold-start
         // clients wait for this broker instead of spawning competitors.
-        let lockDescriptor = try acquireStartupLock(endpoint: endpoint)
+        let lockDescriptor = try acquireStartupLock(
+            endpoint: endpoint,
+            deadline: deadline,
+            monotonicNow: monotonicNow,
+            sleeper: sleeper
+        )
         defer {
             _ = flock(lockDescriptor, LOCK_UN)
             Darwin.close(lockDescriptor)
         }
         do {
-            return try connectAndAwaitHandshake(endpoint: endpoint, connector: connector)
+            return try connectAndAwaitHandshake(
+                endpoint: endpoint,
+                connector: connector,
+                timeoutMilliseconds: handshakeTimeout()
+            )
         } catch {
             guard isBrokerUnavailable(error) else { throw error }
         }
-        try waitForStaleEndpointShutdown(endpoint)
-        try spawner(simulatorUDID)
+        var didSpawnBroker = false
+        if try !isBrokerProcessAlive(endpoint: endpoint) {
+            try waitForStaleEndpointShutdown(
+                endpoint,
+                deadline: deadline,
+                monotonicNow: monotonicNow,
+                sleeper: sleeper
+            )
+            try spawner(simulatorUDID)
+            didSpawnBroker = true
+        }
         var lastError: Error?
         for _ in 0..<startupAttempts {
+            guard monotonicNow() < deadline else { break }
             do {
-                return try connectAndAwaitHandshake(endpoint: endpoint, connector: connector)
+                return try connectAndAwaitHandshake(
+                    endpoint: endpoint,
+                    connector: connector,
+                    timeoutMilliseconds: handshakeTimeout()
+                )
             } catch {
                 guard isBrokerUnavailable(error) else { throw error }
                 lastError = error
-                if error is HIDBrokerNotReadyError {
-                    try waitForStaleEndpointShutdown(endpoint)
+                if let notReady = error as? HIDBrokerNotReadyError,
+                   notReady.isSafeToReplaceBroker {
+                    try waitForStaleEndpointShutdown(
+                        endpoint,
+                        deadline: deadline,
+                        monotonicNow: monotonicNow,
+                        sleeper: sleeper
+                    )
                     try spawner(simulatorUDID)
+                    didSpawnBroker = true
+                } else if let notReady = error as? HIDBrokerNotReadyError,
+                          notReady.allowsReplacementAfterProcessExit,
+                          try !isBrokerProcessAlive(endpoint: endpoint) {
+                    try waitForStaleEndpointShutdown(
+                        endpoint,
+                        deadline: deadline,
+                        monotonicNow: monotonicNow,
+                        sleeper: sleeper
+                    )
+                    try spawner(simulatorUDID)
+                    didSpawnBroker = true
+                } else if try !isBrokerProcessAlive(endpoint: endpoint), !didSpawnBroker {
+                    try waitForStaleEndpointShutdown(
+                        endpoint,
+                        deadline: deadline,
+                        monotonicNow: monotonicNow,
+                        sleeper: sleeper
+                    )
+                    try spawner(simulatorUDID)
+                    didSpawnBroker = true
                 }
                 sleeper(100_000)
             }
         }
-        throw lastError ?? CLIError(errorDescription: "Unable to connect to the HID broker.")
+        let failure: HIDBrokerNotReadyError
+        if let notReady = lastError as? HIDBrokerNotReadyError {
+            failure = notReady
+        } else {
+            failure = HIDBrokerNotReadyError(
+                diagnosticDescription: "Broker startup failed: \(lastError?.localizedDescription ?? "no connection attempt completed")",
+                isSafeToReplaceBroker: false
+            )
+        }
+        throw failure
     }
 
     private static func fnv1a64(_ string: String) -> UInt64 {
