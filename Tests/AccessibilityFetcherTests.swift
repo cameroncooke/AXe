@@ -149,6 +149,26 @@ struct AccessibilityFetcherTests {
         #expect(waits == [.milliseconds(250)])
     }
 
+    @Test("Cancelling recovery process polling terminates promptly")
+    func cancellationStopsRecoveryProcess() async throws {
+        let startedAt = ContinuousClock.now
+        let task = Task {
+            try await AccessibilityFetcher.runProcess(
+                executableURL: URL(fileURLWithPath: "/bin/sleep"),
+                arguments: ["10"],
+                timeout: 10
+            )
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+        task.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await task.value
+        }
+        #expect(startedAt.duration(to: .now) < .seconds(1))
+    }
+
     @Test("Classifies only confirmed accessibility channel failures as recoverable")
     func classifiesRecoverableChannelFailures() {
         let disconnected = NSError(

@@ -60,6 +60,8 @@ struct AccessibilityFetcher {
     private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator) async throws -> Data {
         var latestData: Data?
         for attempt in 0..<5 {
+            // IDB's former `accessibilityElements(withNestedFormat:)` API also serialized the
+            // frontmost application internally. This explicit handle API preserves that scope.
             let accessibilityElement = try await target.accessibilityElementForFrontmostApplication()
             let data: Data
             do {
@@ -185,22 +187,33 @@ struct AccessibilityFetcher {
 
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning, Date() < deadline {
-            try? await Task.sleep(for: .milliseconds(10))
+            do {
+                try await Task.sleep(for: .milliseconds(10))
+            } catch {
+                terminateProcess(process)
+                throw error
+            }
         }
         if process.isRunning {
-            process.terminate()
-            let terminationDeadline = Date().addingTimeInterval(0.5)
-            while process.isRunning, Date() < terminationDeadline {
-                try? await Task.sleep(for: .milliseconds(10))
-            }
-            if process.isRunning {
-                kill(process.processIdentifier, SIGKILL)
-            }
-            process.waitUntilExit()
+            terminateProcess(process)
             throw CLIError(errorDescription: "AXe timed out while restoring accessibility automation.")
         }
         process.waitUntilExit()
         return process.terminationStatus
+    }
+
+    private static func terminateProcess(_ process: Process) {
+        if process.isRunning {
+            process.terminate()
+            let deadline = Date().addingTimeInterval(0.5)
+            while process.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+        }
+        process.waitUntilExit()
     }
 
     private static func serializedAccessibilityData(from accessibilityElement: FBAccessibilityElement) throws -> Data {
@@ -284,7 +297,8 @@ struct AccessibilityFetcher {
         .traits,
     ]
 
-    // Xcode 27's private nested serializer returns an empty hierarchy when `.traits` is requested.
-    // Preserve the public schema by defaulting the missing field after requesting the safe subset.
+    // AXe's former IDB serializer did not return traits. Xcode 27's private nested serializer also
+    // returns an empty hierarchy when `.traits` is requested, so retain the existing public value
+    // as an empty compatibility placeholder after requesting the safe subset on every Xcode version.
     static let accessibilityRequestKeys = accessibilityOutputKeys.subtracting([.traits])
 }
