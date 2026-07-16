@@ -107,6 +107,163 @@ struct AccessibilityFetcherTests {
         #expect(serialized["elements"] == nil)
     }
 
+    @Test("Classifies a screen-sized group as a transient point fallback")
+    func classifiesTransientPointFallback() throws {
+        let portraitFallback = try JSONSerialization.data(withJSONObject: [
+            "type": "Group",
+            "role": "AXGroup",
+            "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+        ])
+        let landscapeFallback = try JSONSerialization.data(withJSONObject: [
+            "type": "Group",
+            "role": "AXGroup",
+            "frame": ["x": 0, "y": 0, "width": 874, "height": 402],
+        ])
+        let button = try JSONSerialization.data(withJSONObject: [
+            "type": "Button",
+            "role": "AXButton",
+            "frame": ["x": 16, "y": 62, "width": 44, "height": 44],
+        ])
+        let point = AccessibilityPoint(x: 38, y: 84)
+
+        #expect(try AccessibilityFetcher.isTransientPointFallback(in: portraitFallback, at: point))
+        #expect(try AccessibilityFetcher.isTransientPointFallback(in: landscapeFallback, at: point))
+        #expect(try !AccessibilityFetcher.isTransientPointFallback(in: button, at: point))
+    }
+
+    @Test("Preserves legitimate compact groups returned by point lookup")
+    func preservesCompactPointGroup() throws {
+        let group = try JSONSerialization.data(withJSONObject: [[
+            "type": "Group",
+            "role": "AXGroup",
+            "frame": ["x": 20, "y": 60, "width": 120, "height": 80],
+        ]])
+
+        #expect(try !AccessibilityFetcher.isTransientPointFallback(
+            in: group,
+            at: AccessibilityPoint(x: 40, y: 80)
+        ))
+    }
+
+    @Test("Preserves meaningful large groups returned by point lookup")
+    func preservesMeaningfulLargePointGroups() throws {
+        let point = AccessibilityPoint(x: 40, y: 80)
+        let variants: [[String: Any]] = [
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "AXLabel": "Content",
+                "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+            ],
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "title": "Content",
+                "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+            ],
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "help": "Interactive content",
+                "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+            ],
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "custom_actions": ["Activate"],
+                "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+            ],
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+                "children": [["type": "Button"]],
+            ],
+            [
+                "type": "Group",
+                "role": "AXGroup",
+                "frame": ["x": 20, "y": 40, "width": 360, "height": 700],
+            ],
+        ]
+
+        for variant in variants {
+            let data = try JSONSerialization.data(withJSONObject: variant)
+            #expect(try !AccessibilityFetcher.isTransientPointFallback(in: data, at: point))
+        }
+    }
+
+    @Test("Retries transient point fallbacks until a target appears")
+    func retriesTransientPointFallback() async throws {
+        let fallback = try JSONSerialization.data(withJSONObject: [
+            "type": "Group",
+            "role": "AXGroup",
+            "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+        ])
+        let button = try JSONSerialization.data(withJSONObject: [
+            "type": "Button",
+            "role": "AXButton",
+            "frame": ["x": 16, "y": 62, "width": 44, "height": 44],
+        ])
+        var responses = [fallback, button]
+        var waits: [Duration] = []
+
+        let result = try await AccessibilityFetcher.retryingTransientPointFallback(
+            at: AccessibilityPoint(x: 38, y: 84),
+            fetch: { responses.removeFirst() },
+            wait: { waits.append($0) }
+        )
+
+        #expect(result == button)
+        #expect(responses.isEmpty)
+        #expect(waits == [.milliseconds(50)])
+    }
+
+    @Test("Bounds transient point fallback retries and preserves the final response")
+    func boundsTransientPointFallbackRetries() async throws {
+        let fallback = try JSONSerialization.data(withJSONObject: [
+            "type": "Group",
+            "role": "AXGroup",
+            "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+        ])
+        var fetchCount = 0
+        var waitCount = 0
+
+        let result = try await AccessibilityFetcher.retryingTransientPointFallback(
+            at: AccessibilityPoint(x: 38, y: 84),
+            fetch: {
+                fetchCount += 1
+                return fallback
+            },
+            wait: { _ in waitCount += 1 }
+        )
+
+        #expect(result == fallback)
+        #expect(fetchCount == 5)
+        #expect(waitCount == 4)
+    }
+
+    @Test("Returns point targets without retrying")
+    func returnsPointTargetWithoutRetrying() async throws {
+        let button = try JSONSerialization.data(withJSONObject: [
+            "type": "Button",
+            "role": "AXButton",
+            "frame": ["x": 16, "y": 62, "width": 44, "height": 44],
+        ])
+        var fetchCount = 0
+
+        let result = try await AccessibilityFetcher.retryingTransientPointFallback(
+            at: AccessibilityPoint(x: 38, y: 84),
+            fetch: {
+                fetchCount += 1
+                return button
+            },
+            wait: { _ in Issue.record("A non-fallback target should not wait") }
+        )
+
+        #expect(result == button)
+        #expect(fetchCount == 1)
+    }
+
     @Test("Rejects accessibility payloads that are not dictionaries or arrays")
     func rejectsInvalidAccessibilityPayload() {
         #expect(throws: CLIError.self) {

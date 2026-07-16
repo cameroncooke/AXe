@@ -49,12 +49,47 @@ struct AccessibilityFetcher {
             dependencies: recoveryDependencies
         ) {
             if let point {
-                let accessibilityElement = try await target.accessibilityElement(at: point.cgPoint)
-                defer { accessibilityElement.close() }
-                return try serializedAccessibilityData(from: accessibilityElement)
+                return try await fetchAccessibilityInfoJSONData(from: target, at: point)
             }
             return try await fetchFrontmostAccessibilityInfoJSONData(from: target)
         }
+    }
+
+    private static func fetchAccessibilityInfoJSONData(
+        from target: FBSimulator,
+        at point: AccessibilityPoint
+    ) async throws -> Data {
+        try await retryingTransientPointFallback(at: point) {
+            let accessibilityElement = try await target.accessibilityElement(at: point.cgPoint)
+            defer { accessibilityElement.close() }
+            return try serializedAccessibilityData(from: accessibilityElement)
+        }
+    }
+
+    static func retryingTransientPointFallback(
+        at point: AccessibilityPoint,
+        maximumAttempts: Int = 5,
+        fetch: @MainActor () async throws -> Data,
+        wait: @MainActor (Duration) async throws -> Void = { duration in
+            try await Task.sleep(for: duration)
+        }
+    ) async throws -> Data {
+        precondition(maximumAttempts > 0)
+        var latestData: Data?
+        for attempt in 0..<maximumAttempts {
+            let data = try await fetch()
+            latestData = data
+            if try !isTransientPointFallback(in: data, at: point) {
+                return data
+            }
+            if attempt < maximumAttempts - 1 {
+                try await wait(.milliseconds(50 * (1 << attempt)))
+            }
+        }
+        guard let latestData else {
+            throw CLIError(errorDescription: "Accessibility element at the requested point could not be serialized.")
+        }
+        return latestData
     }
 
     private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator) async throws -> Data {
@@ -239,6 +274,78 @@ struct AccessibilityFetcher {
         return roots.contains { root in
             guard let children = root["children"] as? [Any] else { return false }
             return !children.isEmpty
+        }
+    }
+
+    static func isTransientPointFallback(in data: Data, at point: AccessibilityPoint) throws -> Bool {
+        let object = try JSONSerialization.jsonObject(with: data)
+        let root: [String: Any]?
+        if let dictionary = object as? [String: Any] {
+            root = dictionary
+        } else if let dictionaries = object as? [[String: Any]], dictionaries.count == 1 {
+            root = dictionaries.first
+        } else {
+            root = nil
+        }
+        let meaningfulKeys = [
+            "AXLabel",
+            "AXUniqueId",
+            "AXIdentifier",
+            "AXValue",
+            "title",
+            "help",
+            "custom_actions",
+            "children",
+        ]
+        guard let root,
+              !meaningfulKeys.contains(where: { hasMeaningfulValue(root[$0]) }) else {
+            return false
+        }
+
+        let decoder = JSONDecoder()
+        let element: AccessibilityElement
+        if let decoded = try? decoder.decode(AccessibilityElement.self, from: data) {
+            element = decoded
+        } else if let decoded = try? decoder.decode([AccessibilityElement].self, from: data),
+                  let first = decoded.first,
+                  decoded.count == 1 {
+            element = first
+        } else {
+            return false
+        }
+
+        guard element.type == "Group",
+              element.role == "AXGroup",
+              element.normalizedLabel == nil,
+              element.normalizedUniqueId == nil,
+              element.normalizedValue == nil,
+              element.children?.isEmpty != false,
+              let frame = element.frame,
+              abs(frame.x) < 1,
+              abs(frame.y) < 1 else {
+            return false
+        }
+        let containsPoint = point.x >= frame.x
+            && point.x <= frame.x + frame.width
+            && point.y >= frame.y
+            && point.y <= frame.y + frame.height
+        return containsPoint
+            && min(frame.width, frame.height) >= 300
+            && max(frame.width, frame.height) >= 600
+    }
+
+    private static func hasMeaningfulValue(_ value: Any?) -> Bool {
+        switch value {
+        case nil, is NSNull:
+            return false
+        case let string as String:
+            return !string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        case let array as [Any]:
+            return !array.isEmpty
+        case let dictionary as [String: Any]:
+            return !dictionary.isEmpty
+        default:
+            return true
         }
     }
 
