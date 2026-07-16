@@ -13,7 +13,7 @@ private struct HIDBrokerResponse: Codable {
     let error: String?
 }
 
-struct HIDBrokerNotReadyError: UserFacingError {
+struct HIDBrokerNotReadyError: LocalizedError, UserFacingError {
     let userFacingDescription = "AXe could not establish simulator input. Wait for the simulator to finish booting and try again."
     let diagnosticDescription: String
     let isSafeToReplaceBroker: Bool
@@ -27,6 +27,10 @@ struct HIDBrokerNotReadyError: UserFacingError {
         self.diagnosticDescription = diagnosticDescription
         self.isSafeToReplaceBroker = isSafeToReplaceBroker
         self.allowsReplacementAfterProcessExit = allowsReplacementAfterProcessExit
+    }
+
+    var errorDescription: String? {
+        userFacingDescription
     }
 }
 
