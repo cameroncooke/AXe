@@ -22,6 +22,8 @@ struct BatchPlanRunner {
                 pendingMergeable.append(event)
             case .hidBarrier(let event):
                 try await flushPending()
+                // A barrier prevents event coalescing; failures propagate without replaying
+                // this event or any earlier event in the batch.
                 try await HIDInteractor.performHIDEvent(event, in: session, logger: logger)
             case .hostSleep(let seconds):
                 try await flushPending()
