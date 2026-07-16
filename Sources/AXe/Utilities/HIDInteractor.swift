@@ -3,6 +3,11 @@ import FBControlCore
 import FBSimulatorControl
 
 // MARK: - HID Interactor
+
+
+// Xcode 27 Beta 3 (27A5218g) Device Hub requires Resize Mode to be disabled for UI automation.
+// With Resize Mode enabled, both DTUHID and legacy Indigo reported successful sends without
+// delivering touches; with it disabled, the ui-interactions pass through this IDB path.
 @MainActor
 struct HIDInteractor {
 
@@ -149,9 +154,6 @@ struct HIDInteractor {
         for simulatorUDID: String,
         logger: AxeLogger
     ) async throws {
-        // Xcode 27 Beta 3 (27A5218g) Device Hub: live DragTests reached this IDB path and reported
-        // successful sends, but delivered no touch events. Forcing legacy Indigo produced the same
-        // silent result, so transport acknowledgement is not proof of guest-side touch delivery.
         let event = try makeCompositeDragEvent(
             from: start,
             to: end,
