@@ -130,6 +130,8 @@ struct Type: AsyncParsableCommand {
         logger.info().log("Performing HID event sequence for text typing")
         
         if !hidEvents.isEmpty {
+            // Keep typing in one ordered session. Indigo awaits each send, while DTUHID adds its
+            // own keyboard pacing; unconditional delays here would double-pace the DTUHID path.
             try await HIDInteractor
                 .performHIDEvent(
                     .composite(hidEvents),

@@ -11,6 +11,7 @@ struct HIDBrokerTests {
         private let expectedInitialConnections: Int
         private var initialConnectionCount = 0
         private var isReady = false
+        private var peerDescriptors: [Int32] = []
         private(set) var spawnCount = 0
         private(set) var successCount = 0
         private(set) var errors: [Error] = []
@@ -38,7 +39,9 @@ struct HIDBrokerTests {
                 throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
             }
             try HIDBroker.writeAll(Data(#"{"ready":true}"#.utf8 + [0x0A]), to: descriptors[1])
-            Darwin.close(descriptors[1])
+            condition.lock()
+            peerDescriptors.append(descriptors[1])
+            condition.unlock()
             return descriptors[0]
         }
 
@@ -59,6 +62,14 @@ struct HIDBrokerTests {
             condition.lock()
             errors.append(error)
             condition.unlock()
+        }
+
+        func closePeers() {
+            condition.lock()
+            let descriptors = peerDescriptors
+            peerDescriptors.removeAll()
+            condition.unlock()
+            descriptors.forEach { Darwin.close($0) }
         }
     }
 
@@ -161,9 +172,13 @@ struct HIDBrokerTests {
             simulatorUDID: UUID().uuidString,
             developerDirectory: FileManager.default.temporaryDirectory.path
         )
-        defer { try? FileManager.default.removeItem(atPath: endpoint + ".lock") }
+        defer {
+            try? FileManager.default.removeItem(atPath: endpoint + ".lock")
+            try? FileManager.default.removeItem(atPath: endpoint + ".lifetime.lock")
+        }
         let clientCount = 8
         let state = StartupState(expectedInitialConnections: clientCount)
+        defer { state.closePeers() }
         let group = DispatchGroup()
 
         for _ in 0..<clientCount {
@@ -189,7 +204,8 @@ struct HIDBrokerTests {
 
         #expect(state.spawnCount == 1)
         #expect(state.successCount == clientCount)
-        #expect(state.errors.isEmpty)
+        let diagnostics = state.errors.compactMap { ($0 as? HIDBrokerNotReadyError)?.diagnosticDescription }
+        #expect(state.errors.isEmpty, "Broker diagnostics: \(diagnostics)")
     }
 
     @Test("A stale broker is replaced without receiving or replaying the touch request")
