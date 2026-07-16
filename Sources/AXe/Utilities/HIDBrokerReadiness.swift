@@ -9,7 +9,9 @@ extension HIDBroker {
         }
         let identities = processes.compactMap { bootIdentity(processIdentifier: $0.processIdentifier) }
         guard let identity = newestBootIdentity(identities) else {
-            throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) has no active launchd_sim process.")
+            throw CLIError(
+                errorDescription: "Simulator \(simulatorUDID) is not ready for input. Wait for it to finish booting and try again."
+            )
         }
 
         return identity

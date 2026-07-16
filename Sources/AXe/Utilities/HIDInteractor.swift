@@ -37,21 +37,26 @@ struct HIDInteractor {
             logger.info().log("Private frameworks loaded successfully.")
         } catch {
             logger.error().log("Failed to load private frameworks: \(error)")
-            throw CLIError(errorDescription: "SimulatorKit is required for HID interactions. Error: \(error)")
+            throw CLIError(
+                errorDescription: "AXe could not initialize simulator input using the selected Xcode installation. Confirm Xcode 26 or later is selected and try again."
+            )
         }
 
         let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         logger.info().log("FBSimulatorSet obtained.")
 
         guard let simulator = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
-            throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) not found in set.")
+            throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
 
         logger.info().log("Target (FBSimulator) obtained: \(simulator.udid)")
         logger.info().log("Simulator name: \(simulator.name)")
 
         guard simulator.state == .booted else {
-            throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) is not booted. Current state: \(simulator.state)")
+            let stateDescription = FBiOSTargetStateStringFromState(simulator.state)
+            throw CLIError(
+                errorDescription: "Simulator \(simulatorUDID) is not booted. Current state: \(stateDescription)."
+            )
         }
         logger.info().log("Simulator state verified: booted")
 
@@ -74,7 +79,9 @@ struct HIDInteractor {
             currentBootIdentity: connectedBootIdentity
         ) else {
             hidConnections.removeValue(forKey: simulatorUDID)
-            throw CLIError(errorDescription: "Simulator rebooted while AXe was connecting to HID.")
+            throw CLIError(
+                errorDescription: "Simulator \(simulatorUDID) restarted while AXe was connecting. Try the command again."
+            )
         }
         try await HIDBroker.waitForHIDReadiness(
             bootIdentity: connectedBootIdentity,

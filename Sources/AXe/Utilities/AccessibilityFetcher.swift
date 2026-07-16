@@ -40,7 +40,7 @@ struct AccessibilityFetcher {
         let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         
         guard let target = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
-            throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) not found in set.")
+            throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
 
         return try await retryingAfterTestManagerRecovery(
@@ -153,7 +153,9 @@ struct AccessibilityFetcher {
             3
         )
         guard status == 0 else {
-            throw CLIError(errorDescription: "Could not restart testmanagerd for simulator \(simulatorUDID) (simctl exited with status \(status)).")
+            throw CLIError(
+                errorDescription: "AXe could not restore accessibility automation for simulator \(simulatorUDID). Restart the simulator and try again."
+            )
         }
         try await dependencies.wait(.milliseconds(250))
     }
@@ -195,7 +197,7 @@ struct AccessibilityFetcher {
                 kill(process.processIdentifier, SIGKILL)
             }
             process.waitUntilExit()
-            throw CLIError(errorDescription: "Timed out waiting for \(executableURL.path) to finish.")
+            throw CLIError(errorDescription: "AXe timed out while restoring accessibility automation.")
         }
         process.waitUntilExit()
         return process.terminationStatus
@@ -241,7 +243,7 @@ struct AccessibilityFetcher {
 
     static func serializeAccessibilityInfo(_ accessibilityInfo: Any) throws -> Data {
         guard accessibilityInfo is [String: Any] || accessibilityInfo is [[String: Any]] else {
-            throw CLIError(errorDescription: "Accessibility info was not a dictionary or array as expected.")
+            throw CLIError(errorDescription: "AXe received an unsupported accessibility response from the simulator.")
         }
         return try JSONSerialization.data(withJSONObject: accessibilityInfo, options: [.prettyPrinted])
     }

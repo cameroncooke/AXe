@@ -6,7 +6,7 @@ import FBSimulatorControl
 struct TextToHIDEvents {
     
     // MARK: - Error Types
-    enum TextConversionError: Error, LocalizedError {
+    enum TextConversionError: Error, LocalizedError, UserFacingError {
         case unsupportedCharacter(Character)
         
         var errorDescription: String? {
@@ -14,6 +14,10 @@ struct TextToHIDEvents {
             case .unsupportedCharacter(let char):
                 return "No keycode found for character: '\(char)'"
             }
+        }
+
+        var userFacingDescription: String {
+            errorDescription ?? "AXe could not convert the requested text into simulator keyboard input."
         }
     }
     

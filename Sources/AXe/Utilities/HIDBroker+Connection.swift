@@ -11,7 +11,9 @@ private struct HIDBrokerResponse: Codable {
     let error: String?
 }
 
-struct HIDBrokerNotReadyError: Error {}
+struct HIDBrokerNotReadyError: UserFacingError {
+    let userFacingDescription = "AXe could not establish simulator input. Wait for the simulator to finish booting and try again."
+}
 
 struct HIDBrokerSocketIdentity: Equatable {
     let device: dev_t
