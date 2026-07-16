@@ -56,6 +56,17 @@ struct HIDInteractor {
         logger.info().log("Simulator state verified: booted")
 
         let bootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
+        let isDTUHIDSelected = FBXcodeConfiguration.xcodeVersion.majorVersion >= 27 ||
+            FBProcessFetcher().subprocess(
+                of: bootIdentity.processIdentifier,
+                withName: "dtuhidd"
+            ) > 0
+        try await HIDBroker.waitForHIDReadiness(
+            bootIdentity: bootIdentity,
+            isDTUHIDSelected: isDTUHIDSelected,
+            now: Date.init,
+            sleep: { delay in try await Task.sleep(for: .seconds(delay)) }
+        )
         let hid = try await getOrCreateHIDConnection(for: simulator, logger: logger)
         let connectedBootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
         guard HIDBroker.shouldReuseSession(

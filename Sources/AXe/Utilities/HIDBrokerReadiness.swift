@@ -4,32 +4,46 @@ import FBControlCore
 
 extension HIDBroker {
     static func currentBootIdentity(simulatorUDID: String) throws -> HIDBrokerBootIdentity {
-        guard let process = FBProcessFetcher().processes(withProcessName: "launchd_sim").first(where: {
+        let processes = FBProcessFetcher().processes(withProcessName: "launchd_sim").filter {
             $0.arguments.contains { $0.contains(simulatorUDID) }
-        }) else {
+        }
+        let identities = processes.compactMap { bootIdentity(processIdentifier: $0.processIdentifier) }
+        guard let identity = newestBootIdentity(identities) else {
             throw CLIError(errorDescription: "Simulator with UDID \(simulatorUDID) has no active launchd_sim process.")
         }
 
+        return identity
+    }
+
+    private static func bootIdentity(processIdentifier: pid_t) -> HIDBrokerBootIdentity? {
         var processInfo = proc_bsdinfo()
         let expectedSize = MemoryLayout<proc_bsdinfo>.size
         let actualSize = proc_pidinfo(
-            process.processIdentifier,
+            processIdentifier,
             PROC_PIDTBSDINFO,
             0,
             &processInfo,
             Int32(expectedSize)
         )
-        guard actualSize == Int32(expectedSize) else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
-                NSLocalizedDescriptionKey: "HID broker proc_pidinfo failed: \(String(cString: strerror(errno)))"
-            ])
-        }
+        guard actualSize == Int32(expectedSize) else { return nil }
 
         return HIDBrokerBootIdentity(
-            processIdentifier: process.processIdentifier,
+            processIdentifier: processIdentifier,
             startSeconds: processInfo.pbi_start_tvsec,
             startMicroseconds: processInfo.pbi_start_tvusec
         )
+    }
+
+    static func newestBootIdentity(_ identities: [HIDBrokerBootIdentity]) -> HIDBrokerBootIdentity? {
+        identities.max { lhs, rhs in
+            if lhs.startSeconds != rhs.startSeconds {
+                return lhs.startSeconds < rhs.startSeconds
+            }
+            if lhs.startMicroseconds != rhs.startMicroseconds {
+                return lhs.startMicroseconds < rhs.startMicroseconds
+            }
+            return lhs.processIdentifier < rhs.processIdentifier
+        }
     }
 
     static func dtuhidReadinessDelay(

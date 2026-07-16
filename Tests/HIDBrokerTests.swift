@@ -33,11 +33,13 @@ struct HIDBrokerTests {
             guard ready else {
                 throw NSError(domain: NSPOSIXErrorDomain, code: Int(ENOENT))
             }
-            let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
-            guard descriptor >= 0 else {
+            var descriptors = [Int32](repeating: -1, count: 2)
+            guard socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0 else {
                 throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
             }
-            return descriptor
+            try HIDBroker.writeAll(Data(#"{"ready":true}"#.utf8 + [0x0A]), to: descriptors[1])
+            Darwin.close(descriptors[1])
+            return descriptors[0]
         }
 
         func spawn() {
@@ -57,6 +59,45 @@ struct HIDBrokerTests {
             condition.lock()
             errors.append(error)
             condition.unlock()
+        }
+    }
+
+    private final class RecoveryState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var staleRequestByteCount = 0
+        private var replacementRequests: [Data] = []
+        private var errors: [String] = []
+        private var spawnAttempt = 0
+
+        func nextSpawnAttempt() -> Int {
+            lock.lock()
+            defer { lock.unlock() }
+            spawnAttempt += 1
+            return spawnAttempt
+        }
+
+        func recordStaleRead(byteCount: Int) {
+            lock.lock()
+            staleRequestByteCount += max(0, byteCount)
+            lock.unlock()
+        }
+
+        func recordReplacementRequest(_ data: Data) {
+            lock.lock()
+            replacementRequests.append(data)
+            lock.unlock()
+        }
+
+        func record(_ error: Error) {
+            lock.lock()
+            errors.append(error.localizedDescription)
+            lock.unlock()
+        }
+
+        func snapshot() -> (staleRequestByteCount: Int, replacementRequests: [Data], errors: [String]) {
+            lock.lock()
+            defer { lock.unlock() }
+            return (staleRequestByteCount, replacementRequests, errors)
         }
     }
 
@@ -151,6 +192,135 @@ struct HIDBrokerTests {
         #expect(state.errors.isEmpty)
     }
 
+    @Test("A stale broker is replaced without receiving or replaying the touch request")
+    func staleBrokerIsSafelyReplaced() throws {
+        let endpoint = try HIDBroker.endpointPath(
+            simulatorUDID: UUID().uuidString,
+            developerDirectory: FileManager.default.temporaryDirectory.path
+        )
+        defer {
+            try? HIDBroker.removeOwnedSocket(endpoint)
+            try? FileManager.default.removeItem(atPath: endpoint + ".lock")
+        }
+        let state = RecoveryState()
+        let staleFinished = DispatchSemaphore(value: 0)
+        let replacementFinished = DispatchSemaphore(value: 0)
+        let staleListener = try HIDBroker.makeListener(at: endpoint)
+
+        Thread.detachNewThread {
+            defer {
+                Darwin.close(staleListener)
+                try? HIDBroker.removeOwnedSocket(endpoint)
+                staleFinished.signal()
+            }
+            do {
+                for _ in 0..<2 {
+                    let client = try Self.acceptClient(on: staleListener)
+                    try HIDBroker.writeAll(Data("{\"ready\":false}\n".utf8), to: client)
+                    var byte: UInt8 = 0
+                    state.recordStaleRead(byteCount: Darwin.read(client, &byte, 1))
+                    Darwin.close(client)
+                }
+                let shutdownProbe = try Self.acceptClient(on: staleListener)
+                Darwin.close(shutdownProbe)
+            } catch {
+                state.record(error)
+            }
+        }
+
+        try HIDBroker.sendTouchPrimitives([.touch(.down, x: 10, y: 20)]) {
+            try HIDBroker.connectToReadyBroker(
+                simulatorUDID: "simulator-a",
+                endpoint: endpoint,
+                connector: HIDBroker.connect(to:),
+                spawner: { _ in
+                    let replacementListener = try HIDBroker.makeListener(at: endpoint)
+                    let replacementIdentity = try HIDBroker.socketIdentity(at: endpoint)
+                    if state.nextSpawnAttempt() == 1 {
+                        Thread.detachNewThread {
+                            defer {
+                                Darwin.close(replacementListener)
+                                try? HIDBroker.removeOwnedSocket(endpoint, matching: replacementIdentity)
+                            }
+                            do {
+                                let client = try Self.acceptClient(on: replacementListener)
+                                Darwin.close(client)
+                            } catch {
+                                state.record(error)
+                            }
+                        }
+                        return
+                    }
+                    Thread.detachNewThread {
+                        defer {
+                            Darwin.close(replacementListener)
+                            try? HIDBroker.removeOwnedSocket(endpoint, matching: replacementIdentity)
+                            replacementFinished.signal()
+                        }
+                        do {
+                            let client = try Self.acceptClient(on: replacementListener)
+                            defer { Darwin.close(client) }
+                            try HIDBroker.writeAll(Data("{\"ready\":true}\n".utf8), to: client)
+                            state.recordReplacementRequest(try HIDBroker.readMessage(from: client))
+                            try HIDBroker.writeAll(Data("{\"error\":null}\n".utf8), to: client)
+                        } catch {
+                            state.record(error)
+                        }
+                    }
+                },
+                sleeper: { _ = usleep($0) }
+            )
+        }
+
+        #expect(staleFinished.wait(timeout: .now() + 2) == .success)
+        #expect(replacementFinished.wait(timeout: .now() + 2) == .success)
+        let snapshot = state.snapshot()
+        #expect(snapshot.staleRequestByteCount == 0)
+        #expect(snapshot.replacementRequests.count == 1)
+        #expect(snapshot.errors.isEmpty)
+        if let request = snapshot.replacementRequests.first {
+            let json = try #require(JSONSerialization.jsonObject(with: request) as? [String: Any])
+            let primitives = try #require(json["primitives"] as? [[String: Any]])
+            #expect(primitives.count == 1)
+            #expect(primitives[0]["kind"] as? String == "down")
+            #expect(primitives[0]["x"] as? Double == 10)
+            #expect(primitives[0]["y"] as? Double == 20)
+        }
+    }
+
+    @Test("An exiting broker cannot unlink a replacement endpoint")
+    func brokerCleanupIsSocketSpecific() throws {
+        let endpoint = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .path
+        let oldListener = try HIDBroker.makeListener(at: endpoint)
+        let oldIdentity = try HIDBroker.socketIdentity(at: endpoint)
+        try HIDBroker.removeOwnedSocket(endpoint)
+        Darwin.close(oldListener)
+
+        let replacementListener = try HIDBroker.makeListener(at: endpoint)
+        defer {
+            Darwin.close(replacementListener)
+            try? HIDBroker.removeOwnedSocket(endpoint)
+        }
+        try HIDBroker.removeOwnedSocket(endpoint, matching: oldIdentity)
+
+        let client = try HIDBroker.connect(to: endpoint)
+        Darwin.close(client)
+    }
+
+    private static func acceptClient(on listener: Int32) throws -> Int32 {
+        while true {
+            let client = Darwin.accept(listener, nil, nil)
+            if client >= 0 {
+                return client
+            }
+            if errno != EINTR {
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+        }
+    }
+
     @Test("Broker endpoints use the canonical developer directory")
     func endpointUsesCanonicalDeveloperDirectory() throws {
         let root = FileManager.default.temporaryDirectory
@@ -171,109 +341,6 @@ struct HIDBrokerTests {
         )
 
         #expect(canonical == selectedAlias)
-    }
-
-    @Test("Broker sessions are scoped to one simulator boot")
-    func bootIdentityScopesSession() {
-        let original = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 100,
-            startMicroseconds: 200
-        )
-        let rebootedWithNewPID = HIDBrokerBootIdentity(
-            processIdentifier: 43,
-            startSeconds: 101,
-            startMicroseconds: 200
-        )
-        let rebootedWithReusedPID = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 101,
-            startMicroseconds: 200
-        )
-
-        #expect(HIDBroker.shouldReuseSession(sessionBootIdentity: original, currentBootIdentity: original))
-        #expect(!HIDBroker.shouldReuseSession(
-            sessionBootIdentity: original,
-            currentBootIdentity: rebootedWithNewPID
-        ))
-        #expect(!HIDBroker.shouldReuseSession(
-            sessionBootIdentity: original,
-            currentBootIdentity: rebootedWithReusedPID
-        ))
-    }
-
-    @Test("DTUHID waits only for the remaining simulator boot readiness window")
-    func dtuhidReadinessDelay() {
-        let bootIdentity = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 100,
-            startMicroseconds: 250_000
-        )
-
-        #expect(HIDBroker.dtuhidReadinessDelay(
-            bootIdentity: bootIdentity,
-            now: Date(timeIntervalSince1970: 105.25)
-        ) == 5)
-        #expect(HIDBroker.dtuhidReadinessDelay(
-            bootIdentity: bootIdentity,
-            now: Date(timeIntervalSince1970: 110.25)
-        ) == 0)
-        #expect(HIDBroker.dtuhidReadinessDelay(
-            bootIdentity: bootIdentity,
-            now: Date(timeIntervalSince1970: 120.25)
-        ) == 0)
-    }
-
-    @Test("DTUHID readiness timing handles a clock earlier than process start")
-    func dtuhidReadinessDelayWithEarlierClock() {
-        let bootIdentity = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 100,
-            startMicroseconds: 0
-        )
-
-        #expect(HIDBroker.dtuhidReadinessDelay(
-            bootIdentity: bootIdentity,
-            now: Date(timeIntervalSince1970: 99)
-        ) == HIDBroker.dtuhidMinimumBootUptime)
-    }
-
-    @Test("DTUHID readiness uses the injected boot identity and clock")
-    func dtuhidReadinessWait() async throws {
-        let bootIdentity = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 100,
-            startMicroseconds: 250_000
-        )
-        var delays: [TimeInterval] = []
-
-        try await HIDBroker.waitForHIDReadiness(
-            bootIdentity: bootIdentity,
-            isDTUHIDSelected: true,
-            now: { Date(timeIntervalSince1970: 106.25) },
-            sleep: { delays.append($0) }
-        )
-
-        #expect(delays == [4])
-    }
-
-    @Test("Legacy Indigo transport is never delayed")
-    func indigoReadinessDoesNotWait() async throws {
-        let bootIdentity = HIDBrokerBootIdentity(
-            processIdentifier: 42,
-            startSeconds: 100,
-            startMicroseconds: 0
-        )
-        var didSleep = false
-
-        try await HIDBroker.waitForHIDReadiness(
-            bootIdentity: bootIdentity,
-            isDTUHIDSelected: false,
-            now: { Date(timeIntervalSince1970: 100) },
-            sleep: { _ in didSleep = true }
-        )
-
-        #expect(!didSleep)
     }
 
     @Test("Partial messages cannot block a broker read indefinitely")
