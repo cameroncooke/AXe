@@ -15,7 +15,7 @@ enum AccessibilityQuery {
     }
 }
 
-enum ElementResolutionError: LocalizedError {
+enum ElementResolutionError: LocalizedError, UserFacingError {
     case notFound(kind: String, value: String)
     case multipleMatches(count: Int, kind: String, value: String, hasUniqueIDs: Bool)
     case invalidFrame(reason: String)
@@ -41,6 +41,10 @@ enum ElementResolutionError: LocalizedError {
     var isNotFound: Bool {
         if case .notFound = self { return true }
         return false
+    }
+
+    var userFacingDescription: String {
+        errorDescription ?? "AXe could not resolve the requested accessibility element."
     }
 }
 

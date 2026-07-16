@@ -11,13 +11,15 @@ func performGlobalSetup(logger: AxeLogger) async throws {
     do {
         let xcodePath = try FBXcodeDirectory.resolveDeveloperDirectory()
         if xcodePath.isEmpty {
-            let errorMessage = "Xcode is not available (xcode-select path is empty). FBSimulatorControl may not function correctly."
+            let errorMessage = "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again."
             logger.error().log(errorMessage)
             throw CLIError(errorDescription: errorMessage)
         }
         logger.info().log("Xcode is available at: \(xcodePath)")
+    } catch let error as CLIError {
+        throw error
     } catch {
-        let errorMessage = "Failed to check Xcode availability: \(error.localizedDescription)"
+        let errorMessage = "AXe could not resolve the active Xcode installation: \(error.localizedDescription)"
         logger.error().log(errorMessage)
         throw CLIError(errorDescription: errorMessage)
     }
@@ -33,7 +35,7 @@ func performGlobalSetup(logger: AxeLogger) async throws {
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
         logger.info().log("Successfully loaded Xcode frameworks.")
     } catch {
-        let errorMessage = "Failed to load essential private frameworks: \(error.localizedDescription)"
+        let errorMessage = "AXe could not load simulator support from the selected Xcode installation: \(error.localizedDescription)"
         logger.error().log(errorMessage)
         throw CLIError(errorDescription: errorMessage)
     }

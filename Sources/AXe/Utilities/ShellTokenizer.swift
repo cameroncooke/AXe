@@ -1,7 +1,7 @@
 import Foundation
 
 struct ShellTokenizer {
-    enum TokenizerError: LocalizedError {
+    enum TokenizerError: LocalizedError, UserFacingError {
         case unterminatedSingleQuote
         case unterminatedDoubleQuote
         case danglingEscape
@@ -15,6 +15,10 @@ struct ShellTokenizer {
             case .danglingEscape:
                 return "Dangling escape sequence in batch step."
             }
+        }
+
+        var userFacingDescription: String {
+            errorDescription ?? "AXe could not parse the batch step."
         }
     }
 
@@ -147,4 +151,3 @@ struct ShellTokenizer {
         return tokens
     }
 }
-

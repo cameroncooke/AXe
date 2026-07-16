@@ -47,9 +47,22 @@ final class SignalObserver {
     }
 }
 
-enum VideoProcessingError: Error {
+enum VideoProcessingError: LocalizedError, UserFacingError {
     case failedToDecodeImage
     case failedToAllocatePixelBuffer
+
+    var userFacingDescription: String {
+        switch self {
+        case .failedToDecodeImage:
+            return "AXe could not decode a simulator video frame."
+        case .failedToAllocatePixelBuffer:
+            return "AXe could not allocate memory for a simulator video frame."
+        }
+    }
+
+    var errorDescription: String? {
+        userFacingDescription
+    }
 }
 
 struct VideoFrameUtilities {

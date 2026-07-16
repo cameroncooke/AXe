@@ -43,7 +43,8 @@ struct InitTests {
 
         let failedResult = try await TestHelpers.runAxeCommandAllowFailure("init --dest \(skillsDir.path)")
         #expect(failedResult.exitCode != 0)
-        #expect(failedResult.output.contains("--force"))
+        #expect(failedResult.output.contains("Skill already installed at \(installedFile.path). Re-run with --force to overwrite."))
+        #expect(!failedResult.output.contains("CLIError(errorDescription:"))
 
         _ = try await TestHelpers.runAxeCommand("init --dest \(skillsDir.path) --force")
         let newContent = try String(contentsOf: installedFile, encoding: .utf8)
