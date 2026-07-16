@@ -52,6 +52,7 @@ show_usage() {
     echo "  -h, --help          Show this help message"
     echo "  -b, --build-only    Only build AXe and playground app (skip tests)"
     echo "  -t, --tests-only    Only run tests (skip building)"
+    echo "  -u, --unit-tests    Build dependencies and run non-E2E Swift tests without a simulator"
     echo "  -c, --clean         Clean build before building"
     echo "  -s, --sequential    Run suites one-by-one (single simulator-safe flow)"
     echo "  -v, --verbose       Verbose output"
@@ -85,6 +86,7 @@ show_usage() {
     echo "  $0 SwipeTests       # Build everything and run only swipe tests"
     echo "  $0 DragTests        # Build everything and run only drag tests"
     echo "  $0 -t SwipeTests    # Skip building, run only swipe tests"
+    echo "  $0 -u               # Build and run non-E2E Swift tests without a simulator"
     echo "  $0 -b               # Only build, skip tests"
     echo "  $0 -c               # Clean build and run all tests"
 }
@@ -92,10 +94,20 @@ show_usage() {
 # Parse command line arguments
 BUILD_ONLY=false
 TESTS_ONLY=false
+UNIT_TESTS=false
 CLEAN_BUILD=false
 SEQUENTIAL=true
 VERBOSE=false
 TEST_FILTER=""
+SWIFT_BUILD_LOG=""
+
+cleanup_test_runner() {
+    if [[ -n "$SWIFT_BUILD_LOG" && -f "$SWIFT_BUILD_LOG" ]]; then
+        rm "$SWIFT_BUILD_LOG"
+    fi
+}
+
+trap cleanup_test_runner EXIT
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -109,6 +121,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -t|--tests-only)
             TESTS_ONLY=true
+            shift
+            ;;
+        -u|--unit-tests)
+            UNIT_TESTS=true
             shift
             ;;
         -c|--clean)
@@ -135,6 +151,12 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [[ "$UNIT_TESTS" == true ]] &&
+   [[ "$BUILD_ONLY" == true || "$TESTS_ONLY" == true || "$CLEAN_BUILD" == true || -n "$TEST_FILTER" ]]; then
+    print_error "--unit-tests cannot be combined with build, E2E test, clean, or test-filter options."
+    exit 1
+fi
+
 # Function to check prerequisites
 check_prerequisites() {
     print_header "Checking Prerequisites"
@@ -157,7 +179,7 @@ check_prerequisites() {
         exit 1
     fi
 
-    if ! command -v jq &> /dev/null; then
+    if [[ "$UNIT_TESTS" != true ]] && ! command -v jq &> /dev/null; then
         print_error "jq not found. Install jq to select the matching simulator runtime."
         exit 1
     fi
@@ -237,10 +259,15 @@ build_axe() {
     print_info "Building AXe CLI tool..."
     if [[ "$VERBOSE" == true ]]; then
         run_selected_swift build --build-tests
-    elif ! run_selected_swift build --build-tests > /tmp/axe-e2e-swift-build.log 2>&1; then
-        print_error "Failed to build AXe with Xcode $SELECTED_XCODE_VERSION. Build output:"
-        tail -80 /tmp/axe-e2e-swift-build.log
-        exit 1
+    else
+        SWIFT_BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/axe-e2e-swift-build.XXXXXX")"
+        if ! run_selected_swift build --build-tests > "$SWIFT_BUILD_LOG" 2>&1; then
+            print_error "Failed to build AXe with Xcode $SELECTED_XCODE_VERSION. Build output:"
+            tail -80 "$SWIFT_BUILD_LOG"
+            exit 1
+        fi
+        rm "$SWIFT_BUILD_LOG"
+        SWIFT_BUILD_LOG=""
     fi
 
     local axe_bin_path
@@ -285,6 +312,22 @@ ensure_test_framework_rpaths() {
 
         ln -s "../$framework_name" "$link_path"
     done
+}
+
+run_unit_tests() {
+    print_header "Running Non-E2E Swift Tests"
+
+    ensure_test_framework_rpaths
+    AXE_BIN_PATH="$(run_selected_swift build --show-bin-path)/axe"
+    export AXE_BIN_PATH
+    export AXE_E2E=0
+    export AXE_LANDSCAPE_E2E=0
+
+    local args=(--skip-build --no-parallel)
+    [[ "$VERBOSE" == true ]] && args+=(--verbose)
+    print_info "Test command: swift test ${args[*]}"
+    run_selected_swift test "${args[@]}"
+    print_success "Non-E2E Swift tests passed"
 }
 
 # Function to build and install playground app
@@ -486,6 +529,17 @@ main() {
 
     # Always check prerequisites
     check_prerequisites
+
+    if [[ "$UNIT_TESTS" == true ]]; then
+        build_idb_xcframeworks
+        build_axe
+        run_unit_tests
+        print_header "Summary"
+        print_success "Non-E2E Swift build and tests completed successfully"
+        print_info "AXe executable: $(run_selected_swift build --show-bin-path)/axe"
+        return
+    fi
+
     ensure_e2e_runtime_host || {
         print_error "Could not start the Xcode 27 Device Hub runtime host."
         exit 1

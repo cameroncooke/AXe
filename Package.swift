@@ -19,7 +19,9 @@ let idbPrivateHeaderSearchFlags = [
     idbPrivateHeadersDirectory.appendingPathComponent("CoreSimulator", isDirectory: true),
     idbPrivateHeadersDirectory.appendingPathComponent("CoreSimulatorUtilities", isDirectory: true),
     idbPrivateHeadersDirectory.appendingPathComponent("SimulatorKit", isDirectory: true),
-].flatMap { ["-I", $0.path] }
+// Keep each search path in one token. SwiftPM can otherwise drop the path while propagating
+// unsafe flags to its generated test runner, leaving a bare `-I` that consumes the next option.
+].map { "-I\($0.path)" }
 
 let package = Package(
     name: "AXe",
