@@ -33,6 +33,24 @@ struct CLIErrorTests {
             String(describing: HIDBrokerNotReadyError())
                 == "AXe could not establish simulator input. Wait for the simulator to finish booting and try again."
         )
+        #expect(
+            HIDBrokerNotReadyError().localizedDescription
+                == "AXe could not establish simulator input. Wait for the simulator to finish booting and try again."
+        )
+    }
+
+    @Test("Broker responses expose only curated errors")
+    func brokerResponsesAreUserFacing() {
+        let curatedError = CLIError(errorDescription: "A useful recovery message.")
+        let frameworkError = NSError(
+            domain: "PrivateFramework",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Internal transport implementation detail"]
+        )
+
+        #expect(HIDBroker.brokerResponseDescription(for: curatedError) == "A useful recovery message.")
+        #expect(HIDBroker.brokerResponseDescription(for: frameworkError) == HIDBroker.inputDeliveryFailureDescription)
+        #expect(!HIDBroker.brokerResponseDescription(for: frameworkError).contains("implementation detail"))
     }
 
     @Test("Missing simulator errors use public terminology and provide recovery guidance")

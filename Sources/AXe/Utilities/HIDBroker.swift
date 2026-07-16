@@ -35,6 +35,7 @@ struct HIDBrokerBootIdentity: Equatable {
 }
 
 enum HIDBroker {
+    static let inputDeliveryFailureDescription = "AXe could not deliver simulator input. The simulator may have restarted or disconnected. Confirm it is booted and try again."
     static let dtuhidMinimumBootUptime: TimeInterval = 10
     private static let protocolVersion = 2
     static let maximumMessageBytes = 64 * 1024
@@ -171,9 +172,17 @@ enum HIDBroker {
             }
             try writeResponse(error: nil, to: client)
         } catch {
-            try? writeResponse(error: error.localizedDescription, to: client)
+            logger.error().log("HID broker request failed: \(error.localizedDescription)")
+            try? writeResponse(error: brokerResponseDescription(for: error), to: client)
         }
         return shouldContinue
+    }
+
+    static func brokerResponseDescription(for error: Error) -> String {
+        if let userFacingError = error as? UserFacingError {
+            return userFacingError.userFacingDescription
+        }
+        return inputDeliveryFailureDescription
     }
 
     static func endpointPath(simulatorUDID: String) throws -> String {
