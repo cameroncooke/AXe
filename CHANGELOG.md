@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Xcode 26 E2E setup and managed IDB cache recovery, including incomplete custom `IDB_CHECKOUT_DIR` checkouts created by AXe.
 - Fixed HID broker crash and simulator-reboot recovery so concurrent cold starts spawn one broker, stale sessions are replaced before sending the first touch request, ambiguous touch requests are never replayed, and broker identity follows the selected Xcode.
 - Fixed runtime failures printing raw error implementation details and internal simulator terminology instead of actionable, user-facing messages.
+- Fixed transient Xcode 27 accessibility point lookups returning the screen root instead of the targeted element.
+- Fixed E2E fixture relaunches racing Device Hub by verifying the requested screen before interacting.
 
 ## [v1.7.1] - 2026-06-02
 
