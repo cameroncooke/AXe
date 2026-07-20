@@ -66,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           PINNED_IDB_URL=$(grep '^IDB_GIT_URL=' scripts/build.sh | sed -E 's/^IDB_GIT_URL="\$\{IDB_GIT_URL:-([^}]*)\}"$/\1/')
-          PINNED_IDB_COMMIT=$(grep '^IDB_GIT_REF=' scripts/build.sh | sed -E 's/^IDB_GIT_REF="\$\{IDB_GIT_REF:-([^}]*)\}"$/\1/')
+          PINNED_IDB_COMMIT=$(grep '^DEFAULT_IDB_GIT_REF=' scripts/build.sh | sed -E 's/^DEFAULT_IDB_GIT_REF="([^"]+)"$/\1/')
           PINNED_IDB_UPSTREAM_BASE=$(grep '^IDB_UPSTREAM_BASE_REF=' scripts/build.sh | sed -E 's/^IDB_UPSTREAM_BASE_REF="\$\{IDB_UPSTREAM_BASE_REF:-([^}]*)\}"$/\1/')
           SOURCE_IDENTITY=$(printf '%s\n%s\n%s\n' "$PINNED_IDB_URL" "$PINNED_IDB_COMMIT" "$PINNED_IDB_UPSTREAM_BASE" | shasum -a 256 | awk '{print $1}')
           BUILD_PIPELINE_HASH=$(printf '%s\n%s\n' "$(shasum -a 256 scripts/build.sh Package.swift)" "$(xcodegen --version)" | shasum -a 256 | awk '{print $1}')
