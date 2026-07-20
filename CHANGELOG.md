@@ -5,29 +5,23 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v1.8.0] - 2026-07-20
+
+### Added
+
+- Added Xcode 27 and iOS 27 simulator automation through Device Hub without requiring Simulator.app, while retaining Xcode 26 support ([#60](https://github.com/cameroncooke/AXe/pull/60) by [@jkaunert](https://github.com/jkaunert)). See [Xcode compatibility](README.md#xcode-compatibility).
 
 ### Changed
 
-- Changed the IDB integration to consume an immutable full-SHA-pinned AXe fork instead of applying local patches during builds.
-- Changed build and release validation to record Xcode build identifiers as provenance instead of requiring exact toolchain and runtime builds.
-- Changed BGRA video streams to honor the requested `--fps` value consistently with the other stream formats instead of using an uncapped native frame rate.
+- Strengthened release supply-chain integrity with immutable, verified IDB sources and stricter validation of release inputs and signing identities.
 
 ### Fixed
 
-- Fixed IDB framework builds failing on incomplete generated checkouts by replacing the cache with a clean clone.
-- Fixed `make e2e` under Xcode 27 by rebuilding IDB frameworks with the selected toolchain, selecting the matching iOS 27 simulator, and launching Device Hub before running tests.
-- Fixed simulator automation with Xcode 27 Beta 3 (27A5218g) while retaining Xcode 26 support by updating the IDB integration, selecting the compatible HID transport, and bootstrapping accessibility through Xcode's current private-framework path.
-- Fixed `test-runner.sh` loading AXe's binary target frameworks with newer SwiftPM layouts while remaining compatible with Xcode 26.
-- Fixed E2E test hangs by resolving the `axe` executable path before `swift test` starts instead of invoking SwiftPM from inside test cases.
-- Fixed release archives embedding AppleDouble (`._*`) metadata files that broke strict Gatekeeper verification of the bundled frameworks by sanitizing staged payloads and excluding filesystem metadata from zip and tar packaging.
-- Fixed `build.sh` blocking on an interactive git pager during IDB checkout verification when run in a terminal.
-- Fixed Xcode 26 E2E setup and managed IDB cache recovery, including incomplete custom `IDB_CHECKOUT_DIR` checkouts created by AXe.
-- Fixed HID broker crash and simulator-reboot recovery so concurrent cold starts spawn one broker, stale sessions are replaced before sending the first touch request, ambiguous touch requests are never replayed, and broker identity follows the selected Xcode.
-- Fixed runtime failures printing raw error implementation details and internal simulator terminology instead of actionable, user-facing messages.
-- Fixed transient Xcode 27 accessibility point lookups returning the screen root instead of the targeted element.
-- Fixed E2E fixture relaunches racing Device Hub by verifying the requested screen before interacting.
-- Fixed Xcode 27-selected commands applying Device Hub accessibility and HID readiness behavior to iOS 26 simulators instead of selecting the protocol from the targeted simulator runtime and services.
+- Fixed BGRA video streams ignoring the requested `--fps` value and running at an uncapped frame rate.
+- Fixed release archives failing strict Gatekeeper verification because of embedded filesystem metadata.
+- Fixed commands exposing low-level simulator errors instead of actionable failure messages.
+
+Various other internal improvements to stability, performance, and code quality.
 
 ## [v1.7.1] - 2026-06-02
 
