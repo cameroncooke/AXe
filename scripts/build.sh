@@ -56,7 +56,8 @@ DEFAULT_IDB_CHECKOUT_DIR="${REPO_ROOT}/idb_checkout"
 IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-${DEFAULT_IDB_CHECKOUT_DIR}}"
 IDB_CHECKOUT_DIR="$(cd "$(dirname "$IDB_CHECKOUT_DIR")" && pwd)/$(basename "$IDB_CHECKOUT_DIR")"
 IDB_GIT_URL="${IDB_GIT_URL:-https://github.com/cameroncooke/idb.git}"
-IDB_GIT_REF="${IDB_GIT_REF:-1395103ca786ee990c70514e1f8bb75fa98cdd82}"
+DEFAULT_IDB_GIT_REF="604c51013438f0c3603b720a05a44b7c5b8f286d"
+IDB_GIT_REF="${IDB_GIT_REF:-${DEFAULT_IDB_GIT_REF}}"
 IDB_UPSTREAM_BASE_REF="${IDB_UPSTREAM_BASE_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
@@ -1243,7 +1244,7 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
   AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
   IDB_GIT_URL            AXe IDB fork URL (default: https://github.com/cameroncooke/idb.git)
-  IDB_GIT_REF            Exact fork revision (default: 1395103ca786ee990c70514e1f8bb75fa98cdd82)
+  IDB_GIT_REF            Exact fork revision (default: ${DEFAULT_IDB_GIT_REF})
   IDB_UPSTREAM_BASE_REF  Verified upstream base (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)

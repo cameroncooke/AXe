@@ -59,6 +59,10 @@ extension HIDBroker {
         return max(0, minimumUptime - uptime)
     }
 
+    static func isDTUHIDSelected(processIdentifier: pid_t) -> Bool {
+        processIdentifier > 0
+    }
+
     static func waitForHIDReadiness(
         bootIdentity: HIDBrokerBootIdentity,
         isDTUHIDSelected: Bool,

@@ -31,7 +31,7 @@ AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hu
 
 Release artifacts are built once with the Xcode version selected by the release environment and run unchanged with either supported Xcode selected. Compatibility was validated with Xcode 26.5 (build `17F42`) and iOS 26.5 (`23F77`), and with Xcode 27 Beta 3 (build `27A5218g`) and iOS 27 (`24A5380g`).
 
-AXe builds IDB from the immutable fork revision `cameroncooke/idb@1395103ca786ee990c70514e1f8bb75fa98cdd82`, based on upstream IDB `e682506725e9efefb9c43b8b917c0b12eb2a5939`. The build does not apply a local patch queue.
+AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build does not apply a local patch queue.
 
 ## E2E development
 

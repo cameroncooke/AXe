@@ -61,11 +61,13 @@ struct HIDInteractor {
         logger.info().log("Simulator state verified: booted")
 
         let bootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
-        let isDTUHIDSelected = FBXcodeConfiguration.xcodeVersion.majorVersion >= 27 ||
-            FBProcessFetcher().subprocess(
-                of: bootIdentity.processIdentifier,
-                withName: "dtuhidd"
-            ) > 0
+        let dtuhidProcessIdentifier = FBProcessFetcher().subprocess(
+            of: bootIdentity.processIdentifier,
+            withName: "dtuhidd"
+        )
+        let isDTUHIDSelected = HIDBroker.isDTUHIDSelected(
+            processIdentifier: dtuhidProcessIdentifier
+        )
         try await HIDBroker.waitForHIDReadiness(
             bootIdentity: bootIdentity,
             isDTUHIDSelected: isDTUHIDSelected,

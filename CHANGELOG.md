@@ -27,6 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed runtime failures printing raw error implementation details and internal simulator terminology instead of actionable, user-facing messages.
 - Fixed transient Xcode 27 accessibility point lookups returning the screen root instead of the targeted element.
 - Fixed E2E fixture relaunches racing Device Hub by verifying the requested screen before interacting.
+- Fixed Xcode 27-selected commands applying Device Hub accessibility and HID readiness behavior to iOS 26 simulators instead of selecting the protocol from the targeted simulator runtime and services.
 
 ## [v1.7.1] - 2026-06-02
 

@@ -85,6 +85,16 @@ struct HIDBrokerReadinessTests {
         ) == HIDBroker.dtuhidMinimumBootUptime)
     }
 
+    @Test("A selected Xcode does not imply DTUHID without a simulator process")
+    func missingDTUHIDProcessSelectsIndigo() {
+        #expect(!HIDBroker.isDTUHIDSelected(processIdentifier: 0))
+    }
+
+    @Test("A simulator DTUHID process selects DTUHID readiness")
+    func dtuhidProcessSelectsDTUHID() {
+        #expect(HIDBroker.isDTUHIDSelected(processIdentifier: 42))
+    }
+
     @Test("DTUHID readiness uses the injected boot identity and clock")
     func dtuhidReadinessWait() async throws {
         let bootIdentity = HIDBrokerBootIdentity(
