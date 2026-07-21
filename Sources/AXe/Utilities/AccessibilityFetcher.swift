@@ -46,7 +46,8 @@ struct AccessibilityFetcher {
         return try await retryingAfterAccessibilityRecovery(
             simulatorUDID: simulatorUDID,
             logger: logger,
-            dependencies: recoveryDependencies
+            dependencies: recoveryDependencies,
+            allowsCoreSimulatorBridgeRecovery: point == nil
         ) {
             if let point {
                 return try await fetchAccessibilityInfoJSONData(from: target, at: point)

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed persistent accessibility translation failures by retrying transient failures and restarting only the affected simulator's CoreSimulator bridge when recovery is required ([#458](https://github.com/getsentry/XcodeBuildMCP/issues/458)).
+- Fixed persistent frontmost-hierarchy accessibility translation failures with bounded readiness polling and coordinated recovery of only the affected simulator's CoreSimulator bridge ([#458](https://github.com/getsentry/XcodeBuildMCP/issues/458)).
 
 ## [v1.8.0] - 2026-07-20
 
