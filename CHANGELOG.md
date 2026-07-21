@@ -5,6 +5,12 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed persistent accessibility translation failures by retrying transient failures and restarting only the affected simulator's CoreSimulator bridge when recovery is required ([#458](https://github.com/getsentry/XcodeBuildMCP/issues/458)).
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

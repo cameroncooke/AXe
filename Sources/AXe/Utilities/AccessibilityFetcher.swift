@@ -43,7 +43,7 @@ struct AccessibilityFetcher {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
 
-        return try await retryingAfterTestManagerRecovery(
+        return try await retryingAfterAccessibilityRecovery(
             simulatorUDID: simulatorUDID,
             logger: logger,
             dependencies: recoveryDependencies
@@ -120,27 +120,6 @@ struct AccessibilityFetcher {
         return latestData
     }
 
-    static func retryingAfterTestManagerRecovery<T>(
-        simulatorUDID: String,
-        logger: AxeLogger,
-        dependencies: AccessibilityRecoveryDependencies,
-        operation: @MainActor () async throws -> T
-    ) async throws -> T {
-        do {
-            return try await operation()
-        } catch {
-            guard shouldRecoverTestManagerDaemon(from: error) else {
-                throw error
-            }
-            logger.info().log("Accessibility transport failed; restarting testmanagerd and retrying once")
-            try await recoverTestManagerDaemon(
-                simulatorUDID: simulatorUDID,
-                dependencies: dependencies
-            )
-            return try await operation()
-        }
-    }
-
     static func shouldRecoverTestManagerDaemon(from error: Error) -> Bool {
         let errors = errorChain(from: error)
         let details = errors.flatMap { error in
@@ -197,7 +176,7 @@ struct AccessibilityFetcher {
         try await dependencies.wait(.milliseconds(250))
     }
 
-    private static func errorChain(from error: Error) -> [NSError] {
+    static func errorChain(from error: Error) -> [NSError] {
         var errors: [NSError] = []
         var current: NSError? = error as NSError
         var visited: Set<ObjectIdentifier> = []

@@ -376,7 +376,7 @@ struct AccessibilityFetcherTests {
             userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"]
         )
 
-        let result = try await AccessibilityFetcher.retryingAfterTestManagerRecovery(
+        let result = try await AccessibilityFetcher.retryingAfterAccessibilityRecovery(
             simulatorUDID: "TEST-UDID",
             logger: AxeLogger(),
             dependencies: dependencies
@@ -411,7 +411,7 @@ struct AccessibilityFetcherTests {
         )
 
         do {
-            _ = try await AccessibilityFetcher.retryingAfterTestManagerRecovery(
+            _ = try await AccessibilityFetcher.retryingAfterAccessibilityRecovery(
                 simulatorUDID: "TEST-UDID",
                 logger: AxeLogger(),
                 dependencies: dependencies
@@ -445,7 +445,7 @@ struct AccessibilityFetcherTests {
         )
 
         do {
-            _ = try await AccessibilityFetcher.retryingAfterTestManagerRecovery(
+            _ = try await AccessibilityFetcher.retryingAfterAccessibilityRecovery(
                 simulatorUDID: "TEST-UDID",
                 logger: AxeLogger(),
                 dependencies: dependencies
