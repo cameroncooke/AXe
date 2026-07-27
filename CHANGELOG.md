@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added Claude Code and Codex plugin marketplaces for installing the bundled AXe skill.
 
+### Changed
+
+- Changed `axe init` to install and uninstall the AXe skill through the Claude Code and Codex marketplaces while retaining direct installation through `--client agents` for `~/.agents/skills` and through custom destinations.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

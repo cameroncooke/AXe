@@ -1,16 +1,17 @@
-OVERVIEW: Install AXe skill files for detected AI clients.
+OVERVIEW: Install the AXe skill directly or through the Claude Code or Codex
+marketplace.
 
 USAGE: axe init [--client <client>] [--dest <dest>] [--force] [--uninstall] [--print]
 
 OPTIONS:
-  --client <client>       Target client: auto, claude, or agents. Defaults to
-                          auto-detect. (values: auto, claude, agents; default:
-                          auto)
-  --dest <dest>           Custom destination skills directory (overrides
-                          --client).
-  --force                 Overwrite an existing installed skill.
-  --uninstall             Remove installed AXe skill from target directories.
+  --client <client>       Target client: auto, agents, claude, or codex.
+                          Defaults to auto-detect. (values: auto, agents,
+                          claude, codex; default: auto)
+  --dest <dest>           Custom destination skills directory instead of a
+                          marketplace.
+  --force                 Reinstall the marketplace plugin or overwrite a
+                          custom destination.
+  --uninstall             Uninstall the marketplace plugin or custom skill.
   --print                 Print bundled skill content to stdout.
   --version               Show the version.
   -h, --help              Show help information.
-

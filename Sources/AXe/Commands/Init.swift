@@ -5,25 +5,29 @@ import Foundation
 struct Init: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "init",
-        abstract: "Install AXe skill files for detected AI clients."
+        abstract: "Install the AXe skill directly or through the Claude Code or Codex marketplace."
     )
+
+    private static let marketplaceSource = "cameroncooke/AXe"
+    private static let pluginIdentifier = "axe@axe"
 
     enum Client: String, ExpressibleByArgument, CaseIterable {
         case auto
-        case claude
         case agents
+        case claude
+        case codex
     }
 
-    @Option(help: "Target client: auto, claude, or agents. Defaults to auto-detect.")
+    @Option(help: "Target client: auto, agents, claude, or codex. Defaults to auto-detect.")
     var client: Client = .auto
 
-    @Option(help: "Custom destination skills directory (overrides --client).")
+    @Option(help: "Custom destination skills directory instead of a marketplace.")
     var dest: String?
 
-    @Flag(help: "Overwrite an existing installed skill.")
+    @Flag(help: "Reinstall the marketplace plugin or overwrite a custom destination.")
     var force: Bool = false
 
-    @Flag(help: "Remove installed AXe skill from target directories.")
+    @Flag(help: "Uninstall the marketplace plugin or custom skill.")
     var uninstall: Bool = false
 
     @Flag(name: .customLong("print"), help: "Print bundled skill content to stdout.")
@@ -59,25 +63,44 @@ struct Init: AsyncParsableCommand {
             return
         }
 
-        let targets = try resolveTargets(for: uninstall ? .uninstall : .install)
-
-        if uninstall {
-            try uninstallSkill(from: targets)
+        if let destination = dest {
+            let resolvedDestination = try Self.resolveDestinationURL(from: destination)
+            if uninstall {
+                try uninstallSkill(from: resolvedDestination)
+            } else {
+                try installSkill(to: resolvedDestination)
+            }
             return
         }
 
-        try installSkill(to: targets)
+        if client == .agents {
+            let agentsDestination = Self.agentsSkillsDirectory()
+            if uninstall {
+                try uninstallSkill(from: agentsDestination)
+            } else {
+                try installSkill(to: agentsDestination)
+            }
+            return
+        }
+
+        let targets = try resolveMarketplaceClients(for: uninstall ? .uninstall : .install)
+        if uninstall {
+            try uninstallMarketplacePlugin(from: targets)
+        } else {
+            try installMarketplacePlugin(for: targets)
+        }
     }
 
-    private enum Operation {
+    private enum Operation: Equatable {
         case install
         case uninstall
     }
 
-    private struct ClientInfo {
-        let id: Client
+    private struct MarketplaceClient {
         let name: String
-        let skillsDirectory: URL
+        let executable: String
+        let installArguments: [String]
+        let uninstallArguments: [String]
     }
 
     private static func loadSkillMarkdown() throws -> String {
@@ -96,142 +119,212 @@ struct Init: AsyncParsableCommand {
         }
     }
 
-    private func installSkill(to targets: [ClientInfo]) throws {
-        let skillMarkdown = try Self.loadSkillMarkdown()
-        var installedPaths: [String] = []
+    private func installMarketplacePlugin(for targets: [MarketplaceClient]) throws {
+        guard !targets.isEmpty else {
+            throw CLIError(errorDescription: "No marketplace clients resolved.")
+        }
 
         for target in targets {
-            let targetDirectory = target.skillsDirectory.appendingPathComponent("axe", isDirectory: true)
-            let targetFile = targetDirectory.appendingPathComponent("SKILL.md", isDirectory: false)
-
-            if FileManager.default.fileExists(atPath: targetFile.path), !force {
-                throw CLIError(
-                    errorDescription: "Skill already installed at \(targetFile.path). Re-run with --force to overwrite."
+            if force {
+                _ = try? runMarketplaceCommand(
+                    executable: target.executable,
+                    arguments: target.uninstallArguments,
+                    for: target.name
                 )
             }
 
-            do {
-                try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
-                try skillMarkdown.write(to: targetFile, atomically: true, encoding: .utf8)
-                installedPaths.append("\(target.name): \(targetFile.path)")
-            } catch {
-                throw CLIError(
-                    errorDescription: "Failed to install AXe skill for \(target.name): \(error.localizedDescription)"
-                )
-            }
-        }
-
-        if installedPaths.isEmpty {
-            throw CLIError(errorDescription: "No install targets resolved.")
-        }
-
-        for entry in installedPaths {
-            fputs("Installed AXe skill -> \(entry)\n", stdout)
+            _ = try runMarketplaceCommand(
+                executable: target.executable,
+                arguments: ["plugin", "marketplace", "add", Self.marketplaceSource],
+                for: target.name
+            )
+            _ = try runMarketplaceCommand(
+                executable: target.executable,
+                arguments: target.installArguments,
+                for: target.name
+            )
+            fputs("Installed AXe marketplace plugin -> \(target.name)\n", stdout)
         }
     }
 
-    private func uninstallSkill(from targets: [ClientInfo]) throws {
-        var removedPaths: [String] = []
-
-        for target in targets {
-            let targetDirectory = target.skillsDirectory.appendingPathComponent("axe", isDirectory: true)
-            guard FileManager.default.fileExists(atPath: targetDirectory.path) else {
-                continue
-            }
-
-            do {
-                try FileManager.default.removeItem(at: targetDirectory)
-                removedPaths.append("\(target.name): \(targetDirectory.path)")
-            } catch {
-                throw CLIError(
-                    errorDescription: "Failed to uninstall AXe skill for \(target.name): \(error.localizedDescription)"
-                )
-            }
-        }
-
-        if removedPaths.isEmpty {
-            fputs("No installed AXe skill directories were found.\n", stdout)
+    private func uninstallMarketplacePlugin(from targets: [MarketplaceClient]) throws {
+        guard !targets.isEmpty else {
+            fputs("No supported marketplace clients were detected.\n", stdout)
             return
         }
 
-        for entry in removedPaths {
-            fputs("Removed AXe skill -> \(entry)\n", stdout)
+        for target in targets {
+            _ = try runMarketplaceCommand(
+                executable: target.executable,
+                arguments: target.uninstallArguments,
+                for: target.name
+            )
+            fputs("Uninstalled AXe marketplace plugin -> \(target.name)\n", stdout)
         }
     }
 
-    private func resolveTargets(for operation: Operation) throws -> [ClientInfo] {
-        if let destination = dest {
-            let resolvedDestination = try Self.resolveDestinationURL(from: destination)
-            return [ClientInfo(id: .auto, name: "Custom", skillsDirectory: resolvedDestination)]
-        }
+    private func runMarketplaceCommand(
+        executable: String,
+        arguments: [String],
+        for clientName: String
+    ) throws -> String {
+        let process = Process()
+        let standardOutputPipe = Pipe()
+        let standardErrorPipe = Pipe()
 
-        if client != .auto {
-            return [try Self.clientInfo(for: client)]
-        }
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = [executable] + arguments
+        process.standardOutput = standardOutputPipe
+        process.standardError = standardErrorPipe
 
-        let detected = Self.detectClients()
-        if detected.isEmpty {
-            if operation == .uninstall {
-                return []
-            }
-
+        do {
+            try process.run()
+        } catch {
             throw CLIError(
-                errorDescription: "No supported AI clients detected. Use --client, --dest, or --print."
+                errorDescription: "Failed to launch \(executable) for \(clientName): \(error.localizedDescription)"
+            )
+        }
+
+        process.waitUntilExit()
+
+        let standardOutput = String(
+            data: standardOutputPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+        let standardError = String(
+            data: standardErrorPipe.fileHandleForReading.readDataToEndOfFile(),
+            encoding: .utf8
+        ) ?? ""
+        let output = [standardOutput, standardError]
+            .filter { !$0.isEmpty }
+            .joined(separator: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard process.terminationStatus == 0 else {
+            let command = ([executable] + arguments).joined(separator: " ")
+            let details = output.isEmpty ? "exit status \(process.terminationStatus)" : output
+            throw CLIError(
+                errorDescription: "Marketplace command failed for \(clientName): \(command)\n\(details)"
+            )
+        }
+
+        return output
+    }
+
+    private func installSkill(to skillsDirectory: URL) throws {
+        let skillMarkdown = try Self.loadSkillMarkdown()
+        let targetDirectory = skillsDirectory.appendingPathComponent("axe", isDirectory: true)
+        let targetFile = targetDirectory.appendingPathComponent("SKILL.md", isDirectory: false)
+
+        if FileManager.default.fileExists(atPath: targetFile.path), !force {
+            throw CLIError(
+                errorDescription: "Skill already installed at \(targetFile.path). Re-run with --force to overwrite."
+            )
+        }
+
+        do {
+            try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
+            try skillMarkdown.write(to: targetFile, atomically: true, encoding: .utf8)
+            fputs("Installed AXe skill -> Custom: \(targetFile.path)\n", stdout)
+        } catch {
+            throw CLIError(
+                errorDescription: "Failed to install AXe skill at custom destination: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func uninstallSkill(from skillsDirectory: URL) throws {
+        let targetDirectory = skillsDirectory.appendingPathComponent("axe", isDirectory: true)
+        guard FileManager.default.fileExists(atPath: targetDirectory.path) else {
+            fputs("No installed AXe skill directory was found.\n", stdout)
+            return
+        }
+
+        do {
+            try FileManager.default.removeItem(at: targetDirectory)
+            fputs("Removed AXe skill -> Custom: \(targetDirectory.path)\n", stdout)
+        } catch {
+            throw CLIError(
+                errorDescription: "Failed to uninstall AXe skill from custom destination: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private func resolveMarketplaceClients(for operation: Operation) throws -> [MarketplaceClient] {
+        if client != .auto {
+            let resolvedClient = try Self.marketplaceClient(for: client)
+            guard Self.isExecutableAvailable(resolvedClient.executable) else {
+                throw CLIError(
+                    errorDescription: "\(resolvedClient.name) executable '\(resolvedClient.executable)' was not found in PATH."
+                )
+            }
+            return [resolvedClient]
+        }
+
+        let detected = Self.detectMarketplaceClients()
+        if detected.isEmpty, operation == .install {
+            throw CLIError(
+                errorDescription: "No supported AI clients detected. Install Claude Code or Codex, or use --dest or --print."
             )
         }
 
         return detected
     }
 
-    private static func detectClients() -> [ClientInfo] {
-        Client.allCases
-            .filter { $0 != .auto }
-            .compactMap { try? clientInfoIfDetected(for: $0) }
+    private static func detectMarketplaceClients() -> [MarketplaceClient] {
+        [Client.claude, Client.codex]
+            .compactMap { client in
+                guard let info = try? marketplaceClient(for: client), isExecutableAvailable(info.executable) else {
+                    return nil
+                }
+                return info
+            }
     }
 
-    private static func clientInfoIfDetected(for client: Client) throws -> ClientInfo? {
-        let homeDirectory = homeDirectoryPath()
-        let clientRootPath: String
-
+    private static func marketplaceClient(for client: Client) throws -> MarketplaceClient {
         switch client {
         case .claude:
-            clientRootPath = homeDirectory + "/.claude"
-        case .agents:
-            clientRootPath = homeDirectory + "/.agents"
-        case .auto:
-            return nil
-        }
-
-        guard FileManager.default.fileExists(atPath: clientRootPath) else {
-            return nil
-        }
-
-        return try clientInfo(for: client)
-    }
-
-    private static func clientInfo(for client: Client) throws -> ClientInfo {
-        let homeDirectory = homeDirectoryPath()
-
-        switch client {
-        case .claude:
-            return ClientInfo(
-                id: .claude,
+            return MarketplaceClient(
                 name: "Claude Code",
-                skillsDirectory: URL(fileURLWithPath: homeDirectory).appendingPathComponent(".claude/skills", isDirectory: true)
+                executable: "claude",
+                installArguments: ["plugin", "install", pluginIdentifier],
+                uninstallArguments: ["plugin", "uninstall", pluginIdentifier]
             )
-        case .agents:
-            return ClientInfo(
-                id: .agents,
-                name: "Agents Skills",
-                skillsDirectory: URL(fileURLWithPath: homeDirectory).appendingPathComponent(".agents/skills", isDirectory: true)
+        case .codex:
+            return MarketplaceClient(
+                name: "Codex",
+                executable: "codex",
+                installArguments: ["plugin", "add", pluginIdentifier],
+                uninstallArguments: ["plugin", "remove", pluginIdentifier]
             )
-        case .auto:
-            throw CLIError(errorDescription: "Auto is not a concrete client target.")
+        case .auto, .agents:
+            throw CLIError(errorDescription: "The selected client is not a marketplace target.")
         }
+    }
+
+    private static func isExecutableAvailable(_ executable: String) -> Bool {
+        guard let path = ProcessInfo.processInfo.environment["PATH"] else {
+            return false
+        }
+
+        return path
+            .split(separator: ":")
+            .map(String.init)
+            .contains { directory in
+                let candidate = URL(fileURLWithPath: directory)
+                    .appendingPathComponent(executable, isDirectory: false)
+                    .path
+                return FileManager.default.isExecutableFile(atPath: candidate)
+            }
     }
 
     private static func homeDirectoryPath() -> String {
         ProcessInfo.processInfo.environment["HOME"] ?? FileManager.default.homeDirectoryForCurrentUser.path
+    }
+
+    private static func agentsSkillsDirectory() -> URL {
+        URL(fileURLWithPath: homeDirectoryPath())
+            .appendingPathComponent(".agents/skills", isDirectory: true)
     }
 
     private func isInteractiveTTY() -> Bool {

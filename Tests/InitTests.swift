@@ -1,8 +1,46 @@
+import Darwin
 import Foundation
 import Testing
 
 @Suite("Init Command Tests")
 struct InitTests {
+    private func runWithFakeClient(
+        _ command: String,
+        executable: String
+    ) async throws -> (output: String, invocations: [String]) {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let binDirectory = tempRoot.appendingPathComponent("bin", isDirectory: true)
+        let executableURL = binDirectory.appendingPathComponent(executable, isDirectory: false)
+        let logURL = tempRoot.appendingPathComponent("invocations.log", isDirectory: false)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        try FileManager.default.createDirectory(at: binDirectory, withIntermediateDirectories: true)
+        try """
+        #!/bin/sh
+        printf '%s\n' "$*" >> "$AXE_INIT_TEST_LOG"
+        """.write(to: executableURL, atomically: true, encoding: .utf8)
+        guard chmod(executableURL.path, 0o755) == 0 else {
+            throw TestError.unexpectedState("Failed to make fake \(executable) executable")
+        }
+
+        let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let result = try await TestHelpers.runAxeCommand(
+            command,
+            environment: [
+                "AXE_INIT_TEST_LOG": logURL.path,
+                "HOME": tempRoot.path,
+                "PATH": "\(binDirectory.path):\(existingPath)"
+            ]
+        )
+        let log = try String(contentsOf: logURL, encoding: .utf8)
+        let invocations = log.split(whereSeparator: { $0.isNewline }).map(String.init)
+        return (result.output, invocations)
+    }
+
     @Test("print outputs skill content")
     func printOutputsSkill() async throws {
         let result = try await TestHelpers.runAxeCommand("init --print")
@@ -24,6 +62,70 @@ struct InitTests {
 
         let installedFile = skillsDir.appendingPathComponent("axe/SKILL.md").path
         #expect(FileManager.default.fileExists(atPath: installedFile))
+    }
+
+    @Test("agents client installs to agents skills directory")
+    func agentsClientInstallsToAgentsSkillsDirectory() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+
+        defer {
+            try? FileManager.default.removeItem(at: tempRoot)
+        }
+
+        let environment = ["HOME": tempRoot.path]
+        _ = try await TestHelpers.runAxeCommand("init --client agents", environment: environment)
+
+        let installedDirectory = tempRoot.appendingPathComponent(".agents/skills/axe", isDirectory: true)
+        let installedFile = installedDirectory.appendingPathComponent("SKILL.md", isDirectory: false)
+        #expect(FileManager.default.fileExists(atPath: installedFile.path))
+
+        _ = try await TestHelpers.runAxeCommand(
+            "init --client agents --uninstall",
+            environment: environment
+        )
+        #expect(!FileManager.default.fileExists(atPath: installedDirectory.path))
+    }
+
+    @Test("installs Claude plugin through marketplace")
+    func installsClaudeMarketplacePlugin() async throws {
+        let result = try await runWithFakeClient("init --client claude", executable: "claude")
+
+        #expect(result.invocations == [
+            "plugin marketplace add cameroncooke/AXe",
+            "plugin install axe@axe"
+        ])
+        #expect(result.output.contains("Installed AXe marketplace plugin -> Claude Code"))
+    }
+
+    @Test("installs Codex plugin through marketplace")
+    func installsCodexMarketplacePlugin() async throws {
+        let result = try await runWithFakeClient("init --client codex", executable: "codex")
+
+        #expect(result.invocations == [
+            "plugin marketplace add cameroncooke/AXe",
+            "plugin add axe@axe"
+        ])
+        #expect(result.output.contains("Installed AXe marketplace plugin -> Codex"))
+    }
+
+    @Test("force reinstalls marketplace plugin")
+    func forceReinstallsMarketplacePlugin() async throws {
+        let result = try await runWithFakeClient("init --client codex --force", executable: "codex")
+
+        #expect(result.invocations == [
+            "plugin remove axe@axe",
+            "plugin marketplace add cameroncooke/AXe",
+            "plugin add axe@axe"
+        ])
+    }
+
+    @Test("uninstall removes marketplace plugin")
+    func uninstallRemovesMarketplacePlugin() async throws {
+        let result = try await runWithFakeClient("init --client claude --uninstall", executable: "claude")
+
+        #expect(result.invocations == ["plugin uninstall axe@axe"])
+        #expect(result.output.contains("Uninstalled AXe marketplace plugin -> Claude Code"))
     }
 
     @Test("existing skill requires force")

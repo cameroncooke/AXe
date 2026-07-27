@@ -27,21 +27,27 @@ axe list-simulators
 
 ## Install the AI skill
 
-Install the bundled AXe skill from this repository's marketplace.
+Use `axe init` to add this repository's marketplace and install the bundled AXe skill.
 
 Claude Code:
 
 ```bash
-claude plugin marketplace add cameroncooke/AXe
-claude plugin install axe@axe
+axe init --client claude
 ```
 
 Codex:
 
 ```bash
-codex plugin marketplace add cameroncooke/AXe
-codex plugin add axe@axe
+axe init --client codex
 ```
+
+Agents skills directory:
+
+```bash
+axe init --client agents
+```
+
+The `agents` client installs directly to `~/.agents/skills`. Use `--uninstall` to remove the selected installation, `--force` to reinstall it, or `--dest <directory>` to copy the bundled skill directly to another skills directory.
 
 > [!NOTE]
 > The marketplace references the existing case-sensitive `Skills/CLI` path directly. It does not include a lowercase `skills/` compatibility symlink, so clients or filesystems that require the conventional lowercase path are unsupported.
