@@ -55,6 +55,31 @@ struct AccessibilityFetcher {
         }
     }
 
+    static func fetchAccessibilityElement(
+        at point: AccessibilityPoint,
+        simulatorUDID: String,
+        logger: AxeLogger
+    ) async throws -> AccessibilityElement? {
+        let jsonData = try await fetchAccessibilityInfoJSONData(
+            for: simulatorUDID,
+            point: point,
+            logger: logger
+        )
+        return decodeSingleAccessibilityElement(from: jsonData)
+    }
+
+    static func decodeSingleAccessibilityElement(from data: Data) -> AccessibilityElement? {
+        let decoder = JSONDecoder()
+        if let element = try? decoder.decode(AccessibilityElement.self, from: data) {
+            return element
+        }
+        if let elements = try? decoder.decode([AccessibilityElement].self, from: data),
+           elements.count == 1 {
+            return elements.first
+        }
+        return nil
+    }
+
     private static func fetchAccessibilityInfoJSONData(
         from target: FBSimulator,
         at point: AccessibilityPoint

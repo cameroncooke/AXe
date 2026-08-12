@@ -106,7 +106,13 @@ struct Tap: AsyncParsableCommand {
         let resolvedDescription: String
 
         if let pointX, let pointY {
-            resolution = TapResolution(point: (x: pointX, y: pointY), isSwitchLikeControl: false)
+            resolution = await Self.resolveCoordinateTap(
+                x: pointX,
+                y: pointY,
+                requestedStyle: tapStyle ?? .automatic,
+                simulatorUDID: simulatorUDID,
+                logger: logger
+            )
             resolvedDescription = "(\(pointX), \(pointY))"
         } else {
             let query: AccessibilityQuery
@@ -174,6 +180,32 @@ struct Tap: AsyncParsableCommand {
 
         logger.info().log("Tap completed successfully")
         print("✓ Tap at \(resolvedDescription) completed successfully")
+    }
+
+    @MainActor
+    static func resolveCoordinateTap(
+        x: Double,
+        y: Double,
+        requestedStyle: TapStyle,
+        simulatorUDID: String,
+        logger: AxeLogger
+    ) async -> TapResolution {
+        guard requestedStyle == .automatic else {
+            return TapResolution(point: (x: x, y: y), isSwitchLikeControl: false)
+        }
+        let isSwitchLikeControl: Bool
+        do {
+            let element = try await AccessibilityFetcher.fetchAccessibilityElement(
+                at: AccessibilityPoint(x: x, y: y),
+                simulatorUDID: simulatorUDID,
+                logger: logger
+            )
+            isSwitchLikeControl = element?.isSwitchLikeControl ?? false
+        } catch {
+            logger.info().log("Could not inspect the element at (\(x), \(y)) for automatic tap style; using simulator tap: \(error.localizedDescription)")
+            isSwitchLikeControl = false
+        }
+        return TapResolution(point: (x: x, y: y), isSwitchLikeControl: isSwitchLikeControl)
     }
 
     private func resolvedTapStyle(for resolution: TapResolution) -> TapStyle {

@@ -271,6 +271,27 @@ struct AccessibilityFetcherTests {
         }
     }
 
+    @Test("Decodes single point-lookup elements from dictionary and singleton array payloads")
+    func decodesSinglePointLookupElements() throws {
+        let toggle: [String: Any] = [
+            "type": "CheckBox",
+            "role": "AXCheckBox",
+            "role_description": "switch",
+            "AXValue": "0",
+            "frame": ["x": 309, "y": 220, "width": 63, "height": 28],
+        ]
+        let dictionaryData = try JSONSerialization.data(withJSONObject: toggle)
+        let singletonArrayData = try JSONSerialization.data(withJSONObject: [toggle])
+        let multipleData = try JSONSerialization.data(withJSONObject: [toggle, toggle])
+
+        let fromDictionary = try #require(AccessibilityFetcher.decodeSingleAccessibilityElement(from: dictionaryData))
+        let fromArray = try #require(AccessibilityFetcher.decodeSingleAccessibilityElement(from: singletonArrayData))
+
+        #expect(fromDictionary.isSwitchLikeControl)
+        #expect(fromArray.isSwitchLikeControl)
+        #expect(AccessibilityFetcher.decodeSingleAccessibilityElement(from: multipleData) == nil)
+    }
+
     @Test("Restarts the canonical testmanagerd service with direct simctl arguments")
     func restartsCanonicalTestManagerService() async throws {
         var executableURL: URL?

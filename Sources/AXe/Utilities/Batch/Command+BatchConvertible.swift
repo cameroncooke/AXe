@@ -80,7 +80,13 @@ extension Tap: BatchConvertible {
         let resolvedRoots: [AccessibilityElement]?
 
         if let pointX, let pointY {
-            resolution = TapResolution(point: (x: pointX, y: pointY), isSwitchLikeControl: false)
+            resolution = await Tap.resolveCoordinateTap(
+                x: pointX,
+                y: pointY,
+                requestedStyle: tapStyle ?? context.tapStyle,
+                simulatorUDID: context.simulatorUDID,
+                logger: logger
+            )
             resolvedRoots = nil
         } else {
             let query: AccessibilityQuery
