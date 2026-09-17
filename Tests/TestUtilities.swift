@@ -98,7 +98,27 @@ struct CommandRunner {
 // MARK: - Test Helpers
 
 struct TestHelpers {
-    private static func resolveSwiftBinPath(sourceRoot: String) throws -> String {
+    /// Directory containing the loaded test bundle, e.g. `.build/out/Products/Debug`.
+    ///
+    /// SwiftPM and Xcode place executable products alongside the test bundle, so this
+    /// locates `axe` without invoking `swift build` while `swift test` holds the build lock.
+    private static func testProductsDirectory() -> URL? {
+        var info = Dl_info()
+        guard dladdr(#dsohandle, &info) != 0, let imagePath = info.dli_fname else {
+            return nil
+        }
+
+        var url = URL(fileURLWithPath: String(cString: imagePath)).resolvingSymlinksInPath()
+        while url.path != "/" {
+            if url.pathExtension == "xctest" {
+                return url.deletingLastPathComponent()
+            }
+            url = url.deletingLastPathComponent()
+        }
+        return nil
+    }
+
+    private static func resolveSwiftBinPath(sourceRoot: String, timeout: TimeInterval = 30) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["swift", "build", "--show-bin-path"]
@@ -109,8 +129,18 @@ struct TestHelpers {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+
         try process.run()
-        process.waitUntilExit()
+
+        if exited.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            throw TestError.commandError(
+                "Timed out after \(timeout)s running `swift build --show-bin-path` from \(sourceRoot). "
+                    + "This deadlocks when run inside `swift test`; set AXE_BIN_PATH instead."
+            )
+        }
 
         let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
         let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
@@ -142,7 +172,10 @@ struct TestHelpers {
         return udid
     }
 
-    /// Get the path to the axe binary using #file to find source root
+    /// Get the path to the axe binary.
+    ///
+    /// Resolution order: `AXE_BIN_PATH`, the products directory containing the test bundle,
+    /// then `swift build --show-bin-path` from the source root.
     static func getAxePath(testFile: String = #file) throws -> String {
         if let axeBinPath = ProcessInfo.processInfo.environment["AXE_BIN_PATH"], !axeBinPath.isEmpty {
             if FileManager.default.fileExists(atPath: axeBinPath) {
@@ -150,6 +183,13 @@ struct TestHelpers {
             }
 
             throw TestError.unexpectedState("AXE_BIN_PATH points to a missing axe binary at \(axeBinPath). Please run 'swift build'.")
+        }
+
+        if let productsDirectory = testProductsDirectory() {
+            let bundledAxePath = productsDirectory.appendingPathComponent("axe").path
+            if FileManager.default.isExecutableFile(atPath: bundledAxePath) {
+                return bundledAxePath
+            }
         }
 
         let sourceRoot: String

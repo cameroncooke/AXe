@@ -17,6 +17,7 @@ struct Axe: AsyncParsableCommand {
             DescribeUI.self,
             ListSimulators.self,
             Init.self,
+            AgentCommand.self,
             Tap.self,
             Slider.self,
             Type.self,

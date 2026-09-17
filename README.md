@@ -55,6 +55,28 @@ axe type 'Hello world' --udid "$UDID"
 axe screenshot --output ./screen.png --udid "$UDID"
 ```
 
+## Agentic simulator automation
+
+The experimental `agent` command turns a natural-language goal into validated AXe actions using TypeSafe AI's Jev model. It uses the simulator's accessibility hierarchy rather than screenshots and executes one bounded action at a time.
+
+```bash
+export TYPESAFE_API_KEY=<TYPE_SAFE_API_KEY>
+export UDID=<BOOTED_SIMULATOR_UDID>
+
+axe agent "Open Settings and turn on Airplane Mode" --udid "$UDID"
+axe agent "Open Notes and create a note saying 'Buy milk'" --udid "$UDID"
+```
+
+Quoted text in a goal can be entered without another model call. Goals requiring a value that is not explicit can use an optional OpenAI-compatible text helper:
+
+```bash
+export TEXT_MODEL_API_KEY=<TEXT_MODEL_API_KEY>
+export TEXT_MODEL_BASE_URL=https://api.deepseek.com/v1
+export TEXT_MODEL=deepseek-chat
+```
+
+See [`docs/agent.md`](docs/agent.md) for the architecture, configuration, supported operations, tracing and limitations.
+
 ## Documentation
 
 Full documentation is available at [axe-cli.com/docs](https://axe-cli.com/docs).
