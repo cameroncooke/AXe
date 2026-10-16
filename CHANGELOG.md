@@ -5,6 +5,12 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed uncaught Objective-C exceptions from the simulator's remote-object stack aborting the CLI with a crash report (observed in Apple's ROCKit XPC deserializer when a sandboxed process cannot claim a simulator IOSurface); AXe now reports the exception, adds guidance to re-run outside the sandbox, and exits with `EX_SOFTWARE`.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added
