@@ -10,6 +10,7 @@ struct Axe: AsyncParsableCommand {
     // Static stored properties are lazily initialized, and a `main() async throws`
     // signature overloads (not overrides) the protocol extension's `main() async`.
     // Startup side effects must therefore live in this exact signature.
+    /// Dispatches the parsed command, installing the exception guard first.
     static func main() async {
         UncaughtExceptionGuard.install()
         do {

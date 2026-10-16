@@ -30,6 +30,7 @@ enum UncaughtExceptionGuard {
 
     private static var isInstalled = false
 
+    /// Registers the process-level handler. Safe to call more than once.
     static func install() {
         guard !isInstalled else { return }
         isInstalled = true
@@ -38,6 +39,8 @@ enum UncaughtExceptionGuard {
         }
     }
 
+    /// Entry point for the Obj-C runtime: converts a raised exception into a
+    /// reported failure.
     static func handle(_ exception: NSException) {
         handle(
             name: exception.name.rawValue,
@@ -46,6 +49,8 @@ enum UncaughtExceptionGuard {
         )
     }
 
+    /// Reports the failure and terminates through the seams. Split from
+    /// `handle(_:)` so tests can drive arbitrary stack traces without raising.
     static func handle(name: String, reason: String, stack: [String]) {
         var lines = [
             "AXe encountered an uncaught Objective-C exception and must exit.",
@@ -63,6 +68,8 @@ enum UncaughtExceptionGuard {
         terminate(exitCode)
     }
 
+    /// Elides the tail of over-long reasons so multi-kilobyte framework
+    /// messages stay readable on stderr.
     private static func truncate(_ text: String, to limit: Int) -> String {
         text.count <= limit ? text : String(text.prefix(limit)) + "…"
     }

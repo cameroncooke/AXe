@@ -10,15 +10,18 @@ struct UncaughtExceptionGuardTests {
         var lines: [String] = []
         var exitCode: Int32?
 
+        /// Captures one line of reported output.
         func record(_ message: String) {
             lines.append(message)
         }
 
+        /// Captures the exit code the guard requested.
         func terminate(_ code: Int32) {
             exitCode = code
         }
     }
 
+    /// Points the guard's seams at a recorder for the duration of `body`.
     private func withTestSeams(
         _ body: (Recorder) -> Void
     ) -> Recorder {
@@ -35,6 +38,7 @@ struct UncaughtExceptionGuardTests {
         return recorder
     }
 
+    /// Verifies name, reason, and top frames are reported and EX_SOFTWARE is used.
     @Test("Reports exception details and terminates with EX_SOFTWARE")
     func reportsDetailsAndExits() {
         let recorder = withTestSeams { recorder in
@@ -55,6 +59,7 @@ struct UncaughtExceptionGuardTests {
         #expect(output.contains("Top frames:"))
     }
 
+    /// Verifies the recovery hint appears only for remote-object failures.
     @Test("ROCKit stack frames add the remote-object recovery hint")
     func rockitFramesAddRecoveryHint() {
         let recorder = withTestSeams { _ in
@@ -70,6 +75,7 @@ struct UncaughtExceptionGuardTests {
         #expect(output.contains("non-sandboxed process"))
     }
 
+    /// Verifies over-long reasons cannot flood stderr unbounded.
     @Test("Long reasons are truncated")
     func longReasonsAreTruncated() {
         let recorder = withTestSeams { _ in
@@ -84,6 +90,7 @@ struct UncaughtExceptionGuardTests {
         #expect(!output.contains(String(repeating: "x", count: 600)))
     }
 
+    /// Verifies a nil exception reason does not crash the handler.
     @Test("Missing reason is reported instead of crashing")
     func missingReasonIsHandled() {
         let recorder = withTestSeams { _ in
@@ -98,6 +105,7 @@ struct UncaughtExceptionGuardTests {
         #expect(recorder.lines.joined(separator: "\n").contains("No reason provided."))
     }
 
+    /// Verifies the frames section is omitted when there is no stack.
     @Test("Empty stack omits the top frames section")
     func emptyStackOmitsFramesSection() {
         let recorder = withTestSeams { _ in
