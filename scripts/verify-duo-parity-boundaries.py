@@ -84,15 +84,21 @@ def main():
                 output, command + "-help", [str(cli), command, "--help"], 0,
                 "USAGE:", environment,
             ))
-        for name, options in [
-            ("tap-wait-rejected", ["--wait-timeout", "0.1"]),
-            ("tap-poll-rejected", ["--poll-interval", "0.5"]),
+        for name, options, expected in [
+            ("tap-wait-over-cap-rejected", ["--wait-timeout", "31"], "Selected --wait-timeout must be finite and in 0...30 seconds"),
+            ("tap-inactive-poll-rejected", ["--poll-interval", "0.5"], "requires a positive --wait-timeout"),
+            ("tap-fast-poll-rejected", ["--wait-timeout", "1", "--poll-interval", "0.01"], "Selected --poll-interval must be finite and in 0.05...30 seconds"),
         ]:
             cases.append(run_case(
                 output, name,
                 [str(cli), "tap", *selection, "--expected-pid", "1", "--id", "missing", *options],
-                64, "polling options are not supported", environment,
+                64, expected, environment,
             ))
+        cases.append(run_case(
+            output, "coordinate-wait-rejected",
+            [str(cli), "tap", *selection, "-x", "1", "-y", "2", "--wait-timeout", "1"],
+            64, "do not support polling options", environment,
+        ))
         cases.append(run_case(
             output, "slider-value-rejected",
             [str(cli), "slider", *selection, "--expected-pid", "1", "--id", "missing", "--value", "33"],

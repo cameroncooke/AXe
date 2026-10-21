@@ -96,7 +96,16 @@ enum SelectedHIDBroker {
                             guard bytes.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
                             return try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
                         }
-                        let response = rejectedWhileBusy ? owner.rejectBusy(request) : await owner.perform(request)
+                        let response: SelectedHIDResponse
+                        if rejectedWhileBusy {
+                            response = owner.rejectBusy(request)
+                        } else if request.ax?.kind == .tap, request.ax?.waitPolicy != nil {
+                            response = await SelectedHIDClientLifetime.run(descriptor: client) {
+                                await owner.perform(request)
+                            }
+                        } else {
+                            response = await owner.perform(request)
+                        }
                         try await offMain {
                             let maximumBytes = request.ax == nil && request.keyboard == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
                             let bytes = try SelectedAXWire.boundedResponse(response, maximumBytes: maximumBytes)

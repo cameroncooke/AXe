@@ -89,8 +89,8 @@ struct SelectedTapPhysicalTests {
         #expect(try unchanged.selectedRequest().ax?.kind == .semanticPress)
     }
 
-    @Test(arguments: [["--wait-timeout", "1"], ["--poll-interval", "0.1"]])
-    func physicalDoesNotEnablePolling(extra: [String]) throws {
+    @Test(arguments: [["--wait-timeout", "31"], ["--poll-interval", "0.1"]])
+    func physicalRejectsInvalidPolling(extra: [String]) throws {
         #expect(throws: (any Error).self) {
             _ = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "physical"] + extra)
         }
@@ -99,7 +99,7 @@ struct SelectedTapPhysicalTests {
     @Test(arguments: [
         "tap --id target --expected-pid 42 --tap-style simulator --semantic-press",
         "tap --id target --expected-pid 42 --tap-style automatic --semantic-press",
-        "tap --id target --expected-pid 42 --tap-style physical --wait-timeout 1",
+        "tap --id target --expected-pid 42 --tap-style physical --wait-timeout 31",
         "tap --id target --expected-pid 42 --tap-style physical --semantic-press"
     ])
     func invalidPhysicalCombinationsStopBeforeSend(line: String) async throws {

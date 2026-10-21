@@ -248,3 +248,14 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 - Use single quotes for inline text to avoid shell expansion.
 - Use `--stdin` or `--file` when input contains shell-sensitive characters.
 - Keep verification (`describe-ui`, `screenshot`) separate from execution.
+
+## Selected-screen tap waiting
+
+Use the active screen pair and expected PID. Put a selected wait on the tap or individual batch tap step; batch-level polling is unsupported. A positive wait is at most 30 seconds. Its interval is 0.05–30 seconds (default 0.25). AXe stops on device changes or any error other than an absent match.
+
+```sh
+axe tap --input-mode selected --screen-id <ID> --screen-uuid <UUID> --udid <UDID> \
+  --expected-pid <PID> --id ready --wait-timeout 5
+axe batch --input-mode selected --screen-id <ID> --screen-uuid <UUID> --udid <UDID> \
+  --step 'tap --id ready --expected-pid <PID> --wait-timeout 5'
+```

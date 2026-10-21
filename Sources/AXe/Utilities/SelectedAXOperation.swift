@@ -99,6 +99,22 @@ enum SelectedAXOperation {
                     outcome: "ready", count: 0, cleanup: "notNeeded", error: nil)
             }
             guard let selector = ax.selector else { throw SelectedHIDFailure.invalid("Missing selected selector") }
+            if let waitPolicy = ax.waitPolicy {
+                result.wait = try await SelectedAXWait.run(policy: waitPolicy) { timeout in
+                    try live.validateCurrentRevision(expected: live.initialObservation)
+                    let probePolicy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: timeout, maximumAttempts: 4)
+                    let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: ax.expectedPID,
+                        observation: live.initialObservation, freshnessProvider: live, policy: probePolicy,
+                        preparation: ax.preparation.libraryValue)
+                    try Task.checkCancellation()
+                    guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
+                        throw SelectedAXWaitAcquisitionFailure(acquisition: acquisition)
+                    }
+                    // Only this typed resolution can report a retryable missing target.
+                    _ = try await snapshot.resolve(selector, freshnessProvider: live)
+                }
+            }
+            try Task.checkCancellation()
             // Starts before the library budget. It can reject earlier, never extend it.
             let deadline = DispatchTime.now() + policy.timeoutSeconds
             let operation = try await FBSimulatorAXTargetOperation.open(for: simulator, expectedPID: ax.expectedPID,
@@ -132,6 +148,18 @@ enum SelectedAXOperation {
                 outcome: receipt.outcome.rawValue, count: count, cleanup: cleanup, error: nil)
         } catch {
             result.failure = result.failure ?? (count > 0 ? .inputFailed : .setupFailed)
+            if let failure = error as? SelectedAXWaitFailure {
+                result.wait = failure.receipt
+                switch failure.receipt.outcome {
+                case .timedOut: result.failure = .waitTimedOut
+                case .cancelled: result.failure = .waitCancelled
+                case .failed, .matched: result.failure = .targetRejected
+                }
+                if let acquisition = failure.cause as? SelectedAXWaitAcquisitionFailure {
+                    result.acquisition = try? SelectedAXAcquisition(acquisition.acquisition)
+                    if failure.receipt.outcome == .failed { result.failure = .acquisitionFailed }
+                }
+            }
             if error is SelectedAXContentError { result.failure = .responseTooLarge }
             if let failure = error as? FBSimulatorAXTargetOpenFailure {
                 result.failure = .targetRejected

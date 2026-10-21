@@ -97,7 +97,7 @@ struct SelectedTapAutomaticTests {
         #expect(FBSimulatorHIDEvent.tapAt(x: 12.5, y: 20.25) == .composite(contacts))
         let expected = withDelays ? [.delay(0.2)] + contacts + [.delay(0.3)] : contacts
         #expect(direct.event == .composite(expected) && batch.event == direct.event)
-        #expect(direct.ax == nil && batch.ax == nil && direct.version == 21)
+        #expect(direct.ax == nil && batch.ax == nil && direct.version == 22)
         let checked = try FBSimulatorHIDSession.preflight(direct.event, observation: observation())
         #expect(checked.primitiveCount == 2 && checked.requestedDelaySeconds == (withDelays ? 0.5 : 0))
     }
@@ -122,7 +122,7 @@ struct SelectedTapAutomaticTests {
         #expect(ax.selectorKind?.rawValue == String(selector[0].dropFirst(2)) && ax.selector != nil)
         #expect(ax.elementType == (selector.count == 4 ? selector[3] : nil))
         #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3 && ax.preparation == .existingBridge)
-        #expect(direct.requestID != batch.requestID && decoded.version == 21)
+        #expect(direct.requestID != batch.requestID && decoded.version == 22)
         let target = try node(#"{"type":"Button","subrole":"AXSwitch"}"#)
         #expect(try ax.tapEvent(at: CGPoint(x: 10, y: 20), target: target) == .tapAt(x: 10, y: 20, duration: 0.1))
     }
@@ -149,7 +149,7 @@ struct SelectedTapAutomaticTests {
         #expect(throws: (any Error).self) { try owner.enter(old) }
         #expect(!owner.inFlight && owner.token == nil)
         try owner.enter(current)
-        #expect(owner.inFlight && current.version == 21)
+        #expect(owner.inFlight && current.version == 22)
     }
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])
@@ -168,7 +168,7 @@ struct SelectedTapAutomaticTests {
 
     @Test(arguments: [
         ["--id", "target", "--expected-pid", "42", "--semantic-press"],
-        ["--id", "target", "--expected-pid", "42", "--wait-timeout", "1"],
+        ["--id", "target", "--expected-pid", "42", "--wait-timeout", "31"],
         ["--id", "target", "--expected-pid", "42", "--poll-interval", "0.1"],
         ["-x", "1", "-y", "2", "--element-type", "Button"]
     ])

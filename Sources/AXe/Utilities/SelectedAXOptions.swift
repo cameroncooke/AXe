@@ -26,7 +26,8 @@ struct SelectedAXOptions: ParsableArguments {
     func request(input: SelectedInputOptions, kind: SelectedAXRequest.Kind,
                  selectorKind: SelectedAXRequest.SelectorKind? = nil, selectorValue: String? = nil,
                  endpoint: FBSimulatorSliderEndpoint? = nil, point: SelectedAXPoint? = nil, preDelay: Double = 0, postDelay: Double = 0,
-                 elementType: String? = nil, tapStyle: SelectedTapStyle? = nil) throws -> SelectedHIDRequest {
+                 elementType: String? = nil, tapStyle: SelectedTapStyle? = nil,
+                 waitPolicy: SelectedAXWaitPolicy? = nil) throws -> SelectedHIDRequest {
         try validate(required: true)
         try input.validate()
         guard input.mode == .selected, let expectedPID, let screenID = input.screenID,
@@ -36,7 +37,7 @@ struct SelectedAXOptions: ParsableArguments {
         let ax = SelectedAXRequest(kind: kind, expectedPID: expectedPID,
             preparation: preparation ?? .automationSession, endpoint: endpoint,
             selectorKind: selectorKind, selectorValue: selectorValue, preDelay: preDelay, postDelay: postDelay, point: point,
-            elementType: elementType, tapStyle: tapStyle)
+            elementType: elementType, tapStyle: tapStyle, waitPolicy: waitPolicy)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [], ax: ax)
         try request.validate()

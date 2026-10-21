@@ -83,7 +83,7 @@ axe batch --udid SIMULATOR_UDID \
   --step "tap --id SaveButton"
 ```
 
-## Example: multi-screen flow with element waiting
+## Example: legacy multi-screen flow with element waiting
 ```bash
 axe batch --udid SIMULATOR_UDID \
   --wait-timeout 5 \
@@ -102,3 +102,13 @@ axe batch --udid SIMULATOR_UDID \
 Batch selector taps share direct `axe tap` behavior. If the matched row or label contains exactly one UIKit `UISwitch` or SwiftUI `Toggle`/switch control, AXe taps that control's activation point. With default `--tap-style automatic`, switch/toggle activations use physical touch down/up and normal taps use simulator `tapAt`.
 
 If label selectors are ambiguous and AXe reports no `AXUniqueId` values for matches, switch that step to coordinates (`tap -x/-y`). For coordinate taps that need physical touch, use `tap -x/-y --tap-style physical` or batch-level `--tap-style physical`.
+
+## Selected-screen tap waiting
+
+Put `--wait-timeout` and optional `--poll-interval` inside an ordinary selected ID, label or value tap step. Use the active batch screen pair and a positive expected PID. The timeout must be greater than zero through 30 seconds. The interval is 0.05–30 seconds (default 0.25); a non-default interval needs a positive wait. Batch-level polling is rejected. Only an absent match retries. Cancellation, changed device state or any other failure stops later steps without replay.
+
+```sh
+axe batch --input-mode selected --screen-id <ID> --screen-uuid <UUID> --udid <UDID> \
+  --step 'tap --id ready --expected-pid <PID> --wait-timeout 5' \
+  --step 'tap --id continue --expected-pid <PID>'
+```

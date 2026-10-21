@@ -38,10 +38,10 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input; physical holds for 0.1 seconds and simulator inserts no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
     var tapStyle: TapStyle?
 
-    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting.")
+    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting. Selected ordinary taps accept finite values up to 30 seconds; only a missing target is retried before input.")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25). Selected active polling accepts finite values in 0.05...30 seconds; a non-default interval requires a positive wait.")
     var pollInterval: Double = 0.25
 
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
@@ -60,11 +60,11 @@ struct Tap: AsyncParsableCommand {
             }
         }
         if selectedInput.mode == .selected {
-            guard tapStyle == nil || (!semanticPress && (tapStyle == .physical || tapStyle == .simulator || tapStyle == .automatic)),
-                  waitTimeout == 0, pollInterval == 0.25 else {
-                throw ValidationError("Selected ordinary tap supports omitted style, physical, simulator or automatic. Semantic press rejects explicit styles; polling options are not supported.")
+            guard tapStyle == nil || (!semanticPress && (tapStyle == .physical || tapStyle == .simulator || tapStyle == .automatic)) else {
+                throw ValidationError("Selected ordinary tap supports omitted style, physical, simulator or automatic. Semantic press rejects explicit styles.")
             }
             let hasCoordinates = pointX != nil || pointY != nil
+            _ = try selectedWaitPolicy(hasCoordinates: hasCoordinates)
             if let elementType {
                 guard !hasCoordinates, !semanticPress,
                       !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -129,6 +129,7 @@ struct Tap: AsyncParsableCommand {
     }
 
     func selectedRequest() throws -> SelectedHIDRequest {
+        let waitPolicy = try selectedWaitPolicy(hasCoordinates: pointX != nil || pointY != nil)
         let selectedStyle: SelectedTapStyle?
         switch tapStyle {
         case .automatic: selectedStyle = .automatic
@@ -142,7 +143,8 @@ struct Tap: AsyncParsableCommand {
             else { selectorKind = .value }
             return try selectedAX.request(input: selectedInput, kind: semanticPress ? .semanticPress : .tap,
                 selectorKind: selectorKind, selectorValue: selectorValue,
-                preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, elementType: elementType, tapStyle: selectedStyle)
+                preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, elementType: elementType, tapStyle: selectedStyle,
+                waitPolicy: waitPolicy)
         }
         guard let pointX, let pointY else { throw ValidationError("Selected tap requires coordinates or one selector") }
         var primitives: [SelectedHIDPrimitive] = []
@@ -151,6 +153,28 @@ struct Tap: AsyncParsableCommand {
         primitives += try coordinateStyle.primitives(x: pointX, y: pointY)
         if let postDelay { primitives.append(.delay(postDelay)) }
         return try selectedInput.request(operation: .complete, token: nil, primitives: primitives)
+    }
+
+    private func selectedWaitPolicy(hasCoordinates: Bool) throws -> SelectedAXWaitPolicy? {
+        if hasCoordinates || semanticPress {
+            guard waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Selected coordinate taps and semantic press do not support polling options.")
+            }
+            return nil
+        }
+        guard waitTimeout.isFinite, waitTimeout >= 0, waitTimeout <= SelectedAXWaitPolicy.maximumTimeout else {
+            throw ValidationError("Selected --wait-timeout must be finite and in 0...30 seconds.")
+        }
+        guard waitTimeout > 0 else {
+            guard pollInterval == 0.25 else {
+                throw ValidationError("Selected --poll-interval requires a positive --wait-timeout.")
+            }
+            return nil
+        }
+        let policy = SelectedAXWaitPolicy(timeoutSeconds: waitTimeout, pollIntervalSeconds: pollInterval)
+        do { try policy.validate() }
+        catch { throw ValidationError(error.localizedDescription) }
+        return policy
     }
 
     func run() async throws {

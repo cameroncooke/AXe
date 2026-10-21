@@ -24,7 +24,7 @@ struct SelectedTapValueTests {
         let original = try valueRequest(value)
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(decoded.version == 21 && decoded.requestID == original.requestID)
+        #expect(decoded.version == 22 && decoded.requestID == original.requestID)
         #expect(decoded.screenID == 3 && decoded.screenUUID == UUID(uuidString: screen))
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         let ax = try #require(decoded.ax)
@@ -63,7 +63,7 @@ struct SelectedTapValueTests {
         ["--value", "Ready", "--semantic-press", "--expected-pid", "42"],
         ["--value", "Ready", "--element-type", " ", "--expected-pid", "42"],
         ["--value", "Ready", "--tap-style", "automatic", "--semantic-press", "--expected-pid", "42"],
-        ["--value", "Ready", "--wait-timeout", "1", "--expected-pid", "42"],
+        ["--value", "Ready", "--wait-timeout", "31", "--expected-pid", "42"],
         ["--value", "Ready", "--poll-interval", "0.1", "--expected-pid", "42"],
         ["--value", "Ready", "--expected-pid", "0"],
         ["--value", "Ready"]

@@ -10,7 +10,7 @@ enum SelectedAXPreparation: String, Codable, Sendable {
 }
 
 enum SelectedAXFailure: String, Codable, Sendable {
-    case ownershipRejected, acquisitionFailed, targetRejected, pressFailed, sliderFailed, inputFailed, cleanupUncertain, responseTooLarge, setupFailed
+    case ownershipRejected, acquisitionFailed, targetRejected, pressFailed, sliderFailed, inputFailed, cleanupUncertain, responseTooLarge, setupFailed, waitTimedOut, waitCancelled
 }
 
 /// Simulator taps use the library's down/up factory without an inserted hold.
@@ -70,6 +70,7 @@ struct SelectedAXRequest: Codable, Sendable {
     var point: SelectedAXPoint? = nil
     var elementType: String? = nil
     var tapStyle: SelectedTapStyle? = nil
+    var waitPolicy: SelectedAXWaitPolicy? = nil
 
     func validate() throws {
         guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
@@ -81,6 +82,12 @@ struct SelectedAXRequest: Codable, Sendable {
         }
         if tapStyle != nil, kind != .tap {
             throw SelectedHIDFailure.invalid("Only an ordinary selected tap accepts a tap style")
+        }
+        if let waitPolicy {
+            guard kind == .tap else {
+                throw SelectedHIDFailure.invalid("Only an ordinary selected tap accepts a wait policy")
+            }
+            try waitPolicy.validate()
         }
         if let elementType {
             guard kind == .tap || kind == .sliderEndpoint, !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -226,6 +233,7 @@ struct SelectedAXResult: Codable, Sendable {
     var point: SelectedAXPoint?
     var validation: SelectedAXValidation?
     var rejectedHit: SelectedAXRejectedHit?
+    var wait: SelectedAXWaitReceipt?
 }
 
 enum SelectedAXContentError: Error { case tooLarge }

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added bounded wait/poll options for ordinary selected ID, label and value taps and individual batch tap steps. Only absent matches retry; device changes and disconnected clients stop the wait before a late tap. Selected wire 22 rejects old wire 21 requests.
+
 - Added `rotate left|right` for the verified Duo profile, with explicit active-screen and boot checks, one device-wide request, stable rotation readback and the common input lock. Selected wire 21 rejects old wire 20 requests. App layout readiness requires a fresh UI read.
 - Added local arm64 Duo display selection, measured coordinate transforms, guarded HID sessions, complete multi-touch gestures, native slider endpoints and hinge read/set with display readiness.
 - Added selected text and key input with an explicit field/PID check before each key down and owned key release on interruption.
@@ -25,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added selected batch `button home` through the existing guarded Home request, with optional per-step boot and duration checks and typed release completion. Other buttons remain unsupported; a failed receipt stops later steps without replay.
 - Added matched `bootIdentity` and a host-monotonic `readInterval` to `list-simulators --displays --udid` JSON, preserving its existing fields. This read evidence does not replace fresh input/capture checks or change default legacy capture.
 - Added exact, case-sensitive `--element-type` filtering for ordinary selected ID/label taps and their batch steps, before uniqueness and final target validation. Selected protocol versioning prevents older brokers from ignoring the filter; legacy taps are unchanged.
-- Added ordinary selected `tap --value` and matching batch steps, with legacy scalar text conversion, trimmed case-sensitive matching, optional exact type and strict fresh target checks. Polling, coordinate-selector combinations and value-based semantic press remain unsupported.
+- Added ordinary selected `tap --value` and matching batch steps, with legacy scalar text conversion, trimmed case-sensitive matching, optional exact type and strict fresh target checks. Coordinate-selector combinations and value-based semantic press remain unsupported.
 - Added explicit `--tap-style physical` for ordinary selected coordinate and ID/label/value taps, including tap steps in selected batches, through the existing guarded touch path. Omitted style and legacy behavior are unchanged; semantic press rejects every explicit style.
 - Added explicit `--tap-style simulator` for ordinary selected coordinate and ID/label/value taps and their batch steps. It uses the real `tapAt` down/up sequence without an inserted hold, while retaining target/context/cleanup guards and pre/post delays. Omitted/physical style and legacy behavior remain unchanged. Selected wire 16 carries the typed style and rejects old wire 15 requests; exact timing parity is not guaranteed.
 
