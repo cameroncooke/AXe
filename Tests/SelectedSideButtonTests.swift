@@ -35,7 +35,7 @@ struct SelectedSideButtonTests {
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(direct))
         try decoded.validate()
         let payload = try #require(decoded.button)
-        #expect(SelectedHIDRequest.version == 22 && decoded.version == 22)
+        #expect(SelectedHIDRequest.version == 23 && decoded.version == 23)
         #expect(payload.kind == .sideButton && payload.duration == duration && payload.expectedBoot == "boot-one")
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen && decoded.home == nil)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)

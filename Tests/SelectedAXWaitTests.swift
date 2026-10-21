@@ -31,7 +31,7 @@ struct SelectedAXWaitTests {
         #expect(try encoder.encode(direct.ax) == encoder.encode(batch.ax))
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: encoder.encode(direct))
         try decoded.validate()
-        #expect(decoded.version == 22)
+        #expect(decoded.version == 23)
         #expect(decoded.ax?.selectorValue == " Ready " && decoded.ax?.elementType == "Button")
         #expect(decoded.ax?.waitPolicy == .init(timeoutSeconds: 30, pollIntervalSeconds: 0.05))
     }

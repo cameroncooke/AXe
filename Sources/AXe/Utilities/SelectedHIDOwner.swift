@@ -42,6 +42,20 @@ final class SelectedHIDOwner {
         }
         catch { return response(request, outcome: "rejectedBeforeInput", error: error) }
         defer { admission.finish(); lastActivity = dependencies.now() }
+        if request.agentAdmission != nil, request.ax == nil, request.keyboard == nil {
+            do {
+                try acquireLease()
+                let result = await AgentModeNativeOperation.perform(request, simulatorUDID: simulatorUDID,
+                    brokerID: brokerID, logger: logger, helperURL: helperURL)
+                if result.cleanup == "uncertain" { return quarantine(result, request: request) }
+                clear()
+                return result
+            } catch {
+                let result = response(request, outcome: "rejectedBeforeInput", error: error)
+                clear()
+                return result
+            }
+        }
         if request.ax != nil || request.hinge != nil || request.keyboard != nil || request.rotation != nil {
             do {
                 try acquireLease()

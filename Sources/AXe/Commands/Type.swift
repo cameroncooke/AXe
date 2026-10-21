@@ -46,9 +46,25 @@ struct Type: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
-        try selectedKeyboard.validate(input: selectedInput)
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
+            let focusID = selectedKeyboard.focusID
+            guard (agentMode.elementRef != nil) != (focusID != nil) else {
+                throw ValidationError("Agent type requires one --ref or one --focus-id for an already focused TextField.")
+            }
+            if let focusID {
+                guard !focusID.isEmpty, focusID.utf8.count <= 4096,
+                      focusID == focusID.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                    throw ValidationError("--focus-id must be a nonempty exact TextField ID.")
+                }
+            }
+        } else {
+            try selectedKeyboard.validate(input: selectedInput)
+        }
         let sourceCount = [text != nil, useStdin, inputFile != nil].filter { $0 }.count
         if sourceCount > 1 {
             throw ValidationError("Please specify only one input source: text argument, --stdin, or --file.")
@@ -57,6 +73,15 @@ struct Type: AsyncParsableCommand {
         if sourceCount == 0 {
             throw ValidationError("No input provided. Provide text as argument, or use --stdin, or --file.")
         }
+    }
+
+    func agentRequest(standardInput: FileHandle = .standardInput) throws -> SelectedHIDRequest {
+        let input = try AgentModeCommandAdapter.readText(text, useStdin: useStdin,
+            inputFile: inputFile, standardInput: standardInput)
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .typeText,
+            expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            selectorKind: selectedKeyboard.focusID == nil ? nil : .id,
+            selectorValue: selectedKeyboard.focusID, text: input), input: selectedInput)
     }
 
     func selectedRequest(standardInput: FileHandle = .standardInput) throws -> SelectedHIDRequest {
@@ -74,6 +99,10 @@ struct Type: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
             return

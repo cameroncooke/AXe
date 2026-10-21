@@ -20,14 +20,48 @@ struct DescribeUI: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("since-screen-hash"), help: "Agent only: return an unchanged capture when a fresh screen hash matches.")
+    var sinceScreenHash: String?
+
+    @Option(name: .customLong("row-offset"), help: "Agent only: first row in the snapshot table, in 0...4096. Reuse --snapshot-id for the next page.")
+    var rowOffset: Int?
+
+    @Option(name: .customLong("row-limit"), help: "Agent only: maximum rows in this page, in 1...64 (default 64).")
+    var rowLimit: Int?
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            guard point == nil, agentMode.elementRef == nil, selectedAX.preparation == nil else {
+                throw ValidationError("Agent describe-ui does not accept --point, --ref or --ax-preparation.")
+            }
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            if let sinceScreenHash, sinceScreenHash.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ValidationError("--since-screen-hash must not be empty.")
+            }
+            guard (0...4096).contains(rowOffset ?? 0), (1...64).contains(rowLimit ?? 64) else {
+                throw ValidationError("Agent rows require --row-offset in 0...4096 and --row-limit in 1...64.")
+            }
+            guard agentMode.snapshotID == nil || sinceScreenHash == nil else {
+                throw ValidationError("Choose --snapshot-id for a current snapshot page or --since-screen-hash for a fresh capture.")
+            }
+            return
+        }
+        guard sinceScreenHash == nil, rowOffset == nil, rowLimit == nil else {
+            throw ValidationError("--since-screen-hash, --row-offset and --row-limit require --agent.")
+        }
         try selectedInput.validate()
         try selectedAX.validate(required: selectedInput.mode == .selected)
         _ = try parsedPoint()
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
@@ -45,6 +79,12 @@ struct DescribeUI: AsyncParsableCommand {
             throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.")
         }
         print(jsonString)
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        try AgentModeCommandAdapter.request(AgentModeRequest(kind: .describe,
+            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, sinceScreenHash: sinceScreenHash,
+            rowOffset: rowOffset ?? 0, rowLimit: rowLimit ?? 64), input: selectedInput)
     }
 
     func selectedRequest() throws -> SelectedHIDRequest {

@@ -33,6 +33,7 @@ enum SelectedAXOperation {
                 screenID: display.id, screenUniqueID: display.uuid)
             feed = live; observation = live.initialObservation
             try SelectedAXBounds.validateContext(SelectedHIDContext(live.initialObservation))
+            try request.agentAdmission?.validateContext(live.initialObservation)
             if ax.kind == .semanticPress {
                 guard let identifier = ax.selectorValue else { throw SelectedHIDFailure.invalid("Missing semantic press ID") }
                 let receipt = try await FBSimulatorAXSemanticPress.perform(for: simulator,
@@ -121,6 +122,10 @@ enum SelectedAXOperation {
                 selector: selector, observation: live.initialObservation, freshnessProvider: live, policy: policy,
                 preparation: ax.preparation.libraryValue)
             target = operation
+            if let agentAdmission = request.agentAdmission {
+                try agentAdmission.validateScreen(await operation.snapshot.roots)
+                try agentAdmission.target?.validate(await operation.reference.node)
+            }
             result.acquisition = try SelectedAXAcquisition(await operation.acquisition)
             result.roots = await operation.snapshot.roots
             result.target = await operation.reference.node
@@ -129,7 +134,7 @@ enum SelectedAXOperation {
             try SelectedAXBounds.validateContent(result)
             let style = try ax.resolvedTapStyle(target: result.target)
             let guardOwner = SelectedAXSizeGuard(operation: operation, result: result, deadline: deadline,
-                automaticStyle: ax.tapStyle == .automatic ? style : nil)
+                automaticStyle: ax.tapStyle == .automatic ? style : nil, agentAdmission: request.agentAdmission)
             sizeGuard = guardOwner
             let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
                 liveFreshnessProvider: live)
@@ -206,19 +211,23 @@ actor SelectedAXSizeGuard: FBSimulatorHIDInputAdmissionGuard {
     private let operation: FBSimulatorAXTargetOperation
     private let deadline: DispatchTime
     private let automaticStyle: SelectedTapStyle?
+    private let agentAdmission: AgentModeAdmission?
     private(set) var result: SelectedAXResult
     init(operation: FBSimulatorAXTargetOperation, result: SelectedAXResult, deadline: DispatchTime,
-         automaticStyle: SelectedTapStyle? = nil) {
+         automaticStyle: SelectedTapStyle? = nil, agentAdmission: AgentModeAdmission? = nil) {
         self.operation = operation; self.result = result; self.deadline = deadline
         self.automaticStyle = automaticStyle
+        self.agentAdmission = agentAdmission
     }
     func validate(observation: FBSimulatorHIDSessionObservation, firstEvent: FBSimulatorHIDEvent) async throws {
         try checkDeadline()
+        try agentAdmission?.validateContext(observation)
         try await operation.validate(observation: observation, firstEvent: firstEvent)
         guard let receipt = await operation.validationReceipt() else {
             throw SelectedHIDFailure.invalid("Missing selected target validation receipt")
         }
         result.validation = SelectedAXValidation(receipt)
+        try agentAdmission?.target?.validate(receipt.verifiedTarget)
         if let automaticStyle {
             try automaticStyle.validateAutomaticChoice(verifiedTarget: receipt.verifiedTarget)
         }

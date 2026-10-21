@@ -24,7 +24,7 @@ struct SelectedTapValueTests {
         let original = try valueRequest(value)
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(decoded.version == 22 && decoded.requestID == original.requestID)
+        #expect(decoded.version == 23 && decoded.requestID == original.requestID)
         #expect(decoded.screenID == 3 && decoded.screenUUID == UUID(uuidString: screen))
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         let ax = try #require(decoded.ax)

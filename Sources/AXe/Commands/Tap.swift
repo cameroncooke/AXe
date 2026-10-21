@@ -50,8 +50,14 @@ struct Tap: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try validateAgent()
+            return
+        }
         try selectedInput.validate()
         if semanticPress {
             guard selectedInput.mode == .selected, elementID != nil, elementLabel == nil, elementValue == nil,
@@ -128,6 +134,58 @@ struct Tap: AsyncParsableCommand {
         }
     }
 
+    private func validateAgent() throws {
+        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+        guard !semanticPress, selectedAX.preparation == nil, waitTimeout == 0, pollInterval == 0.25 else {
+            throw ValidationError("Agent tap does not accept semantic press, AX preparation or polling overrides.")
+        }
+        let selectors = [elementID, elementLabel, elementValue].compactMap { $0 }
+        let hasPoint = pointX != nil || pointY != nil
+        let targetCount = (agentMode.elementRef == nil ? 0 : 1) + (hasPoint ? 1 : 0) + selectors.count
+        guard targetCount == 1 else {
+            throw ValidationError("Agent tap requires one ref, one selector, or one coordinate pair.")
+        }
+        if hasPoint {
+            guard let pointX, let pointY, pointX.isFinite, pointY.isFinite, pointX >= 0, pointY >= 0 else {
+                throw ValidationError("Agent coordinates require finite non-negative -x and -y.")
+            }
+            try agentMode.requireSnapshot()
+        }
+        if let selector = selectors.first, selector.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ValidationError("Agent selectors must not be empty.")
+        }
+        if let elementType {
+            guard !hasPoint, agentMode.elementRef == nil,
+                  !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw ValidationError("Agent --element-type requires an explicit selector and a nonempty type.")
+            }
+        }
+        try AgentModeCommandAdapter.validateDelay(preDelay, name: "--pre-delay")
+        try AgentModeCommandAdapter.validateDelay(postDelay, name: "--post-delay")
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        let selectorKind: SelectedAXRequest.SelectorKind?
+        if elementID != nil { selectorKind = .id }
+        else if elementLabel != nil { selectorKind = .label }
+        else if elementValue != nil { selectorKind = .value }
+        else { selectorKind = nil }
+        let point: SelectedAXPoint?
+        if let pointX, let pointY { point = SelectedAXPoint(x: pointX, y: pointY) }
+        else { point = nil }
+        let style: SelectedTapStyle
+        switch tapStyle {
+        case .physical: style = .physical
+        case .simulator: style = .simulator
+        case .automatic, nil: style = .automatic
+        }
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .tap,
+            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            point: point, selectorKind: selectorKind, selectorValue: elementID ?? elementLabel ?? elementValue,
+            elementType: elementType, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, tapStyle: style),
+            input: selectedInput)
+    }
+
     func selectedRequest() throws -> SelectedHIDRequest {
         let waitPolicy = try selectedWaitPolicy(hasCoordinates: pointX != nil || pointY != nil)
         let selectedStyle: SelectedTapStyle?
@@ -178,6 +236,10 @@ struct Tap: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
             return

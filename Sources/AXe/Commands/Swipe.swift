@@ -1,4 +1,5 @@
 import ArgumentParser
+import AXeCore
 import Foundation
 import FBControlCore
 import FBSimulatorControl
@@ -9,16 +10,16 @@ struct Swipe: AsyncParsableCommand {
     )
     
     @Option(name: .customLong("start-x"), help: "The X coordinate of the starting point.")
-    var startX: Double
+    var startX: Double?
     
     @Option(name: .customLong("start-y"), help: "The Y coordinate of the starting point.")
-    var startY: Double
+    var startY: Double?
     
     @Option(name: .customLong("end-x"), help: "The X coordinate of the ending point.")
-    var endX: Double
+    var endX: Double?
     
     @Option(name: .customLong("end-y"), help: "The Y coordinate of the ending point.")
-    var endY: Double
+    var endY: Double?
     
     @Option(name: .customLong("duration"), help: "Duration of the swipe in seconds.")
     var duration: Double?
@@ -37,9 +38,29 @@ struct Swipe: AsyncParsableCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("direction"), help: "Agent ref swipe only: up, down, left or right within the current ref bounds.")
+    var agentDirection: RuntimeSwipeDirection?
+
+    @Option(name: .customLong("distance"), help: "Agent ref swipe only: fraction of the ref bounds in (0,1], default 1.")
+    var agentDistance: Double?
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try validateAgent()
+            return
+        }
+        guard agentDirection == nil, agentDistance == nil else {
+            throw ValidationError("--direction and --distance require --agent.")
+        }
+        try selectedAX.validate(required: false)
         try selectedInput.validate()
+        guard let startX, let startY, let endX, let endY else {
+            throw ValidationError("Swipe requires --start-x, --start-y, --end-x and --end-y.")
+        }
         if selectedInput.mode == .selected { try selectedPath.validate() }
         // Validate coordinates are non-negative
         guard startX >= 0, startY >= 0, endX >= 0, endY >= 0 else {
@@ -79,13 +100,60 @@ struct Swipe: AsyncParsableCommand {
         }
     }
 
+    private func validateAgent() throws {
+        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+        guard selectedAX.preparation == nil else {
+            throw ValidationError("Agent swipe does not accept --ax-preparation.")
+        }
+        let coordinates = [startX, startY, endX, endY]
+        if agentMode.elementRef != nil {
+            guard coordinates.allSatisfy({ $0 == nil }), agentDirection != nil, delta == nil else {
+                throw ValidationError("Agent ref swipe requires --direction and does not accept coordinates or --delta.")
+            }
+            let distance = agentDistance ?? 1
+            guard distance.isFinite, distance > 0, distance <= 1 else {
+                throw ValidationError("--distance must be finite and in (0,1].")
+            }
+        } else {
+            guard agentDirection == nil, agentDistance == nil else {
+                throw ValidationError("--direction and --distance require an agent --ref.")
+            }
+            try agentMode.requireSnapshot()
+            try selectedPath.validate()
+        }
+        if let duration, !duration.isFinite || duration <= 0 || duration > 10 {
+            throw ValidationError("Agent swipe duration must be finite and in (0,10] seconds.")
+        }
+        try AgentModeCommandAdapter.validateDelay(preDelay, name: "--pre-delay")
+        try AgentModeCommandAdapter.validateDelay(postDelay, name: "--post-delay")
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        if agentMode.elementRef != nil {
+            return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .swipe,
+                expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+                direction: agentDirection, distance: agentDistance ?? 1, duration: duration ?? 1,
+                preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
+        }
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .complete,
+            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID),
+            input: selectedInput, path: selectedPath)
+    }
+
     var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .swipe, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration ?? 1, delta: delta ?? 50, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let request = try selectedInput.pathRequest(selectedPath)
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
             return
+        }
+        guard let startX, let startY, let endX, let endY else {
+            throw ValidationError("Swipe requires --start-x, --start-y, --end-x and --end-y.")
         }
         let logger = AxeLogger()
         try await setup(logger: logger)

@@ -27,8 +27,9 @@ enum SelectedKeyboardOperation {
                 screenID: display.id, screenUniqueID: display.uuid)
             feed = live
             observation = live.initialObservation
+            try request.agentAdmission?.validateContext(live.initialObservation)
             _ = try FBSimulatorHIDSession.preflight(keyboard.event, observation: live.initialObservation)
-            let focus = SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard)
+            let focus = SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard, agentAdmission: request.agentAdmission)
             guardOwner = focus
             try await focus.prepare()
             let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
@@ -67,13 +68,15 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     private let simulator: FBSimulator
     private let feed: FBSimulatorHIDNativeFreshnessProvider
     private let request: SelectedKeyboardRequest
+    private let agentAdmission: AgentModeAdmission?
     private let deadline = DispatchTime.now() + 8
     private(set) var result: SelectedKeyboardResult
 
-    init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, request: SelectedKeyboardRequest) {
+    init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, request: SelectedKeyboardRequest, agentAdmission: AgentModeAdmission? = nil) {
         self.simulator = simulator
         self.feed = feed
         self.request = request
+        self.agentAdmission = agentAdmission
         result = SelectedKeyboardResult(expectedPID: request.expectedPID, focusID: request.focusID)
     }
 
@@ -82,6 +85,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     }
 
     func validateKeyDown(observation: FBSimulatorHIDSessionObservation, keyCode: UInt32) async throws {
+        try agentAdmission?.validateContext(observation)
         guard observation == feed.initialObservation, keyCode <= 255, let initial = result.initialTarget else {
             throw SelectedHIDFailure.invalid("Keyboard context or initial field is missing or changed")
         }
@@ -99,6 +103,16 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
 
     private func readFocusedField() async throws -> FBSimulatorAXNode {
         let remaining = try remainingSeconds()
+        if let agentAdmission {
+            let field = try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
+                expectedPID: request.expectedPID, identifier: request.focusID,
+                observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
+            _ = try remainingSeconds()
+            try SelectedKeyboardFocusPolicy.validate(field, expectedPID: request.expectedPID, focusID: request.focusID)
+            try agentAdmission.target?.validate(field, allowingValueChange: result.validatedKeyDownCount > 0)
+            _ = try remainingSeconds()
+            return field
+        }
         let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: remaining, maximumAttempts: 1)
         let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: request.expectedPID,
             observation: feed.initialObservation, freshnessProvider: feed, policy: policy, preparation: .existingBridge)
@@ -108,6 +122,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         }
         let reference = try await snapshot.resolve(.identifier(request.focusID), freshnessProvider: feed)
         try SelectedKeyboardFocusPolicy.validate(reference.node, expectedPID: request.expectedPID, focusID: request.focusID)
+        try agentAdmission?.target?.validate(reference.node, allowingValueChange: result.validatedKeyDownCount > 0)
         try await snapshot.validate(reference, freshnessProvider: feed)
         _ = try remainingSeconds()
         return reference.node

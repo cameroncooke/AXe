@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 22
+    static let version = 23
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -20,9 +20,39 @@ struct SelectedHIDRequest: Codable, Sendable {
     var home: SelectedHomeRequest? = nil
     var button: SelectedButtonRequest? = nil
     var rotation: SelectedRotationRequest? = nil
+    var agent: AgentModeRequest? = nil
+    var agentAdmission: AgentModeAdmission? = nil
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if let agent {
+            try agent.validate()
+            guard agentAdmission == nil, operation == .complete, token == nil,
+                  (screenID == nil) == (screenUUID == nil), ax == nil, keyboard == nil,
+                  hinge == nil, rotation == nil, home == nil, button == nil, pinch == nil, gesture == nil else {
+                throw AgentModeFailure("mixedPayload", "Agent input requires one complete request without native action payloads.")
+            }
+            if agent.kind == .complete {
+                guard path != nil || !primitives.isEmpty else {
+                    throw AgentModeFailure("missingCompletePayload", "A complete coordinate action requires its existing path or primitives.")
+                }
+                try path?.validate()
+                guard primitives.count <= 1024 else { throw AgentModeFailure("inputTooLarge", "Too many coordinate primitives.") }
+                for primitive in primitives { try primitive.validate() }
+            } else if path != nil || !primitives.isEmpty {
+                throw AgentModeFailure("mixedPayload", "Agent reference actions cannot contain coordinate primitives.")
+            }
+            return
+        }
+        if let agentAdmission {
+            guard operation == .complete, token == nil, agentAdmission.expectedPID > 0,
+                  agentAdmission.context.screenID == screenID,
+                  UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID,
+                  agentAdmission.screenHash.utf8.count <= 64, hinge == nil, rotation == nil,
+                  home == nil, button == nil, pinch == nil, gesture == nil else {
+                throw AgentModeFailure("invalidAdmission", "Agent native admission does not match this complete request.")
+            }
+        }
         guard [path != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
             throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
         }
@@ -196,9 +226,10 @@ struct SelectedHIDResponse: Codable, Sendable {
     var home: SelectedHomeResult? = nil
     var button: SelectedButtonResult? = nil
     var rotation: SelectedRotationResult? = nil
+    var agent: AgentModeResult? = nil
 }
 
-struct SelectedHIDContext: Codable, Sendable {
+struct SelectedHIDContext: Codable, Sendable, Equatable {
     let bootIdentity: String
     let screenID: UInt32
     let screenUUID: String

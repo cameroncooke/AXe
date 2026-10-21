@@ -5,13 +5,18 @@ import FBSimulatorControl
 @MainActor
 protocol BatchConvertible {
     var batchInputMode: SimulatorInputMode { get }
+    var batchAgentModeEnabled: Bool { get }
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive]
 }
 
 extension BatchConvertible {
     var batchInputMode: SimulatorInputMode { .legacy }
+    var batchAgentModeEnabled: Bool { false }
 
     func validateBatchAdmission() throws {
+        guard !batchAgentModeEnabled else {
+            throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+        }
         guard batchInputMode == .legacy else {
             throw ValidationError("Selected input is not supported in batch steps. Run the selected command separately.")
         }
@@ -74,6 +79,7 @@ func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws
 }
 
 extension Tap: BatchConvertible {
+    var batchAgentModeEnabled: Bool { agentMode.enabled }
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     private func resolvedTapStyle(for resolution: TapResolution, context: BatchContext) -> TapStyle {
@@ -147,9 +153,13 @@ extension Tap: BatchConvertible {
 }
 
 extension Swipe: BatchConvertible {
+    var batchAgentModeEnabled: Bool { agentMode.enabled }
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
+        guard let startX, let startY, let endX, let endY else {
+            throw ValidationError("Batch swipe requires all four coordinates.")
+        }
         let swipeDuration = duration ?? 1.0
         let swipeDelta = delta ?? 50.0
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
@@ -301,6 +311,7 @@ extension KeyCombo: BatchConvertible {
 }
 
 extension Type: BatchConvertible {
+    var batchAgentModeEnabled: Bool { agentMode.enabled }
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {

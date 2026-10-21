@@ -45,6 +45,9 @@ enum SelectedBatchStep {
         switch name {
         case "tap":
             let command = try parse(Tap.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             guard !command.semanticPress else {
                 throw ValidationError("Semantic press is not yet supported in selected batch steps.")
             }
@@ -57,6 +60,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest()
         case "swipe":
             let command = try parse(Swipe.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             request = try command.selectedInput.pathRequest(command.selectedPath)
         case "drag":
             let command = try parse(Drag.self, arguments)
@@ -77,6 +83,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest()
         case "type":
             let command = try parse(Type.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             request = try command.selectedRequest(standardInput: standardInput)
         case "key":
             let command = try parse(Key.self, arguments)

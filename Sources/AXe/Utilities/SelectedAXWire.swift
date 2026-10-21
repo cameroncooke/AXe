@@ -35,6 +35,27 @@ enum SelectedAXWire {
     static func boundedResponse(_ response: SelectedHIDResponse, maximumBytes: Int) throws -> Data {
         do { return try encodeResponse(response, maximumBytes: maximumBytes) }
         catch {
+            if let agent = response.agent {
+                let failure = AgentModeFailure("responseTooLarge",
+                    "The agent response exceeds its size bound. Capture and error details were omitted. Inspect the action receipt before continuing.")
+                let quarantine = agent.data.quarantine ?? response.quarantine
+                var summary = SelectedHIDResponse(version: response.version, requestID: response.requestID,
+                    brokerID: response.brokerID, outcome: response.outcome, token: response.token,
+                    enqueuedEventCount: response.enqueuedEventCount, cleanup: response.cleanup,
+                    error: failure.message, context: response.context, quarantine: response.quarantine)
+                summary.agent = AgentModeResult(error: failure, action: agent.data.action,
+                    cache: AgentModeCacheState(status: quarantine == nil ? "invalidated" : "quarantined",
+                        reason: failure.code, requiresRefresh: true),
+                    context: agent.data.context ?? response.context, quarantine: quarantine,
+                    nextSteps: [
+                        "Input was not replayed. Do not repeat the action.",
+                        quarantine == nil
+                            ? "Inspect the action and cleanup receipt. Run describe-ui --agent before another reference action."
+                            : "Inspect the action and quarantine receipts. Complete explicit input recovery before requesting a fresh agent snapshot.",
+                    ])
+                // Preserve the receipt or fail explicitly; never drop it to make a response fit.
+                return try encodeResponse(summary, maximumBytes: maximumBytes)
+            }
             // Do not emit partial JSON. Preserve input accounting and mark evidence omitted.
             var summary = response.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID, preparation: $0.preparation) }
             summary?.failure = .responseTooLarge

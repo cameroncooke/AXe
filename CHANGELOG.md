@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added opt-in `--agent` snapshots and guarded reference actions on `describe-ui`, `tap`, `type` and `swipe`, with compact RS/1-style output, bounded broker state, immutable snapshot IDs and fresh context/target validation. Existing commands without the flag retain their raw output and coordinate route. Selected wire 23 rejects old wire 22 requests.
+
 - Added bounded wait/poll options for ordinary selected ID, label and value taps and individual batch tap steps. Only absent matches retry; device changes and disconnected clients stop the wait before a late tap. Selected wire 22 rejects old wire 21 requests.
 
 - Added `rotate left|right` for the verified Duo profile, with explicit active-screen and boot checks, one device-wide request, stable rotation readback and the common input lock. Selected wire 21 rejects old wire 20 requests. App layout readiness requires a fresh UI read.

@@ -25,7 +25,7 @@ enum SelectedHIDBroker {
         defer { Darwin.close(descriptor) }
         try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: 120_000, writeMilliseconds: 2000)
         return try exchange(data, requestID: request.requestID, descriptor: descriptor,
-            maximumResponseBytes: request.ax == nil && request.keyboard == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
+            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
     }
     static func exchange(_ data: Data, requestID: UUID, descriptor: Int32,
                          maximumResponseBytes: Int = HIDBroker.maximumMessageBytes) throws -> SelectedHIDResponse {
@@ -64,10 +64,11 @@ enum SelectedHIDBroker {
         let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
         guard FileManager.default.isExecutableFile(atPath: helper.path) else { throw SelectedHIDFailure.invalid("Missing signed cadisplay-context helper beside axe") }
         let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger, helperURL: helper)
+        let agentController = AgentModeController(simulatorUDID: simulatorUDID, logger: logger, owner: owner)
         var tasks: [UUID: Task<Void, Never>] = [:]
         do {
             while !owner.shouldStop {
-                await owner.maintain()
+                if !agentController.isBusy { await owner.maintain() }
                 if owner.shouldStop { break }
                 let client = try await offMain {
                     var descriptor = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
@@ -81,7 +82,7 @@ enum SelectedHIDBroker {
                 guard client >= 0 else { continue }
                 // Bounded outstanding socket work. Rejection happens before the ready handshake.
                 guard tasks.count < 8 else { Darwin.close(client); continue }
-                let rejectedWhileBusy = owner.isBusy
+                let rejectedWhileBusy = owner.isBusy || agentController.isBusy
                 let id = UUID()
                 tasks[id] = Task { @MainActor in
                     defer { Darwin.close(client); tasks.removeValue(forKey: id) }
@@ -97,17 +98,23 @@ enum SelectedHIDBroker {
                             return try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
                         }
                         let response: SelectedHIDResponse
-                        if rejectedWhileBusy {
-                            response = owner.rejectBusy(request)
+                        if rejectedWhileBusy || agentController.isBusy {
+                            response = request.agent == nil ? owner.rejectBusy(request) : agentController.reject(request)
+                        } else if request.agent != nil {
+                            response = await SelectedHIDClientLifetime.run(descriptor: client) {
+                                await agentController.perform(request)
+                            }
                         } else if request.ax?.kind == .tap, request.ax?.waitPolicy != nil {
+                            agentController.invalidate()
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await owner.perform(request)
                             }
                         } else {
+                            agentController.invalidate()
                             response = await owner.perform(request)
                         }
                         try await offMain {
-                            let maximumBytes = request.ax == nil && request.keyboard == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
+                            let maximumBytes = request.ax == nil && request.keyboard == nil && request.agent == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
                             let bytes = try SelectedAXWire.boundedResponse(response, maximumBytes: maximumBytes)
                             try HIDBroker.writeAll(bytes, to: client)
                         }
