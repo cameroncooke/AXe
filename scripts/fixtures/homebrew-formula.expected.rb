@@ -9,7 +9,7 @@ class Axe < Formula
   sha256 "<normalized>"
 
   def install
-    libexec.install "axe", "Frameworks", "AXe_AXe.bundle"
+    libexec.install "axe", "cadisplay-context", "Frameworks", "AXe_AXe.bundle"
     bin.write_exec_script libexec/"axe"
   end
 
@@ -19,6 +19,7 @@ class Axe < Formula
     end
 
     system "codesign", "--force", "--sign", "-", "--timestamp=none", libexec/"axe"
+    system "codesign", "--force", "--sign", "-", "--timestamp=none", libexec/"cadisplay-context"
   end
 
   test do

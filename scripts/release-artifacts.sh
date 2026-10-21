@@ -110,6 +110,7 @@ verify_stage() {
 
   [[ -d "$stage_dir" ]] || fail "Stage directory not found: $stage_dir"
   [[ -x "$stage_dir/axe" ]] || fail "Stage is missing executable axe"
+  [[ -x "$stage_dir/cadisplay-context" ]] || fail "Stage is missing executable cadisplay-context"
   [[ -d "$stage_dir/Frameworks" ]] || fail "Stage is missing Frameworks directory"
   [[ -d "$stage_dir/AXe_AXe.bundle" ]] || fail "Stage is missing AXe_AXe.bundle"
 

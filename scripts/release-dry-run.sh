@@ -45,6 +45,7 @@ lipo -info "$BIN_PATH" | grep -q "arm64"
 lipo -info "$BIN_PATH" | grep -q "x86_64"
 
 cp "$BIN_PATH" "$PACKAGE_ROOT/axe"
+cp "$BIN_PATH" "$PACKAGE_ROOT/cadisplay-context"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBControlCore.framework/FBControlCore"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/XCTestBootstrap.framework/XCTestBootstrap"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBSimulatorControl.framework/FBSimulatorControl"
@@ -94,7 +95,7 @@ HOMEBREW_SHA="$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{print $1}')"
   > "$FORMULA_OUT"
 
 grep -q 'depends_on macos: :sonoma' "$FORMULA_OUT"
-grep -q 'libexec.install "axe", "Frameworks", "AXe_AXe.bundle"' "$FORMULA_OUT"
+grep -q 'libexec.install "axe", "cadisplay-context", "Frameworks", "AXe_AXe.bundle"' "$FORMULA_OUT"
 grep -q 'bin.write_exec_script libexec/"axe"' "$FORMULA_OUT"
 grep -q 'def post_install' "$FORMULA_OUT"
 
