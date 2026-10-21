@@ -144,16 +144,18 @@ stayed at 1200/400 percent over 20 seconds. Builds used one job with all guests
 off and a separate starting app gate below 7 GiB. Native input required a fresh
 app sample below 7.75 GiB. Only the assigned guest ran in this round.
 
-Across the saved groups, sampled peaks were app 7.829 GiB, all simulator groups
+Across the fix per-command guard records, sampled peaks were app 7.829 GiB, all simulator groups
 4.885 GiB, and owned command 0.477 GiB. No resource limit stop occurred. The last
 shutdown sample was app 7.144 GiB and simulator groups 0.595 GiB. These are sampled
 physical footprints, not RSS sums.
 
-The main ignored IDB checkout was read only. A final check confirmed all 60 of its
-previous tracked foundation pins still matched. It must be advanced with the
-exact accepted source and local project delta, or builds must use the explicit
-isolated `IDB_CHECKOUT_DIR`. The coordinator owns that integration. Existing
-binary products must not be overwritten as part of the source merge.
+The worker kept the main ignored IDB checkout read only and confirmed all 60
+previous source pins. After source merge `664686f5`, the coordinator saved recovery
+copies and advanced only the session, the new focused test source and the accepted
+four-line generated project entry. The existing `/bin/bash scripts/build.sh setup`
+command passed all 61 new source hashes and the reverse patch check. The record is
+`main-idb-integration.json` in the evidence root. Existing binary products stay
+unchanged; no main rebuild with unrelated Agent edits was attempted.
 
 This evidence covers the stated retained-input gap and regression paths. It does
 not prove every Duo pose or every public feature. Fresh Debug compiled modules
