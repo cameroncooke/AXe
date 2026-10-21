@@ -1601,7 +1601,7 @@ diff --git a/FBSimulatorControl/Commands/FBAXTranslationRequest.swift b/FBSimula
 +  }
 +}
 diff --git a/FBSimulatorControl/Commands/FBAccessibilityElement.swift b/FBSimulatorControl/Commands/FBAccessibilityElement.swift
-index 0ebd3bb25..ff9d12ce3 100644
+index 0ebd3bb25..c23f54068 100644
 --- a/FBSimulatorControl/Commands/FBAccessibilityElement.swift
 +++ b/FBSimulatorControl/Commands/FBAccessibilityElement.swift
 @@ -37,6 +37,69 @@ public final class FBAccessibilityElement {
@@ -1691,17 +1691,17 @@ index 0ebd3bb25..ff9d12ce3 100644
    /// Perform an unconditional accessibility tap (AXPress) without any label verification.
    public func tap() throws {
      if closed {
-@@ -129,6 +202,41 @@ public final class FBAccessibilityElement {
+@@ -129,6 +202,47 @@ public final class FBAccessibilityElement {
      return newHandle
    }
  
-+  /// Exact labels share the snapshot predicate. Uniqueness precedes role filtering.
++  /// Selected slider handles use exact selectors. Uniqueness precedes role filtering.
 +  /// The existing substring search remains unchanged for its current callers.
-+  func findElement(withExactLabel label: String, depth: UInt, deadline: Double) throws -> FBAccessibilityElement {
-+    guard !closed else { throw FBAccessibilityError.closedElement(operation: "select exact label") }
++  func findSliderElement(matching selection: FBSimulatorSliderSelection, depth: UInt, deadline: Double) throws -> FBAccessibilityElement {
++    guard !closed else { throw FBAccessibilityError.closedElement(operation: "select exact slider") }
 +    var found: FBAXPlatformElement?
 +    do {
-+      try Self.findExactLabel(label, in: element, token: request.token, remainingDepth: depth,
++      try Self.findSliderElement(matching: selection, in: element, token: request.token, remainingDepth: depth,
 +        deadline: deadline, found: &found)
 +      guard let found else { throw FBSimulatorSliderError.invalidSelection }
 +      guard let simulator else { throw FBAccessibilityError.simulatorDeallocated }
@@ -1714,17 +1714,23 @@ index 0ebd3bb25..ff9d12ce3 100644
 +    }
 +  }
 +
-+  private static func findExactLabel(_ label: String, in element: FBAXPlatformElement,
++  static func findSliderElement(matching selection: FBSimulatorSliderSelection, in element: FBAXPlatformElement,
 +    token: String, remainingDepth: UInt, deadline: Double, found: inout FBAXPlatformElement?) throws {
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    element.axSetBridgeDelegateToken(token)
-+    if FBSimulatorAXSelector.matchesLabel(element.axLabel(), query: label) {
++    let matches: Bool
++    switch selection {
++    case .identifier(let identifier): matches = element.axIdentifier() == identifier
++    case .label(let label): matches = FBSimulatorAXSelector.matchesLabel(element.axLabel(), query: label)
++    }
++    if matches {
 +      guard found == nil else { throw FBSimulatorSliderError.invalidSelection }
 +      found = element
 +    }
++    try FBSimulatorSliderEndpointController.check(deadline)
 +    guard remainingDepth > 0 else { return }
 +    for child in element.axChildren() {
-+      try findExactLabel(label, in: child, token: token, remainingDepth: remainingDepth - 1,
++      try findSliderElement(matching: selection, in: child, token: token, remainingDepth: remainingDepth - 1,
 +        deadline: deadline, found: &found)
 +    }
 +    try FBSimulatorSliderEndpointController.check(deadline)
@@ -4722,10 +4728,10 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2
  }
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..d8a543ac0d59cbc4a2aa0e5c41c4e09ef796919b
+index 000000000..8275a90d5
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
-@@ -0,0 +1,438 @@
+@@ -0,0 +1,432 @@
 +import AppKit
 +import Foundation
 +
@@ -5107,13 +5113,7 @@ index 0000000000000000000000000000000000000000..d8a543ac0d59cbc4a2aa0e5c41c4e09e
 +    }
 +    let node = try FBSimulatorSliderTargetSelection.resolve(roots: snapshot.roots,
 +      selection: selection, expectedPID: expectedPID, elementType: elementType)
-+    let selected: FBAccessibilityElement
-+    switch selection {
-+    case .identifier(let identifier):
-+      selected = try root.findElement(withValue: identifier, forKey: .uniqueID, depth: 64)
-+    case .label(let label):
-+      selected = try root.findElement(withExactLabel: label, depth: 64, deadline: deadline)
-+    }
++    let selected = try root.findSliderElement(matching: selection, depth: 64, deadline: deadline)
 +    defer { selected.close() }
 +    switch selection {
 +    case .identifier(let identifier):
@@ -12939,11 +12939,13 @@ index 0000000000000000000000000000000000000000..292b728690168769570ebdb42c8cf3b4
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorSliderLabelTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorSliderLabelTests.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..655d49a3ea9fd4c1b9d19afc9639fbab52bc42b8
+index 000000000..eac4d736d
 --- /dev/null
 +++ b/FBSimulatorHIDEventTransportTests/FBSimulatorSliderLabelTests.swift
-@@ -0,0 +1,121 @@
+@@ -0,0 +1,302 @@
++import AppKit
 +import CoreGraphics
++import FBControlCore
 +import Foundation
 +import Testing
 +@testable import FBSimulatorControl
@@ -13062,6 +13064,185 @@ index 0000000000000000000000000000000000000000..655d49a3ea9fd4c1b9d19afc9639fbab
 +      _ = try FBSimulatorSliderTargetSelection.ownedRoot(roots: roots,
 +        selection: selection(kind), expectedPID: 42, elementType: "Slider")
 +    }
++  }
++}
++
++@Suite("Selected slider owned handle search")
++struct FBSimulatorSliderOwnedSearchTests {
++  private final class Element: FBAXPlatformElement {
++    let identifier: String?
++    let label: String?
++    let role: String
++    let children: [Element]
++    var onIdentifierRead: (() -> Void)?
++    var onChildrenRead: (() -> Void)?
++    private(set) var tokens: [String] = []
++    private(set) var identifierReads = 0
++    private(set) var labelReads = 0
++    private(set) var roleReads = 0
++    private(set) var childrenReads = 0
++    private(set) var actionCalls = 0
++
++    init(identifier: String? = nil, label: String? = nil, role: String = "AXSlider", children: [Element] = []) {
++      self.identifier = identifier; self.label = label; self.role = role; self.children = children
++    }
++
++    func axIdentifier() -> String? { identifierReads += 1; onIdentifierRead?(); return identifier }
++    func axLabel() -> String? { labelReads += 1; return label }
++    func axRole() -> String? { roleReads += 1; return role }
++    func axChildren() -> [FBAXPlatformElement] { childrenReads += 1; onChildrenRead?(); return children }
++    func axSetBridgeDelegateToken(_ token: String?) { tokens.append(token ?? "<nil>") }
++    var axTranslationPid: pid_t { 42 }
++    func axFrame() -> NSRect { NSRect(x: 10, y: 20, width: 100, height: 30) }
++    func axValue() -> Any? { nil }
++    func axTitle() -> String? { nil }
++    func axHelp() -> String? { nil }
++    func axRoleDescription() -> String? { nil }
++    func axSubrole() -> String? { nil }
++    func axPlaceholderValue() -> String? { nil }
++    func axIsEnabled() -> Bool { true }
++    func axIsRequired() -> Bool { false }
++    func axIsExpanded() -> Bool { false }
++    func axIsHidden() -> Bool { false }
++    func axIsFocused() -> Bool { false }
++    func axCustomActionNames() -> [String] { [] }
++    func axActionNames() -> [String] { [] }
++    func axTraits() -> [String]? { nil }
++    func axPerformPress() -> Bool { actionCalls += 1; return false }
++    func axScroll(_ direction: FBAccessibilityScrollDirection) { actionCalls += 1 }
++    func axSetValue(_ value: Any?) { actionCalls += 1 }
++  }
++
++  private func search(_ root: Element, selection: FBSimulatorSliderSelection = .identifier("slider.unit"),
++    depth: UInt = 64, deadline: Double? = nil) throws -> Element? {
++    var found: FBAXPlatformElement?
++    try FBAccessibilityElement.findSliderElement(matching: selection, in: root, token: "owned-search",
++      remainingDepth: depth, deadline: deadline ?? ProcessInfo.processInfo.systemUptime + 30, found: &found)
++    return found as? Element
++  }
++
++  private func waitUntilExpired(_ deadline: Double) {
++    while ProcessInfo.processInfo.systemUptime < deadline {
++      Thread.sleep(forTimeInterval: max(0.001, deadline - ProcessInfo.processInfo.systemUptime))
++    }
++  }
++
++  private func expectDeadline(_ operation: () throws -> Void) {
++    do { try operation(); Issue.record("Owned search returned after its deadline") }
++    catch FBSimulatorSliderError.deadline {}
++    catch { Issue.record("Unexpected error: \(error)") }
++  }
++
++  @Test func earlierStateLabelCannotReplaceExactSliderHandle() throws {
++    let state = Element(identifier: "slider.unitState", label: "Unit value", role: "AXStaticText")
++    let slider = Element(identifier: "slider.unit", label: "Unit range slider")
++    let root = Element(role: "AXApplication", children: [state, slider])
++    #expect(try search(root) === slider)
++    #expect(root.tokens == ["owned-search"] && state.tokens == ["owned-search"] && slider.tokens == ["owned-search"])
++    #expect(state.roleReads == 0 && slider.roleReads == 0)
++    #expect(root.actionCalls == 0 && state.actionCalls == 0 && slider.actionCalls == 0)
++  }
++
++  @Test(arguments: [nil, "slider", "slider.unitState", "Slider.unit", "SLIDER.UNIT", " slider.unit", "slider.unit ", "\nslider.unit\t"] as [String?])
++  func partialCaseChangedOrPaddedNativeIDDoesNotMatch(identifier: String?) throws {
++    let candidate = Element(identifier: identifier)
++    #expect(try search(Element(children: [candidate])) == nil)
++    #expect(candidate.identifierReads == 1 && candidate.roleReads == 0 && candidate.actionCalls == 0)
++  }
++
++  @Test(arguments: ["slider", "Slider.unit", " slider.unit", "slider.unit "])
++  func queryIDIsNotTrimmedOrMatchedAsSubstring(query: String) throws {
++    let slider = Element(identifier: "slider.unit")
++    #expect(try search(slider, selection: .identifier(query)) == nil)
++    #expect(slider.identifierReads == 1 && slider.actionCalls == 0)
++  }
++
++  @Test(arguments: ["AXSlider", "AXButton", "AXStaticText"], ["sibling", "descendant"])
++  func duplicateExactIDRejectsBeforeRoleFiltering(otherRole: String, placement: String) throws {
++    let duplicate = Element(identifier: "slider.unit", role: otherRole)
++    let first = Element(identifier: "slider.unit", children: placement == "descendant" ? [duplicate] : [])
++    let root = Element(children: placement == "sibling" ? [first, duplicate] : [first])
++    #expect(throws: FBSimulatorSliderError.self) { _ = try search(root) }
++    #expect(first.tokens == ["owned-search"] && duplicate.tokens == ["owned-search"])
++    #expect(first.roleReads == 0 && duplicate.roleReads == 0)
++    #expect(first.actionCalls == 0 && duplicate.actionCalls == 0)
++  }
++
++  @Test(arguments: [" Unit range slider ", "\nUnit range slider\t", "\u{00a0}Unit range slider\u{00a0}"])
++  func labelSelectorTrimsBothSidesAndKeepsTheExactHandle(label: String) throws {
++    let prefix = Element(label: "Unit range slider state", role: "AXStaticText")
++    let slider = Element(label: label)
++    let root = Element(children: [prefix, slider])
++    #expect(try search(root, selection: .label(" \nUnit range slider\t")) === slider)
++    #expect(slider.labelReads == 1 && slider.identifierReads == 0 && slider.actionCalls == 0)
++  }
++
++  @Test(arguments: [nil, "Unit range", "unit range slider", "Unit range slider state", "", " "] as [String?])
++  func absentPartialOrCaseChangedNativeLabelDoesNotMatch(label: String?) throws {
++    let candidate = Element(label: label)
++    #expect(try search(candidate, selection: .label("Unit range slider")) == nil)
++    #expect(candidate.labelReads == 1 && candidate.identifierReads == 0 && candidate.actionCalls == 0)
++  }
++
++  @Test(arguments: ["", " ", "\n\t"])
++  func emptyTrimmedLabelQueryCannotMatch(query: String) throws {
++    #expect(try search(Element(label: "Unit range slider"), selection: .label(query)) == nil)
++  }
++
++  @Test(arguments: ["AXSlider", "AXButton"])
++  func duplicateTrimmedLabelsRejectBeforeRoleFiltering(otherRole: String) throws {
++    let first = Element(label: "Unit range slider")
++    let duplicate = Element(label: "\n Unit range slider \t", role: otherRole)
++    #expect(throws: FBSimulatorSliderError.self) {
++      _ = try search(Element(children: [first, Element(children: [duplicate])]), selection: .label("Unit range slider"))
++    }
++    #expect(first.roleReads == 0 && duplicate.roleReads == 0 && duplicate.tokens == ["owned-search"])
++    #expect(first.actionCalls == 0 && duplicate.actionCalls == 0)
++  }
++
++  @Test(arguments: [0, 1, 2] as [UInt])
++  func nestedTraversalUsesTheExactDepthBound(depth: UInt) throws {
++    let slider = Element(identifier: "slider.unit")
++    let group = Element(children: [slider])
++    let root = Element(children: [group])
++    let found = try search(root, depth: depth)
++    if depth == 2 { #expect(found === slider) }
++    else { #expect(found == nil) }
++    #expect(root.childrenReads == (depth > 0 ? 1 : 0))
++    #expect(group.tokens.count == (depth > 0 ? 1 : 0))
++    #expect(group.childrenReads == (depth > 1 ? 1 : 0))
++    #expect(slider.tokens.count == (depth > 1 ? 1 : 0))
++    #expect(slider.childrenReads == 0)
++  }
++
++  @Test func depthZeroCanSelectOnlyTheRoot() throws {
++    let child = Element(identifier: "slider.unit")
++    let root = Element(identifier: "slider.unit", children: [child])
++    #expect(try search(root, depth: 0) === root)
++    #expect(root.childrenReads == 0 && child.tokens.isEmpty && child.identifierReads == 0)
++  }
++
++  @Test(arguments: [0.0, -1.0, Double.nan, Double.infinity, -Double.infinity])
++  func invalidOrExpiredDeadlineRejectsBeforeNativeReads(deadline: Double) {
++    let root = Element(identifier: "slider.unit")
++    expectDeadline { _ = try search(root, deadline: deadline) }
++    #expect(root.tokens.isEmpty && root.identifierReads == 0 && root.childrenReads == 0 && root.actionCalls == 0)
++  }
++
++  @Test func expiryDuringTraversalCannotReturnAnEarlierMatch() {
++    let deadline = ProcessInfo.processInfo.systemUptime + 1
++    let root = Element(identifier: "slider.unit")
++    root.onChildrenRead = { waitUntilExpired(deadline) }
++    expectDeadline { _ = try search(root, deadline: deadline) }
++    #expect(root.identifierReads == 1 && root.childrenReads == 1 && root.actionCalls == 0)
++  }
++
++  @Test func expiryInDepthZeroSelectorReadCannotReturnAMatch() {
++    let deadline = ProcessInfo.processInfo.systemUptime + 1
++    let root = Element(identifier: "slider.unit")
++    root.onIdentifierRead = { waitUntilExpired(deadline) }
++    expectDeadline { _ = try search(root, depth: 0, deadline: deadline) }
++    #expect(root.identifierReads == 1 && root.childrenReads == 0 && root.actionCalls == 0)
 +  }
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift

@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed selected slider ID requests failing when an earlier element had a longer ID with the same prefix. Native handle lookup now uses exact, unique ID matching; duplicate and wrong-role requests still reject before action.
 - Fixed live library retained touches staying held while the caller is idle after folding or rotation. Single and paired contacts now release on the original connection; `close()` waits for owned automatic cleanup and preserves uncertain-release failures.
 - Fixed selected input holding contacts through fold or rotation changes during long delays and between retained-touch commands. The owner releases on the original connection, rejects old tokens and keeps uncertain cleanup blocked.
 - Fixed selected exact-ID physical taps on UIKit switches whose point hit is an unnamed child. Native identity, screen and parent checks now validate that child before input; bounded Duo fold/rotation checks passed.
