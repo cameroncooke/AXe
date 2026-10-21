@@ -37,7 +37,22 @@ struct Touch: AsyncParsableCommand {
     var simulatorUDID: String
 
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+
+    @Option(name: .customLong("contact-token"), help: "Selected input only: token returned by a retained down; down moves it and up releases it.")
+    var contactToken: String?
+
     func validate() throws {
+        try selectedInput.validate()
+        if let contactToken {
+            guard selectedInput.mode == .selected, UUID(uuidString: contactToken) != nil, touchDown != touchUp else {
+                throw ValidationError("A contact token requires selected input and exactly one of --down or --up.")
+            }
+        }
+        if selectedInput.mode == .selected, touchUp && !touchDown && contactToken == nil {
+            throw ValidationError("Selected touch up requires the retained contact token.")
+        }
+
         // Validate coordinates are non-negative
         guard pointX >= 0, pointY >= 0 else {
             throw ValidationError("Coordinates must be non-negative values.")
@@ -64,7 +79,26 @@ struct Touch: AsyncParsableCommand {
         }
     }
 
+    func selectedRequest() throws -> SelectedHIDRequest {
+        let token = contactToken.flatMap(UUID.init(uuidString:))
+        let operation: SelectedHIDRequest.Operation
+        var primitives: [SelectedHIDPrimitive] = [.touch(.down, x: pointX, y: pointY)]
+        if touchDown && touchUp {
+            operation = .complete
+            primitives += [.delay(delay ?? TapTiming.defaultHoldDuration), .touch(.up, x: pointX, y: pointY)]
+        } else if touchDown {
+            operation = token == nil ? .begin : .move
+        } else {
+            operation = .end
+        }
+        return try selectedInput.request(operation: operation, token: token, primitives: primitives)
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         

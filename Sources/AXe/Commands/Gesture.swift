@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-enum GesturePreset: String, CaseIterable, ExpressibleByArgument {
+enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendable {
     case scrollUp = "scroll-up"
     case scrollDown = "scroll-down" 
     case scrollLeft = "scroll-left"
@@ -34,10 +34,11 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument {
         }
     }
     
-    func coordinates(screenWidth: Double = 390, screenHeight: Double = 844) -> (startX: Double, startY: Double, endX: Double, endY: Double) {
+    func coordinates(screenWidth: Double = 390, screenHeight: Double = 844, edgeInset: Double? = nil) -> (startX: Double, startY: Double, endX: Double, endY: Double) {
         let centerX = screenWidth / 2
         let centerY = screenHeight / 2
         let edgeMargin = 20.0
+        let startInset = edgeInset ?? edgeMargin
         let scrollDistance = 200.0
         
         switch self {
@@ -50,16 +51,39 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument {
         case .scrollRight:
             return (centerX - scrollDistance/2, centerY, centerX + scrollDistance/2, centerY)
         case .swipeFromLeftEdge:
-            return (edgeMargin, centerY, screenWidth - edgeMargin, centerY)
+            return (startInset, centerY, screenWidth - edgeMargin, centerY)
         case .swipeFromRightEdge:
-            return (screenWidth - edgeMargin, centerY, edgeMargin, centerY)
+            return (screenWidth - startInset, centerY, edgeMargin, centerY)
         case .swipeFromTopEdge:
-            return (centerX, edgeMargin, centerX, screenHeight - edgeMargin)
+            return (centerX, startInset, centerX, screenHeight - edgeMargin)
         case .swipeFromBottomEdge:
-            return (centerX, screenHeight - edgeMargin, centerX, edgeMargin)
+            return (centerX, screenHeight - startInset, centerX, edgeMargin)
         }
     }
     
+    /// Validate an explicit start inset without changing existing default geometry.
+    /// Selected paths supply the dimensions only after the owner reads the display.
+    func validateEdgeInset(_ inset: Double?, screenWidth: Double? = nil, screenHeight: Double? = nil) throws {
+        guard let inset else { return }
+        let length: Double?
+        switch self {
+        case .swipeFromLeftEdge, .swipeFromRightEdge:
+            length = screenWidth
+        case .swipeFromTopEdge, .swipeFromBottomEdge:
+            length = screenHeight
+        case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
+            throw ValidationError("--edge-inset is available only for edge presets.")
+        }
+        guard inset.isFinite, inset > 0 else {
+            throw ValidationError("Edge inset must be finite and greater than zero logical points.")
+        }
+        if let length {
+            guard length.isFinite, length > 20, inset < length - 20 else {
+                throw ValidationError("Edge inset must leave an inward path to the opposite 20-point margin.")
+            }
+        }
+    }
+
     var defaultDuration: Double {
         switch self {
         case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
@@ -79,11 +103,45 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument {
     }
 }
 
+enum GestureAction: ExpressibleByArgument {
+    case preset(GesturePreset)
+    case pinch
+    case doubleTap
+    case rotate
+    case twoFingerTap
+    case twoFingerHold
+
+    init?(argument: String) {
+        switch argument {
+        case "pinch": self = .pinch; return
+        case "double-tap": self = .doubleTap; return
+        case "rotate": self = .rotate; return
+        case "two-finger-tap": self = .twoFingerTap; return
+        case "two-finger-hold": self = .twoFingerHold; return
+        default: break
+        }
+        guard let preset = GesturePreset(rawValue: argument) else { return nil }
+        self = .preset(preset)
+    }
+
+    static var allValueStrings: [String] { GesturePreset.allCases.map(\.rawValue) + ["pinch", "double-tap", "rotate", "two-finger-tap", "two-finger-hold"] }
+}
+
 struct Gesture: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform preset gesture patterns on the simulator.",
+        abstract: "Perform a preset or a complete selected gesture.",
         discussion: """
-        Execute common gesture patterns without specifying coordinates.
+        Execute a preset, or one complete gesture on an explicit selected display.
+        Selected-only names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold.
+        Double-tap requires -x/-y; rotate also requires --radius/--degrees.
+        Two-finger actions require -x/-y/--x2/--y2; hold also requires --hold.
+        Edge presets accept --edge-inset for the start only (default 20 logical points).
+        The opposite endpoint remains 20 points from its edge. No Back action is inferred.
+        With --edge-inset, legacy input requires the path span to be at least --delta.
+        No retained token or app-recognizer completion is implied.
+        Pinch requires -x, -y, --radius, --scale and --input-mode selected.
+        Scale below 1 moves fingers inward; above 1 moves them outward. Scale 1 fails.
+        Pinch defaults: duration 0.6 seconds, delta 5 logical points; no retained token.
         
         Available presets:
           scroll-up, scroll-down, scroll-left, scroll-right
@@ -97,19 +155,49 @@ struct Gesture: AsyncParsableCommand {
         """
     )
     
-    @Argument(help: "The gesture preset to perform.")
-    var preset: GesturePreset
+    @Argument(help: "A preset, pinch, double-tap, rotate, two-finger-tap or two-finger-hold.")
+    var gesture: GestureAction
+
+    @Option(name: .customShort("x"), help: "Selected gesture center or first contact X in logical points.")
+    var centerX: Double?
+
+    @Option(name: .customShort("y"), help: "Selected gesture center or first contact Y in logical points.")
+    var centerY: Double?
+
+    @Option(name: .long, help: "Pinch/rotate only: explicit positive radius in logical points.")
+    var radius: Double?
+
+    @Option(name: .long, help: "Pinch only: final radius divided by starting radius; positive and not 1.")
+    var scale: Double?
     
+    @Option(name: .long, help: "Rotate only: nonzero clockwise angle in -360...360 degrees.")
+    var degrees: Double?
+
+    @Option(name: .customLong("x2"), help: "Two-finger actions only: second contact X in logical points.")
+    var secondX: Double?
+
+    @Option(name: .customLong("y2"), help: "Two-finger actions only: second contact Y in logical points.")
+    var secondY: Double?
+
+    @Option(name: .long, help: "Contact hold in seconds (0, 10]; required for two-finger-hold.")
+    var hold: Double?
+
+    @Option(name: .long, help: "Double-tap only: release-to-next-down interval (0, 10], default 0.1 seconds.")
+    var interval: Double?
+
+    @Option(name: .long, help: "Edge presets only: positive start inset in logical points (default 20); opposite inset stays 20.")
+    var edgeInset: Double?
+
     @Option(name: .customLong("screen-width"), help: "Screen width in points (default: 390 for iPhone 15).")
     var screenWidth: Double?
     
     @Option(name: .customLong("screen-height"), help: "Screen height in points (default: 844 for iPhone 15).")
     var screenHeight: Double?
     
-    @Option(name: .customLong("duration"), help: "Duration of the gesture in seconds (uses preset default if not specified).")
+    @Option(name: .customLong("duration"), help: "Motion duration in seconds (preset default, or 0.6 for pinch/rotate).")
     var duration: Double?
     
-    @Option(name: .customLong("delta"), help: "Distance between touch points in pixels (uses preset default if not specified).")
+    @Option(name: .customLong("delta"), help: "Preset touch spacing; pinch/rotate use maximum spacing in logical points (default 5).")
     var delta: Double?
     
     @Option(name: .customLong("pre-delay"), help: "Delay before starting the gesture in seconds.")
@@ -121,7 +209,46 @@ struct Gesture: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+
     func validate() throws {
+        try selectedInput.validate()
+        if let edgeInset {
+            guard case let .preset(preset) = gesture else {
+                throw ValidationError("--edge-inset is available only for edge presets.")
+            }
+            if selectedInput.mode == .selected {
+                try preset.validateEdgeInset(edgeInset)
+            } else {
+                try preset.validateEdgeInset(edgeInset, screenWidth: screenWidth ?? 390, screenHeight: screenHeight ?? 844)
+                let points = preset.coordinates(screenWidth: screenWidth ?? 390, screenHeight: screenHeight ?? 844, edgeInset: edgeInset)
+                let span = hypot(points.endX - points.startX, points.endY - points.startY)
+                guard span >= (delta ?? preset.defaultDelta) else {
+                    throw ValidationError("Explicit legacy edge inset requires a path span at least as large as delta.")
+                }
+            }
+        }
+        switch gesture {
+        case .pinch:
+            guard degrees == nil, secondX == nil, secondY == nil, hold == nil, interval == nil else {
+                throw ValidationError("Pinch does not accept rotation or contact-hold options.")
+            }
+            guard selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Pinch requires selected input and does not accept screen dimension overrides.")
+            }
+            try selectedPinch().validate()
+        case .preset:
+            guard centerX == nil, centerY == nil, radius == nil, scale == nil,
+                  degrees == nil, secondX == nil, secondY == nil, hold == nil, interval == nil else {
+                throw ValidationError("Explicit geometry and contact timing are not preset options.")
+            }
+            if selectedInput.mode == .selected { try selectedPath().validate() }
+        case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold:
+            guard selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Complete gestures require selected input without dimension overrides.")
+            }
+            try selectedCompleteGesture().validate()
+        }
         // Validate screen dimensions if provided
         if let screenWidth = screenWidth {
             guard screenWidth > 0 && screenWidth <= 2000 else {
@@ -163,7 +290,72 @@ struct Gesture: AsyncParsableCommand {
         }
     }
 
+    func selectedPath() throws -> SelectedHIDPath {
+        guard case let .preset(preset) = gesture else {
+            throw ValidationError("Pinch is not a preset path.")
+        }
+        return SelectedHIDPath(kind: .preset, preset: preset, duration: duration ?? preset.defaultDuration,
+            delta: delta ?? preset.defaultDelta, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0,
+            expectedWidth: screenWidth, expectedHeight: screenHeight, edgeInset: edgeInset)
+    }
+
+    func selectedPinch() throws -> SelectedHIDPinch {
+        guard case .pinch = gesture, let centerX, let centerY, let radius, let scale else {
+            throw ValidationError("Pinch requires explicit -x, -y, --radius and --scale.")
+        }
+        return SelectedHIDPinch(centerX: centerX, centerY: centerY, scale: scale, radius: radius,
+            duration: duration ?? 0.6, spacing: delta ?? 5, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
+    }
+
+    func selectedCompleteGesture() throws -> SelectedHIDCompleteGesture {
+        guard let centerX, let centerY, scale == nil else {
+            throw ValidationError("Complete gestures require explicit -x/-y and do not accept --scale.")
+        }
+        let point = SelectedHIDCompleteGesture.Point(x: centerX, y: centerY)
+        let timing = SelectedHIDCompleteGesture.Timing(preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
+        switch gesture {
+        case .doubleTap:
+            guard radius == nil, degrees == nil, secondX == nil, secondY == nil, duration == nil, delta == nil else {
+                throw ValidationError("Double-tap accepts only its point, hold, interval and delays.")
+            }
+            return .doubleTap(.init(point: point, hold: hold ?? 0.06, interval: interval ?? 0.1, timing: timing))
+        case .rotate:
+            guard let radius, let degrees, secondX == nil, secondY == nil, hold == nil, interval == nil else {
+                throw ValidationError("Rotate requires --radius/--degrees and does not accept contact-hold options.")
+            }
+            return .rotate(.init(center: point, radius: radius, degrees: degrees,
+                duration: duration ?? 0.6, spacing: delta ?? 5, timing: timing))
+        case .twoFingerTap, .twoFingerHold:
+            guard let secondX, let secondY, radius == nil, degrees == nil, interval == nil,
+                  duration == nil, delta == nil else {
+                throw ValidationError("Two-finger actions require --x2/--y2 and accept only hold and delays.")
+            }
+            let second = SelectedHIDCompleteGesture.Point(x: secondX, y: secondY)
+            if case .twoFingerHold = gesture {
+                guard let hold else { throw ValidationError("Two-finger-hold requires an explicit --hold.") }
+                return .twoFingerHold(.init(first: point, second: second, hold: hold, timing: timing))
+            }
+            return .twoFingerTap(.init(first: point, second: second, hold: hold ?? 0.1, timing: timing))
+        case .pinch, .preset:
+            throw ValidationError("Use the existing pinch or preset payload.")
+        }
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let request: SelectedHIDRequest
+            switch gesture {
+            case .preset: request = try selectedInput.pathRequest(selectedPath())
+            case .pinch: request = try selectedInput.pinchRequest(selectedPinch())
+            case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold:
+                request = try selectedInput.gestureRequest(selectedCompleteGesture())
+            }
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            return
+        }
+        guard case let .preset(preset) = gesture else {
+            throw ValidationError("Complete gestures are supported only with selected input.")
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         
@@ -174,7 +366,7 @@ struct Gesture: AsyncParsableCommand {
         let height = screenHeight ?? 844.0
         
         // Get gesture coordinates
-        let coords = preset.coordinates(screenWidth: width, screenHeight: height)
+        let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
         
         // Use provided values or preset defaults
         let gestureDuration = duration ?? preset.defaultDuration

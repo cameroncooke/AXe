@@ -5,6 +5,58 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Added `rotate left|right` for the verified Duo profile, with explicit active-screen and boot checks, one device-wide request, stable rotation readback and the common input lock. Selected wire 21 rejects old wire 20 requests. App layout readiness requires a fresh UI read.
+- Added local arm64 Duo display selection, measured coordinate transforms, guarded HID sessions, complete multi-touch gestures, native slider endpoints and hinge read/set with display readiness.
+- Added selected text and key input with an explicit field/PID check before each key down and owned key release on interruption.
+- Added `list-simulators --displays --udid` for measured display discovery and explicit `tap --semantic-press --id` for one native CheckBox on the inspected host framework image, with no mouse or HID fallback.
+- Added selected `describe-ui --point` with oriented coordinates, exact foreground/result PID checks and one bounded point read.
+- Added active-panel PNG screenshots with paired `--screen-id`/`--screen-uuid`, optional `--expected-boot`, context checks and a JSON receipt. Selected capture does not replace existing output files or fall back to another display; surface identity and frame presentation time remain unavailable.
+- Added batch-level selected display input for complete tap, swipe, gesture, touch and keyboard steps, with fresh per-step guards, structured receipts and stop-on-failure behavior. Unsupported steps reject without legacy fallback; legacy batches remain unchanged.
+- Added explicit `gesture --edge-inset` for the start of the four edge presets in legacy and selected routes, including batch steps. The opposite 20-point endpoint and existing defaults are unchanged. Explicit legacy insets require a path span of at least the effective delta; navigation effects still require separate verification.
+- Added explicit selected-screen `record-video` with per-frame context checks, awaited signal stop and publication of completed MP4 files without replacing existing output. Selected clips require one fixed pose; recording across rotation or folding remains incomplete.
+- Added fixed-pose selected `stream-video` for multipart JPEG, length-prefixed JPEG, concatenated JPEG and packed BGRA. The route shares validated capture ownership with selected recording, reports metadata on stderr and stops on context or output failure; legacy streaming is unchanged.
+- Added selected batch `drag` steps through the existing guarded drag route, with standalone options and defaults, per-step fresh bounds and stop-on-failure receipts. Legacy batch drag remains unsupported.
+- Added selected batch slider endpoint steps with exact ID/PID selection and semantic value-readback completion, including an already-at-endpoint result with no action. Unsupported options and failed receipts stop later steps; legacy batch slider remains unsupported.
+- Added standalone selected `button home` with active-display context and optional exact boot guards, preserved hold durations and typed transport execution/cleanup evidence. Home remains a device-wide action.
+- Added selected batch `button home` through the existing guarded Home request, with optional per-step boot and duration checks and typed release completion. Other buttons remain unsupported; a failed receipt stops later steps without replay.
+- Added matched `bootIdentity` and a host-monotonic `readInterval` to `list-simulators --displays --udid` JSON, preserving its existing fields. This read evidence does not replace fresh input/capture checks or change default legacy capture.
+- Added exact, case-sensitive `--element-type` filtering for ordinary selected ID/label taps and their batch steps, before uniqueness and final target validation. Selected protocol versioning prevents older brokers from ignoring the filter; legacy taps are unchanged.
+- Added ordinary selected `tap --value` and matching batch steps, with legacy scalar text conversion, trimmed case-sensitive matching, optional exact type and strict fresh target checks. Polling, coordinate-selector combinations and value-based semantic press remain unsupported.
+- Added explicit `--tap-style physical` for ordinary selected coordinate and ID/label/value taps, including tap steps in selected batches, through the existing guarded touch path. Omitted style and legacy behavior are unchanged; semantic press rejects every explicit style.
+- Added explicit `--tap-style simulator` for ordinary selected coordinate and ID/label/value taps and their batch steps. It uses the real `tapAt` down/up sequence without an inserted hold, while retaining target/context/cleanup guards and pre/post delays. Omitted/physical style and legacy behavior remain unchanged. Selected wire 16 carries the typed style and rejects old wire 15 requests; exact timing parity is not guaranteed.
+
+- Added explicit `--tap-style automatic` for ordinary selected taps and their batch steps. Coordinates use simulator `tapAt`; selectors use the existing switch/toggle classification on the resolved target and recheck the style choice before the first down. Target/context/cleanup guards remain strict, with no legacy redirection or retry after failure. Selected wire 17 rejects old wire 16; omitted, physical and simulator behavior remain unchanged. This does not establish full switch support or exact timing parity.
+
+- Added selected batch `sleep` as a cancellable host wait for finite non-negative durations, with typed wait receipts, no input lease and fresh guards on the next input step. Legacy sleep behavior is unchanged.
+- Added optional exact, case-sensitive `--element-type` filtering for selected slider ID endpoints and their batch steps. Global ID uniqueness and native Slider role, value-domain and fresh-target checks remain required. Selected wire 18 rejects old wire 17 requests; legacy slider behavior is unchanged.
+
+- Added exact-label selection for selected slider endpoints and their batch steps. Labels match case-sensitively after whitespace/newline trimming, with duplicate matches rejected before the optional type filter. A native Slider can be selected without an ID; PID, context, frame, domain and fresh owned-target checks remain required. Selected wire 19 rejects old wire 18 requests. ID selection and legacy behavior are unchanged.
+
+- Added selected batch `type --stdin` through the existing bounded text loader and keyboard guards. Text is read at its ordered step; invalid input stops later steps. The synchronous EOF read has no deadline or cancellation while blocked; use batch `--step` or `--file` so stdin remains available for text.
+
+- Added selected `button side-button` and matching batch steps with active-context and optional boot guards, preserved duration, and typed transport execution/cleanup evidence. Wire 20 rejects old wire 19 requests. This does not prove lock, wake, power or security state; Home and legacy routes are unchanged.
+
+### Changed
+
+- Build IDB from a tracked patch against the exact fork base without discarding unexpected source changes. Local Duo builds currently require `AXE_BUILD_ARCHS=arm64`; universal release validation remains open.
+- Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
+
+### Fixed
+
+- Fixed selected input holding contacts through fold or rotation changes during long delays and between retained-touch commands. The owner releases on the original connection, rejects old tokens and keeps uncertain cleanup blocked.
+- Fixed selected exact-ID physical taps on UIKit switches whose point hit is an unnamed child. Native identity, screen and parent checks now validate that child before input; bounded Duo fold/rotation checks passed.
+- Fixed selected display discovery and input admission for iPad mini (A17 Pro) simulator profile 405.
+- Fixed compressed video streams returning PNG bytes as JPEG at default quality and scale. Invalid or incomplete image data is now rejected.
+- Handle `SIGINT` and `SIGTERM` during selected PNG capture by cancelling and awaiting the operation. Accepted early cancellation publishes no PNG; unconfirmed cleanup remains an error.
+- Fixed finite positive legacy swipes shorter than the effective delta producing non-finite coordinates by using at least one step.
+- Fixed the build artifact check rejecting AXe-owned accessibility type names. It now matches complete private identifiers while retaining required module and fork-feature checks.
+
+- Fixed selected slider reads accepting a matching descendant in place of the owned target. ID and label reads now require the owned root itself to match before each action and final read.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

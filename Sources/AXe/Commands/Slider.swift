@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import FBSimulatorControl
 
 struct Slider: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -24,11 +25,17 @@ struct Slider: AsyncParsableCommand {
     @Option(name: [.customLong("label")], help: "Set the slider matching AXLabel (accessibilityLabel).")
     var elementLabel: String?
 
-    @Option(name: [.customLong("element-type")], help: "Filter matches to this accessibility type, usually Slider.")
+    @Option(name: [.customLong("element-type")], help: "Filter matches to this exact case-sensitive accessibility type, usually Slider. Selected endpoints keep unique selector and native Slider role checks.")
     var elementType: String?
 
     @Option(name: [.customLong("value")], help: "Target slider value as a percentage from 0 to 100.")
-    var value: Double
+    var value: Double?
+
+    @Option(name: .customLong("endpoint"), help: "Selected AX only: minimum or maximum of the verified native slider domain.")
+    var endpoint: SelectedSliderEndpoint?
+
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the slider before failing (0 = no waiting, default).")
     var waitTimeout: Double = 0
@@ -40,6 +47,19 @@ struct Slider: AsyncParsableCommand {
     var simulatorUDID: String
 
     func validate() throws {
+        try selectedInput.validate()
+        try selectedAX.validate(required: selectedInput.mode == .selected)
+        if selectedInput.mode == .selected {
+            guard endpoint != nil, value == nil,
+                  waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Selected slider requires exactly one --id or --label and --endpoint; --value and polling options are not supported.")
+            }
+            if let elementType, elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ValidationError("--element-type must not be empty.")
+            }
+        } else {
+            guard endpoint == nil, value != nil else { throw ValidationError("Legacy slider requires --value and does not accept --endpoint.") }
+        }
         let selectorCount = [elementID != nil, elementLabel != nil].filter { $0 }.count
         guard selectorCount == 1 else {
             throw ValidationError("Use exactly one of --id or --label to target a slider.")
@@ -52,7 +72,7 @@ struct Slider: AsyncParsableCommand {
             throw ValidationError("--label must not be empty.")
         }
 
-        guard value.isFinite, (0...100).contains(value) else {
+        if let value, !value.isFinite || !(0...100).contains(value) {
             throw ValidationError("--value must be a finite number between 0 and 100.")
         }
         guard waitTimeout >= 0 else {
@@ -65,7 +85,19 @@ struct Slider: AsyncParsableCommand {
         }
     }
 
+    func selectedRequest() throws -> SelectedHIDRequest {
+        try selectedAX.request(input: selectedInput, kind: .sliderEndpoint,
+            selectorKind: elementID != nil ? .id : .label, selectorValue: elementID ?? elementLabel, endpoint: endpoint?.libraryValue,
+            elementType: elementType)
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let request = try selectedRequest()
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            return
+        }
+        guard let value else { throw ValidationError("Legacy slider requires --value.") }
         let logger = AxeLogger()
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)
@@ -170,7 +202,7 @@ struct Slider: AsyncParsableCommand {
         )
         guard observedValue.isWithinTolerance else {
             throw CLIError(
-                errorDescription: "Slider value did not reach requested value \(formatPercent(value)) after direct drag. Observed AXValue: \(observedValue.rawValue ?? "none")."
+                errorDescription: "Slider value did not reach requested value \(formatPercent(targetNormalized * 100)) after direct drag. Observed AXValue: \(observedValue.rawValue ?? "none")."
             )
         }
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)

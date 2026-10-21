@@ -12,17 +12,27 @@ struct DescribeUI: AsyncParsableCommand {
     @Option(
         name: .customLong("point"),
         help: ArgumentHelp(
-            "Describe only the accessibility element at screen coordinates x,y.",
+            "Describe one element at x,y. Selected mode uses oriented logical display points.",
             valueName: "x,y"
         )
     )
     var point: String?
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
+
     func validate() throws {
+        try selectedInput.validate()
+        try selectedAX.validate(required: selectedInput.mode == .selected)
         _ = try parsedPoint()
     }
 
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let request = try selectedRequest()
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await performGlobalSetup(logger: logger)
 
@@ -35,6 +45,12 @@ struct DescribeUI: AsyncParsableCommand {
             throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.")
         }
         print(jsonString)
+    }
+
+    func selectedRequest() throws -> SelectedHIDRequest {
+        let point = try parsedPoint().map { SelectedAXPoint(x: $0.x, y: $0.y) }
+        return try selectedAX.request(input: selectedInput,
+            kind: point == nil ? .describe : .describePoint, point: point)
     }
 
     private func parsedPoint() throws -> AccessibilityPoint? {

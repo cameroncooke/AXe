@@ -20,6 +20,8 @@ struct Axe: AsyncParsableCommand {
             AgentCommand.self,
             Tap.self,
             Slider.self,
+            Hinge.self,
+            Rotate.self,
             Type.self,
             Swipe.self,
             Drag.self,

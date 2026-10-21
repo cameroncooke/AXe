@@ -3,15 +3,33 @@ import Foundation
 
 struct Batch: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Execute ordered interaction steps using one simulator/HID session.",
+        abstract: "Execute ordered legacy steps or guarded complete selected steps.",
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
         Steps are executed in order.
+        Legacy mode uses one simulator/HID session and supports --continue-on-error.
+        Batch-level selected mode sends each complete step through the selected owner.
+        It returns one JSON receipt per attempted step and stops on any failure.
+        Earlier steps are not undone. AX targets and focus are read afresh per step.
+        Selected mode has no whole-batch exclusive lock or cross-step context token.
+        Selected button home and side-button use device-wide routes with active-screen admission.
+        Their receipts prove transport and release, not UI or security state. Other buttons, retained
+        touch and semantic press are not yet supported in selected batches.
+        Selected type --stdin reads 1–256 UTF-8 bytes at its ordered step, before input ownership.
+        It preserves newlines and uses the existing US keyboard conversion. Close the input to
+        finish the read; there is no EOF deadline or task cancellation during a blocked read.
+        Use --step or --file for the batch commands: batch --stdin consumes stdin itself.
+        A later type --stdin sees EOF and rejects empty input; no input is replayed.
+        Selected sleep accepts finite non-negative seconds with no total cap. It waits on the
+        host without an input lease; a typed host-wait receipt has no request or broker ID.
+        Cancellation or SIGINT/SIGTERM observed during that wait stops later steps.
+        Signal handling is wait-only, not a whole-batch cancellation guarantee.
+        Use per-step --expected-pid and --focus-id where required; Home and side-button support --expected-boot.
 
-        Supported step commands:
+        Legacy step commands:
           tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo
 
-        Batch-only pseudo-step:
+        Legacy and selected batch-only pseudo-step:
           sleep <seconds>
 
         Examples:
@@ -23,6 +41,8 @@ struct Batch: AsyncParsableCommand {
 
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
+
+    @OptionGroup var selectedInput: SelectedInputOptions
 
     @Option(name: .customLong("step"), help: "Step to execute. Repeat for multiple steps.")
     var steps: [String] = []
@@ -42,7 +62,7 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("type-chunk-size"), help: "Maximum HID events per chunk when type-submission is chunked.")
     var typeChunkSize: Int = 200
 
-    @Option(name: .customLong("tap-style"), help: "Default tap event style for tap steps: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up.")
+    @Option(name: .customLong("tap-style"), help: "Legacy default tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected mode uses per-step styles only: batch-level automatic is accepted as the default but does not change step style; physical and simulator reject.")
     var tapStyle: TapStyle = .automatic
 
     @Flag(name: .customLong("continue-on-error"), help: "Continue executing later steps even if one step fails.")
@@ -58,6 +78,13 @@ struct Batch: AsyncParsableCommand {
     var verbose: Bool = false
 
     func validate() throws {
+        try selectedInput.validate()
+        if selectedInput.mode == .selected {
+            guard !continueOnError, axCachePolicy == .perBatch, typeSubmissionMode == .chunked,
+                  typeChunkSize == 200, tapStyle == .automatic, waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Selected batch stops on failure and does not use legacy cache, type chunk, tap-style or polling settings.")
+            }
+        }
         let sourceCount = [!steps.isEmpty, file != nil, useStdin].filter { $0 }.count
         guard sourceCount == 1 else {
             throw ValidationError("Specify exactly one step source: --step, --file, or --stdin.")
@@ -79,6 +106,12 @@ struct Batch: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let lines = try loadStepLines()
+            guard !lines.isEmpty else { throw ValidationError("No executable steps found.") }
+            try await SelectedBatchRunner.run(lines: lines, input: selectedInput, simulatorUDID: simulatorUDID)
+            return
+        }
         let logger = AxeLogger(writeToStdErr: verbose)
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)

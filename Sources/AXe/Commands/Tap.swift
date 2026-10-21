@@ -8,6 +8,9 @@ struct Tap: AsyncParsableCommand {
         abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
     )
 
+    @Flag(name: .customLong("semantic-press"), help: "Selected AX only: send one explicit AXPress to an exact native CheckBox ID. No HID or mouse fallback; a native reply is not effect proof.")
+    var semanticPress = false
+
     @Option(name: .customShort("x"), help: "The X coordinate of the point to tap.")
     var pointX: Double?
 
@@ -23,7 +26,7 @@ struct Tap: AsyncParsableCommand {
     @Option(name: [.customLong("value")], help: "Tap the activation point of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
     var elementValue: String?
 
-    @Option(name: [.customLong("element-type")], help: "Filter matches to elements of this accessibility type (e.g. Button, TextField, Switch). Narrows --id/--label/--value results when multiple elements match.")
+    @Option(name: [.customLong("element-type")], help: "Filter matches by exact accessibility type (e.g. Button, TextField, Switch). Selected mode: ordinary --id/--label/--value taps only.")
     var elementType: String?
 
     @Option(name: .customLong("pre-delay"), help: "Delay before tapping in seconds.")
@@ -32,7 +35,7 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after tapping in seconds.")
     var postDelay: Double?
 
-    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up.")
+    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input; physical holds for 0.1 seconds and simulator inserts no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
     var tapStyle: TapStyle?
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting.")
@@ -45,7 +48,36 @@ struct Tap: AsyncParsableCommand {
     var simulatorUDID: String
 
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
+
     func validate() throws {
+        try selectedInput.validate()
+        if semanticPress {
+            guard selectedInput.mode == .selected, elementID != nil, elementLabel == nil, elementValue == nil,
+                  pointX == nil, pointY == nil, preDelay == nil, postDelay == nil else {
+                throw ValidationError("--semantic-press requires selected input, one exact --id and no coordinates, label, value or delays.")
+            }
+        }
+        if selectedInput.mode == .selected {
+            guard tapStyle == nil || (!semanticPress && (tapStyle == .physical || tapStyle == .simulator || tapStyle == .automatic)),
+                  waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Selected ordinary tap supports omitted style, physical, simulator or automatic. Semantic press rejects explicit styles; polling options are not supported.")
+            }
+            let hasCoordinates = pointX != nil || pointY != nil
+            if let elementType {
+                guard !hasCoordinates, !semanticPress,
+                      !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw ValidationError("Selected --element-type requires an ordinary ID/label/value tap and a nonempty type.")
+                }
+            }
+            if hasCoordinates, elementID != nil || elementLabel != nil || elementValue != nil {
+                throw ValidationError("Selected tap cannot mix coordinates and selectors.")
+            }
+            try selectedAX.validate(required: !hasCoordinates)
+        } else {
+            try selectedAX.validate(required: false)
+        }
         if pointX != nil || pointY != nil {
             guard let pointX, let pointY else {
                 throw ValidationError("Both -x and -y must be provided together.")
@@ -96,7 +128,36 @@ struct Tap: AsyncParsableCommand {
         }
     }
 
+    func selectedRequest() throws -> SelectedHIDRequest {
+        let selectedStyle: SelectedTapStyle?
+        switch tapStyle {
+        case .automatic: selectedStyle = .automatic
+        case .simulator: selectedStyle = .simulator
+        case .physical, nil: selectedStyle = nil
+        }
+        if let selectorValue = elementID ?? elementLabel ?? elementValue {
+            let selectorKind: SelectedAXRequest.SelectorKind
+            if elementID != nil { selectorKind = .id }
+            else if elementLabel != nil { selectorKind = .label }
+            else { selectorKind = .value }
+            return try selectedAX.request(input: selectedInput, kind: semanticPress ? .semanticPress : .tap,
+                selectorKind: selectorKind, selectorValue: selectorValue,
+                preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, elementType: elementType, tapStyle: selectedStyle)
+        }
+        guard let pointX, let pointY else { throw ValidationError("Selected tap requires coordinates or one selector") }
+        var primitives: [SelectedHIDPrimitive] = []
+        if let preDelay { primitives.append(.delay(preDelay)) }
+        let coordinateStyle = try (selectedStyle ?? .physical).resolved(for: nil)
+        primitives += try coordinateStyle.primitives(x: pointX, y: pointY)
+        if let postDelay { primitives.append(.delay(postDelay)) }
+        return try selectedInput.request(operation: .complete, token: nil, primitives: primitives)
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
 

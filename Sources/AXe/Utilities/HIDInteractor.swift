@@ -15,6 +15,7 @@ struct HIDInteractor {
         let simulatorUDID: String
         let simulator: FBSimulator
         let hid: FBSimulatorHID
+        let inputLease: HIDInputLease
     }
 
     // Cache for HID connections per simulator
@@ -30,6 +31,7 @@ struct HIDInteractor {
     }
 
     static func makeSession(for simulatorUDID: String, logger: AxeLogger) async throws -> Session {
+        let inputLease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
         logger.info().log("Loading private frameworks for HID operations...")
         let frameworkLoader = FBSimulatorControlFrameworkLoader.xcodeFrameworks
         do {
@@ -91,10 +93,11 @@ struct HIDInteractor {
             now: Date.init,
             sleep: { delay in try await Task.sleep(for: .seconds(delay)) }
         )
-        return Session(simulatorUDID: simulatorUDID, simulator: simulator, hid: hid)
+        return Session(simulatorUDID: simulatorUDID, simulator: simulator, hid: hid, inputLease: inputLease)
     }
 
     static func performHIDEvent(_ event: FBSimulatorHIDEvent, in session: Session, logger: AxeLogger) async throws {
+        defer { withExtendedLifetime(session.inputLease) {} }
         logger.info().log("Performing HID event...")
         try await session.hid.send(event: event, logger: logger)
         logger.info().log("HID event performed successfully.")

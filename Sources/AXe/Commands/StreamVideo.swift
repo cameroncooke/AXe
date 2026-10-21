@@ -31,7 +31,27 @@ struct StreamVideo: AsyncParsableCommand {
     @Option(help: "Scale factor (0.1-1.0, default: 1.0)")
     var scale: Double = 1.0
 
+    @Option(name: .customLong("screen-id"), help: "Stream this measured active display; requires --screen-uuid.")
+    var screenID: UInt32?
+
+    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from list-simulators --displays; no retargeting.")
+    var screenUUID: String?
+
+    @Option(name: .customLong("expected-boot"), help: "Selected streaming only: reject a different simulator boot identity.")
+    var expectedBoot: String?
+
     func validate() throws {
+        guard (screenID == nil) == (screenUUID == nil) else {
+            throw ValidationError("Selected streaming requires both --screen-id and --screen-uuid.")
+        }
+        if let screenUUID, UUID(uuidString: screenUUID) == nil {
+            throw ValidationError("Selected streaming requires a valid display UUID.")
+        }
+        if let expectedBoot, screenID == nil || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ValidationError("--expected-boot requires selected streaming and a nonempty boot identity.")
+        }
+
+
         guard fps >= 1 && fps <= 30 else {
             throw ValidationError("FPS must be between 1 and 30")
         }
@@ -46,6 +66,12 @@ struct StreamVideo: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
+            try await SelectedVideoStream.run(simulatorUDID: simulatorUDID, screenID: screenID,
+                screenUUID: uuid, expectedBoot: expectedBoot, format: format, fps: fps, quality: quality, scale: scale)
+            return
+        }
+
         let logger = AxeLogger()
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)

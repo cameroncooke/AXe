@@ -505,7 +505,7 @@ struct OrientationAwareCoordinates {
     // MARK: - Private Helpers
 
     /// Applies a `CoordinateMapping` to a single logical point, logging the translation.
-    private static func applyMapping(
+    static func applyMapping(
         _ mapping: CoordinateMapping,
         to point: (x: Double, y: Double),
         logger: AxeLogger

@@ -58,6 +58,9 @@ IDB_CHECKOUT_DIR="$(cd "$(dirname "$IDB_CHECKOUT_DIR")" && pwd)/$(basename "$IDB
 IDB_GIT_URL="${IDB_GIT_URL:-https://github.com/cameroncooke/idb.git}"
 DEFAULT_IDB_GIT_REF="604c51013438f0c3603b720a05a44b7c5b8f286d"
 IDB_GIT_REF="${IDB_GIT_REF:-${DEFAULT_IDB_GIT_REF}}"
+IDB_PATCH_BASE_REF="604c51013438f0c3603b720a05a44b7c5b8f286d"
+IDB_FOUNDATION_PATCH="${REPO_ROOT}/patches/idb-duo-foundation.patch"
+IDB_FOUNDATION_HASHES="${REPO_ROOT}/patches/idb-duo-foundation.sha256"
 IDB_UPSTREAM_BASE_REF="${IDB_UPSTREAM_BASE_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
@@ -72,6 +75,9 @@ source "${SCRIPT_DIR}/release-payload.sh"
 
 FRAMEWORK_SDK="macosx"
 FRAMEWORK_CONFIGURATION="Release"
+# Universal remains the release default. The selected AX private stub is only
+# verified for arm64; local Duo builds must opt in explicitly.
+AXE_BUILD_ARCHS="${AXE_BUILD_ARCHS:-arm64 x86_64}"
 
 # Codesigning configuration.
 # Provided via AXE_CODESIGN_IDENTITY (from .env locally, or the environment / CI
@@ -243,15 +249,14 @@ function verify_fbsimulatorcontrol_fork_features() {
 
   local framework_contents
   framework_contents=$(dirname "$binary_path")
-  local public_module_artifacts=(
-    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/arm64-apple-macos.swiftinterface"
-    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/x86_64-apple-macos.swiftinterface"
-    "${framework_contents}/Headers/FBSimulatorControl-Swift.h"
-  )
-  local compiled_swift_modules=(
-    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/arm64-apple-macos.swiftmodule"
-    "${framework_contents}/Modules/FBSimulatorControl.swiftmodule/x86_64-apple-macos.swiftmodule"
-  )
+  local public_module_artifacts=()
+  local compiled_swift_modules=()
+  local module_arch
+  for module_arch in $AXE_BUILD_ARCHS; do
+    public_module_artifacts+=("${framework_contents}/Modules/FBSimulatorControl.swiftmodule/${module_arch}-apple-macos.swiftinterface")
+    compiled_swift_modules+=("${framework_contents}/Modules/FBSimulatorControl.swiftmodule/${module_arch}-apple-macos.swiftmodule")
+  done
+  public_module_artifacts+=("${framework_contents}/Headers/FBSimulatorControl-Swift.h")
   local compiled_swift_module
   for compiled_swift_module in "${compiled_swift_modules[@]}"; do
     if [[ ! -f "${compiled_swift_module}" ]]; then
@@ -266,7 +271,8 @@ function verify_fbsimulatorcontrol_fork_features() {
       echo "❌ Error: FBSimulatorControl public module artifact is missing: ${artifact}"
       exit 1
     fi
-    if grep -E 'AccessibilityPlatformTranslation|AXP[A-Za-z]' "$artifact" >/dev/null; then
+    # Match complete identifiers, not the AXP substring in AXe-owned names.
+    if grep -E '(^|[^[:alnum:]_])(AccessibilityPlatformTranslation|AXP[[:alnum:]_]*)([^[:alnum:]_]|$)' "$artifact" >/dev/null; then
       echo "❌ Error: FBSimulatorControl leaks AccessibilityPlatformTranslation through its public interface"
       echo "   Leaking artifact: ${artifact}"
       echo "   Rebuild from the pinned AXe IDB fork revision."
@@ -337,14 +343,8 @@ function copy_resource_bundle() {
 
 function fresh_clone_idb_repo() {
   if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
-    local existing_remote
-    existing_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
-    if [[ ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" &&
-          ( "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" || "$existing_remote" != "$IDB_GIT_URL" ) ]]; then
-      echo "❌ Error: Refusing to replace an unmanaged IDB checkout: $IDB_CHECKOUT_DIR" >&2
-      echo "   Remove or repair that checkout manually, then retry." >&2
-      return 1
-    fi
+    echo "Error: Refusing to replace an existing IDB checkout: $IDB_CHECKOUT_DIR" >&2
+    return 1
   fi
 
   IDB_REPLACEMENT_ROOT="$(mktemp -d "$(dirname "$IDB_CHECKOUT_DIR")/.axe-idb-replacement.XXXXXX")"
@@ -359,7 +359,8 @@ function fresh_clone_idb_repo() {
   fi
   touch "$replacement_checkout/.git/axe-managed-checkout"
   if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
-    rm -r "$IDB_CHECKOUT_DIR"
+    echo "Error: IDB checkout appeared during clone; preserving it." >&2
+    return 1
   fi
   mv "$replacement_checkout" "$IDB_CHECKOUT_DIR"
   cleanup_current_idb_replacement
@@ -367,52 +368,22 @@ function fresh_clone_idb_repo() {
 }
 
 function clone_idb_repo() {
-  cleanup_stale_idb_replacements
-  if [[ ! -d "$IDB_CHECKOUT_DIR/.git" ]]; then
+  # Never repair, reset or replace a caller's existing source tree. The tracked
+  # foundation patch is an expected worktree change, not disposable dirt.
+  if [[ ! -e "$IDB_CHECKOUT_DIR" ]]; then
     fresh_clone_idb_repo
-  else
-    local actual_ref actual_remote
-    actual_ref="$(git -C "$IDB_CHECKOUT_DIR" rev-parse HEAD 2>/dev/null || true)"
-    actual_remote="$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin 2>/dev/null || true)"
-    if [[ "$actual_ref" == "$IDB_GIT_REF" && "$actual_remote" == "$IDB_GIT_URL" ]] &&
-       git -C "$IDB_CHECKOUT_DIR" cat-file -e "${IDB_GIT_REF}^{tree}" 2>/dev/null; then
-      if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain)" ]]; then
-        if [[ "$IDB_CHECKOUT_DIR" != "$DEFAULT_IDB_CHECKOUT_DIR" &&
-              ! -f "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout" ]]; then
-          echo "Error: Refusing to repair an unmanaged IDB checkout: $IDB_CHECKOUT_DIR" >&2
-          echo "   Clean or repair that checkout manually, then retry." >&2
-          return 1
-        fi
-        print_warning "The pinned IDB checkout is dirty; repairing the managed checkout locally."
-        if ! git -C "$IDB_CHECKOUT_DIR" restore --source=HEAD --staged --worktree -- . ||
-           ! git -C "$IDB_CHECKOUT_DIR" clean -fd; then
-          if [[ "$IDB_CHECKOUT_DIR" == "$DEFAULT_IDB_CHECKOUT_DIR" ]]; then
-            fresh_clone_idb_repo
-          else
-            echo "Error: Unable to repair managed IDB checkout: $IDB_CHECKOUT_DIR" >&2
-            return 1
-          fi
-        fi
-      fi
-      touch "$IDB_CHECKOUT_DIR/.git/axe-managed-checkout"
-      print_info "Reusing pinned IDB fork checkout at $IDB_GIT_REF."
-      verify_idb_source_state
-      return 0
-    fi
-
-    print_info "Updating AXe's IDB fork to $IDB_GIT_REF..."
-    git -C "$IDB_CHECKOUT_DIR" remote set-url origin "$IDB_GIT_URL"
-    if ! (cd "$IDB_CHECKOUT_DIR" && git fetch origin --tags --prune && git checkout -- . && git clean -fd && git checkout --detach "$IDB_GIT_REF"); then
-      print_warning "The cached IDB checkout is incomplete; replacing it with a clean clone."
-      fresh_clone_idb_repo
-    else
-      print_success "IDB fork updated to $IDB_GIT_REF."
-    fi
+  elif [[ ! -d "$IDB_CHECKOUT_DIR/.git" ]]; then
+    echo "Error: IDB path exists but is not a supported Git checkout: $IDB_CHECKOUT_DIR" >&2
+    return 1
   fi
-  verify_idb_source_state
+  prepare_idb_foundation
 }
 
-function verify_idb_source_state() {
+function verify_idb_base_state() {
+  if [[ "$IDB_GIT_REF" != "$IDB_PATCH_BASE_REF" ]]; then
+    echo "Error: The Duo foundation patch requires IDB $IDB_PATCH_BASE_REF." >&2
+    return 1
+  fi
   local actual_ref
   actual_ref=$(git -C "$IDB_CHECKOUT_DIR" rev-parse HEAD)
   if [[ "$actual_ref" != "$IDB_GIT_REF" ]]; then
@@ -455,16 +426,53 @@ function verify_idb_source_state() {
     fi
   done
 
-  if ! git -C "$IDB_CHECKOUT_DIR" diff --check; then
-    echo "❌ Error: Pinned IDB fork checkout contains uncommitted whitespace errors"
-    exit 1
+}
+
+function verify_idb_source_state() {
+  verify_idb_base_state
+  if ! git -C "$IDB_CHECKOUT_DIR" diff --cached --quiet; then
+    echo "Error: IDB has staged changes; leave them intact and use a separate checkout." >&2
+    return 1
   fi
-  if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain)" ]]; then
-    echo "❌ Error: Pinned IDB fork checkout is not clean"
-    exit 1
+  if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" diff --summary HEAD)" ]]; then
+    echo "Error: IDB has unexpected file mode or deletion changes." >&2
+    return 1
   fi
 
-  print_success "Verified IDB fork ${IDB_GIT_URL}@${actual_ref} from upstream base ${IDB_UPSTREAM_BASE_REF}"
+  local changed_files untracked_files source_file expected_hash
+  changed_files="$(git -C "$IDB_CHECKOUT_DIR" diff --name-only HEAD)"
+  untracked_files="$(git -C "$IDB_CHECKOUT_DIR" ls-files --others --exclude-standard)"
+  while IFS= read -r source_file; do
+    [[ -n "$source_file" ]] || continue
+    if ! awk '{print $2}' "$IDB_FOUNDATION_HASHES" | grep -Fqx -- "$source_file"; then
+      echo "Error: Unexpected IDB change preserved: $source_file" >&2
+      return 1
+    fi
+  done <<< "$changed_files
+$untracked_files"
+
+  while read -r expected_hash source_file; do
+    if [[ ! -f "$IDB_CHECKOUT_DIR/$source_file" || -L "$IDB_CHECKOUT_DIR/$source_file" ||
+          -x "$IDB_CHECKOUT_DIR/$source_file" ]]; then
+      echo "Error: IDB foundation source must be a regular non-executable file: $source_file" >&2
+      return 1
+    fi
+  done < "$IDB_FOUNDATION_HASHES"
+  (cd "$IDB_CHECKOUT_DIR" && shasum -a 256 -c "$IDB_FOUNDATION_HASHES")
+  git -C "$IDB_CHECKOUT_DIR" apply --reverse --check "$IDB_FOUNDATION_PATCH"
+  git -C "$IDB_CHECKOUT_DIR" diff --check
+  print_success "Verified pinned IDB base and exact tracked Duo foundation patch"
+}
+
+function prepare_idb_foundation() {
+  verify_idb_base_state
+  if [[ -z "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain --untracked-files=all)" ]]; then
+    git -C "$IDB_CHECKOUT_DIR" apply --check "$IDB_FOUNDATION_PATCH"
+    git -C "$IDB_CHECKOUT_DIR" apply "$IDB_FOUNDATION_PATCH"
+  fi
+  # A previously applied exact patch is reusable. Any other edit stops here;
+  # there is no reset, clean, fallback checkout or partial-patch repair.
+  verify_idb_source_state
 }
 
 function generate_idb_projects() {
@@ -474,7 +482,7 @@ function generate_idb_projects() {
     exit 1
   fi
 
-  verify_idb_source_state
+  prepare_idb_foundation
   print_info "Generating pinned IDB fork projects with $(xcodegen --version)..."
   (cd "$IDB_CHECKOUT_DIR" && ./build.sh generate)
   if [[ ! -f "${FBSIMCONTROL_PROJECT}/project.pbxproj" ]]; then
@@ -485,10 +493,13 @@ function generate_idb_projects() {
 }
 
 function write_idb_build_evidence() {
+  verify_idb_source_state
   local evidence_path="${BUILD_XCFRAMEWORK_DIR}/IDB_BUILD_EVIDENCE.txt"
   mkdir -p "$BUILD_XCFRAMEWORK_DIR"
   {
     echo "IDB_SHA=${IDB_GIT_REF}"
+    echo "IDB_FOUNDATION_PATCH_SHA256=$(shasum -a 256 "$IDB_FOUNDATION_PATCH" | awk '{print $1}')"
+    echo "IDB_FOUNDATION_FILES_SHA256=$(shasum -a 256 "$IDB_FOUNDATION_HASHES" | awk '{print $1}')"
     echo "IDB_GIT_URL=${IDB_GIT_URL}"
     echo "IDB_UPSTREAM_BASE_SHA=${IDB_UPSTREAM_BASE_REF}"
     echo "DEVELOPER_DIR=${DEVELOPER_DIR:-<not set>}"
@@ -500,6 +511,38 @@ function write_idb_build_evidence() {
       "${IDB_UPSTREAM_BASE_REF}..${IDB_GIT_REF}"
   } > "$evidence_path"
   print_success "Recorded pinned IDB fork build evidence at ${evidence_path}"
+}
+
+function require_selected_build_architecture() {
+  if [[ "$AXE_BUILD_ARCHS" != "arm64" ]]; then
+    echo "Error: The selected Duo AX stub is verified for arm64 only." >&2
+    echo "   Use AXE_BUILD_ARCHS=arm64 for a local build. Universal release is not admitted." >&2
+    return 1
+  fi
+}
+
+function build_cadisplay_context() {
+  local output_base_dir="$1"
+  local simulator_sdk helper_binary
+  simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+  helper_binary="$output_base_dir/cadisplay-context"
+  mkdir -p "$output_base_dir"
+  xcrun clang -target arm64-apple-ios17.0-simulator -isysroot "$simulator_sdk" \
+    -framework Foundation -framework CoreGraphics -framework QuartzCore \
+    -MMD -MF "$output_base_dir/cadisplay-context.d" \
+    "$REPO_ROOT/Sources/CADisplayContext/cadisplay-context.m" -o "$helper_binary"
+  # This is a simulator guest executable. Preserve the accepted ad-hoc signing
+  # contract, with no host CLI entitlements or runtime input during the build.
+  codesign --force --sign - --timestamp=none "$helper_binary"
+  codesign --verify --strict "$helper_binary"
+  verify_macho_has_arch "$helper_binary" arm64
+  if ! otool -l "$helper_binary" | awk '
+    /cmd LC_BUILD_VERSION/ { build_command = 1; next }
+    build_command && /platform/ { if ($2 == 7 || $2 == "IOSSIMULATOR") found = 1; build_command = 0 }
+    END { exit !found }'; then
+    echo "Error: cadisplay-context is not an iOS Simulator executable." >&2
+    return 1
+  fi
 }
 
 # Function to build a single framework
@@ -524,7 +567,7 @@ function framework_build() {
     build \
     SKIP_INSTALL=NO \
     ONLY_ACTIVE_ARCH=NO \
-    ARCHS="arm64 x86_64" \
+    ARCHS="$AXE_BUILD_ARCHS" \
     BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
     GCC_WARN_ABOUT_MISSING_FIELD_INITIALIZERS=NO \
     CLANG_WARN_DOCUMENTATION_COMMENTS=NO \
@@ -782,44 +825,39 @@ function build_axe_executable() {
   local output_base_dir="$1"
   local build_config="release"
   local executable_dest="${output_base_dir}/axe"
-  local arm64_executable="${output_base_dir}/axe-arm64"
-  local x64_executable="${output_base_dir}/axe-x86_64"
-  local arm64_bin_path
-  local x64_bin_path
-
-  print_subsection "⚡" "Building AXe executable"
-  print_info "Using Swift Package Manager to build AXe..."
-
-  # Clean any existing build products to ensure fresh build
-  print_info "Cleaning previous build products..."
+  require_selected_build_architecture
+  build_cadisplay_context "$output_base_dir"
+  print_subsection "⚡" "Building AXe Executable"
   swift package clean
-
-  print_info "Building arm64 executable..."
-  swift build --configuration "${build_config}" --arch arm64
-  arm64_bin_path="$(swift_build_bin_path "$build_config" "arm64")/axe"
-  if [[ ! -f "${arm64_bin_path}" ]]; then
-    echo "❌ Error: arm64 AXe executable not found at ${arm64_bin_path}"
-    exit 1
+  local target_arch executable_source slice
+  local slices=()
+  for target_arch in $AXE_BUILD_ARCHS; do
+    swift build --configuration "$build_config" --arch "$target_arch"
+    executable_source="$(swift_build_bin_path "$build_config" "$target_arch")/axe"
+    if [[ ! -f "$executable_source" ]]; then
+      echo "Error: AXe executable not found: $executable_source" >&2
+      return 1
+    fi
+    slice="$output_base_dir/axe-$target_arch"
+    cp "$executable_source" "$slice"
+    slices+=("$slice")
+  done
+  if [[ "${#slices[@]}" -eq 0 ]]; then
+    echo "Error: No executable architectures were selected." >&2
+    return 1
   fi
-  cp "${arm64_bin_path}" "${arm64_executable}"
-
-  print_info "Building x86_64 executable..."
-  swift build --configuration "${build_config}" --arch x86_64
-  x64_bin_path="$(swift_build_bin_path "$build_config" "x86_64")/axe"
-  if [[ ! -f "${x64_bin_path}" ]]; then
-    echo "❌ Error: x86_64 AXe executable not found at ${x64_bin_path}"
-    exit 1
+  if [[ "${#slices[@]}" -eq 1 ]]; then
+    cp "${slices[0]}" "$executable_dest"
+  else
+    lipo -create -output "$executable_dest" "${slices[@]}"
   fi
-  cp "${x64_bin_path}" "${x64_executable}"
-
-  print_info "Creating universal executable with lipo..."
-  lipo -create -output "${executable_dest}" "${arm64_executable}" "${x64_executable}"
-  rm -f "${arm64_executable}" "${x64_executable}"
+  for slice in "${slices[@]}"; do rm -f "$slice"; done
 
   copy_resource_bundle "${output_base_dir}"
 
-  verify_macho_has_arch "${executable_dest}" "arm64"
-  verify_macho_has_arch "${executable_dest}" "x86_64"
+  for target_arch in $AXE_BUILD_ARCHS; do
+    verify_macho_has_arch "${executable_dest}" "$target_arch"
+  done
   print_success "AXe executable installed to ${executable_dest}"
 
   # Configure rpath for organized framework loading
@@ -879,14 +917,16 @@ function verify_xcframework_inputs() {
       echo "❌ Error: Could not locate framework binary inside ${xcframework_path}"
       exit 1
     fi
-    verify_macho_has_arch "${framework_binary}" "arm64"
-    verify_macho_has_arch "${framework_binary}" "x86_64"
+    local expected_arch
+    for expected_arch in $AXE_BUILD_ARCHS; do
+      verify_macho_has_arch "${framework_binary}" "$expected_arch"
+    done
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
       verify_fbsimulatorcontrol_fork_features "${framework_binary}"
     fi
   done
 
-  print_success "XCFramework inputs include arm64 and x86_64 slices"
+  print_success "XCFramework inputs include requested slices: $AXE_BUILD_ARCHS"
 }
 
 function verify_release_architectures() {
@@ -896,8 +936,10 @@ function verify_release_architectures() {
   local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
 
   print_subsection "🧪" "Validating release artifact architectures"
-  verify_macho_has_arch "${executable_path}" "arm64"
-  verify_macho_has_arch "${executable_path}" "x86_64"
+  local expected_arch
+  for expected_arch in $AXE_BUILD_ARCHS; do
+    verify_macho_has_arch "${executable_path}" "$expected_arch"
+  done
 
   if [[ ! -d "${frameworks_dir}" ]]; then
     echo "❌ Error: Frameworks directory not found under ${output_base_dir}"
@@ -916,14 +958,16 @@ function verify_release_architectures() {
       echo "❌ Error: Could not locate framework binary in ${framework_path}"
       exit 1
     fi
-    verify_macho_has_arch "${framework_binary}" "arm64"
-    verify_macho_has_arch "${framework_binary}" "x86_64"
+    local expected_arch
+    for expected_arch in $AXE_BUILD_ARCHS; do
+      verify_macho_has_arch "${framework_binary}" "$expected_arch"
+    done
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
       verify_fbsimulatorcontrol_fork_features "${framework_binary}"
     fi
   done
 
-  print_success "Release artifacts include arm64 and x86_64 slices"
+  print_success "Artifacts include requested slices: $AXE_BUILD_ARCHS"
 }
 
 # Function to sign the AXe executable with Developer ID
@@ -1063,6 +1107,11 @@ function notarize_package() {
 
     if [ -n "${extracted_package_dir}" ] && [ -f "${extracted_package_dir}/axe" ]; then
       cp "${extracted_package_dir}/axe" "${BUILD_OUTPUT_DIR}/axe"
+      if [[ ! -f "${extracted_package_dir}/cadisplay-context" ]]; then
+        echo "Error: Notarized package missing cadisplay-context" >&2
+        exit 1
+      fi
+      cp "${extracted_package_dir}/cadisplay-context" "${BUILD_OUTPUT_DIR}/cadisplay-context"
       print_success "Original executable replaced with notarized version"
 
       rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
@@ -1127,6 +1176,7 @@ function notarize_package() {
         # Clean up build artifacts (axe executable and Frameworks, keep XCFrameworks)
         print_info "Cleaning up build artifacts..."
         rm -f "${BUILD_OUTPUT_DIR}/axe"
+        rm -f "${BUILD_OUTPUT_DIR}/cadisplay-context"
         rm -rf "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle"
         rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
         print_success "Cleaned up axe executable, resource bundle, and Frameworks directory"
@@ -1192,7 +1242,7 @@ Commands:
     Print this usage information.
 
   setup
-    Clone the IDB repository and set up directories.
+    Verify the pinned IDB base and apply the tracked Duo patch without discarding edits.
 
   clean
     Clean previous build products and derived data.
@@ -1219,7 +1269,11 @@ Commands:
     Code sign all XCFrameworks with Developer ID.
 
   executable
-    Build the AXe executable using Swift Package Manager.
+    Build AXe and its signed simulator cadisplay-context sibling.
+
+  debug-helper
+    Build and sign cadisplay-context in the actual arm64 SwiftPM debug output directory.
+    Run again after swift package clean, before a selected debug CLI or test run.
 
   sign-executable
     Code sign the AXe executable with Developer ID.
@@ -1244,7 +1298,8 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
   AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
   IDB_GIT_URL            AXe IDB fork URL (default: https://github.com/cameroncooke/idb.git)
-  IDB_GIT_REF            Exact fork revision (default: ${DEFAULT_IDB_GIT_REF})
+  IDB_GIT_REF            Exact fork revision (must match the tracked foundation base)
+  AXE_BUILD_ARCHS        Architectures (default: arm64 x86_64; Duo local build: arm64)
   IDB_UPSTREAM_BASE_REF  Verified upstream base (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
@@ -1259,6 +1314,7 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
 Examples:
   ./build.sh                    # Build everything (default)
   ./build.sh help               # Show this help
+  AXE_BUILD_ARCHS=arm64 ./build.sh debug-helper  # Stage the selected debug helper
   ./build.sh frameworks         # Only build frameworks
   ./build.sh sign-frameworks    # Only sign frameworks
   ./build.sh notarize           # Only run notarization step
@@ -1283,6 +1339,7 @@ function cmd_clean() {
 }
 
 function cmd_frameworks() {
+  require_selected_build_architecture
   print_section "🔧" "Building Frameworks"
   generate_idb_projects
   framework_build "FBControlCore" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
@@ -1350,6 +1407,18 @@ function cmd_executable() {
   build_axe_executable "${BUILD_OUTPUT_DIR}"
 }
 
+function cmd_debug_helper() {
+  require_selected_build_architecture
+  local debug_bin_path
+  debug_bin_path="$(cd "$REPO_ROOT" && swift build --configuration debug --arch arm64 --show-bin-path)"
+  if [[ -z "$debug_bin_path" || "$debug_bin_path" != /* || "$debug_bin_path" == *$'\n'* ]]; then
+    echo "Error: SwiftPM did not return one absolute debug output path." >&2
+    return 1
+  fi
+  build_cadisplay_context "$debug_bin_path"
+  print_success "Signed cadisplay-context staged in $debug_bin_path"
+}
+
 function cmd_sign_executable() {
   print_section "🔒" "Signing AXe Executable"
   require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
@@ -1387,6 +1456,7 @@ function cmd_verify_arches() {
 }
 
 function cmd_build() {
+  require_selected_build_architecture
   print_section "🚀" "IDB Framework Builder for AXe Project"
 
   print_info "IDB Checkout Directory: ${IDB_CHECKOUT_DIR}"
@@ -1448,6 +1518,7 @@ case $COMMAND in
   sign-xcframeworks)
     cmd_sign_xcframeworks;;
   dev)
+    require_selected_build_architecture
     cmd_setup
     cmd_clean
     cmd_frameworks
@@ -1455,9 +1526,12 @@ case $COMMAND in
     cmd_strip
     cmd_sign_frameworks
     cmd_xcframeworks
-    cmd_sign_xcframeworks;;
+    cmd_sign_xcframeworks
+    build_cadisplay_context "$BUILD_OUTPUT_DIR";;
   executable)
     cmd_executable;;
+  debug-helper)
+    cmd_debug_helper;;
   sign-executable)
     cmd_sign_executable;;
   package)

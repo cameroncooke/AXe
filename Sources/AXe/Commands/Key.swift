@@ -33,7 +33,11 @@ struct Key: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+
     func validate() throws {
+        try selectedKeyboard.validate(input: selectedInput)
         // Validate keycode range
         guard keycode >= 0 && keycode <= 255 else {
             throw ValidationError("Keycode must be between 0 and 255.")
@@ -51,6 +55,10 @@ struct Key: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         
@@ -89,5 +97,14 @@ struct Key: AsyncParsableCommand {
             )
         
         logger.info().log("Key press completed successfully")
+    }
+
+    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
+        try validate()
+        if let duration {
+            return .composite([.keyboard(direction: .down, keyCode: UInt32(keycode)),
+                .delay(duration), .keyboard(direction: .up, keyCode: UInt32(keycode))])
+        }
+        return .shortKeyPress(UInt32(keycode))
     }
 } 

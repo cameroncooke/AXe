@@ -39,7 +39,11 @@ struct Drag: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+
     func validate() throws {
+        try selectedInput.validate()
+        if selectedInput.mode == .selected { try selectedPath.validate() }
         guard startX >= 0, startY >= 0, endX >= 0, endY >= 0 else {
             throw ValidationError("Coordinates must be non-negative values.")
         }
@@ -64,7 +68,18 @@ struct Drag: AsyncParsableCommand {
         }
     }
 
+    var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .drag, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration, steps: steps, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
+
+    func selectedRequest() throws -> SelectedHIDRequest {
+        try selectedInput.pathRequest(selectedPath)
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let request = try selectedRequest()
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         try await performGlobalSetup(logger: logger)

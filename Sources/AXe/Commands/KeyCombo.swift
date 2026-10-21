@@ -38,7 +38,11 @@ struct KeyCombo: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+
     func validate() throws {
+        try selectedKeyboard.validate(input: selectedInput)
         let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
         guard !parsedModifiers.isEmpty else {
@@ -61,6 +65,10 @@ struct KeyCombo: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
 
@@ -97,5 +105,16 @@ struct KeyCombo: AsyncParsableCommand {
             )
 
         logger.info().log("Key combo completed successfully")
+    }
+
+    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
+        try validate()
+        let codes = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
+        guard codes.allSatisfy({ (224...231).contains($0) }) else {
+            throw ValidationError("Selected key-combo modifiers must be HID modifier keys 224...231.")
+        }
+        return .composite(codes.map { .keyboard(direction: .down, keyCode: UInt32($0)) }
+            + [.shortKeyPress(UInt32(key))]
+            + codes.reversed().map { .keyboard(direction: .up, keyCode: UInt32($0)) })
     }
 }

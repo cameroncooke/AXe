@@ -4,7 +4,18 @@ import FBSimulatorControl
 
 @MainActor
 protocol BatchConvertible {
+    var batchInputMode: SimulatorInputMode { get }
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive]
+}
+
+extension BatchConvertible {
+    var batchInputMode: SimulatorInputMode { .legacy }
+
+    func validateBatchAdmission() throws {
+        guard batchInputMode == .legacy else {
+            throw ValidationError("Selected input is not supported in batch steps. Run the selected command separately.")
+        }
+    }
 }
 
 private func buildDelayedEvent(
@@ -63,6 +74,8 @@ func parseCommaSeparatedIntsStrict(_ rawValue: String, fieldName: String) throws
 }
 
 extension Tap: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     private func resolvedTapStyle(for resolution: TapResolution, context: BatchContext) -> TapStyle {
         let requestedStyle = tapStyle ?? context.tapStyle
         switch requestedStyle {
@@ -134,6 +147,8 @@ extension Tap: BatchConvertible {
 }
 
 extension Swipe: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let swipeDuration = duration ?? 1.0
         let swipeDelta = delta ?? 50.0
@@ -158,10 +173,15 @@ extension Swipe: BatchConvertible {
 }
 
 extension Gesture: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
+        guard case let .preset(preset) = gesture else {
+            throw ValidationError("Pinch is not supported in batch steps.")
+        }
         let width = screenWidth ?? 390.0
         let height = screenHeight ?? 844.0
-        let coords = preset.coordinates(screenWidth: width, screenHeight: height)
+        let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
         let gestureDuration = duration ?? preset.defaultDuration
         let gestureDelta = delta ?? preset.defaultDelta
 
@@ -179,6 +199,8 @@ extension Gesture: BatchConvertible {
 }
 
 extension Touch: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: (x: pointX, y: pointY),
@@ -207,6 +229,8 @@ extension Touch: BatchConvertible {
 }
 
 extension Button: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         if let duration {
             let composite = FBSimulatorHIDEvent.composite([
@@ -222,6 +246,8 @@ extension Button: BatchConvertible {
 }
 
 extension Key: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         if let duration {
             let composite = FBSimulatorHIDEvent.composite([
@@ -237,6 +263,8 @@ extension Key: BatchConvertible {
 }
 
 extension KeySequence: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         let keyDelay = delay ?? 0.1
@@ -254,6 +282,8 @@ extension KeySequence: BatchConvertible {
 }
 
 extension KeyCombo: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
@@ -271,6 +301,8 @@ extension KeyCombo: BatchConvertible {
 }
 
 extension Type: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         let inputText: String
         switch (text, useStdin, inputFile) {

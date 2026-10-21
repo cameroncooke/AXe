@@ -40,6 +40,11 @@ copy_release_payload() {
     exit 1
   fi
 
+  if [[ ! -f "${source_dir}/cadisplay-context" ]]; then
+    echo "Error: cadisplay-context helper missing from ${source_dir}" >&2
+    exit 1
+  fi
+
   if [[ ! -d "${source_dir}/Frameworks" ]]; then
     echo "❌ Error: Frameworks directory missing from ${source_dir}" >&2
     exit 1
@@ -53,6 +58,7 @@ copy_release_payload() {
   rm -rf "$destination_dir"
   mkdir -p "$destination_dir"
   cp "$source_dir/axe" "$destination_dir/"
+  cp "$source_dir/cadisplay-context" "$destination_dir/"
   cp -R "$source_dir/Frameworks" "$destination_dir/"
   cp -R "$source_dir/AXe_AXe.bundle" "$destination_dir/"
   sanitize_release_payload "$destination_dir"

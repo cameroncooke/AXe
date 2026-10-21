@@ -36,7 +36,11 @@ struct Swipe: AsyncParsableCommand {
     var simulatorUDID: String
 
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+
     func validate() throws {
+        try selectedInput.validate()
+        if selectedInput.mode == .selected { try selectedPath.validate() }
         // Validate coordinates are non-negative
         guard startX >= 0, startY >= 0, endX >= 0, endY >= 0 else {
             throw ValidationError("Coordinates must be non-negative values.")
@@ -75,7 +79,14 @@ struct Swipe: AsyncParsableCommand {
         }
     }
 
+    var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .swipe, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration ?? 1, delta: delta ?? 50, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            let request = try selectedInput.pathRequest(selectedPath)
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         

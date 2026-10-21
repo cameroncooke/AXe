@@ -3,6 +3,7 @@ import FBSimulatorControl
 @preconcurrency import FBControlCore
 import AVFoundation
 import ImageIO
+import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
 #endif
@@ -78,12 +79,39 @@ struct VideoFrameUtilities {
     }
 
     static func processJPEGData(_ data: Data, scale: Double, quality: Int) async throws -> Data {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              CGImageSourceGetCount(source) > 0,
+              CGImageSourceCreateImageAtIndex(
+                source, 0, [kCGImageSourceShouldCacheImmediately: true] as CFDictionary
+              ) != nil,
+              CGImageSourceGetStatus(source) == .statusComplete,
+              CGImageSourceGetStatusAtIndex(source, 0) == .statusComplete else {
+            throw VideoProcessingError.failedToDecodeImage
+        }
+
+        let imageType = CGImageSourceGetType(source)
+        if let imageType, CFEqual(imageType, UTType.jpeg.identifier as CFString) {
+            // Require a complete standalone frame, even when ImageIO tolerates truncation.
+            let endOfImage: [UInt8] = [0xff, 0xd9]
+            guard data.suffix(endOfImage.count).elementsEqual(endOfImage) else {
+                throw VideoProcessingError.failedToDecodeImage
+            }
+        } else if let imageType, CFEqual(imageType, UTType.png.identifier as CFString) {
+            let endChunk: [UInt8] = [0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82]
+            guard data.suffix(endChunk.count).elementsEqual(endChunk) else {
+                throw VideoProcessingError.failedToDecodeImage
+            }
+        }
+
         if scale < 1.0 {
             return try await scaleJPEGData(data, scale: scale, quality: quality)
         } else if quality != 80 {
             return try await reencodeJPEGData(data, quality: quality)
         }
-        return data
+        if let imageType, CFEqual(imageType, UTType.jpeg.identifier as CFString) {
+            return data
+        }
+        return try await reencodeJPEGData(data, quality: quality)
     }
 
     static func computeDimensions(for image: CGImage, scale: Double) -> (width: Int, height: Int) {
@@ -222,6 +250,42 @@ final class H264StreamRecorder: @unchecked Sendable {
             }
         }
 
+        try appendReady(image: image, presentationTime: presentationTime)
+    }
+
+    /// Selected recording must yield so stop signals and task cancellation can be handled.
+    /// The single recording owner serializes all writer calls.
+    @MainActor
+    func appendSelected(image: CGImage, presentationTime: CMTime) async throws {
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        while !input.isReadyForMoreMediaData {
+            try Task.checkCancellation()
+            guard writer.status == .writing else {
+                throw CLIError(errorDescription: "Video writer is not writing: \(writer.error?.localizedDescription ?? "unknown error")")
+            }
+            guard ProcessInfo.processInfo.systemUptime < deadline else {
+                throw CLIError(errorDescription: "Video writer readiness timed out")
+            }
+            try await Task.sleep(nanoseconds: 5_000_000)
+        }
+        try Task.checkCancellation()
+        guard writer.status == .writing else {
+            throw CLIError(errorDescription: "Video writer stopped before frame append")
+        }
+        try appendReady(image: image, presentationTime: presentationTime)
+    }
+
+    @MainActor
+    func finishSelected() async throws {
+        try Task.checkCancellation()
+        try await finish()
+        try Task.checkCancellation()
+        guard writer.status == .completed else {
+            throw CLIError(errorDescription: "Video writer did not complete")
+        }
+    }
+
+    private func appendReady(image: CGImage, presentationTime: CMTime) throws {
         guard let pixelBuffer = Self.makePixelBuffer(width: width, height: height, adaptor: adaptor) else {
             throw VideoProcessingError.failedToAllocatePixelBuffer
         }

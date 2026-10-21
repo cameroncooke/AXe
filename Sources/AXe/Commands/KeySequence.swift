@@ -26,7 +26,11 @@ struct KeySequence: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
     
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+
     func validate() throws {
+        try selectedKeyboard.validate(input: selectedInput)
         let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         
         // Validate that we have at least one keycode
@@ -58,6 +62,10 @@ struct KeySequence: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         
@@ -96,5 +104,16 @@ struct KeySequence: AsyncParsableCommand {
             )
         
         logger.info().log("Key sequence completed successfully")
+    }
+
+    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
+        try validate()
+        let codes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
+        var events: [FBSimulatorHIDEvent] = []
+        for (index, code) in codes.enumerated() {
+            events.append(.shortKeyPress(UInt32(code)))
+            if index < codes.count - 1, (delay ?? 0.1) > 0 { events.append(.delay(delay ?? 0.1)) }
+        }
+        return .composite(events)
     }
 } 

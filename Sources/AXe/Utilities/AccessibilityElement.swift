@@ -37,6 +37,10 @@ struct AccessibilityElement: Decodable {
     let AXUniqueId: String?
     let AXIdentifier: String?
     let AXValue: String?
+    let title: String?
+    let help: String?
+    let enabled: Bool?
+    let customActions: [String]?
 
     enum CodingKeys: String, CodingKey {
         case type
@@ -49,6 +53,10 @@ struct AccessibilityElement: Decodable {
         case AXUniqueId
         case AXIdentifier
         case AXValue
+        case title
+        case help
+        case enabled
+        case customActions = "custom_actions"
     }
 
     init(from decoder: Decoder) throws {
@@ -64,6 +72,16 @@ struct AccessibilityElement: Decodable {
         AXUniqueId = try Self.decodeOptionalScalarString(from: container, forKey: .AXUniqueId)
         AXIdentifier = try Self.decodeOptionalScalarString(from: container, forKey: .AXIdentifier)
         AXValue = try Self.decodeOptionalScalarString(from: container, forKey: .AXValue)
+        title = try Self.decodeOptionalScalarString(from: container, forKey: .title)
+        help = try Self.decodeOptionalScalarString(from: container, forKey: .help)
+        if let value = try? container.decodeIfPresent(Bool.self, forKey: .enabled) {
+            enabled = value
+        } else if let value = try? container.decodeIfPresent(Int.self, forKey: .enabled) {
+            enabled = value != 0
+        } else {
+            enabled = nil
+        }
+        customActions = try? container.decodeIfPresent([String].self, forKey: .customActions)
     }
 
     private static func decodeOptionalScalarString(

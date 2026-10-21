@@ -13,7 +13,17 @@ struct HIDBrokerCommand: AsyncParsableCommand {
     @Option(name: .customLong("udid"))
     var simulatorUDID: String
 
+    @Flag(name: .customLong("selected"))
+    var selected = false
+
     func run() async throws {
+        if selected {
+            let logger = AxeLogger()
+            try await setup(logger: logger)
+            try await performGlobalSetup(logger: logger)
+            try await SelectedHIDBroker.serve(simulatorUDID: simulatorUDID, logger: logger)
+            return
+        }
         let endpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID)
         let lifetimeLock = try HIDBroker.acquireLifetimeLock(endpoint: endpoint)
         defer {

@@ -44,7 +44,11 @@ struct Type: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+
     func validate() throws {
+        try selectedKeyboard.validate(input: selectedInput)
         let sourceCount = [text != nil, useStdin, inputFile != nil].filter { $0 }.count
         if sourceCount > 1 {
             throw ValidationError("Please specify only one input source: text argument, --stdin, or --file.")
@@ -55,7 +59,25 @@ struct Type: AsyncParsableCommand {
         }
     }
 
+    func selectedRequest(standardInput: FileHandle = .standardInput) throws -> SelectedHIDRequest {
+        let input: String
+        switch (text, useStdin, inputFile) {
+        case (let literal?, false, nil): input = literal
+        case (nil, true, nil): input = try SelectedKeyboardOptions.readText(from: standardInput)
+        case (nil, false, let file?):
+            let handle = try FileHandle(forReadingFrom: URL(fileURLWithPath: file))
+            defer { try? handle.close() }
+            input = try SelectedKeyboardOptions.readText(from: handle)
+        default: throw ValidationError("Select one text input source.")
+        }
+        return try selectedKeyboard.request(input: selectedInput, event: SelectedKeyboardRequest.textEvent(input))
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         

@@ -72,6 +72,7 @@ struct BatchStepParser {
             throw CLIError(errorDescription: "Failed to parse batch step arguments: \(arguments.joined(separator: " "))")
         }
         try parsed.validate()
+        try parsed.validateBatchAdmission()
         return try await parsed.toBatchPrimitives(context: context, logger: logger)
     }
 

@@ -7,6 +7,7 @@ import OSLog
 // A false value guarantees that the broker has not read or executed any touch primitives.
 private struct HIDBrokerHandshake: Codable {
     let ready: Bool
+    let version: Int?
 }
 
 private struct HIDBrokerResponse: Codable {
@@ -72,7 +73,8 @@ extension HIDBroker {
     static func connectAndAwaitHandshake(
         endpoint: String,
         connector: (String) throws -> Int32,
-        timeoutMilliseconds: Int = serverIOTimeoutMilliseconds
+        timeoutMilliseconds: Int = serverIOTimeoutMilliseconds,
+        expectedVersion: Int? = nil
     ) throws -> Int32 {
         let descriptor = try connector(endpoint)
         do {
@@ -80,6 +82,9 @@ extension HIDBroker {
             let data = try readMessage(from: descriptor)
             let handshake = try JSONDecoder().decode(HIDBrokerHandshake.self, from: data)
             guard handshake.ready else { throw HIDBrokerNotReadyError() }
+            if let expectedVersion, handshake.version != expectedVersion {
+                throw CLIError(errorDescription: "HID broker protocol version mismatch")
+            }
             try configureReceiveTimeout(descriptor, milliseconds: clientResponseTimeoutMilliseconds)
             return descriptor
         } catch {
@@ -300,8 +305,8 @@ extension HIDBroker {
         try writeAll(data, to: descriptor)
     }
 
-    static func writeHandshake(ready: Bool, to descriptor: Int32) throws {
-        var data = try JSONEncoder().encode(HIDBrokerHandshake(ready: ready))
+    static func writeHandshake(ready: Bool, version: Int? = nil, to descriptor: Int32) throws {
+        var data = try JSONEncoder().encode(HIDBrokerHandshake(ready: ready, version: version))
         data.append(0x0A)
         try writeAll(data, to: descriptor)
     }

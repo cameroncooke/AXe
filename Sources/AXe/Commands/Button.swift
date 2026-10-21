@@ -46,6 +46,8 @@ struct Button: AsyncParsableCommand {
         abstract: "Press a hardware button on the simulator.",
         discussion: """
         Available buttons: apple-pay, home, lock, side-button, siri
+        Selected mode supports Home and side-button. The screen pair guards the active context;
+        both act on the whole device. Transport evidence does not prove a UI, lock or power state.
         
         Examples:
           axe button home --udid SIMULATOR_UDID
@@ -63,7 +65,25 @@ struct Button: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var selectedInput: SelectedInputOptions
+
+    @Option(name: .customLong("expected-boot"), help: "Selected Home or side-button: require this exact measured boot identity before input.")
+    var expectedBoot: String?
+
     func validate() throws {
+        try selectedInput.validate()
+        if selectedInput.mode == .selected {
+            switch buttonType {
+            case .home:
+                try SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot).validate()
+            case .sideButton:
+                try SelectedButtonRequest(kind: .sideButton, duration: duration, expectedBoot: expectedBoot).validate()
+            default:
+                throw ValidationError("Selected button supports only home and side-button. Other buttons remain available in legacy mode.")
+            }
+        } else if expectedBoot != nil {
+            throw ValidationError("--expected-boot requires selected Home or side-button.")
+        }
         // Validate duration if provided
         if let duration = duration {
             guard duration > 0 else {
@@ -75,7 +95,28 @@ struct Button: AsyncParsableCommand {
         }
     }
 
+    func selectedRequest() throws -> SelectedHIDRequest {
+        try validate()
+        guard selectedInput.mode == .selected, let screenID = selectedInput.screenID,
+              let screenUUID = selectedInput.screenUUID.flatMap(UUID.init(uuidString:)) else {
+            throw ValidationError("Selected button requires an explicit screen ID and UUID.")
+        }
+        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [])
+        switch buttonType {
+        case .home: request.home = SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot)
+        case .sideButton: request.button = SelectedButtonRequest(kind: .sideButton, duration: duration, expectedBoot: expectedBoot)
+        default: throw ValidationError("Unsupported selected button.")
+        }
+        try request.validate()
+        return request
+    }
+
     func run() async throws {
+        if selectedInput.mode == .selected {
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            return
+        }
         let logger = AxeLogger()
         try await setup(logger: logger)
         

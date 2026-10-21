@@ -37,7 +37,7 @@ struct HIDBrokerBootIdentity: Equatable {
 enum HIDBroker {
     static let inputDeliveryFailureDescription = "AXe could not deliver simulator input. The simulator may have restarted or disconnected. Confirm it is booted and try again."
     static let dtuhidMinimumBootUptime: TimeInterval = 10
-    private static let protocolVersion = 2
+    static let protocolVersion = 2
     static let maximumMessageBytes = 64 * 1024
     private static let idleTimeoutMilliseconds: Int32 = 60_000
     static let serverIOTimeoutMilliseconds: Int = 2_000
@@ -190,7 +190,7 @@ enum HIDBroker {
         return try endpointPath(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory)
     }
 
-    static func endpointPath(simulatorUDID: String, developerDirectory: String) throws -> String {
+    static func endpointPath(simulatorUDID: String, developerDirectory: String, version: Int = protocolVersion) throws -> String {
         let uid = getuid()
         let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .resolvingSymlinksInPath()
@@ -204,7 +204,7 @@ enum HIDBroker {
         let simulatorIdentity = String(fnv1a64(simulatorUDID), radix: 16)
         // Version the endpoint so a running broker from an older wire protocol cannot intercept
         // a request before the current client completes its readiness handshake.
-        let filename = "\(simulatorIdentity)-\(identity)-v\(protocolVersion).sock"
+        let filename = "\(simulatorIdentity)-\(identity)-v\(version).sock"
         let path = root.appendingPathComponent(filename).path
         guard path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else {
             throw CLIError(errorDescription: "HID broker socket path is too long.")
@@ -271,7 +271,8 @@ enum HIDBroker {
         connector: (String) throws -> Int32,
         spawner: (String) throws -> Void,
         sleeper: (useconds_t) -> Void,
-        monotonicNow: () -> UInt64 = monotonicTimeNanoseconds
+        monotonicNow: () -> UInt64 = monotonicTimeNanoseconds,
+        expectedVersion: Int? = nil
     ) throws -> Int32 {
         let startedAt = monotonicNow()
         let deadlineResult = startedAt.addingReportingOverflow(startupTimeoutNanoseconds)
@@ -289,7 +290,8 @@ enum HIDBroker {
             return try connectAndAwaitHandshake(
                 endpoint: endpoint,
                 connector: connector,
-                timeoutMilliseconds: handshakeTimeout()
+                timeoutMilliseconds: handshakeTimeout(),
+                expectedVersion: expectedVersion
             )
         } catch {
             guard isBrokerUnavailable(error) else { throw error }
@@ -310,7 +312,8 @@ enum HIDBroker {
             return try connectAndAwaitHandshake(
                 endpoint: endpoint,
                 connector: connector,
-                timeoutMilliseconds: handshakeTimeout()
+                timeoutMilliseconds: handshakeTimeout(),
+                expectedVersion: expectedVersion
             )
         } catch {
             guard isBrokerUnavailable(error) else { throw error }
@@ -333,7 +336,8 @@ enum HIDBroker {
                 return try connectAndAwaitHandshake(
                     endpoint: endpoint,
                     connector: connector,
-                    timeoutMilliseconds: handshakeTimeout()
+                    timeoutMilliseconds: handshakeTimeout(),
+                    expectedVersion: expectedVersion
                 )
             } catch {
                 guard isBrokerUnavailable(error) else { throw error }
