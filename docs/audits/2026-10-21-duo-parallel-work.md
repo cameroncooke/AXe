@@ -12,9 +12,9 @@ The coordinator alone grants simulator and build slots. The extra continuous sam
 
 | Workstream | Scope | State | Integration |
 | --- | --- | --- | --- |
-| Gestures and coordinates | Moving two-finger rotation during folding/device rotation; remaining outer landscape gesture and coordinate cases | Two twist interruptions and five outer270 cases passed; guest shut down, six further cases pending slot | Worker4eeb969 reviewed and merged |
-| Hinge and hardware | Selected side-button, supported lock/wake observations, measured hinge transitions and fresh input | Standalone/batch side-button and fresh real taps passed; hinge checks running on dedicated F812E915-55DA-46C0-B2DB-B8C6E1EF1B66 | Pending |
-| Build and regression | Build the isolated Duo source, focused existing checks, ordinary iPhone/iPad checks, exact API/release gap report | 111 test functions/14 suites and ten host boundary checks passed; ordinary-device native checks running | Pending |
+| Gestures and coordinates | Moving two-finger rotation during folding/device rotation; remaining outer landscape gesture and coordinate cases | Two twist interruptions and five outer270 cases passed; six further outer270 cases now assigned slot A | Worker4eeb969 reviewed and merged |
+| Hinge and hardware | Selected side-button, supported lock/wake observations, measured hinge transitions and fresh input | Standalone/batch side-button,18 hinge checks and nine stale-panel rejection/refind cases passed; held keys running | Worker e3689e6b reviewed and merged |
+| Build and regression | Build the isolated Duo source, focused existing checks, ordinary iPhone/iPad checks, exact API/release gap report | 111 test functions/14 suites, ten host boundary checks and20 ordinary iPhone/iPad actions passed; final saved review pending | Pending |
 
 Unrelated Agent and AXeCore changes remain outside the Duo checkpoint. Existing failed cases remain failed. A completed bounded check does not close a broad feature row. Missing polling, numeric slider values, agent selection and universal release support require separate source work; this round must report those limits rather than infer support.
 
