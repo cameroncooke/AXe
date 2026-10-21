@@ -36,7 +36,7 @@ The key process record confirms exit 1 without signals. Both external operators 
 - [DuoExternalStateChange.swift](../../scripts/fixtures/DuoExternalStateChange.swift) uses the existing proved library control methods with an explicit owned device and helper path. It sends no touch or key input. Its deliberate overlap represents an external fold or turn while AXe owns the key. It adds no product route around the input lock.
 - [verify-duo-held-key-saved.py](../../scripts/verify-duo-held-key-saved.py) reads saved evidence without sending input.
 
-The state operator built with the recorded Swift 5 compiler, two jobs, the current framework set and no product build. Exact command and resource result: [controls-compile-external](/Volumes/Developer/AXe/build_products/verification/parallel-duo-20261021/controls-compile-external/started.json).
+The state operator built with the recorded Xcode compiler in Swift 5 language mode, two jobs, the current framework set and no product build. Exact command and resource result: [controls-compile-external](/Volumes/Developer/AXe/build_products/verification/parallel-duo-20261021/controls-compile-external/started.json).
 
 `/usr/bin/python3 -B scripts/verify-duo-held-key-saved.py --root /Volumes/Developer/AXe/build_products/verification/parallel-duo-20261021` passed on 21 October 2026. It verified the 14 current pins, real pre-change Space effects, expected interruption and cleanup receipts, stopped repeat, two fresh Button effects and final shutdown. It retains the failed original fold wrapper. [Saved verification](/Volumes/Developer/AXe/build_products/verification/parallel-duo-20261021/controls-held-key-saved-verification.json).
 
