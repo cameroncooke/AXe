@@ -2,7 +2,7 @@
 
 ## Optional agent mode
 
-Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
+Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo`, `key-sequence` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
 
 1. Capture with `axe describe-ui --agent --udid <UDID> --expected-pid <PID>`. Use the current PID; let capture discover the active display, or supply the explicit selected pair.
 2. Read the returned snapshot ID and `ref|action|role|label|value|id` rows. Use bounded capture paging for omitted rows. A matching `--since-screen-hash` still performs a fresh read. Cache reuse also checks a separate exact native fingerprint. The compact RS/1 `screenHash` uses normalized data; a matching hash alone does not prove unchanged raw UI.
@@ -52,3 +52,11 @@ Use `axe key-combo --modifiers 225 --key 4 --agent --udid <UDID> --expected-pid 
 Supply 1...8 distinct modifier HID codes in 224...231 and one different key in 0...255. AXe presses modifiers in the given order, presses and releases the target key, then releases modifiers in reverse order. This is one complete sequence with no added delay. Duplicate modifiers, a target already held as a modifier, mixed targets, focus-ID override, timing override and agent batch use reject. Raw and selected key combinations keep their existing behavior.
 
 The separate `keyCombo` request kind leaves the strict single-key `keyPress` contract unchanged. Use a matched CLI and broker; older brokers reject it. Snapshot, target, PID, display and per-key focus checks use the existing keyboard owner and unchanged eight-second admission budget. Owned key-up cleanup can release after focus loss or context change. Focus reads and input are separate OS operations; do not assume atomic recipient control. Refresh after failure or use the replacement capture after success. Never replay uncertain input. Build and native verification are pending.
+
+## Send a key sequence to a focused field reference
+
+Use `axe key-sequence --keycodes 42,42 --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF>` for two Backspaces. Choose a current `typeText` reference for an already focused, enabled, visible native TextField with a unique exact ID. The command does not focus it.
+
+Supply 1...100 HID codes in 0...255. Each key is pressed and released before the next. Optional `--delay` is finite in 0...5 seconds, defaults to 0.1, and applies only between keys. Total requested delay cannot exceed 20 seconds; the existing 1024-event bound and eight-second admission budget remain. This command does not hold modifiers across keys; use `key-combo` for shortcuts. Focus-ID overrides, other targets, retained keys and agent batch use reject. Raw and selected sequences keep their behavior.
+
+CLI wire 29 gives the separate `keySequence` kind a new broker endpoint; older wire requests reject. Native frameworks and strict single-key/shortcut contracts are unchanged. Snapshot, target, PID, display and per-key focus checks use the existing keyboard owner. Key-up cleanup can release after focus loss or context change. Focus reads and input are separate OS operations, not atomic recipient control. Refresh after failure or use the replacement capture after success. Never replay uncertain input. Build and native verification are pending.

@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, keyPress, keyCombo, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, keyPress, keyCombo, keySequence, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -59,8 +59,18 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidKeyCombo", "An agent key combination requires one snapshot/ref and a complete modifier/key sequence, without other payloads or timing options.")
             }
             try validateKeyCombo(keyEvents)
+        } else if kind == .keySequence {
+            guard let keyEvents, ref != nil, snapshotID != nil,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, direction == nil, tapStyle == nil,
+                  sinceScreenHash == nil, destination == nil, steps == nil,
+                  duration == 1, preDelay == 0, postDelay == 0, distance == 1,
+                  rowOffset == 0, rowLimit == 64 else {
+                throw AgentModeFailure("invalidKeySequence", "An agent key sequence requires one snapshot/ref and complete key presses, without other payloads or timing options.")
+            }
+            try validateKeySequence(keyEvents)
         } else if keyEvents != nil {
-            throw AgentModeFailure("mixedPayload", "Key events apply only to an agent key press or key combination.")
+            throw AgentModeFailure("mixedPayload", "Key events apply only to an agent key press, key combination or key sequence.")
         }
         if kind == .hold {
             guard ref != nil, snapshotID != nil, point == nil,
@@ -141,6 +151,29 @@ struct AgentModeRequest: Codable, Sendable {
             }
         }
     }
+    private func validateKeySequence(_ events: [SelectedKeyboardPrimitive]) throws {
+        let failure = AgentModeFailure("invalidKeySequence", "An agent key sequence requires 1...100 matching key down/up pairs in 0...255, optional finite inter-key delays in 0...5 seconds and at most 20 seconds of total delay.")
+        guard !events.isEmpty, events.count <= SelectedKeyboardRequest.maximumEvents else { throw failure }
+        var index = 0
+        var keyCount = 0
+        var totalDelay = 0.0
+        while index < events.count {
+            guard index + 1 < events.count,
+                  case let .down(code) = events[index],
+                  case let .up(released) = events[index + 1],
+                  code <= 255, code == released else { throw failure }
+            keyCount += 1
+            index += 2
+            if index < events.count, case let .delay(seconds) = events[index] {
+                guard seconds.isFinite, (0...5).contains(seconds),
+                      index + 1 < events.count else { throw failure }
+                totalDelay += seconds
+                index += 1
+            }
+        }
+        guard keyCount <= 100, totalDelay <= 20 else { throw failure }
+    }
+
     private func validateKeyCombo(_ events: [SelectedKeyboardPrimitive]) throws {
         let failure = AgentModeFailure("invalidKeyCombo", "An agent key combination requires 1...8 unique modifiers in 224...231, one different key in 0...255, and matching releases in reverse order.")
         guard (4...18).contains(events.count), events.count.isMultiple(of: 2) else { throw failure }

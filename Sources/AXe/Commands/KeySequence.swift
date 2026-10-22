@@ -9,11 +9,13 @@ struct KeySequence: AsyncParsableCommand {
         discussion: """
         Press multiple keys in sequence using their HID keycode values.
         Each key will be pressed and released before the next key is pressed.
+        Agent mode requires a current focused TextField snapshot/ref and --expected-pid.
+        It checks focus before each key down; input is never replayed automatically.
         
         Examples:
-          axe key-sequence 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello" (h=11, e=8, l=15, l=15, o=18)
-          axe key-sequence 40,40,40 --udid SIMULATOR_UDID          # Press Enter 3 times
-          axe key-sequence 224,4,225 --udid SIMULATOR_UDID        # Ctrl+A (Ctrl=224, A=4, release Ctrl=225)
+          axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
+          axe key-sequence --keycodes 40,40,40 --udid SIMULATOR_UDID        # Press Enter 3 times
+          axe key-sequence --keycodes 42,42 --agent --snapshot-id SNAPSHOT_ID --ref e1 --expected-pid APP_PID --udid SIMULATOR_UDID
         """
     )
     
@@ -28,9 +30,18 @@ struct KeySequence: AsyncParsableCommand {
     
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
-        try selectedKeyboard.validate(input: selectedInput)
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
+            guard agentMode.elementRef != nil, selectedKeyboard.focusID == nil else {
+                throw ValidationError("Agent key-sequence requires --snapshot-id and --ref for an already focused TextField, with no --focus-id.")
+            }
+        } else {
+            try selectedKeyboard.validate(input: selectedInput)
+        }
         let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         
         // Validate that we have at least one keycode
@@ -59,9 +70,26 @@ struct KeySequence: AsyncParsableCommand {
         guard parsedKeycodes.count <= 100 else {
             throw ValidationError("Key sequence must not exceed 100 keys.")
         }
+        if agentMode.enabled {
+            let keyDelay = delay ?? 0.1
+            guard keyDelay.isFinite, keyDelay * Double(parsedKeycodes.count - 1) <= 20 else {
+                throw ValidationError("Agent key-sequence requires finite delays with at most 20 seconds in total.")
+            }
+        }
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        let events = try SelectedKeyboardRequest.primitives(from: selectedKeyboardEvent())
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .keySequence,
+            expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID,
+            ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
             return

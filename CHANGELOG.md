@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added standalone `key-sequence --agent` for complete key presses on a current focused TextField reference, with snapshot/PID/focus checks and owned key release. Inter-key delay and sequence bounds apply before input; agent batch and focus-ID overrides reject. Raw/selected behavior and native frameworks are unchanged. CLI wire 29 separates the new request kind from older brokers. Build and native proof are pending.
+
 - Added selected Siri, Lock and Apple Pay button commands and batch steps with measured context, optional boot checks and typed release evidence. Apple Pay keeps the native two-side-press adaptation and four-event receipt. CLI wire 28 separates these capabilities from wire 27 brokers; native frameworks and raw button routes are unchanged. The isolated build, 153 existing checks and scoped native delivery/release checks passed. Selected Siri UI, Wallet UI and wider button checks remain open.
 
 - Added standalone `key-combo --agent` for complete modifier shortcuts on a current focused TextField reference, with snapshot/PID/focus checks and owned key release. Raw and selected combinations remain unchanged; agent batch and focus-ID overrides reject. The isolated build, 42 existing checks and 15 scoped native subchecks passed. A later older selected-path timeout and a separate startup failure remain recorded.

@@ -262,6 +262,7 @@ extension Key: BatchConvertible {
 }
 
 extension KeySequence: BatchConvertible {
+    var batchAgentModeEnabled: Bool { agentMode.enabled }
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
