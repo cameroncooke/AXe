@@ -7,6 +7,7 @@ enum SelectedHIDCompleteGesture: Codable, Sendable {
     case rotate(Rotation)
     case twoFingerTap(PairContact)
     case twoFingerHold(PairContact)
+    case twoFingerSwipe(PairPath)
 
     static let maximumSegments = 500
     static let maximumEventCount = 1024
@@ -57,6 +58,16 @@ enum SelectedHIDCompleteGesture: Codable, Sendable {
         var timing = Timing()
     }
 
+    struct PairPath: Codable, Sendable {
+        let firstStart: Point
+        let firstEnd: Point
+        let secondStart: Point
+        let secondEnd: Point
+        var duration: Double = 0.6
+        var spacing: Double = 5
+        var timing = Timing()
+    }
+
     func validate() throws {
         switch self {
         case .doubleTap(let value):
@@ -75,6 +86,21 @@ enum SelectedHIDCompleteGesture: Codable, Sendable {
             let segments = ceil(abs(value.degrees * .pi / 180) * value.radius / value.spacing)
             guard segments.isFinite, segments <= Double(Self.maximumSegments) else {
                 throw SelectedHIDFailure.invalid("Rotation exceeds the 500-segment limit")
+            }
+            try value.timing.validate(activeDuration: value.duration)
+        case .twoFingerSwipe(let value):
+            for point in [value.firstStart, value.firstEnd, value.secondStart, value.secondEnd] {
+                try point.validate()
+            }
+            try Self.duration(value.duration)
+            guard value.spacing.isFinite, value.spacing > 0, value.spacing <= 200 else {
+                throw SelectedHIDFailure.invalid("Two-finger-swipe delta must be in (0, 200] logical points")
+            }
+            let distance = max(hypot(value.firstEnd.x - value.firstStart.x, value.firstEnd.y - value.firstStart.y),
+                hypot(value.secondEnd.x - value.secondStart.x, value.secondEnd.y - value.secondStart.y))
+            let segments = ceil(distance / value.spacing)
+            guard segments.isFinite, segments <= Double(Self.maximumSegments) else {
+                throw SelectedHIDFailure.invalid("Two-finger-swipe exceeds the 500-segment limit")
             }
             try value.timing.validate(activeDuration: value.duration)
         case .twoFingerTap(let value), .twoFingerHold(let value):
@@ -100,6 +126,11 @@ enum SelectedHIDCompleteGesture: Codable, Sendable {
         case .rotate(let value):
             motion = try builder.rotate(at: value.center.cgPoint, degrees: value.degrees,
                 radius: value.radius, duration: value.duration, spacing: value.spacing)
+            timing = value.timing
+        case .twoFingerSwipe(let value):
+            motion = try builder.twoFingerSwipe(firstStart: value.firstStart.cgPoint, firstEnd: value.firstEnd.cgPoint,
+                secondStart: value.secondStart.cgPoint, secondEnd: value.secondEnd.cgPoint,
+                duration: value.duration, spacing: value.spacing)
             timing = value.timing
         case .twoFingerTap(let value), .twoFingerHold(let value):
             motion = try builder.twoFingerTap(first: value.first.cgPoint, second: value.second.cgPoint, hold: value.hold)

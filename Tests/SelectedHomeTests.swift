@@ -35,7 +35,7 @@ struct SelectedHomeTests {
         let original = try parse().selectedRequest()
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(SelectedHIDRequest.version == 26)
+        #expect(SelectedHIDRequest.version == 27)
         #expect(decoded.requestID == original.requestID && decoded.version == SelectedHIDRequest.version)
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -48,7 +48,7 @@ struct SelectedHomeTests {
         #expect(plan.primitiveCount == 2 && plan.requestedDelaySeconds == 0)
         #expect(throws: (any Error).self) { _ = try decoded.completeEvent(logicalSize: CGSize(width: 200, height: 100)) }
         var admission = SelectedHIDAdmission()
-        #expect(throws: (any Error).self) { try admission.enter(request(version: 25)) }
+        #expect(throws: (any Error).self) { try admission.enter(request(version: 26)) }
         #expect(!admission.inFlight)
     }
 

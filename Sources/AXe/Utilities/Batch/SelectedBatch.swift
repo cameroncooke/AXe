@@ -70,6 +70,8 @@ enum SelectedBatchStep {
         case "gesture":
             let command = try parse(Gesture.self, arguments)
             switch command.gesture {
+            case .twoFingerSwipe:
+                throw ValidationError("Two-finger-swipe is not supported in batch steps. Use a standalone selected gesture.")
             case .preset: request = try command.selectedInput.pathRequest(command.selectedPath())
             case .pinch: request = try command.selectedInput.pinchRequest(command.selectedPinch())
             case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold:

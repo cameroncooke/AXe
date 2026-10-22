@@ -6773,10 +6773,10 @@ index 0000000000000000000000000000000000000000..a127a4b315ab4abe73936d82e3ae5e3e
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift b/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..7210611198ba652803ddd9c9937c2b21f0ed9c5d
+index 0000000000000000000000000000000000000000..679ff6a67d3bb19cc647b2fd8edbb3bbc805d332
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift
-@@ -0,0 +1,140 @@
+@@ -0,0 +1,173 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -6854,6 +6854,29 @@ index 0000000000000000000000000000000000000000..7210611198ba652803ddd9c9937c2b21
 +        ]))
 +    }
 +
++    /// Two independent straight paths with one shared clock and stable finger order.
++    /// Either path may be stationary. Coordinates stay in the selected logical space.
++    public func twoFingerSwipe(firstStart: CGPoint, firstEnd: CGPoint,
++                               secondStart: CGPoint, secondEnd: CGPoint,
++                               duration seconds: TimeInterval = 0.6, spacing: Double = 5) throws -> FBSimulatorHIDEvent {
++        let points = [firstStart, firstEnd, secondStart, secondEnd]
++        guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
++            throw ConstructionError.invalidGeometry
++        }
++        let distance = max(hypot(firstEnd.x - firstStart.x, firstEnd.y - firstStart.y),
++                           hypot(secondEnd.x - secondStart.x, secondEnd.y - secondStart.y))
++        let count = try segments(distance: distance, spacing: spacing)
++        func interpolate(_ start: CGPoint, _ end: CGPoint, _ fraction: Double) -> CGPoint {
++            if fraction == 0 { return start }
++            if fraction == 1 { return end }
++            return CGPoint(x: start.x + (end.x - start.x) * fraction,
++                           y: start.y + (end.y - start.y) * fraction)
++        }
++        return try pairMotion(duration: seconds, segments: count) { fraction in
++            (interpolate(firstStart, firstEnd, fraction), interpolate(secondStart, secondEnd, fraction))
++        }
++    }
++
 +    public func pinch(at center: CGPoint, scale: Double, radius: Double = 30,
 +                      duration seconds: TimeInterval = 0.6, spacing: Double = 5) throws -> FBSimulatorHIDEvent {
 +        guard scale.isFinite, scale > 0, radius.isFinite, radius > 0,
@@ -6880,16 +6903,26 @@ index 0000000000000000000000000000000000000000..7210611198ba652803ddd9c9937c2b21
 +                            geometry: (Double) -> (radius: Double, angle: Double)) throws -> FBSimulatorHIDEvent {
 +        try duration(seconds)
 +        guard center.x.isFinite, center.y.isFinite else { throw ConstructionError.invalidGeometry }
++        return try pairMotion(duration: seconds, segments: count) { fraction in
++            let position = geometry(fraction)
++            let dx = position.radius * cos(position.angle)
++            let dy = position.radius * sin(position.angle)
++            return (CGPoint(x: center.x - dx, y: center.y - dy),
++                    CGPoint(x: center.x + dx, y: center.y + dy))
++        }
++    }
++
++    private func pairMotion(duration seconds: TimeInterval, segments count: Int,
++                            geometry: (Double) -> (first: CGPoint, second: CGPoint)) throws -> FBSimulatorHIDEvent {
++        try duration(seconds)
 +        let delay = seconds / Double(count + 2)
 +        var events: [FBSimulatorHIDEvent] = []
 +        var finalFirst = CGPoint.zero
 +        var finalSecond = CGPoint.zero
 +        for index in 0...count {
 +            let position = geometry(Double(index) / Double(count))
-+            let dx = position.radius * cos(position.angle)
-+            let dy = position.radius * sin(position.angle)
-+            finalFirst = CGPoint(x: center.x - dx, y: center.y - dy)
-+            finalSecond = CGPoint(x: center.x + dx, y: center.y + dy)
++            finalFirst = position.first
++            finalSecond = position.second
 +            events.append(.twoFingerTouch(direction: .down, finger1: finalFirst, finger2: finalSecond))
 +            events.append(.delay(delay))
 +        }
@@ -6917,6 +6950,7 @@ index 0000000000000000000000000000000000000000..7210611198ba652803ddd9c9937c2b21
 +        return event
 +    }
 +}
+
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift b/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift
 new file mode 100644
 index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4011c03ae
