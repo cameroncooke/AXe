@@ -182,16 +182,17 @@ struct Batch: AsyncParsableCommand {
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
                 let stepError = error
+                let stepMessage = (stepError as? ValidationError)?.description ?? stepError.localizedDescription
                 if context.duoOwner != nil {
                     do { try await context.validateCurrentContext() }
                     catch {
-                        throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepError.localizedDescription)\nDuo batch stopped; \(error.localizedDescription). Later input was not replayed.")
+                        throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepMessage)\nDuo batch stopped; \(error.localizedDescription). Later input was not replayed.")
                     }
                 }
                 if continueOnError {
-                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(stepError.localizedDescription)")
+                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(stepMessage)")
                 } else {
-                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepError.localizedDescription)")
+                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepMessage)")
                 }
             }
         }

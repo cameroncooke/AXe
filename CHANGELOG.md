@@ -62,6 +62,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed ordinary batch validation errors showing a generic system error instead of the command message. Cleanup and input receipts are unchanged.
+
 - Fixed ordinary Duo standalone typing to use the existing measured owned session, including startup readiness, context checks, signal cancellation and key cleanup. Literal/file/stdin loading, US mapping, plain output and other-device routes are preserved.
 
 - Fixed ordinary Duo batches to use one measured input owner, preserving ordered touch/key state, typing chunks and repeated modifier events. Changed context or input failure stops later input; blocked step stdin is cancellable, and owned input closes before exit.
