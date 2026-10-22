@@ -208,8 +208,13 @@ final class AgentModeController {
         var plannedKeyboard: SelectedKeyboardRequest?
         var node: FBSimulatorAXNode?
         if let ref = mode.ref, let cached {
-            let action: RuntimeElementAction = mode.kind == .typeText ? .typeText : mode.kind == .swipe ? .swipeWithin : .tap
-            let original = try cached.snapshot.node(ref: ref, requiredAction: action)
+            let original: FBSimulatorAXNode
+            if mode.kind == .drag {
+                original = try cached.snapshot.dragNode(ref: ref)
+            } else {
+                let action: RuntimeElementAction = mode.kind == .typeText ? .typeText : mode.kind == .swipe ? .swipeWithin : .tap
+                original = try cached.snapshot.node(ref: ref, requiredAction: action)
+            }
             let freshTarget = try snapshot.resolve(original)
             try AgentModeTarget(original).validate(freshTarget)
             node = freshTarget
@@ -257,6 +262,21 @@ final class AgentModeController {
             }
             plannedPath = SelectedHIDPath(kind: .swipe, startX: points.from.x, startY: points.from.y,
                 endX: points.to.x, endY: points.to.y, duration: mode.duration, delta: 50,
+                preDelay: mode.preDelay, postDelay: mode.postDelay)
+        case .drag:
+            guard let node, let frame = node.frame, let destination = mode.destination,
+                  [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
+                  frame.width > 0, frame.height > 0 else {
+                throw AgentModeFailure("missingDragTarget", "The fresh native drag target has no valid frame.")
+            }
+            let bounds = CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)
+            let start = CGPoint(x: frame.midX, y: frame.midY)
+            let end = CGPoint(x: destination.x, y: destination.y)
+            guard bounds.contains(start), bounds.contains(end) else {
+                throw AgentModeFailure("invalidDragGeometry", "The drag start and destination must be inside the current selected display.")
+            }
+            plannedPath = SelectedHIDPath(kind: .drag, startX: start.x, startY: start.y,
+                endX: end.x, endY: end.y, duration: mode.duration, steps: mode.steps,
                 preDelay: mode.preDelay, postDelay: mode.postDelay)
         case .complete:
             guard mode.snapshotID != nil, outer.hinge == nil, outer.rotation == nil,

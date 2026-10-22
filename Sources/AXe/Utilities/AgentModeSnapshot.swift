@@ -73,6 +73,16 @@ struct AgentModeSnapshot: Sendable {
         return nodes[index]
     }
 
+    func dragNode(ref: String) throws -> FBSimulatorAXNode {
+        let target = try node(ref: ref, requiredAction: .touch)
+        let targets = RuntimeSnapshotCompactor.targets(in: elements, limit: Self.maximumElements)
+        let scroll = RuntimeSnapshotCompactor.scrollAreas(in: elements, limit: Self.maximumElements)
+        guard targets.contains(where: { $0.element.ref == ref }) || scroll.contains(where: { $0.element.ref == ref }) else {
+            throw AgentModeFailure("unsupportedDragReference", "Drag requires a target or scroll reference from the agent capture.")
+        }
+        return target
+    }
+
     func resolve(_ original: FBSimulatorAXNode) throws -> FBSimulatorAXNode {
         let selector = try uniqueSelector(for: original)
         return try match(kind: selector.kind, value: selector.value, type: original.type)

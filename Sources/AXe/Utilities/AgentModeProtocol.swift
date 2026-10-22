@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -17,6 +17,8 @@ struct AgentModeRequest: Codable, Sendable {
     var text: String? = nil
     var direction: RuntimeSwipeDirection? = nil
     var distance: Double = 1
+    var destination: SelectedAXPoint? = nil
+    var steps: Int? = nil
     var duration: Double = 1
     var preDelay: Double = 0
     var postDelay: Double = 0
@@ -34,6 +36,19 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .drag {
+            guard ref != nil, snapshotID != nil, let destination,
+                  destination.x.isFinite, destination.y.isFinite, destination.x >= 0, destination.y >= 0,
+                  let steps, (1...1000).contains(steps),
+                  preDelay + duration + 0.1 + postDelay <= 20,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, direction == nil, tapStyle == nil,
+                  sinceScreenHash == nil else {
+                throw AgentModeFailure("invalidDrag", "A reference drag requires one snapshot/ref, a finite non-negative destination, 1...1000 steps and at most 20 seconds of total delay.")
+            }
+        } else if destination != nil || steps != nil {
+            throw AgentModeFailure("mixedPayload", "Drag destination and steps apply only to a reference drag.")
         }
         if let ref {
             guard snapshotID != nil, ref.utf8.count <= 32, ref.first == "e",

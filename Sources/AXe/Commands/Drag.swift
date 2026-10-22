@@ -13,10 +13,10 @@ struct Drag: AsyncParsableCommand {
     private static let finalHold: TimeInterval = 0.05
 
     @Option(name: .customLong("start-x"), help: "The X coordinate of the starting point.")
-    var startX: Double
+    var startX: Double?
 
     @Option(name: .customLong("start-y"), help: "The Y coordinate of the starting point.")
-    var startY: Double
+    var startY: Double?
 
     @Option(name: .customLong("end-x"), help: "The X coordinate of the ending point.")
     var endX: Double
@@ -40,8 +40,23 @@ struct Drag: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            guard startX == nil, startY == nil, agentMode.elementRef != nil, selectedAX.preparation == nil else {
+                throw ValidationError("Agent drag requires --ref and does not accept --start-x, --start-y or --ax-preparation.")
+            }
+            _ = try agentRequest()
+            return
+        }
+        try selectedAX.validate(required: false)
+        guard let startX, let startY else {
+            throw ValidationError("Drag requires --start-x and --start-y without --agent.")
+        }
         try selectedInput.validate()
         if selectedInput.mode == .selected { try selectedPath.validate() }
         guard startX >= 0, startY >= 0, endX >= 0, endY >= 0 else {
@@ -71,14 +86,31 @@ struct Drag: AsyncParsableCommand {
     var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .drag, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration, steps: steps, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
 
     func selectedRequest() throws -> SelectedHIDRequest {
-        try selectedInput.pathRequest(selectedPath)
+        guard !agentMode.enabled else {
+            throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+        }
+        return try selectedInput.pathRequest(selectedPath)
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        try AgentModeCommandAdapter.request(AgentModeRequest(kind: .drag,
+            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            destination: SelectedAXPoint(x: endX, y: endY), steps: steps, duration: duration,
+            preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
             return
+        }
+        guard let startX, let startY else {
+            throw ValidationError("Drag requires --start-x and --start-y without --agent.")
         }
         let logger = AxeLogger()
         try await setup(logger: logger)

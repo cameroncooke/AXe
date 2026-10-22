@@ -59,7 +59,7 @@ axe screenshot --output ./screen.png --udid "$UDID"
 
 ## Agent mode (experimental)
 
-Add `--agent` to `describe-ui`, `tap`, `type` or `swipe` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.
+Add `--agent` to `describe-ui`, `tap`, `type`, `swipe` or `drag` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.
 
 ```bash
 axe describe-ui --agent --udid "$UDID" --expected-pid "$APP_PID"
@@ -70,6 +70,8 @@ axe type 'Hello' --agent --udid "$UDID" --expected-pid "$APP_PID" \
   --snapshot-id "$SNAPSHOT_ID" --ref "$FOCUSED_FIELD_REF"
 axe swipe --agent --udid "$UDID" --expected-pid "$APP_PID" \
   --snapshot-id "$SNAPSHOT_ID" --ref "$SCROLL_REF" --direction up --distance 0.5
+axe drag --agent --udid "$UDID" --expected-pid "$APP_PID" \
+  --snapshot-id "$SNAPSHOT_ID" --ref "$REF" --end-x "$END_X" --end-y "$END_Y"
 ```
 
 Capture discovers the measured active display unless an explicit selected pair is supplied. A positive current app PID is required. Compact RS/1-style JSON includes bounded `ref|action|role|label|value|id` rows, snapshot identity, context, cache status and action receipts. Use the capture paging options in `describe-ui --help` for omitted rows. `--since-screen-hash <hash>` still reads the current UI before reporting it unchanged. Cache reuse also checks a separate exact native fingerprint. The compact RS/1 `screenHash` uses normalized data; a matching hash alone does not prove unchanged raw UI.
@@ -77,6 +79,8 @@ Capture discovers the measured active display unless an explicit selected pair i
 Agent captures include `keyboard` evidence from the selected app's existing accessibility read, including unchanged and replacement captures. `state: "likelyVisible"` means visible Button IDs or labels match keyboard-key signals; `"unknown"` means no supported evidence was found, not that the keyboard is hidden. `source: "accessibility-key-signals"`, `scope: "selected-application"` and the four `signals` fields (`idChromeCount`, `globeSeen`, `letterKeyCount`, `chromeKeyCount`) show the basis. Counts use distinct matching IDs, labels and Latin letters. This heuristic adds no native query, does not prove keyboard focus and does not change typing checks.
 
 References belong to one immutable snapshot and expire with the broker cache. Reference and coordinate actions require `--snapshot-id`; a ref alone is not a stable identifier. The runtime reads current context and accessibility data before input. A changed screen or boot, app, display, hinge, rotation or geometry invalidates old state. Refresh and choose the new ref; AXe does not silently reuse old coordinates. After an action, use its replacement capture or read a new snapshot. Cache loss and uncertain input require a fresh observation; input is never replayed automatically.
+
+Agent `drag` starts at the fresh native centre of an existing `targets` or `scroll` reference. Supply `--snapshot-id`, `--ref`, `--expected-pid`, `--end-x` and `--end-y`; endpoints use decimal logical points, not screen fractions. The endpoint can leave the target frame but must stay inside the current selected display. Native point and tree reads must prove the start belongs to that target; choose the innermost scroll area when needed. Defaults remain 0.6-second movement, 60 steps and 0.05-second holds at each end. Duration is finite in (0,10], steps are 1...1000, each pre/post delay is 0...10 and total requested delay including holds is at most 20 seconds. Start coordinates, explicit selectors, AX preparation and batch steps are rejected. This does not expose new pad or slider references, or prove which control receives the endpoint. Stale or uncertain actions are never replayed. Use a matched CLI and broker; an older broker cannot decode the new drag action kind. Build and native proof of this extension remain pending.
 
 Typing keeps the existing US keyboard mapping and 256-byte limit. First tap and inspect the field; it must already be focused. Ref swipes use bounded current element geometry; `up` moves the finger up. Coordinate tap/swipe forms remain available with an agent snapshot, but do not prove an AX recipient. Other commands keep their existing interfaces and do not yet accept `--agent`. The existing native input and touch-release checks remain authoritative.
 

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added optional `drag --agent` from an existing snapshot target/scroll reference to an explicit logical endpoint. The start uses fresh native target and hit validation; existing owned drag limits, context checks and release remain. Raw drag is unchanged, and batch use rejects. Build and native proof remain pending.
 - Added `hinge set closed|tabletop|open` as names for 0, 90 and 180 degrees. Numeric angles, options, JSON output, measured mechanical completion and separate screen readiness checks remain unchanged.
 - Added agent-only `tap --label-contains`, `--label-regex` with Foundation regex syntax, and logical-point `--frame` filters for explicit selectors. Queries use bounded fresh native-tree resolution, reject ambiguity and retain exact native target/context checks before input. Existing exact/ref routes and no-flag behavior remain. Older brokers reject new selector payloads rather than ignore filters.
 - Added optional agent-capture software-keyboard evidence from the existing selected app accessibility read, with separate signal counts and `likelyVisible` or `unknown` state. Missing evidence never reports the keyboard as hidden; raw no-flag output is unchanged.

@@ -10,7 +10,7 @@ enum AgentModeNativeOperation {
         var observation: FBSimulatorHIDSessionObservation?
         var feed: FBSimulatorHIDNativeFreshnessProvider?
         var session: FBSimulatorHIDSession?
-        var swipeGuard: AgentModeSwipeAdmissionGuard?
+        var pathGuard: AgentModePathAdmissionGuard?
         var count = 0
         var cleanup = "notNeeded"
         do {
@@ -33,9 +33,9 @@ enum AgentModeNativeOperation {
                 guard let path = request.path else {
                     throw AgentModeFailure("unsupportedTargetPath", "A target admission requires a complete explicit path.")
                 }
-                let guardValue = try AgentModeSwipeAdmissionGuard(simulator: simulator, feed: live,
+                let guardValue = try AgentModePathAdmissionGuard(simulator: simulator, feed: live,
                     admission: admission, path: path)
-                swipeGuard = guardValue
+                pathGuard = guardValue
                 guardOwner = guardValue
             } else {
                 guardOwner = AgentModeFreshScreenGuard(simulator: simulator, feed: live, admission: admission)
@@ -70,7 +70,7 @@ enum AgentModeNativeOperation {
             let message: String
             if released.1 == "uncertain" {
                 message = "Native input cleanup is uncertain. Do not repeat input."
-            } else if let failure = swipeGuard?.failure ?? (error as? AgentModeFailure) {
+            } else if let failure = pathGuard?.failure ?? (error as? AgentModeFailure) {
                 message = failure.message
             } else if error is CancellationError {
                 message = "The agent input was cancelled. Refresh the snapshot before another action."
