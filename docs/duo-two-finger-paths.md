@@ -1,6 +1,6 @@
 # Selected two-finger straight paths
 
-This source candidate adds one complete selected gesture. Build and native acceptance are pending.
+This complete selected gesture is accepted for the recorded inner-landscape paths and fold release/recovery checks. Main source matches the built and tested isolated candidate; main was not rebuilt or rerun for this integration.
 
 ## CLI
 
@@ -26,6 +26,12 @@ The complete owner/session supplies the measured display transform once and keep
 
 Selected wire 27 rejects wire 26 and older requests. The new associated gesture payload cannot mix with primitives, other gesture payloads or retained tokens. The native source change is exported through the complete tracked Duo foundation patch and postimage manifest; build AXe against that matched library.
 
-## Verification limit
+## Recorded verification
 
-No build or simulator input has run against this candidate. Required native proof is one asymmetric two-path action with separate contact identities and exact endpoints, one stationary-finger action, and normal fold interruption followed by complete pair release and a fresh named tap. Existing shared-session rotation evidence remains separate; no new rotation matrix is required unless a failure appears. Use the existing visible fixture, resource guard and saved contact readback. Existing gesture checks must also cover the unchanged pinch/rotation event shape. No new verification suite or hidden app route is added.
+Candidate `2a3f6a1d0edf06f8bae40f18b2011d35ca6bdd23` built with the matched native framework and passed 159 existing tests in 14 suites. On the normal v6 UIKit fixture, inner270 checks proved two different straight paths, one stationary finger, exact contact identities/endpoints and release. Bounds, coincident starts and same-time crossings rejected with zero enqueued events and unchanged app input. A normal Device Hub fold stopped a moving pair, released both original contacts and allowed a fresh outer-screen reference tap. Existing pinch and rotation each produced the requested physical endpoints, released both contacts and completed a real app recognizer callback.
+
+The command specifies physical contact geometry. UIKit recognizer scale/rotation need not equal the requested physical ratio/angle: the saved pinch moved radius 24 to 36 with one completion and UIKit scale 1.285714. A 56-point recognizer baseline is inferred, not directly recorded. No recognizer-exact-scale or angle claim is made.
+
+[Scoped acceptance and exact receipts](/Volumes/Developer/AXe/build_products/verification/two-finger-paths-20261022/scoped-acceptance.md) preserve normal-v2 and normal-v3 full-run failures, the corrected proof assumptions, fold-v3 PASS and rotate-only v5 PASS. No passed inputs were repeated to make one combined green run.
+
+These results do not prove every pose, rotation during this new moving pair, every lifecycle interruption, ordinary-device regression or release packaging. Existing shared-session rotation evidence remains separate. No new verification suite or hidden app route was added.
