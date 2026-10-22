@@ -24,7 +24,20 @@ struct Hinge: AsyncParsableCommand {
 
     struct Set: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Send one hinge request and observe mechanical completion. Optionally observe active-display coherence. No replay.")
-        @Argument(help: "Requested mechanical angle in degrees, within the verified native range (0...180).") var degrees: Double
+        @Argument(
+            help: "Requested mechanical angle in degrees (0...180), or closed (0), tabletop (90), open (180). Names are case-sensitive.",
+            transform: { text in
+                switch text {
+                case "closed": return 0
+                case "tabletop": return 90
+                case "open": return 180
+                default:
+                    guard let degrees = Double(text) else {
+                        throw ValidationError("Expected an angle in degrees or one of: closed, tabletop, open")
+                    }
+                    return degrees
+                }
+            }) var degrees: Double
         @Option(name: .customLong("udid"), help: "Simulator UDID.") var simulatorUDID: String
         @Option(name: .customLong("expected-boot"), help: "Required boot identity from a fresh hinge read: PID:SECONDS:MICROSECONDS.") var expectedBoot: String
         @Option(name: .customLong("tolerance"), help: "Mechanical match tolerance in degrees, 0...1.") var tolerance: Double = 0.5
