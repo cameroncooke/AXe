@@ -57,6 +57,16 @@ axe type 'Hello world' --udid "$UDID"
 axe screenshot --output ./screen.png --udid "$UDID"
 ```
 
+## Simulator shutdown
+
+Use `axe shutdown --udid <UUID>` to shut down exactly one simulator through the public `simctl` command. Names and the `booted` and `all` aliases are rejected. This command is simulator lifecycle control, not a guest lock or power-button action. It does not select a display or accept agent/batch options.
+
+Success prints JSON with `source: "simctl"`, `udid`, `initialState`, `finalState: "Shutdown"` and `outcome`. `shutdownCompleted` requires a fresh state read after the one shutdown request. `alreadyShutdown` means the initial read found that state, with no shutdown request. The command has a shared 60-second budget for child commands and state observation. A failure or interruption does not undo a shutdown that has started; inspect the simulator state before another request. Success records the observed state, not a guarantee against a later boot by another client.
+
+```bash
+axe shutdown --udid "$UDID"
+```
+
 ## Agent mode (experimental)
 
 Add `--agent` to `describe-ui`, `tap`, `type`, `swipe` or `drag` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.

@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `shutdown --udid <UUID>` for one simulator through public `simctl`, with confirmed Shutdown state, distinct `alreadyShutdown` output and no all-device alias. This is simulator lifecycle control, not guest lock or power-button input.
+
 - Added optional `drag --agent` from an existing snapshot target/scroll reference to an explicit logical endpoint. The start uses fresh native target and hit validation; existing owned drag limits, context checks and release remain. Raw drag is unchanged, and batch use rejects. Scoped native checks passed for inner-landscape reference drags and fold release/fresh-tap recovery; a later restoration failure remains recorded.
 - Added standalone selected `gesture two-finger-swipe` with independent straight start/end paths, shared duration/spacing and existing measured input/cleanup. Either finger may stay still. Simultaneous coincident contacts reject before input, including between samples. Batch and agent mode remain unsupported. Selected wire 27 rejects old wire 26 requests. Native checks passed for inner-landscape paths, one stationary finger, zero-input bounds/collision rejection and fold release/fresh-tap recovery; existing pinch and rotation compatibility also passed.
 
