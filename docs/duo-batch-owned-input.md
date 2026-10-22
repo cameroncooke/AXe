@@ -1,6 +1,6 @@
 # Ordinary Duo batch input
 
-Status: source fix candidate, 22 October 2026. The earlier matched batch build passed tap and retained-touch checks, but one-event typing chunks caused repeated characters. The boundary-check fix below has not been built or run in a simulator. It is not accepted for main integration. Use matched AXe and FBSimulatorControl artifacts after verification.
+Status: isolated batch candidate, 22 October 2026. The matched v3 build passed the exact one-event-chunk typing case: A!q7 produced four real edit callbacks with released touches. Broader batch acceptance and main integration remain separate. Use matched AXe and FBSimulatorControl artifacts.
 
 The ordinary no-flag `batch` command uses one measured Duo display, native session and common input lease for its whole ordered run. Other devices keep the prior batch route. Selected batch and agent command behavior are unchanged. No CLI option or wire change is added.
 
@@ -20,7 +20,9 @@ Accessibility cache policies remain available. They do not prove current app lay
 
 ## Native batch part API
 
-`FBSimulatorHIDSession.submitLegacyBatchPart(_:)` uses the fixed live context, transport, owned input state, drain and cleanup of `submitOwnedPart(_:)`. Its first part performs a full context read. Every primitive, delay and later part uses the continuous native feed, including after drain. This avoids full guest helper reads between key down and key up or during a physical tap hold. Strict owned parts and complete input keep their existing full-read boundaries.
+`FBSimulatorHIDSession.submitLegacyBatchPart(_:)` uses the fixed live context, transport, owned input state and cleanup of `submitOwnedPart(_:)`. Its first part performs a full context read. Every primitive, delay and later part uses the continuous native feed, including the final part check. This avoids full guest helper reads between key down and key up or during a physical tap hold. Strict owned parts and complete input keep their existing full-read boundaries.
+
+While a legacy part retains a touch, key or button, it awaits the normal per-message host enqueue and guest service barriers but defers the disconnect keepalive. The connection stays open for the next part. That receipt is `retained`; its execution evidence does not claim a completed drain. The normal drain runs after all input is released. Failure and close keep owned-input release and cleanup. Event order, chunk size, keyboard pacing and CLI stabilization remain unchanged.
 
 Call `validateLegacyBatchBoundary()` after command conversion and before its first part, then once at normal batch completion. When no touch, key or button is held, it reads and compares the full context. When input is held across steps, it uses the live feed without extending that hold with guest helper work. A failed check invalidates the fixed session and releases owned input. The feed and idle monitor remain active throughout. Only one stream mode can be used in a session. Close it before changing between strict owned parts, legacy batch parts, complete input or explicit retained contacts.
 
@@ -28,4 +30,4 @@ The batch API preserves duplicate modifier codes and a target key that also appe
 
 Fresh/extra touch and button ups still reject. A keyboard up with no held/earlier matching down credit rejects. The strict `submitOwnedPart(_:)` API still rejects a second up after release. There is no two-finger, pose or system-state event support in owned batch parts. Existing DTUHID keyboard pacing and Apple Pay adaptation occur once inside native submission.
 
-Native/API receipts show library state and transport progress. They do not prove app behavior or an independent OS key/button inventory. Build, modifier ordering, release, interruption, stdin cancellation and real UI results require the separate guarded native checks before acceptance.
+Native/API receipts show library state and transport progress. They do not prove app behavior or an independent OS key/button inventory. Keep the matched build/runtime pins and real app records for each accepted case. The proved typing case does not replace separate interruption or stdin-cancellation checks.

@@ -7425,10 +7425,10 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..912e92edcedcf024e6116b28f2d300abb3bddf5b
+index 0000000000000000000000000000000000000000..dc44b434dbb1a0ad471a40688fc6f852d1a3f8bf
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,811 @@
+@@ -0,0 +1,819 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7580,7 +7580,10 @@ index 0000000000000000000000000000000000000000..912e92edcedcf024e6116b28f2d300ab
 +  /// continues to another part. Touch/button releases stay strict; modes cannot be mixed.
 +  /// This uses the same measured connection and owned cleanup as submitOwnedPart. The first
 +  /// part performs a full context read; later parts use the continuous live feed, including
-+  /// after drain. Call validateLegacyBatchBoundary before each ordinary command step.
++  /// after each part. Retained parts keep the connection open without its disconnect
++  /// keepalive; their receipt is retained and execution evidence does not claim a drain.
++  /// Released parts and close keep the normal drain. Call validateLegacyBatchBoundary
++  /// before each ordinary command step.
 +  public func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
 +    try await executePrepared(event, admissionGuard: nil, mode: .legacyBatch)
 +  }
@@ -7698,9 +7701,14 @@ index 0000000000000000000000000000000000000000..912e92edcedcf024e6116b28f2d300ab
 +          try await dispatch(item)
 +        }
 +      }
-+      phase = .drain
-+      try await completeDrain()
-+      drainCompleted = true
++      // A retained legacy part keeps the same connection for the next part. Each primitive
++      // already awaited host enqueue and the guest barrier; the disconnect keepalive must
++      // not extend an open touch, key or button hold. Drain after its final release instead.
++      if mode != .legacyBatch || !hasOwnedInput {
++        phase = .drain
++        try await completeDrain()
++        drainCompleted = true
++      }
 +      phase = .finalContextCheck
 +      try await checkFreshness(authoritative: mode != .legacyBatch)
 +      let retained = usesOwnedParts && hasOwnedInput
