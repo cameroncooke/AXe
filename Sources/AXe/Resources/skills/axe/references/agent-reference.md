@@ -2,7 +2,7 @@
 
 ## Optional agent mode
 
-Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
+Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
 
 1. Capture with `axe describe-ui --agent --udid <UDID> --expected-pid <PID>`. Use the current PID; let capture discover the active display, or supply the explicit selected pair.
 2. Read the returned snapshot ID and `ref|action|role|label|value|id` rows. Use bounded capture paging for omitted rows. A matching `--since-screen-hash` still performs a fresh read. Cache reuse also checks a separate exact native fingerprint. The compact RS/1 `screenHash` uses normalized data; a matching hash alone does not prove unchanged raw UI.
@@ -41,6 +41,14 @@ Keep the existing context-change detection, owned release, cache invalidation an
 
 Use `axe key 42 --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF>` for Backspace. Choose a current `typeText` reference for an already focused, enabled, visible native TextField with a unique exact ID. AXe does not focus the field. Keycodes remain HID codes in 0...255, not Unicode characters.
 
-This sends one complete default key down/up without an added hold. Explicit `--duration`, `--focus-id`, other targets and batch use reject. Retained keys, key sequences and key combinations are not added to agent mode. Raw and selected key commands keep their existing behavior.
+This sends one complete default key down/up without an added hold. Explicit `--duration`, `--focus-id`, other targets and batch use reject. This single-key command does not add retained keys or key sequences; modifier shortcuts use `key-combo` below. Raw and selected key commands keep their existing behavior.
 
 The runtime checks the snapshot, app, display and field again, then uses the existing keyboard owner. It checks focus/PID and current context before key down; key up and cleanup can still release after focus loss. Focus reads and HID input are separate OS operations, not an atomic recipient guarantee. The shared eight-second admission budget and focused-field read bounds remain. A stale reference sends no input. Refresh after failure; use the replacement capture after success. Never replay uncertain input. Older brokers reject the new keyPress action kind. The isolated arm64 candidate passed 42 existing checks. On Duo outer portrait, Backspace changed AB to A, then A to empty after a fresh lookup; stale, wrong-app and unfocused references rejected without input. Raw and selected key routes also passed. Other keys, fields, orientations and transitions remain unverified.
+
+## Send a modifier shortcut to a focused field reference
+
+Use `axe key-combo --modifiers 225 --key 4 --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF>` for Shift+A. Choose a current `typeText` reference for an already focused, enabled, visible native TextField with a unique exact ID. The command does not focus it.
+
+Supply 1...8 distinct modifier HID codes in 224...231 and one different key in 0...255. AXe presses modifiers in the given order, presses and releases the target key, then releases modifiers in reverse order. This is one complete sequence with no added delay. Duplicate modifiers, a target already held as a modifier, mixed targets, focus-ID override, timing override and agent batch use reject. Raw and selected key combinations keep their existing behavior.
+
+The separate `keyCombo` request kind leaves the strict single-key `keyPress` contract unchanged. Use a matched CLI and broker; older brokers reject it. Snapshot, target, PID, display and per-key focus checks use the existing keyboard owner and unchanged eight-second admission budget. Owned key-up cleanup can release after focus loss or context change. Focus reads and input are separate OS operations; do not assume atomic recipient control. Refresh after failure or use the replacement capture after success. Never replay uncertain input. Build and native verification are pending.

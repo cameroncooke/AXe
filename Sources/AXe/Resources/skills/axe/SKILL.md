@@ -13,7 +13,7 @@ Use `axe shutdown --udid <UUID>` for one simulator. JSON reports `shutdownComple
 
 ## Optional agent mode
 
-Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key` or complete reference `touch` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
+Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo` or complete reference `touch` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
 
 Read `capture.keyboard` as keyboard-like AX evidence for the selected app. `likelyVisible` is a heuristic; `unknown` does not mean hidden. It does not prove focus or change typing checks.
 
@@ -23,7 +23,7 @@ Read `capture.keyboard` as keyboard-like AX evidence for the selected app. `like
 4. Use `drag --agent --snapshot-id <UUID> --ref <REF> --end-x <X> --end-y <Y> --expected-pid <PID> --udid <UDID>`. Choose a target/scroll ref. Start uses its fresh centre; keep the endpoint inside the display. Limits: duration (0,10], steps 1...1000, total delay 20 seconds including holds. Reject start coordinates and batch use.
 
 5. Hold a current target with `touch --agent --snapshot-id <UUID> --ref <REF> --down --up --delay 0.7 --expected-pid <PID> --udid <UDID>`. Default delay: 0.1 seconds; explicit delay: finite (0,10]. Reject coordinates, retained tokens, AX preparation and batch steps.
-6. Agent `key` requires a focused TextField ref. No duration, focus-ID override or batch. See the reference below.
+6. Agent `key`/`key-combo` requires a focused TextField ref. No duration, focus-ID override or batch. See the reference below.
 
 Read [Agent mode reference](references/agent-reference.md) for commands, matching syntax, bounds, cache/freshness rules and failure handling before input. Check actual app effects separately.
 

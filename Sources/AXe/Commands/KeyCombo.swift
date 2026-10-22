@@ -7,7 +7,9 @@ struct KeyCombo: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press a key while holding one or more modifier keys on the simulator.",
         discussion: """
-        Hold modifier keys and press another key as a single atomic operation.
+        Hold modifier keys and press another key as one complete sequence.
+        Agent mode requires a current focused TextField snapshot/ref and --expected-pid.
+        It checks focus before each key down; OS recipient control is not atomic.
         Modifier keys are held down, the target key is pressed and released,
         then modifier keys are released in reverse order (LIFO).
 
@@ -40,9 +42,18 @@ struct KeyCombo: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
-        try selectedKeyboard.validate(input: selectedInput)
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
+            guard agentMode.elementRef != nil, selectedKeyboard.focusID == nil else {
+                throw ValidationError("Agent key-combo requires --snapshot-id and --ref for an already focused TextField, with no --focus-id.")
+            }
+        } else {
+            try selectedKeyboard.validate(input: selectedInput)
+        }
         let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
 
         guard !parsedModifiers.isEmpty else {
@@ -64,7 +75,18 @@ struct KeyCombo: AsyncParsableCommand {
         }
     }
 
+    func agentRequest() throws -> SelectedHIDRequest {
+        let events = try SelectedKeyboardRequest.primitives(from: selectedKeyboardEvent())
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .keyCombo,
+            expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID,
+            ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
+    }
+
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
             return

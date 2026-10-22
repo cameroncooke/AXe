@@ -100,6 +100,9 @@ enum SelectedBatchStep {
             request = try command.selectedKeyboard.request(input: command.selectedInput, event: command.selectedKeyboardEvent())
         case "key-combo":
             let command = try parse(KeyCombo.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             request = try command.selectedKeyboard.request(input: command.selectedInput, event: command.selectedKeyboardEvent())
         default:
             throw ValidationError("Selected batch does not yet support step '\(name)'.")
