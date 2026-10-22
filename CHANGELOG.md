@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed ordinary Duo standalone typing to use the existing measured owned session, including startup readiness, context checks, signal cancellation and key cleanup. Literal/file/stdin loading, US mapping, plain output and other-device routes are preserved. Native verification is pending.
+
 - Fixed ordinary Duo batches to use one measured input owner, preserving ordered touch/key state, typing chunks and repeated modifier events. Changed context or input failure stops later input; blocked step stdin is cancellable, and owned input closes before exit. Build and native acceptance remain pending.
 
 - Fixed ordinary iPhone Duo `touch` routing to use the measured active display and owned contact stream. A down starts or moves one contact; up ends at its supplied point without an added move. Successful downs remain owned for up to 60 idle seconds; an orphan up sends zero HID events. Explicit selected tokens and other-device routes remain separate. Selected wire 26 rejects old wire 25 requests.

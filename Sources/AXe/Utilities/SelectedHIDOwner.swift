@@ -337,7 +337,9 @@ final class SelectedHIDOwner {
             throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(diagnostic). \(persistence)")
         }
         clear()
-        if let actionError { throw actionError }
+        if let actionError {
+            throw CLIError(errorDescription: "Duo input stopped: \(String(describing: actionError)); cleanup=\(cleanup). Input was not replayed.")
+        }
     }
 
     func validateLegacyBatchContext() async throws {
