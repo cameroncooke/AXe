@@ -8,6 +8,8 @@
 
 ## Commands
 - NEVER commit unless user asks
+- If 1Password signing fails for an authorized local commit, commit unsigned with `git -c commit.gpgsign=false commit ...`. Do not stop to ask for approval or change the stored Git signing settings.
+- Skip signature verification for that unsigned commit and report that it is unsigned. All other required build, test and code checks still apply.
 
 ## GitHub
 When reading issues:
