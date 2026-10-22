@@ -139,7 +139,7 @@ enum SelectedAXOperation {
             let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
                 liveFreshnessProvider: live)
             session = hid
-            let event = try style.event(x: point.x, y: point.y)
+            let event = try ax.tapEvent(at: point, target: result.target)
             let receipt = try await hid.execute(event, admissionGuard: guardOwner)
             result = await guardOwner.result
             count = await hid.status().enqueuedEventCount

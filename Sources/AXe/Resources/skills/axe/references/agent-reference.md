@@ -2,7 +2,7 @@
 
 ## Optional agent mode
 
-Use `--agent` on `describe-ui`, `tap`, `type`, `swipe` and `drag` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
+Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
 
 1. Capture with `axe describe-ui --agent --udid <UDID> --expected-pid <PID>`. Use the current PID; let capture discover the active display, or supply the explicit selected pair.
 2. Read the returned snapshot ID and `ref|action|role|label|value|id` rows. Use bounded capture paging for omitted rows. A matching `--since-screen-hash` still performs a fresh read. Cache reuse also checks a separate exact native fingerprint. The compact RS/1 `screenHash` uses normalized data; a matching hash alone does not prove unchanged raw UI.
@@ -28,3 +28,11 @@ Use `axe drag --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --
 Use decimal logical points for the explicit endpoint. It can leave the original frame, but both endpoints must be inside the selected display. This proves the start target, not an endpoint recipient or app effect. If the start is inside a nested scroll area, select that area. No reference, identity or hit failure falls back to coordinate input.
 
 Keep the existing defaults: 0.6-second movement, 60 steps, and 0.05-second initial/final holds. Use finite duration in (0,10], 1...1000 steps, pre/post delays of 0...10 seconds and at most 20 seconds of total requested delay including holds. Admission shares the existing eight-second deadline and 4096-node/depth-64 tree bounds. Reject start coordinates, explicit selectors, AX preparation, mixed payloads and batch use. Retain context checks during input, owned release and no automatic replay. Refresh after failure or use the replacement capture after success. Use a matched CLI/broker; an older broker rejects the new drag action kind. Recorded reference drags, rejections and fold release/fresh tap passed. Other lifecycle checks remain open.
+
+## Press and hold a control by its agent reference
+
+Use `axe touch --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF> --down --up --delay 0.7`. Choose a visible, enabled reference with a unique native ID or label. AXe reads its current target and activation point, then validates the point hit, app, screen and target again before touch down. It sends one complete physical touch.
+
+Omit `--delay` for the existing 0.1-second physical press. An explicit delay must be finite and in (0,10] seconds. A delay requests contact duration; the app decides whether it is a long press. No new pad or slider references are exposed. Coordinates, partial down/up, contact tokens, AX preparation and batch use reject. This does not add retained agent touches.
+
+Keep the existing context-change detection, owned release, cache invalidation and no-replay rules. If folding or rotation interrupts input, read again and select the current reference. A changed layout is not permission to reuse the old point. Use the replacement capture after success, or refresh when it is unavailable. Check the real app effect separately. Older brokers reject the new hold action kind. Build and native proof are pending.

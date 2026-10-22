@@ -13,7 +13,7 @@ Use `axe shutdown --udid <UUID>` for one simulator. JSON reports `shutdownComple
 
 ## Optional agent mode
 
-Use `--agent` on `describe-ui`, `tap`, `type`, `swipe` or `drag` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
+Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag` or complete reference `touch` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
 
 Read `capture.keyboard` as keyboard-like AX evidence for the selected app. `likelyVisible` is a heuristic; `unknown` does not mean hidden. It does not prove focus or change typing checks.
 
@@ -21,6 +21,8 @@ Read `capture.keyboard` as keyboard-like AX evidence for the selected app. `like
 2. Pass its immutable `--snapshot-id` with ref/coordinate actions. Refresh after UI or context changes; never replay uncertain input.
 3. For tap selectors, use exact ID/label/value, `--label-contains`, or Foundation `--label-regex`. Optional `--frame` uses decimal logical points; exclude refs/coordinates.
 4. Use `drag --agent --snapshot-id <UUID> --ref <REF> --end-x <X> --end-y <Y> --expected-pid <PID> --udid <UDID>`. Choose a target/scroll ref. Start uses its fresh centre; keep the endpoint inside the display. Limits: duration (0,10], steps 1...1000, total delay 20 seconds including holds. Reject start coordinates and batch use.
+
+5. Use `touch --agent --snapshot-id <UUID> --ref <REF> --down --up --delay 0.7 --expected-pid <PID> --udid <UDID>` to hold a current native target. Omitted delay keeps 0.1 seconds; explicit delay must be finite and greater than zero through 10 seconds. Do not supply coordinates, retained tokens, AX preparation or batch steps.
 
 Read [Agent mode reference](references/agent-reference.md) for commands, matching syntax, bounds, cache/freshness rules and failure handling before input. Check actual app effects separately.
 

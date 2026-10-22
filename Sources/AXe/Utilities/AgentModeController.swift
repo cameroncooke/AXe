@@ -212,7 +212,13 @@ final class AgentModeController {
             if mode.kind == .drag {
                 original = try cached.snapshot.dragNode(ref: ref)
             } else {
-                let action: RuntimeElementAction = mode.kind == .typeText ? .typeText : mode.kind == .swipe ? .swipeWithin : .tap
+                let action: RuntimeElementAction
+                switch mode.kind {
+                case .typeText: action = .typeText
+                case .swipe: action = .swipeWithin
+                case .hold: action = .longPress
+                default: action = .tap
+                }
                 original = try cached.snapshot.node(ref: ref, requiredAction: action)
             }
             let freshTarget = try snapshot.resolve(original)
@@ -244,6 +250,14 @@ final class AgentModeController {
                 plannedPrimitives += try style.primitives(x: point.x, y: point.y)
                 if mode.postDelay > 0 { plannedPrimitives.append(.delay(mode.postDelay)) }
             } else { throw AgentModeFailure("missingTarget", "The tap target is unavailable.") }
+        case .hold:
+            guard let node else {
+                throw AgentModeFailure("missingHoldTarget", "The fresh hold target is unavailable.")
+            }
+            let selector = try snapshot.uniqueSelector(for: node)
+            plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid, preparation: .automationSession,
+                endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
+                preDelay: 0, postDelay: 0, elementType: node.type, holdDuration: mode.duration)
         case .typeText:
             guard let node, let identifier = node.identifier, let text = mode.text else {
                 throw AgentModeFailure("unsupportedTextTarget", "Typing requires an exact native focused field ID.")

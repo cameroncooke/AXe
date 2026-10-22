@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added complete `touch --agent --ref` presses and timed holds with fresh native target/hit checks, owned release and snapshot refresh. Coordinate touch behavior is unchanged; partial contacts, retained tokens and batch agent use reject. Build and native verification remain pending.
+
 - Added `shutdown --udid <UUID>` for one simulator through public `simctl`, with confirmed Shutdown state, distinct `alreadyShutdown` output and no all-device alias. This is simulator lifecycle control, not guest lock or power-button input.
 
 - Added optional `drag --agent` from an existing snapshot target/scroll reference to an explicit logical endpoint. The start uses fresh native target and hit validation; existing owned drag limits, context checks and release remain. Raw drag is unchanged, and batch use rejects. Scoped native checks passed for inner-landscape reference drags and fold release/fresh-tap recovery; a later restoration failure remains recorded.

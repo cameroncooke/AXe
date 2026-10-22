@@ -199,6 +199,10 @@ extension Touch: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
+        guard !agentMode.enabled else {
+            throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+        }
+        guard let pointX, let pointY else { throw ValidationError("Batch touch requires -x and -y.") }
         let physicalPoint = try await context.inputPoint((x: pointX, y: pointY), logger: logger)
 
         let touchDownEvent = FBSimulatorHIDEvent.touch(direction: .down, x: physicalPoint.x, y: physicalPoint.y)

@@ -62,6 +62,9 @@ struct SelectedHIDRequest: Codable, Sendable {
             }
             return
         }
+        if ax?.kind == .hold, agentAdmission?.target == nil {
+            throw AgentModeFailure("missingHoldAdmission", "A reference hold requires fresh agent target admission.")
+        }
         if let agentAdmission {
             guard operation == .complete, token == nil, agentAdmission.expectedPID > 0,
                   agentAdmission.context.screenID == screenID,

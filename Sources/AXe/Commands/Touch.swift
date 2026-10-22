@@ -19,10 +19,10 @@ struct Touch: AsyncParsableCommand {
     )
     
     @Option(name: .customShort("x"), help: "The X coordinate of the touch point.")
-    var pointX: Double
+    var pointX: Double?
     
     @Option(name: .customShort("y"), help: "The Y coordinate of the touch point.")
-    var pointY: Double
+    var pointY: Double?
     
     @Flag(name: .customLong("down"), help: "Perform touch down event.")
     var touchDown: Bool = false
@@ -38,11 +38,27 @@ struct Touch: AsyncParsableCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     @Option(name: .customLong("contact-token"), help: "Selected input only: token returned by a retained down; down moves it and up releases it.")
     var contactToken: String?
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            guard touchDown, touchUp, agentMode.elementRef != nil, pointX == nil, pointY == nil,
+                  contactToken == nil, selectedAX.preparation == nil else {
+                throw ValidationError("Agent touch requires --ref, --down and --up, without coordinates, a contact token or AX preparation.")
+            }
+            _ = try agentRequest()
+            return
+        }
+        try selectedAX.validate(required: false)
+        guard let pointX, let pointY else {
+            throw ValidationError("Touch requires -x and -y without --agent.")
+        }
         try selectedInput.validate()
         if let contactToken {
             guard selectedInput.mode == .selected, UUID(uuidString: contactToken) != nil, touchDown != touchUp else {
@@ -79,7 +95,17 @@ struct Touch: AsyncParsableCommand {
         }
     }
 
+    func agentRequest() throws -> SelectedHIDRequest {
+        try AgentModeCommandAdapter.request(AgentModeRequest(kind: .hold,
+            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            duration: delay ?? TapTiming.defaultHoldDuration), input: selectedInput)
+    }
+
     func selectedRequest() throws -> SelectedHIDRequest {
+        guard !agentMode.enabled else {
+            throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+        }
+        guard let pointX, let pointY else { throw ValidationError("Selected touch requires -x and -y.") }
         let token = contactToken.flatMap(UUID.init(uuidString:))
         let operation: SelectedHIDRequest.Operation
         var primitives: [SelectedHIDPrimitive] = [.touch(.down, x: pointX, y: pointY)]
@@ -95,10 +121,15 @@ struct Touch: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
             return
         }
+        guard let pointX, let pointY else { throw ValidationError("Touch requires -x and -y without --agent.") }
         let logger = AxeLogger()
         try await setup(logger: logger)
         

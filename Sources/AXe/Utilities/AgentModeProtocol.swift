@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -36,6 +36,14 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .hold {
+            guard ref != nil, snapshotID != nil, point == nil,
+                  selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, direction == nil, tapStyle == nil,
+                  sinceScreenHash == nil, preDelay == 0, postDelay == 0, distance == 1 else {
+                throw AgentModeFailure("invalidHold", "A reference hold requires one snapshot/ref and a duration in (0,10], without other targets, styles or delays.")
+            }
         }
         if kind == .drag {
             guard ref != nil, snapshotID != nil, let destination,
