@@ -215,6 +215,8 @@ final class AgentModeController {
             node = freshTarget
         } else if let kind = mode.selectorKind, let value = mode.selectorValue {
             node = try snapshot.match(kind: kind, value: value, type: mode.elementType)
+        } else if let selector = mode.tapSelector {
+            node = try snapshot.match(selector, type: mode.elementType, context: context)
         }
         var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: snapshot.hash,
                                           nativeFingerprint: snapshot.nativeFingerprint, target: try node.map { try AgentModeTarget($0) })

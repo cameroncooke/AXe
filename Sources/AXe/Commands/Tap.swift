@@ -26,6 +26,15 @@ struct Tap: AsyncParsableCommand {
     @Option(name: [.customLong("value")], help: "Tap the activation point of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
     var elementValue: String?
 
+    @Option(name: .customLong("label-contains"), help: "Agent only: match one native label containing this case-sensitive literal substring. Cannot be combined with another target.")
+    var labelContains: String?
+
+    @Option(name: .customLong("label-regex"), help: "Agent only: match one native label with a Foundation regular expression, case-sensitive by default. Use ^/$ to anchor the match. Maximum 128 UTF-8 bytes and a shared 100 ms query budget.")
+    var labelRegex: String?
+
+    @Option(name: .customLong("frame"), help: "Agent selector only: AND-filter a complete native frame with minX, maxX, minY or maxY bounds in current logical UI points (key=value[,key=value]). Omitted edges use current screen bounds. No refs or coordinates.")
+    var selectorFrame: String?
+
     @Option(name: [.customLong("element-type")], help: "Filter matches by exact accessibility type (e.g. Button, TextField, Switch). Selected mode: ordinary --id/--label/--value taps only.")
     var elementType: String?
 
@@ -57,6 +66,9 @@ struct Tap: AsyncParsableCommand {
         if agentMode.enabled {
             try validateAgent()
             return
+        }
+        guard labelContains == nil, labelRegex == nil, selectorFrame == nil else {
+            throw ValidationError("--label-contains, --label-regex and --frame require --agent.")
         }
         try selectedInput.validate()
         if semanticPress {
@@ -139,7 +151,7 @@ struct Tap: AsyncParsableCommand {
         guard !semanticPress, selectedAX.preparation == nil, waitTimeout == 0, pollInterval == 0.25 else {
             throw ValidationError("Agent tap does not accept semantic press, AX preparation or polling overrides.")
         }
-        let selectors = [elementID, elementLabel, elementValue].compactMap { $0 }
+        let selectors = [elementID, elementLabel, elementValue, labelContains, labelRegex].compactMap { $0 }
         let hasPoint = pointX != nil || pointY != nil
         let targetCount = (agentMode.elementRef == nil ? 0 : 1) + (hasPoint ? 1 : 0) + selectors.count
         guard targetCount == 1 else {
@@ -160,13 +172,17 @@ struct Tap: AsyncParsableCommand {
                 throw ValidationError("Agent --element-type requires an explicit selector and a nonempty type.")
             }
         }
+        do { _ = try extendedAgentSelector() }
+        catch let error as AgentModeFailure { throw ValidationError(error.message) }
         try AgentModeCommandAdapter.validateDelay(preDelay, name: "--pre-delay")
         try AgentModeCommandAdapter.validateDelay(postDelay, name: "--post-delay")
     }
 
     func agentRequest() throws -> SelectedHIDRequest {
+        let extended = try extendedAgentSelector()
         let selectorKind: SelectedAXRequest.SelectorKind?
-        if elementID != nil { selectorKind = .id }
+        if extended != nil { selectorKind = nil }
+        else if elementID != nil { selectorKind = .id }
         else if elementLabel != nil { selectorKind = .label }
         else if elementValue != nil { selectorKind = .value }
         else { selectorKind = nil }
@@ -181,9 +197,27 @@ struct Tap: AsyncParsableCommand {
         }
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .tap,
             expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
-            point: point, selectorKind: selectorKind, selectorValue: elementID ?? elementLabel ?? elementValue,
+            point: point, selectorKind: selectorKind,
+            selectorValue: extended == nil ? elementID ?? elementLabel ?? elementValue : nil,
+            tapSelector: extended,
             elementType: elementType, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, tapStyle: style),
             input: selectedInput)
+    }
+
+    private func extendedAgentSelector() throws -> AgentModeTapSelector? {
+        guard labelContains != nil || labelRegex != nil || selectorFrame != nil else { return nil }
+        let candidates: [(AgentModeTapSelector.Kind, String?)] = [
+            (.id, elementID), (.label, elementLabel), (.value, elementValue),
+            (.labelContains, labelContains), (.labelRegex, labelRegex),
+        ]
+        let provided = candidates.compactMap { kind, value in value.map { (kind, $0) } }
+        guard provided.count == 1, pointX == nil, pointY == nil, agentMode.elementRef == nil else {
+            throw ValidationError("Agent label patterns and --frame require one explicit selector, without a ref or coordinates.")
+        }
+        let frame = try selectorFrame.map { try AgentModeFrameFilter(specification: $0) }
+        let selector = AgentModeTapSelector(kind: provided[0].0, query: provided[0].1, frame: frame)
+        try selector.validate()
+        return selector
     }
 
     func selectedRequest() throws -> SelectedHIDRequest {

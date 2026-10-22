@@ -12,6 +12,7 @@ struct AgentModeRequest: Codable, Sendable {
     var point: SelectedAXPoint? = nil
     var selectorKind: SelectedAXRequest.SelectorKind? = nil
     var selectorValue: String? = nil
+    var tapSelector: AgentModeTapSelector? = nil
     var elementType: String? = nil
     var text: String? = nil
     var direction: RuntimeSwipeDirection? = nil
@@ -40,7 +41,7 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidReference", "A reference requires its immutable --snapshot-id and an eN name.")
             }
         }
-        guard [point != nil, ref != nil, selectorValue != nil].filter({ $0 }).count <= 1 else {
+        guard [point != nil, ref != nil, selectorValue != nil, tapSelector != nil].filter({ $0 }).count <= 1 else {
             throw AgentModeFailure("mixedTargets", "Select one reference, selector, or point.")
         }
         if let point {
@@ -58,11 +59,23 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidSelector", "The native selector is empty or too large.")
             }
         }
+        if let tapSelector {
+            guard kind == .tap else {
+                throw AgentModeFailure("invalidTapSelector", "Rich selectors and frame filters apply to agent tap only.")
+            }
+            if let elementType {
+                guard !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      elementType.utf8.count <= 256 else {
+                    throw AgentModeFailure("invalidElementType", "An agent selector type must be nonblank and at most 256 UTF-8 bytes.")
+                }
+            }
+            try tapSelector.validate()
+        }
         if snapshotID != nil, sinceScreenHash != nil {
             throw AgentModeFailure("mixedSnapshotQuery", "Snapshot paging cannot be combined with since-screen-hash.")
         }
         if kind == .describe {
-            guard ref == nil, point == nil, selectorValue == nil, text == nil, direction == nil else {
+            guard ref == nil, point == nil, selectorValue == nil, tapSelector == nil, text == nil, direction == nil else {
                 throw AgentModeFailure("invalidDescribe", "Agent description accepts no action target or text.")
             }
         } else if kind == .typeText {
@@ -75,7 +88,7 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidSwipe", "A reference swipe requires a snapshot, reference, and direction.")
             }
         } else if kind == .tap {
-            guard ref != nil || selectorValue != nil || point != nil else {
+            guard ref != nil || selectorValue != nil || tapSelector != nil || point != nil else {
                 throw AgentModeFailure("missingTarget", "Agent tap requires a reference, selector, or point.")
             }
         }

@@ -82,6 +82,19 @@ Keep agent captures within 4096 nodes and depth 64. The same `--row-offset` and 
 
 Visible controls without a unique native ID or label remain in the capture with their action marked unavailable. AXe offers `typeText` only for a currently focused native `TextField` with a unique exact ID; otherwise it offers `tap` when a unique native ID or label can resolve the field.
 
+Agent `tap` also accepts `--label-contains <text>` for a case-sensitive literal substring or `--label-regex <pattern>` for Foundation `NSRegularExpression` syntax. Regex searches the native label; use `^` and `$` to anchor it. Groups and alternation such as `^(Save|Done)$` are supported. Matching is case-sensitive by default; Foundation inline options apply. Use exactly one of `--id`, `--label`, `--value`, `--label-contains`, `--label-regex`, `--ref` or a coordinate pair. An explicit selector can use the exact `--element-type` filter.
+
+Use one optional `--frame 'minX=12.5,maxY=500.25'` with any explicit selector. Keys are `minX`, `maxX`, `minY` and `maxY`; values are finite non-negative logical UI points, including decimals. Omitted edges use the current screen bounds. The complete native element frame must fit the resulting positive rectangle within the current screen. Relative screen fractions, repeated keys, refs and coordinate targets are rejected. These three new options require `--agent` and apply only to `tap`.
+
+```bash
+axe tap --agent --udid "$UDID" --expected-pid "$APP_PID" \
+  --label-contains 'Save' --element-type Button --frame 'minY=100.5,maxY=500.25'
+axe tap --agent --udid "$UDID" --expected-pid "$APP_PID" \
+  --label-regex '^(Save|Done)$' --element-type Button
+```
+
+The new queries allow 512 UTF-8 bytes, with regex patterns limited to 128 bytes and frame specifications to 256 bytes. Each candidate ID/label/value is limited to 4096 bytes; total candidate text is limited to 256 KiB under the existing 4096-node tree limit. Selection shares a 100 ms budget, with cooperative Foundation progress cancellation for regex matching. Pattern compilation has a byte cap and invalid-pattern rejection; Foundation does not expose compilation cancellation. A bound failure, no match or more than one match sends no input. Narrow the query instead of retrying unchanged. AXe resolves the fresh native tree, requires a unique exact native ID or label, then repeats the existing context, native-screen and target checks before input. A geometric match never authorizes cached-coordinate input. An older broker rejects a new selector payload instead of ignoring its filters.
+
 ## Selected Duo input
 
 Ordinary `tap`, `swipe` and `drag` without mode flags use the measured active display on the verified iPhone Duo profile. Coordinates remain logical UI points. Tap keeps legacy selector matching, styles and wait/poll options. Swipe and drag keep their existing event factories, movement duration, swipe delta and drag steps/holds. Pre/post delays run on the host; normal text output remains. AXe checks boot, panel, hinge, orientation and geometry before input. These pose checks do not add an app/PID or UI-layout guard. Duo paths above 100,000 movement steps reject before event allocation; `drag --steps` retains its existing 1...1,000 limit. Other devices and other commands without mode flags keep their existing routes.
