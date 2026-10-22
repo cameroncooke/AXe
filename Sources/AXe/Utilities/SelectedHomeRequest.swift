@@ -50,7 +50,11 @@ struct SelectedHomeRequest: Codable, Sendable {
 }
 
 struct SelectedButtonRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case sideButton = "side-button" }
+    enum Kind: String, Codable, Sendable {
+        case sideButton = "side-button"
+        case siri, lock
+        case applePay = "apple-pay"
+    }
     let kind: Kind
     let duration: Double?
     let expectedBoot: String?
@@ -63,11 +67,19 @@ struct SelectedButtonRequest: Codable, Sendable {
         try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: kind.rawValue, observation: observation)
     }
 
+    /// DTUHID adapts Apple Pay to two side-button presses; delays are not primitives.
+    var expectedPrimitiveCount: Int { kind == .applePay ? 4 : 2 }
+
     func event(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
         try validate(observation: observation)
+        let button: FBSimulatorHIDButton
         switch kind {
-        case .sideButton: return SelectedButtonPolicy.event(.sideButton, duration: duration)
+        case .sideButton: button = .sideButton
+        case .siri: button = .siri
+        case .lock: button = .lock
+        case .applePay: button = .applePay
         }
+        return SelectedButtonPolicy.event(button, duration: duration)
     }
 }
 

@@ -155,6 +155,10 @@ axe button siri --udid <UDID>
 axe button apple-pay --udid <UDID>
 ```
 
+Selected mode supports all five buttons with `--input-mode selected --screen-id <ID> --screen-uuid <UUID>`. Optional `--expected-boot <BOOT_ID>` must match before input. The active pair guards context; each button acts on the whole device. Omitted duration has no requested hold; explicit duration is finite, greater than zero and at most 10 seconds. The same names and options work in selected batch steps.
+
+Home keeps its `home` result; the others return `button.kind` and typed execution/cleanup evidence. Apple Pay uses two native side-button presses (four primitives), a 0.15-second gap and half the supplied duration per hold; other buttons use two primitives. Receipts confirm transport, not Siri/payment UI, secure lock, wake or power. Do not replay uncertain input. Selected wire 28 uses a separate broker endpoint and rejects wire 27. Raw routes and defaults are unchanged. New selected Siri/Lock/Apple Pay build and native proof are pending.
+
 ## Batch (multi-step workflows)
 
 ```bash

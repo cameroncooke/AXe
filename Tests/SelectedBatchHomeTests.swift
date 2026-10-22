@@ -36,7 +36,7 @@ struct SelectedBatchHomeTests {
         #expect(batch.requestID != direct.requestID)
     }
 
-    @Test(arguments: ["button lock", "button siri", "button apple-pay",
+    @Test(arguments: ["button unknown",
         "button home --duration 0", "button home --duration nan", "button home --duration 10.1",
         "button home --expected-boot ''", "button home --expected-pid 123",
         "button home --screen-id 1", "button home --input-mode legacy", "button home --udid other"])
@@ -129,7 +129,7 @@ struct SelectedBatchHomeTests {
         var sends = 0
         var receipts: [SelectedBatchStepReceipt] = []
         await #expect(throws: (any Error).self) {
-            try await SelectedBatchRunner.run(lines: ["button home", "button lock", "button home"],
+            try await SelectedBatchRunner.run(lines: ["button home", "button unknown", "button home"],
                 input: options(), simulatorUDID: udid,
                 send: { item, _ in sends += 1; return try response(item) }, emit: { receipts.append($0) })
         }

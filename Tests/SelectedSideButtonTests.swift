@@ -35,7 +35,7 @@ struct SelectedSideButtonTests {
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(direct))
         try decoded.validate()
         let payload = try #require(decoded.button)
-        #expect(SelectedHIDRequest.version == 27 && decoded.version == 27)
+        #expect(SelectedHIDRequest.version == 28 && decoded.version == 28)
         #expect(payload.kind == .sideButton && payload.duration == duration && payload.expectedBoot == "boot-one")
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen && decoded.home == nil)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -88,7 +88,7 @@ struct SelectedSideButtonTests {
                 screenUUID: screen, operation: operation, token: token,
                 primitives: primitives, button: clean.button)
         }
-        var invalid = [make(version: 26), make(token: UUID()), make(screenID: nil),
+        var invalid = [make(version: 27), make(token: UUID()), make(screenID: nil),
                        make(primitives: [.touch(.down, x: 1, y: 2)])]
         invalid += [SelectedHIDRequest.Operation.begin, .move, .end, .close].map { make(operation: $0) }
         invalid.append(SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
@@ -127,7 +127,7 @@ struct SelectedSideButtonTests {
         }
     }
 
-    @Test(arguments: ["home", "lock", "siri", "SIDE-BUTTON"])
+    @Test(arguments: ["home", "LOCK", "SIRI", "SIDE-BUTTON"])
     func unknownButtonKindsCannotDecode(kind: String) throws {
         let data = Data("{\"kind\":\"\(kind)\"}".utf8)
         #expect(throws: (any Error).self) { _ = try JSONDecoder().decode(SelectedButtonRequest.self, from: data) }
@@ -159,7 +159,8 @@ struct SelectedSideButtonTests {
         #expect(home.home != nil && home.button == nil)
         #expect(try home.completeEvent(observation: observation()) != event)
         for name in ["lock", "siri", "apple-pay"] {
-            #expect(throws: (any Error).self) { _ = try Button.parse([name, "--udid", udid] + selection + extra) }
+            let selected = try Button.parse([name, "--udid", udid] + selection + extra).selectedRequest()
+            #expect(selected.button?.kind.rawValue == name && selected.home == nil)
             #expect(try Button.parse([name, "--udid", udid] + extra).selectedInput.mode == .legacy)
         }
     }
@@ -209,7 +210,7 @@ struct SelectedSideButtonTests {
         if fault == .executionCleanup { wire.executionCleanup = "uncertain" }
         if fault == .reversedTime { wire.finishedUptime = 0 }
         let execution = try JSONDecoder().decode(SelectedButtonExecutionEvidence.self, from: JSONEncoder().encode(wire))
-        var result = SelectedHIDResponse(version: fault == .wrongVersion ? 26 : SelectedHIDRequest.version,
+        var result = SelectedHIDResponse(version: fault == .wrongVersion ? 27 : SelectedHIDRequest.version,
             requestID: fault == .wrongRequest ? UUID() : request.requestID, brokerID: UUID(),
             outcome: fault == .failed ? "failedNoReplay" : "enqueuedAndDrained", token: nil,
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,
@@ -254,7 +255,7 @@ struct SelectedSideButtonTests {
         #expect(receipts[0].response != nil && receipts[0].requestID != nil)
     }
 
-    @Test(arguments: ["button lock", "button side-button --duration 0", "button side-button --expected-pid 123",
+    @Test(arguments: ["button unknown", "button side-button --duration 0", "button side-button --expected-pid 123",
                       "button side-button --screen-id 1", "button side-button --input-mode legacy"])
     func invalidLaterStepStopsBeforeSend(line: String) async throws {
         var sends = 0; var receipts: [SelectedBatchStepReceipt] = []

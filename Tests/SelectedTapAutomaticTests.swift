@@ -97,7 +97,7 @@ struct SelectedTapAutomaticTests {
         #expect(FBSimulatorHIDEvent.tapAt(x: 12.5, y: 20.25) == .composite(contacts))
         let expected = withDelays ? [.delay(0.2)] + contacts + [.delay(0.3)] : contacts
         #expect(direct.event == .composite(expected) && batch.event == direct.event)
-        #expect(direct.ax == nil && batch.ax == nil && direct.version == 27)
+        #expect(direct.ax == nil && batch.ax == nil && direct.version == 28)
         let checked = try FBSimulatorHIDSession.preflight(direct.event, observation: observation())
         #expect(checked.primitiveCount == 2 && checked.requestedDelaySeconds == (withDelays ? 0.5 : 0))
     }
@@ -122,7 +122,7 @@ struct SelectedTapAutomaticTests {
         #expect(ax.selectorKind?.rawValue == String(selector[0].dropFirst(2)) && ax.selector != nil)
         #expect(ax.elementType == (selector.count == 4 ? selector[3] : nil))
         #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3 && ax.preparation == .existingBridge)
-        #expect(direct.requestID != batch.requestID && decoded.version == 27)
+        #expect(direct.requestID != batch.requestID && decoded.version == 28)
         let target = try node(#"{"type":"Button","subrole":"AXSwitch"}"#)
         #expect(try ax.tapEvent(at: CGPoint(x: 10, y: 20), target: target) == .tapAt(x: 10, y: 20, duration: 0.1))
     }
@@ -141,15 +141,15 @@ struct SelectedTapAutomaticTests {
         #expect(coordinate.event == event)
     }
 
-    @Test func wireTwentyFiveRejectsBeforeOwnership() throws {
+    @Test func oldWireRejectsBeforeOwnership() throws {
         let current = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "automatic"]).selectedRequest()
-        let old = SelectedHIDRequest(version: 26, requestID: current.requestID, screenID: current.screenID,
+        let old = SelectedHIDRequest(version: 27, requestID: current.requestID, screenID: current.screenID,
             screenUUID: current.screenUUID, operation: .complete, token: nil, primitives: [], ax: current.ax)
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }
         #expect(!owner.inFlight && owner.token == nil)
         try owner.enter(current)
-        #expect(owner.inFlight && current.version == 27)
+        #expect(owner.inFlight && current.version == 28)
     }
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])

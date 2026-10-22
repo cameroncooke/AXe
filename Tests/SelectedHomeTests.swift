@@ -35,7 +35,7 @@ struct SelectedHomeTests {
         let original = try parse().selectedRequest()
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(SelectedHIDRequest.version == 27)
+        #expect(SelectedHIDRequest.version == 28)
         #expect(decoded.requestID == original.requestID && decoded.version == SelectedHIDRequest.version)
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -48,7 +48,7 @@ struct SelectedHomeTests {
         #expect(plan.primitiveCount == 2 && plan.requestedDelaySeconds == 0)
         #expect(throws: (any Error).self) { _ = try decoded.completeEvent(logicalSize: CGSize(width: 200, height: 100)) }
         var admission = SelectedHIDAdmission()
-        #expect(throws: (any Error).self) { try admission.enter(request(version: 26)) }
+        #expect(throws: (any Error).self) { try admission.enter(request(version: 27)) }
         #expect(!admission.inFlight)
     }
 
@@ -74,8 +74,17 @@ struct SelectedHomeTests {
     }
 
     @Test(arguments: ["apple-pay", "lock", "siri"])
-    func selectedOtherButtonsRejectWhileLegacyRemainsAvailable(name: String) throws {
-        #expect(throws: (any Error).self) { _ = try Button.parse([name, "--udid", udid] + selection) }
+    func selectedDeviceButtonsKeepLegacyEventsAndDistinctPayloads(name: String) throws {
+        let selected = try Button.parse([name, "--udid", udid] + selection + ["--duration", "0.2"]).selectedRequest()
+        let payload = try #require(selected.button)
+        #expect(selected.home == nil && payload.kind.rawValue == name && payload.duration == 0.2)
+        let button = try #require(ButtonType(rawValue: name)).hidButton
+        let event = try selected.completeEvent(observation: observation())
+        #expect(event == .composite([.button(direction: .down, button: button),
+                                    .delay(0.2), .button(direction: .up, button: button)]))
+        let plan = try FBSimulatorHIDSession.preflight(event, observation: observation())
+        #expect(plan.primitiveCount == payload.expectedPrimitiveCount)
+        #expect(abs(plan.requestedDelaySeconds - (name == "apple-pay" ? 0.35 : 0.2)) < 0.000001)
         let legacy = try Button.parse([name, "--udid", udid, "--duration", "0.2"])
         #expect(legacy.buttonType.rawValue == name && legacy.duration == 0.2)
         #expect(legacy.selectedInput.mode == .legacy)

@@ -227,20 +227,23 @@ enum SelectedBatchRunner {
         do { try request.validate() } catch { return false }
         let execution: SelectedButtonExecutionEvidence
         let expectedBoot: String?
+        let expectedPrimitiveCount: Int
         if let expected = request.home {
             guard let home = response.home, response.button == nil else { return false }
             execution = home
             expectedBoot = expected.expectedBoot
+            expectedPrimitiveCount = 2
         } else if let expected = request.button {
             guard let button = response.button, button.kind == expected.kind, response.home == nil else { return false }
             execution = button.execution
             expectedBoot = expected.expectedBoot
+            expectedPrimitiveCount = expected.expectedPrimitiveCount
         } else { return false }
         guard let context = response.context,
               let cleanup = execution.cleanupEvidence, let simulatorUDID,
               let deviceID = UUID(uuidString: simulatorUDID),
               response.version == request.version, response.requestID == request.requestID,
-              response.outcome == "enqueuedAndDrained", response.enqueuedEventCount == 2,
+              response.outcome == "enqueuedAndDrained", response.enqueuedEventCount == expectedPrimitiveCount,
               response.error == nil, response.token == nil, response.quarantine == nil,
               response.ax == nil, response.hinge == nil, response.keyboard == nil,
               response.cleanup == "notNeeded", context.screenID == request.screenID,
@@ -248,7 +251,8 @@ enum SelectedBatchRunner {
               expectedBoot == nil || expectedBoot == context.bootIdentity,
               execution.schemaVersion == 1, UUID(uuidString: execution.simulatorUDID) == deviceID,
               execution.axDisplayID == context.screenID,
-              execution.phase == "completed", execution.plannedPrimitiveCount == 2, execution.sentPrimitiveCount == 2,
+              execution.phase == "completed", execution.plannedPrimitiveCount == expectedPrimitiveCount,
+              execution.sentPrimitiveCount == expectedPrimitiveCount,
               execution.allInputsReleasedBeforeCleanup, execution.drainCompleted, execution.interruption == nil,
               execution.executionCleanup == "notNeeded", execution.startedUptime.isFinite,
               execution.finishedUptime.isFinite, execution.finishedUptime >= execution.startedUptime,

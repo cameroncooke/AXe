@@ -46,8 +46,8 @@ struct Button: AsyncParsableCommand {
         abstract: "Press a hardware button on the simulator.",
         discussion: """
         Available buttons: apple-pay, home, lock, side-button, siri
-        Selected mode supports Home and side-button. The screen pair guards the active context;
-        both act on the whole device. Transport evidence does not prove a UI, lock or power state.
+        Selected mode supports all five buttons. The screen pair guards the active context;
+        buttons act on the whole device. Transport evidence does not prove a UI, lock or power state.
         
         Examples:
           axe button home --udid SIMULATOR_UDID
@@ -67,22 +67,19 @@ struct Button: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
 
-    @Option(name: .customLong("expected-boot"), help: "Selected Home or side-button: require this exact measured boot identity before input.")
+    @Option(name: .customLong("expected-boot"), help: "Selected hardware button: require this exact measured boot identity before input.")
     var expectedBoot: String?
 
     func validate() throws {
         try selectedInput.validate()
         if selectedInput.mode == .selected {
-            switch buttonType {
-            case .home:
+            if let payload = selectedButtonPayload {
+                try payload.validate()
+            } else {
                 try SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot).validate()
-            case .sideButton:
-                try SelectedButtonRequest(kind: .sideButton, duration: duration, expectedBoot: expectedBoot).validate()
-            default:
-                throw ValidationError("Selected button supports only home and side-button. Other buttons remain available in legacy mode.")
             }
         } else if expectedBoot != nil {
-            throw ValidationError("--expected-boot requires selected Home or side-button.")
+            throw ValidationError("--expected-boot requires a selected hardware button.")
         }
         // Validate duration if provided
         if let duration = duration {
@@ -103,13 +100,25 @@ struct Button: AsyncParsableCommand {
         }
         var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [])
-        switch buttonType {
-        case .home: request.home = SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot)
-        case .sideButton: request.button = SelectedButtonRequest(kind: .sideButton, duration: duration, expectedBoot: expectedBoot)
-        default: throw ValidationError("Unsupported selected button.")
+        if let payload = selectedButtonPayload {
+            request.button = payload
+        } else {
+            request.home = SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot)
         }
         try request.validate()
         return request
+    }
+
+    private var selectedButtonPayload: SelectedButtonRequest? {
+        let kind: SelectedButtonRequest.Kind
+        switch buttonType {
+        case .home: return nil
+        case .sideButton: kind = .sideButton
+        case .siri: kind = .siri
+        case .lock: kind = .lock
+        case .applePay: kind = .applePay
+        }
+        return SelectedButtonRequest(kind: kind, duration: duration, expectedBoot: expectedBoot)
     }
 
     func run() async throws {

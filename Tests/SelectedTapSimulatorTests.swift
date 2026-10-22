@@ -29,7 +29,7 @@ struct SelectedTapSimulatorTests {
         if withDelays { arguments += ["--pre-delay", "0.2", "--post-delay", "0.3"] }
         let request = try parse(arguments).selectedRequest()
         try request.validate()
-        #expect(request.version == 27 && request.ax == nil && request.token == nil)
+        #expect(request.version == 28 && request.ax == nil && request.token == nil)
         #expect(request.operation == .complete && request.screenID == 3 && request.screenUUID == UUID(uuidString: screen))
         let touch: [FBSimulatorHIDEvent] = [.touch(direction: .down, x: 12.5, y: 20.25),
                                           .touch(direction: .up, x: 12.5, y: 20.25)]
@@ -49,7 +49,7 @@ struct SelectedTapSimulatorTests {
             input: SelectedInputOptions.parse(selection), simulatorUDID: udid)
         try batch.validate()
         #expect(batch.ax == nil && batch.event == direct.event && batch.requestID != direct.requestID)
-        #expect(batch.version == 27 && batch.operation == .complete && batch.token == nil)
+        #expect(batch.version == 28 && batch.operation == .complete && batch.token == nil)
         #expect(batch.screenID == direct.screenID && batch.screenUUID == direct.screenUUID)
     }
 
@@ -136,10 +136,10 @@ struct SelectedTapSimulatorTests {
         #expect(throws: (any Error).self) { _ = try JSONDecoder().decode(SelectedAXRequest.self, from: bytes) }
     }
 
-    @Test func wireTwentyFiveCannotSilentlyDropSimulatorStyle() throws {
-        #expect(SelectedHIDRequest.version == 27)
+    @Test func oldWireCannotSilentlyDropSimulatorStyle() throws {
+        #expect(SelectedHIDRequest.version == 28)
         let current = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "simulator"]).selectedRequest()
-        let old = SelectedHIDRequest(version: 26, requestID: current.requestID, screenID: current.screenID,
+        let old = SelectedHIDRequest(version: 27, requestID: current.requestID, screenID: current.screenID,
             screenUUID: current.screenUUID, operation: .complete, token: nil, primitives: [], ax: current.ax)
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }

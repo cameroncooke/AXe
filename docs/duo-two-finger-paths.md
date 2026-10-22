@@ -24,7 +24,7 @@ The complete owner/session supplies the measured display transform once and keep
 
 `FBSimulatorHIDGesture.twoFingerSwipe(firstStart:firstEnd:secondStart:secondEnd:duration:spacing:)` returns the existing composite `twoFingerTouch` event shape. It uses a shared paired-motion emitter with pinch/rotation, exact linear endpoints and the existing final stationary sample. Native construction remains bounded to 4096 segments; the CLI applies the smaller 500-segment limit. All events use logical points and native session preflight. Transport, contact tracking, cancellation and cleanup are unchanged.
 
-Selected wire 27 rejects wire 26 and older requests. The new associated gesture payload cannot mix with primitives, other gesture payloads or retained tokens. The native source change is exported through the complete tracked Duo foundation patch and postimage manifest; build AXe against that matched library.
+Current selected wire 28 rejects wire 27 and older requests; the recorded pair candidate below used wire 27. The new associated gesture payload cannot mix with primitives, other gesture payloads or retained tokens. The native source change is exported through the complete tracked Duo foundation patch and postimage manifest; build AXe against that matched library.
 
 ## Recorded verification
 
