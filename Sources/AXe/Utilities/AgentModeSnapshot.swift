@@ -14,10 +14,12 @@ struct AgentModeSnapshot: Sendable {
     private let identityIndex: NativeIdentityIndex
     private let referenceIndices: [String: Int]
     private let selectors: [NativeSelector?]
+    private let keyboardButtons: [AgentModeKeyboardDetector.Button]
 
     init(roots: [FBSimulatorAXNode]) throws {
         var nodes: [FBSimulatorAXNode] = []
         var inheritedHidden: [Bool] = []
+        var keyboardButtons: [AgentModeKeyboardDetector.Button] = []
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         func collect(_ node: FBSimulatorAXNode, depth: Int, parentHidden: Bool) throws -> String {
@@ -27,12 +29,16 @@ struct AgentModeSnapshot: Sendable {
             let hidden = parentHidden || node.hidden == true
             nodes.append(node)
             inheritedHidden.append(hidden)
+            if let button = AgentModeKeyboardDetector.Button(node, inheritedHidden: hidden) {
+                keyboardButtons.append(button)
+            }
             let children = try node.children.map { try collect($0, depth: depth + 1, parentHidden: hidden) }
             return Self.digest(try encoder.encode(NativeFingerprintNode(node, children: children.sorted())))
         }
         let rootFingerprints = try roots.map { try collect($0, depth: 0, parentHidden: false) }
         nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.sorted()))
         self.nodes = nodes
+        self.keyboardButtons = keyboardButtons
         let identities = NativeIdentityIndex(nodes: nodes)
         identityIndex = identities
         let selectors = nodes.map { identities.selector(for: $0, nodes: nodes) }
@@ -81,6 +87,39 @@ struct AgentModeSnapshot: Sendable {
         return nodes[entry.index]
     }
 
+    func match(_ selector: AgentModeTapSelector, type: String?, context: SelectedHIDContext) throws -> FBSimulatorAXNode {
+        let rectangle = try selector.frame?.rectangle(in: context)
+        var matcher = try AgentModeTapMatcher(selector: selector)
+        var matched: FBSimulatorAXNode?
+        for node in nodes {
+            try matcher.checkBudget()
+            if let type, node.type != type { continue }
+            if let rectangle {
+                guard let frame = node.frame,
+                      frame.minX.isFinite, frame.minY.isFinite, frame.width.isFinite, frame.height.isFinite,
+                      frame.width > 0, frame.height > 0, rectangle.contains(frame) else { continue }
+            }
+            let raw: String?
+            switch selector.kind {
+            case .id: raw = node.identifier
+            case .label, .labelContains, .labelRegex: raw = node.label
+            case .value: raw = Self.text(node.value)
+            }
+            guard let raw, try matcher.matches(raw) else { continue }
+            guard matched == nil else {
+                throw AgentModeFailure("targetAmbiguous", "The agent selector matches more than one native target. Narrow the type or frame filter.")
+            }
+            matched = node
+        }
+        try matcher.checkBudget()
+        guard let matched else {
+            throw AgentModeFailure("targetMissing", "The agent selector matches no native target. Refresh the UI or change the query.")
+        }
+        // A frame/pattern never becomes coordinate authority. Native input still needs a unique selector.
+        _ = try uniqueSelector(for: matched)
+        return matched
+    }
+
     func uniqueSelector(for node: FBSimulatorAXNode) throws -> (kind: SelectedAXRequest.SelectorKind, value: String) {
         guard let selector = identityIndex.selector(for: node, nodes: nodes) else {
             throw AgentModeFailure("unsupportedIdentity", "The target has no unique native ID or label. Cached coordinates cannot authorize this action.")
@@ -112,7 +151,9 @@ struct AgentModeSnapshot: Sendable {
             text: page(text, requiresSelector: false), udid: udid,
             applicationPID: applicationPID, context: context,
             rowOffset: request.rowOffset, rowLimit: request.rowLimit, targetCount: targets.count,
-            scrollCount: scroll.count, textCount: text.count, truncated: remaining, expiresInSeconds: expiresIn)
+            scrollCount: scroll.count, textCount: text.count, truncated: remaining, expiresInSeconds: expiresIn,
+            keyboard: AgentModeKeyboardDetector.observe(keyboardButtons,
+                logicalWidth: context.logicalWidth, logicalHeight: context.logicalHeight))
     }
 
     private static func runtimeNode(_ node: FBSimulatorAXNode) -> RuntimeSnapshotNode {
