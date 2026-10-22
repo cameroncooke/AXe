@@ -8,6 +8,8 @@ struct Key: AsyncParsableCommand {
         abstract: "Press a single key by keycode on the simulator.",
         discussion: """
         Press individual keys using their HID keycode values.
+        Agent mode sends one default down/up to a current focused TextField reference.
+        It requires --snapshot-id, --ref and --expected-pid; duration and batch use reject.
         
         Common keycodes:
           40 - Return/Enter
@@ -27,7 +29,7 @@ struct Key: AsyncParsableCommand {
     @Argument(help: "The HID keycode to press (0-255).")
     var keycode: Int
     
-    @Option(name: .customLong("duration"), help: "Duration to hold the key in seconds (optional).")
+    @Option(name: .customLong("duration"), help: "Duration to hold the key in seconds (optional; unavailable with --agent).")
     var duration: Double?
     
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
@@ -35,9 +37,18 @@ struct Key: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
-        try selectedKeyboard.validate(input: selectedInput)
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
+            guard agentMode.elementRef != nil, selectedKeyboard.focusID == nil, duration == nil else {
+                throw ValidationError("Agent key requires --snapshot-id and --ref for an already focused TextField, with no --focus-id or --duration.")
+            }
+        } else {
+            try selectedKeyboard.validate(input: selectedInput)
+        }
         // Validate keycode range
         guard keycode >= 0 && keycode <= 255 else {
             throw ValidationError("Keycode must be between 0 and 255.")
@@ -54,7 +65,18 @@ struct Key: AsyncParsableCommand {
         }
     }
 
+    func agentRequest() throws -> SelectedHIDRequest {
+        let events = try SelectedKeyboardRequest.primitives(from: selectedKeyboardEvent())
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .keyPress,
+            expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID,
+            ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
+    }
+
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
             return

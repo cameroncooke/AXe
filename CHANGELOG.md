@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added standalone `key --agent` for one default key down/up on a current focused TextField reference, with snapshot/PID/focus checks and owned release. Duration, focus-ID overrides and batch use reject; raw and selected key behavior is unchanged. Build and native verification remain pending.
+
 - Added complete `touch --agent --ref` presses and timed holds with fresh native target/hit checks, owned release and snapshot refresh. Coordinate touch behavior is unchanged; partial contacts, retained tokens and batch agent use reject. Build and native verification remain pending.
 
 - Added `shutdown --udid <UUID>` for one simulator through public `simctl`, with confirmed Shutdown state, distinct `alreadyShutdown` output and no all-device alias. This is simulator lifecycle control, not guest lock or power-button input.

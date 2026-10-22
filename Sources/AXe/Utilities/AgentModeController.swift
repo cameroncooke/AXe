@@ -214,7 +214,7 @@ final class AgentModeController {
             } else {
                 let action: RuntimeElementAction
                 switch mode.kind {
-                case .typeText: action = .typeText
+                case .typeText, .keyPress: action = .typeText
                 case .swipe: action = .swipeWithin
                 case .hold: action = .longPress
                 default: action = .tap
@@ -258,6 +258,12 @@ final class AgentModeController {
             plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid, preparation: .automationSession,
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type, holdDuration: mode.duration)
+        case .keyPress:
+            guard let node, let identifier = node.identifier, let events = mode.keyEvents else {
+                throw AgentModeFailure("unsupportedKeyTarget", "A key press requires an exact native focused field ID.")
+            }
+            try SelectedKeyboardFocusPolicy.validate(node, expectedPID: pid, focusID: identifier)
+            plannedKeyboard = SelectedKeyboardRequest(expectedPID: pid, focusID: identifier, events: events)
         case .typeText:
             guard let node, let identifier = node.identifier, let text = mode.text else {
                 throw AgentModeFailure("unsupportedTextTarget", "Typing requires an exact native focused field ID.")

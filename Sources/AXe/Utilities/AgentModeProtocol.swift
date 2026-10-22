@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, keyPress, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -15,6 +15,7 @@ struct AgentModeRequest: Codable, Sendable {
     var tapSelector: AgentModeTapSelector? = nil
     var elementType: String? = nil
     var text: String? = nil
+    var keyEvents: [SelectedKeyboardPrimitive]? = nil
     var direction: RuntimeSwipeDirection? = nil
     var distance: Double = 1
     var destination: SelectedAXPoint? = nil
@@ -36,6 +37,20 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .keyPress {
+            guard let keyEvents, keyEvents.count == 2,
+                  case let .down(code) = keyEvents[0], case let .up(released) = keyEvents[1],
+                  code <= 255, code == released, ref != nil, snapshotID != nil,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, direction == nil, tapStyle == nil,
+                  sinceScreenHash == nil, destination == nil, steps == nil,
+                  duration == 1, preDelay == 0, postDelay == 0, distance == 1,
+                  rowOffset == 0, rowLimit == 64 else {
+                throw AgentModeFailure("invalidKeyPress", "An agent key requires one snapshot/ref and one matching key down/up in 0...255, without other payloads or timing options.")
+            }
+        } else if keyEvents != nil {
+            throw AgentModeFailure("mixedPayload", "Key events apply only to an agent key press.")
         }
         if kind == .hold {
             guard ref != nil, snapshotID != nil, point == nil,

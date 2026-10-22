@@ -69,7 +69,7 @@ axe shutdown --udid "$UDID"
 
 ## Agent mode (experimental)
 
-Add `--agent` to `describe-ui`, `tap`, `type`, `swipe`, `drag` or complete reference `touch` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.
+Add `--agent` to `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key` or complete reference `touch` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.
 
 ```bash
 axe describe-ui --agent --udid "$UDID" --expected-pid "$APP_PID"
@@ -94,9 +94,11 @@ Agent `drag` starts at the fresh native centre of an existing `targets` or `scro
 
 Agent `touch` presses and holds a current element reference with `--down --up`: `axe touch --agent --udid "$UDID" --expected-pid "$APP_PID" --snapshot-id "$SNAPSHOT_ID" --ref e4 --down --up --delay 0.7`. Omit `--delay` for a 0.1-second press; an explicit delay must be finite and in (0,10] seconds. The current native target and point hit are checked before physical input. Existing context-change detection, owned release, cache invalidation and no-replay rules remain. Coordinates, partial down/up, retained tokens, AX preparation and batch use reject. No new pad or slider references are exposed. A requested hold duration does not prove the app's long-press effect. [Feature and verification scope](docs/agent-reference-hold.md).
 
+Agent `key` sends one default key down/up to a current focused TextField reference. For Backspace, use `axe key 42 --agent --udid "$UDID" --expected-pid "$APP_PID" --snapshot-id "$SNAPSHOT_ID" --ref "$FOCUSED_FIELD_REF"`. Keycodes remain 0...255 HID codes. The referenced field must already be focused, enabled and visible, with a unique exact native ID. Snapshot, target, PID, display and per-key focus checks use the existing keyboard owner. Key-up cleanup can release after focus loss. Explicit `--duration`, `--focus-id` and batch use reject; this adds no retained keys, combinations or implicit focus. Raw and selected key routes remain unchanged. Use the replacement capture or refresh after the action; never replay uncertain input. Older brokers reject the new keyPress kind. Focus checks and HID delivery are not atomic recipient control. Build and manual verification remain pending for this source candidate.
+
 Typing keeps the existing US keyboard mapping and 256-byte limit. First tap and inspect the field; it must already be focused. Ref swipes use bounded current element geometry; `up` moves the finger up. Coordinate tap/swipe forms remain available with an agent snapshot, but do not prove an AX recipient. Other commands keep their existing interfaces and do not yet accept `--agent`. The existing native input and touch-release checks remain authoritative.
 
-Keep agent captures within 4096 nodes and depth 64. The same `--row-offset` and `--row-limit` values (`rowOffset` and `rowLimit` in JSON) apply separately to the `targets`, `scroll` and `text` sections, with at most 64 rows per section. Agent typing limits its focused-field read to 512 nodes, depth 32 and 1 MiB of field output; its shared eight-second admission deadline remains unchanged. For nested scrolling, select the innermost scroll area that receives the gesture.
+Keep agent captures within 4096 nodes and depth 64. The same `--row-offset` and `--row-limit` values (`rowOffset` and `rowLimit` in JSON) apply separately to the `targets`, `scroll` and `text` sections, with at most 64 rows per section. Agent typing and key input limit their focused-field read to 512 nodes, depth 32 and 1 MiB of field output; its shared eight-second admission deadline remains unchanged. For nested scrolling, select the innermost scroll area that receives the gesture.
 
 Visible controls without a unique native ID or label remain in the capture with their action marked unavailable. AXe offers `typeText` only for a currently focused native `TextField` with a unique exact ID; otherwise it offers `tap` when a unique native ID or label can resolve the field.
 

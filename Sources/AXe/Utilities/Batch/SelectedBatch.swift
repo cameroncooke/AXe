@@ -91,6 +91,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest(standardInput: standardInput)
         case "key":
             let command = try parse(Key.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             request = try command.selectedKeyboard.request(input: command.selectedInput, event: command.selectedKeyboardEvent())
         case "key-sequence":
             let command = try parse(KeySequence.self, arguments)
