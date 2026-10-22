@@ -69,7 +69,7 @@ The native worker checks the cached screen, current app/display context, slider 
 
 Read `action.slider` for the semantic action count, delivery, endpoint and bounded numeric samples. Zero HID events does not mean zero semantic adjustments. An already reached endpoint can complete with zero actions. Verify the app value and callback separately; native adjustment and the app response are separate operations. Refresh after failure or use the replacement capture after success. Never replay an uncertain action.
 
-Percentage values, selectors, type/preparation overrides, non-default polling and agent batch use reject. Raw percentage sliders and selected selector endpoints keep their behavior. Slider rows do not add tap, drag or hold support. Use matching CLI wire 31 and rebuilt native frameworks; older brokers reject this kind. Build and native verification are pending.
+Percentage values, selectors, type/preparation overrides, non-default polling and agent batch use reject. Raw percentage sliders and selected selector endpoints keep their behavior. Slider rows do not add tap, drag or hold support. Use matching CLI wire 31 and rebuilt native frameworks; older brokers reject this kind. Candidate 05ce8806 passed its build and nine scoped agent subchecks on one v6 outer-portrait Slider, with exact endpoint values and real app callbacks. Six refusals left the app unchanged. The full V2 run remains FAIL on a proof preparation expectation; a separate persisted read supports only retrospective default-selected automation-session compatibility. Other domains, poses, interruptions and percentages remain unproved. See build_products/verification/agent-reference-slider-endpoints-20261022/scoped-acceptance.json.
 
 ## Double-tap a control by its agent reference
 

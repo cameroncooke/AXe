@@ -123,7 +123,7 @@ axe type --file input.txt --udid <UDID>
 printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UUID>
 ```
 
-Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md). Build and native proof are pending.
+Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md). One v6 outer-portrait product-copy plus key101/fresh Paste Button workflow passed exact 22-byte insertion, one callback and release; automatic Paste and other apps remain unproved. Empty-open-stdin signal cancellation passed; running-child cancellation remains unproved.
 
 ## Keyboard
 
