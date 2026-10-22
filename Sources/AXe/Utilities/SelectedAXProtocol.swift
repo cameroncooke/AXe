@@ -56,8 +56,22 @@ enum SelectedTapStyle: String, Codable, Sendable {
     }
 }
 
+struct SelectedAXDoubleTapTiming: Codable, Sendable {
+    let hold: Double
+    let interval: Double
+
+    func validate(preDelay: Double, postDelay: Double) throws {
+        guard hold.isFinite, interval.isFinite, hold > 0, hold <= 10,
+              interval > 0, interval <= 10 else {
+            throw AgentModeFailure("invalidDoubleTapTiming", "Double-tap hold and interval must be finite and in (0,10] seconds.")
+        }
+        try SelectedHIDCompleteGesture.Timing(preDelay: preDelay, postDelay: postDelay)
+            .validate(activeDuration: hold * 2 + interval)
+    }
+}
+
 struct SelectedAXRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, sliderEndpoint, semanticPress }
+    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, semanticPress }
     enum SelectorKind: String, Codable, Sendable { case id, label, value }
     let kind: Kind
     let expectedPID: Int32
@@ -72,6 +86,7 @@ struct SelectedAXRequest: Codable, Sendable {
     var tapStyle: SelectedTapStyle? = nil
     var waitPolicy: SelectedAXWaitPolicy? = nil
     var holdDuration: Double? = nil
+    var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
 
     func validate() throws {
         guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
@@ -84,6 +99,9 @@ struct SelectedAXRequest: Codable, Sendable {
         if kind != .hold, holdDuration != nil {
             throw SelectedHIDFailure.invalid("Only an agent reference hold accepts a hold duration")
         }
+        if kind != .doubleTap, doubleTapTiming != nil {
+            throw SelectedHIDFailure.invalid("Only a reference double-tap accepts double-tap timing")
+        }
         if tapStyle != nil, kind != .tap {
             throw SelectedHIDFailure.invalid("Only an ordinary selected tap accepts a tap style")
         }
@@ -94,8 +112,8 @@ struct SelectedAXRequest: Codable, Sendable {
             try waitPolicy.validate()
         }
         if let elementType {
-            guard kind == .tap || kind == .hold || kind == .sliderEndpoint, !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw SelectedHIDFailure.invalid("Only a selected tap, reference hold or slider endpoint accepts a nonempty element type")
+            guard kind == .tap || kind == .hold || kind == .doubleTap || kind == .sliderEndpoint, !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw SelectedHIDFailure.invalid("Only a selected tap, reference hold, double-tap or slider endpoint accepts a nonempty element type")
             }
         }
         switch kind {
@@ -121,6 +139,13 @@ struct SelectedAXRequest: Codable, Sendable {
                   preDelay == 0, postDelay == 0 else {
                 throw SelectedHIDFailure.invalid("A reference hold requires an exact ID or label, a duration in (0,10] and no other delays")
             }
+        case .doubleTap:
+            guard endpoint == nil, selectorKind == .id || selectorKind == .label,
+                  let selectorValue, !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  let doubleTapTiming else {
+                throw SelectedHIDFailure.invalid("A reference double-tap requires an exact ID or label and complete timing")
+            }
+            try doubleTapTiming.validate(preDelay: preDelay, postDelay: postDelay)
         case .semanticPress:
             guard endpoint == nil, selectorKind == .id, let selectorValue,
                   !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,

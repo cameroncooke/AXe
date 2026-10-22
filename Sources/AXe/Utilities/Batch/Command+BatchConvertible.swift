@@ -169,6 +169,7 @@ extension Swipe: BatchConvertible {
 
 extension Gesture: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
+    var batchAgentModeEnabled: Bool { agentMode.enabled }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
         guard case let .preset(preset) = gesture else {

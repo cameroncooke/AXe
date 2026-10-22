@@ -258,6 +258,15 @@ final class AgentModeController {
             plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid, preparation: .automationSession,
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type, holdDuration: mode.duration)
+        case .doubleTap:
+            guard let node, let timing = mode.doubleTapTiming else {
+                throw AgentModeFailure("missingDoubleTapTarget", "The fresh double-tap target or timing is unavailable.")
+            }
+            let selector = try snapshot.uniqueSelector(for: node)
+            plannedAX = SelectedAXRequest(kind: .doubleTap, expectedPID: pid, preparation: .automationSession,
+                endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
+                preDelay: mode.preDelay, postDelay: mode.postDelay,
+                elementType: node.type, doubleTapTiming: timing)
         case .keyPress, .keyCombo, .keySequence:
             guard let node, let identifier = node.identifier, let events = mode.keyEvents else {
                 throw AgentModeFailure("unsupportedKeyTarget", "Keyboard input requires an exact native focused field ID.")

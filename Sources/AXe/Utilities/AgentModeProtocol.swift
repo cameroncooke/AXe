@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, keyPress, keyCombo, keySequence, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -24,6 +24,7 @@ struct AgentModeRequest: Codable, Sendable {
     var preDelay: Double = 0
     var postDelay: Double = 0
     var tapStyle: SelectedTapStyle? = nil
+    var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
     var rowOffset: Int = 0
     var rowLimit: Int = 64
 
@@ -37,6 +38,18 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .doubleTap {
+            guard ref != nil, snapshotID != nil, let doubleTapTiming,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, keyEvents == nil, direction == nil, tapStyle == nil,
+                  sinceScreenHash == nil, destination == nil, steps == nil,
+                  duration == 1, distance == 1, rowOffset == 0, rowLimit == 64 else {
+                throw AgentModeFailure("invalidDoubleTap", "A reference double-tap requires one snapshot/ref and timing, without other targets or payloads.")
+            }
+            try doubleTapTiming.validate(preDelay: preDelay, postDelay: postDelay)
+        } else if doubleTapTiming != nil {
+            throw AgentModeFailure("mixedPayload", "Double-tap timing applies only to a reference double-tap.")
         }
         if kind == .keyPress {
             guard let keyEvents, keyEvents.count == 2,

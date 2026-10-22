@@ -136,6 +136,8 @@ struct Gesture: AsyncParsableCommand {
         Execute a preset, or one complete gesture on an explicit selected display.
         Selected-only names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
         Double-tap requires -x/-y; rotate also requires --radius/--degrees.
+        With --agent, double-tap instead requires a current --snapshot-id/--ref and --expected-pid.
+        It uses the fresh target point; the app can change between the two taps.
         Two-finger actions require -x/-y/--x2/--y2; hold also requires --hold.
         Two-finger-swipe also requires --end-x/--end-y/--end-x2/--end-y2.
         Both straight paths share duration and delta; either finger may stay still.
@@ -228,8 +230,20 @@ struct Gesture: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("expected-pid"), help: "Agent double-tap only: expected application PID.")
+    var expectedPID: Int32?
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try validateAgentDoubleTap()
+            return
+        }
+        guard expectedPID == nil else {
+            throw ValidationError("--expected-pid requires gesture double-tap --agent.")
+        }
         try selectedInput.validate()
         if let edgeInset {
             guard case let .preset(preset) = gesture else {
@@ -373,7 +387,37 @@ struct Gesture: AsyncParsableCommand {
         }
     }
 
+    private func validateAgentDoubleTap() throws {
+        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
+        guard case .doubleTap = gesture else {
+            throw ValidationError("Gesture agent mode supports double-tap only.")
+        }
+        guard agentMode.elementRef != nil else {
+            throw ValidationError("Agent double-tap requires --snapshot-id and --ref.")
+        }
+        guard centerX == nil, centerY == nil, radius == nil, scale == nil, degrees == nil,
+              secondX == nil, secondY == nil, endX == nil, endY == nil,
+              secondEndX == nil, secondEndY == nil, edgeInset == nil,
+              screenWidth == nil, screenHeight == nil, duration == nil, delta == nil else {
+            throw ValidationError("Agent double-tap accepts a reference and timing only, without coordinates, geometry or dimension overrides.")
+        }
+        try SelectedAXDoubleTapTiming(hold: hold ?? 0.06, interval: interval ?? 0.1)
+            .validate(preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
+    }
+
+    func agentRequest() throws -> SelectedHIDRequest {
+        try validate()
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .doubleTap,
+            expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            preDelay: preDelay ?? 0, postDelay: postDelay ?? 0,
+            doubleTapTiming: .init(hold: hold ?? 0.06, interval: interval ?? 0.1)), input: selectedInput)
+    }
+
     func run() async throws {
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let request: SelectedHIDRequest
             switch gesture {

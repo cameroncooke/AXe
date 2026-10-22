@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 29
+    static let version = 30
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -64,6 +64,9 @@ struct SelectedHIDRequest: Codable, Sendable {
         }
         if ax?.kind == .hold, agentAdmission?.target == nil {
             throw AgentModeFailure("missingHoldAdmission", "A reference hold requires fresh agent target admission.")
+        }
+        if ax?.kind == .doubleTap, agentAdmission?.target == nil {
+            throw AgentModeFailure("missingDoubleTapAdmission", "A reference double-tap requires fresh agent target admission.")
         }
         if let agentAdmission {
             guard operation == .complete, token == nil, agentAdmission.expectedPID > 0,

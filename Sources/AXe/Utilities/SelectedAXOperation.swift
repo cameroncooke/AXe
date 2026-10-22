@@ -134,14 +134,30 @@ enum SelectedAXOperation {
             let point = await operation.point
             result.point = SelectedAXPoint(x: point.x, y: point.y)
             try SelectedAXBounds.validateContent(result)
-            let style = try ax.resolvedTapStyle(target: result.target)
+            let style: SelectedTapStyle?
+            if ax.kind == .doubleTap {
+                style = nil
+            } else {
+                style = try ax.resolvedTapStyle(target: result.target)
+            }
             let guardOwner = SelectedAXSizeGuard(operation: operation, result: result, deadline: deadline,
                 automaticStyle: ax.tapStyle == .automatic ? style : nil, agentAdmission: request.agentAdmission)
             sizeGuard = guardOwner
             let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
                 liveFreshnessProvider: live)
             session = hid
-            let event = try ax.tapEvent(at: point, target: result.target)
+            let event: FBSimulatorHIDEvent
+            if ax.kind == .doubleTap {
+                guard let timing = ax.doubleTapTiming else {
+                    throw SelectedHIDFailure.invalid("Missing reference double-tap timing")
+                }
+                // AX pre/post delays stay outside input, as for the existing target actions.
+                event = try SelectedHIDCompleteGesture.doubleTap(.init(
+                    point: .init(x: point.x, y: point.y), hold: timing.hold, interval: timing.interval))
+                    .event(observation: live.initialObservation)
+            } else {
+                event = try ax.tapEvent(at: point, target: result.target)
+            }
             let receipt = try await hid.execute(event, admissionGuard: guardOwner)
             result = await guardOwner.result
             count = await hid.status().enqueuedEventCount

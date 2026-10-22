@@ -69,6 +69,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest()
         case "gesture":
             let command = try parse(Gesture.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             switch command.gesture {
             case .twoFingerSwipe:
                 throw ValidationError("Two-finger-swipe is not supported in batch steps. Use a standalone selected gesture.")
