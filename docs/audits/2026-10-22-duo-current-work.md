@@ -12,6 +12,14 @@ Retained-touch cleanup passed both checks on unchanged candidate af6bb00b. The r
 
 Independent two-finger paths, simulator shutdown, Siri activation through fresh AX, and normal lock-screen presentation are complete in their separately recorded scope. Apple Pay UI remains unobserved. The batch validation-message fix is integrated in a9a765f8. Its isolated build and seven existing checks passed; native proof showed the explicit command message, no later sentinel input, and one successful ordinary batch tap. Current serial work is one agent-reference key press. [Batch acceptance](/Volumes/Developer/AXe/build_products/verification/batch-validation-message-20261022/acceptance.json). Full display/command coverage, inset scenes, capture transitions, Unicode, sliders, semantic switches and release proof remain open. Earlier sections below retain historical candidates and limits.
 
+## Current isolated checks
+
+The agent-key source106481e0, combined candidate9510b956 / CLI a8c17b81, built and passed42 existing keyboard/batch checks plus four guide checks. It remains unmerged. Native V2 stopped before key input on a selected focus-reader failure. V3 stopped at display discovery. After one Device Hub restart, V4 and fresh E V5 stopped at initial agent screen acquisition. No new key input passed; no cause is established. Each guard recorded no stop/crash and owned cleanup passed. The next isolation compares detailed selected AX receipts from accepted af6bb00b and the key candidate on one boot, with broker teardown between them. [Handoff](/Volumes/Developer/AXe/build_products/verification/agent-reference-key-20261022/verification-handoff.md).
+
+The isolated slider probe compiled and read current50/minimum0/maximum100. It matched generic/native PID, token, Slider role33, frame, display and window before its saved record stopped at the geometry-read phase. The child exited0 without final stdout, so geometry/session completion is unaccepted. Independent persisted app readback shows no changed controls or input; guard peak14.99 GiB, no stop/crash, deviceShutdown confirmed. One tool-only checkpoint repair is being reviewed; no library edit or slider action was made. [Original run](/Volumes/Developer/AXe/build_products/verification/slider-geometry-20261022/proof-v1/verification.json).
+
+Unicode remains a proposal for an explicit clipboard paste route. The compared source stages UTF-8 and uses the native Paste menu. Clipboard sharing and exact destination/focus proof remain unverified; no host or simulator clipboard content was read or written in this study.
+
 ## Source and accepted work
 
 | Scope | Current position | Recorded verification |
