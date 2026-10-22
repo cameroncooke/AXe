@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 23
+    static let version = 24
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -22,9 +22,21 @@ struct SelectedHIDRequest: Codable, Sendable {
     var rotation: SelectedRotationRequest? = nil
     var agent: AgentModeRequest? = nil
     var agentAdmission: AgentModeAdmission? = nil
+    var expectedContext: SelectedHIDContext? = nil
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if let expectedContext {
+            guard operation == .complete, token == nil, !primitives.isEmpty,
+                  path == nil, pinch == nil, gesture == nil, ax == nil, hinge == nil,
+                  keyboard == nil, home == nil, button == nil, rotation == nil,
+                  agent == nil, agentAdmission == nil,
+                  expectedContext.screenID == screenID,
+                  UUID(uuidString: expectedContext.screenUUID) == screenUUID else {
+                throw SelectedHIDFailure.invalid("Expected context requires one complete primitive request on its measured display")
+            }
+            try expectedContext.validate()
+        }
         if let agent {
             try agent.validate()
             guard agentAdmission == nil, operation == .complete, token == nil,
@@ -248,6 +260,23 @@ struct SelectedHIDContext: Codable, Sendable, Equatable {
         nativePixelHeight = value.displayContext.nativePixelSize.height
         scale = value.displayContext.scale
         poseRevision = value.poseRevision
+    }
+
+    func validate() throws {
+        guard !bootIdentity.isEmpty, bootIdentity.utf8.count <= 256,
+              !poseRevision.isEmpty, poseRevision.utf8.count <= 4096,
+              UUID(uuidString: screenUUID) != nil,
+              let rotation = FBSimulatorHIDDisplayRotation(rawValue: rotationDegrees) else {
+            throw SelectedHIDFailure.invalid("Invalid expected input context identity or rotation")
+        }
+        let display = try FBSimulatorHIDDisplayContext(
+            hidTarget: UInt64(screenID),
+            nativePixelSize: CGSize(width: nativePixelWidth, height: nativePixelHeight),
+            scale: scale, rotation: rotation
+        )
+        guard display.logicalSize == CGSize(width: logicalWidth, height: logicalHeight) else {
+            throw SelectedHIDFailure.invalid("Expected input context has inconsistent logical geometry")
+        }
     }
 }
 

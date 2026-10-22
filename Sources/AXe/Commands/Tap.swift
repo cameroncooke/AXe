@@ -249,6 +249,9 @@ struct Tap: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
+        let duoContext = try await LegacyDuoTap.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+        )
         let resolution: TapResolution
         let resolvedDescription: String
 
@@ -286,6 +289,20 @@ struct Tap: AsyncParsableCommand {
 
         logger.info().log("Tapping at \(resolvedDescription)")
 
+        if let duoContext {
+            try await LegacyDuoTap.perform(
+                at: resolution.point, style: resolvedTapStyle(for: resolution), context: duoContext,
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger
+            )
+        } else {
+            try await performLegacyTap(resolution: resolution, logger: logger)
+        }
+
+        logger.info().log("Tap completed successfully")
+        print("✓ Tap at \(resolvedDescription) completed successfully")
+    }
+
+    private func performLegacyTap(resolution: TapResolution, logger: AxeLogger) async throws {
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: resolution.point,
             for: simulatorUDID,
@@ -319,8 +336,6 @@ struct Tap: AsyncParsableCommand {
             throw CLIError(errorDescription: "Unexpected tap style resolution.")
         }
 
-        logger.info().log("Tap completed successfully")
-        print("✓ Tap at \(resolvedDescription) completed successfully")
     }
 
     private func resolvedTapStyle(for resolution: TapResolution) -> TapStyle {

@@ -74,6 +74,9 @@ final class SelectedHIDOwner {
         var beforeCount = 0
         var buttonExecution: SelectedButtonExecutionEvidence?
         do {
+            if request.expectedContext != nil, session != nil {
+                throw SelectedHIDFailure.invalid("Context-bound input requires a fresh complete session")
+            }
             if session == nil { try await open(request) }
             guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned session") }
             beforeCount = await session.status().enqueuedEventCount
@@ -211,6 +214,9 @@ final class SelectedHIDOwner {
             screenID: display.id, screenUniqueID: display.uuid)
         self.feed = feed
         observation = feed.initialObservation
+        if let expected = request.expectedContext, expected != SelectedHIDContext(feed.initialObservation) {
+            throw SelectedHIDFailure.invalid("Measured Duo tap context changed before input")
+        }
         try request.home?.validate(observation: feed.initialObservation)
         try request.button?.validate(observation: feed.initialObservation)
         session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation, liveFreshnessProvider: feed)
