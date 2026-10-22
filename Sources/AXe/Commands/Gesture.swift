@@ -139,6 +139,7 @@ struct Gesture: AsyncParsableCommand {
         Two-finger actions require -x/-y/--x2/--y2; hold also requires --hold.
         Two-finger-swipe also requires --end-x/--end-y/--end-x2/--end-y2.
         Both straight paths share duration and delta; either finger may stay still.
+        Contacts must remain distinct at the same time; crossing at different times is allowed.
         Two-finger-swipe is standalone only; batch rejects it.
         Edge presets accept --edge-inset for the start only (default 20 logical points).
         The opposite endpoint remains 20 points from its edge. No Back action is inferred.

@@ -6773,10 +6773,10 @@ index 0000000000000000000000000000000000000000..a127a4b315ab4abe73936d82e3ae5e3e
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift b/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..679ff6a67d3bb19cc647b2fd8edbb3bbc805d332
+index 0000000000000000000000000000000000000000..b9419cab66b41e7c76613477baedc88359bb28b2
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDGesture.swift
-@@ -0,0 +1,173 @@
+@@ -0,0 +1,190 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -6788,6 +6788,7 @@ index 0000000000000000000000000000000000000000..679ff6a67d3bb19cc647b2fd8edbb3bb
 +        case invalidSpacing
 +        case invalidGeometry
 +        case excessiveSegments
++        case coincidentContacts
 +    }
 +
 +    public static let maximumSegments = 4096
@@ -6862,6 +6863,22 @@ index 0000000000000000000000000000000000000000..679ff6a67d3bb19cc647b2fd8edbb3bb
 +        let points = [firstStart, firstEnd, secondStart, secondEnd]
 +        guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else {
 +            throw ConstructionError.invalidGeometry
++        }
++        // The relative segment reaches the origin only when both contacts share a point at the same time.
++        let startDX = firstStart.x - secondStart.x
++        let startDY = firstStart.y - secondStart.y
++        let endDX = firstEnd.x - secondEnd.x
++        let endDY = firstEnd.y - secondEnd.y
++        let firstProduct = startDX * endDY
++        let secondProduct = startDY * endDX
++        let determinant = firstProduct - secondProduct
++        guard [startDX, startDY, endDX, endDY, firstProduct, secondProduct, determinant].allSatisfy(\.isFinite) else {
++            throw ConstructionError.invalidGeometry
++        }
++        let spansOriginX = min(startDX, endDX) <= 0 && max(startDX, endDX) >= 0
++        let spansOriginY = min(startDY, endDY) <= 0 && max(startDY, endDY) >= 0
++        guard determinant != 0 || !spansOriginX || !spansOriginY else {
++            throw ConstructionError.coincidentContacts
 +        }
 +        let distance = max(hypot(firstEnd.x - firstStart.x, firstEnd.y - firstStart.y),
 +                           hypot(secondEnd.x - secondStart.x, secondEnd.y - secondStart.y))

@@ -14,7 +14,7 @@ axe gesture two-finger-swipe --udid "$UDID" --input-mode selected \
   --duration 0.6 --delta 5
 ```
 
-Both contacts begin together, follow independent straight paths on one timeline and release together. Either path may remain stationary. Finger order stays fixed throughout the event. This is not a curved path, retained-contact operation or recognition guarantee. Batch steps and agent mode do not support this new gesture. Commands without selected options keep their existing behavior.
+Both contacts begin together, follow independent straight paths on one timeline and release together. Either path may remain stationary. Finger order stays fixed throughout the event. Simultaneous coincident logical positions reject before event construction, including collisions between samples. Spatial crossings at different times remain allowed. Relative differences and products must remain finite; native preflight still checks display bounds. This is not a curved path, retained-contact operation or recognition guarantee. Batch steps and agent mode do not support this new gesture. Commands without selected options keep their existing behavior.
 
 Duration is finite and in (0,10] seconds, default 0.6. Delta is finite and in (0,200] logical points, default 5. Each pre/post delay is in [0,10] seconds; duration plus delays is at most 20 seconds. The longer path determines one shared segment count, at most 500. The complete expanded gesture is limited to 1024 events. The native preflight checks every point against the fresh selected display before input. Endpoints and all start coordinates are required. Radius, scale, degrees, hold, interval, edge inset and dimension overrides reject.
 
@@ -28,4 +28,4 @@ Selected wire 27 rejects wire 26 and older requests. The new associated gesture 
 
 ## Verification limit
 
-No build or simulator input has run against this candidate. Required native proof is one asymmetric two-path action with separate contact identities and exact endpoints, one stationary-finger action, and normal fold/rotation interruption followed by complete pair release and a fresh named tap. Use the existing visible fixture, resource guard and saved contact readback. Existing gesture checks must also cover the unchanged pinch/rotation event shape. No new verification suite or hidden app route is added.
+No build or simulator input has run against this candidate. Required native proof is one asymmetric two-path action with separate contact identities and exact endpoints, one stationary-finger action, and normal fold interruption followed by complete pair release and a fresh named tap. Existing shared-session rotation evidence remains separate; no new rotation matrix is required unless a failure appears. Use the existing visible fixture, resource guard and saved contact readback. Existing gesture checks must also cover the unchanged pinch/rotation event shape. No new verification suite or hidden app route is added.
