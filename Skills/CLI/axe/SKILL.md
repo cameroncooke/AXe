@@ -79,7 +79,7 @@ Use `axe button <side-button|siri|lock|apple-pay> --udid <UDID> --input-mode sel
 
 Typed `button.kind` and execution/cleanup evidence confirm transport only. Siri, Lock and side-button use two primitives. Apple Pay uses the existing native two-side-press adaptation: four primitives, a 0.15-second gap, and half the supplied duration per hold. Home keeps its `home` result. No receipt proves Siri, payment UI, secure lock, wake or power state. Final context failure can follow an effect; never replay uncertain input or use a fallback button.
 
-Selected batch steps use the same names, guards and exact count/release checks. Raw routes stay unchanged. Wire 30 selects a separate broker endpoint; wire 29 rejects. New selected Siri/Lock/Apple Pay build and native proof remain pending.
+Selected batch steps use the same names, guards and exact count/release checks. Raw routes stay unchanged. Wire 30 selects a separate broker endpoint; wire 29 rejects. The isolated build, 153 existing checks and scoped native delivery/release checks passed. Selected Siri UI and Wallet UI remain unproved. See docs/audits/2026-10-22-duo-current-work.md.
 
 ## Selected batch steps
 
