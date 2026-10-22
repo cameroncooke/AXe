@@ -51,6 +51,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed no-flag iPhone Duo swipes and drags missing the inner display in landscape. Both now use measured display context and their existing event factories, with host pre/post waits, logical coordinates and normal output. A Duo-only limit rejects paths above 100,000 movement steps before allocation; drag retains its 1...1,000-step limit. Selected wire 25 rejects old wire 24 requests.
+
 - Fixed no-flag iPhone Duo taps missing the inner display in landscape by using measured active-display context. Logical coordinates, legacy selectors/styles, waits/delays and plain text output remain; other-device routes are unchanged. Selected wire 24 rejects old wire 23 requests.
 
 - Fixed Homebrew installations omitting the selected-screen helper. The formula now installs and signs `cadisplay-context`; release checks require the helper in the package.

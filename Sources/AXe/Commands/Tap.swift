@@ -249,7 +249,7 @@ struct Tap: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
-        let duoContext = try await LegacyDuoTap.captureContext(
+        let duoContext = try await LegacyDuoInput.captureContext(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
         )
         let resolution: TapResolution
@@ -290,7 +290,7 @@ struct Tap: AsyncParsableCommand {
         logger.info().log("Tapping at \(resolvedDescription)")
 
         if let duoContext {
-            try await LegacyDuoTap.perform(
+            try await LegacyDuoInput.perform(
                 at: resolution.point, style: resolvedTapStyle(for: resolution), context: duoContext,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger
             )

@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Only positive-wait taps use this scope. The caller owns the socket and must
+/// Agent actions, waiting taps and legacy Duo paths use this scope. The caller must
 /// keep it open until run returns, after both child tasks have finished.
 @MainActor
 enum SelectedHIDClientLifetime {

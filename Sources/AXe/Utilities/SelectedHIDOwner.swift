@@ -83,7 +83,12 @@ final class SelectedHIDOwner {
             let receipt: FBSimulatorHIDSessionReceipt
             switch request.operation {
             case .complete:
-                let event = try request.completeEvent(observation: observation)
+                let event: FBSimulatorHIDEvent
+                if let path = request.legacyPath {
+                    event = try path.event(logicalSize: observation.displayContext.logicalSize)
+                } else {
+                    event = try request.completeEvent(observation: observation)
+                }
                 _ = try FBSimulatorHIDSession.preflight(event, observation: observation)
                 receipt = try await session.execute(event)
             case .begin:
@@ -209,13 +214,22 @@ final class SelectedHIDOwner {
         guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }), simulator.state == .booted else {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
+        if request.legacyPath != nil {
+            guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
+                throw SelectedHIDFailure.invalid("Legacy Duo paths require the verified Duo device profile")
+            }
+            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
+            guard capability.hinge == .supported else {
+                throw SelectedHIDFailure.invalid(capability.reason)
+            }
+        }
         let display = try request.selectedDisplay()
         let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
             screenID: display.id, screenUniqueID: display.uuid)
         self.feed = feed
         observation = feed.initialObservation
         if let expected = request.expectedContext, expected != SelectedHIDContext(feed.initialObservation) {
-            throw SelectedHIDFailure.invalid("Measured Duo tap context changed before input")
+            throw SelectedHIDFailure.invalid("Measured Duo input context changed before input")
         }
         try request.home?.validate(observation: feed.initialObservation)
         try request.button?.validate(observation: feed.initialObservation)
