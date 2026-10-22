@@ -101,7 +101,7 @@ final class AgentModeController {
             let result = await owner.perform(native)
             action = AgentModeActionReceipt(kind: mode.kind, outcome: result.outcome,
                 enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
-                quarantine: result.quarantine)
+                quarantine: result.quarantine, slider: result.ax?.slider)
             guard result.error == nil, result.cleanup != "uncertain" else {
                 return failure(request, AgentModeFailure("nativeActionFailed", result.error ?? "Native cleanup is uncertain."),
                                native: result, action: action)
@@ -211,6 +211,8 @@ final class AgentModeController {
             let original: FBSimulatorAXNode
             if mode.kind == .drag {
                 original = try cached.snapshot.dragNode(ref: ref)
+            } else if mode.kind == .sliderEndpoint {
+                original = try cached.snapshot.sliderNode(ref: ref)
             } else {
                 let action: RuntimeElementAction
                 switch mode.kind {
@@ -267,6 +269,14 @@ final class AgentModeController {
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: mode.preDelay, postDelay: mode.postDelay,
                 elementType: node.type, doubleTapTiming: timing)
+        case .sliderEndpoint:
+            guard let node, node.type == "Slider", let endpoint = mode.sliderEndpoint else {
+                throw AgentModeFailure("missingSliderTarget", "The fresh slider target or endpoint is unavailable.")
+            }
+            let selector = try snapshot.uniqueSelector(for: node)
+            plannedAX = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: pid, preparation: .automationSession,
+                endpoint: endpoint, selectorKind: selector.kind, selectorValue: selector.value,
+                preDelay: 0, postDelay: 0, elementType: node.type)
         case .keyPress, .keyCombo, .keySequence:
             guard let node, let identifier = node.identifier, let events = mode.keyEvents else {
                 throw AgentModeFailure("unsupportedKeyTarget", "Keyboard input requires an exact native focused field ID.")

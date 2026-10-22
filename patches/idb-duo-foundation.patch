@@ -4810,10 +4810,10 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2
  }
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
 new file mode 100644
-index 000000000..8275a90d5
+index 000000000..158d65c47
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
-@@ -0,0 +1,432 @@
+@@ -0,0 +1,462 @@
 +import AppKit
 +import Foundation
 +
@@ -4907,6 +4907,15 @@ index 000000000..8275a90d5
 +  public let callReturnedUptime: Double
 +  public let guestAcknowledged: Bool
 +}
++
++/// Optional reference admission. Runs synchronously while the AX worker owns the native handle.
++/// Existing selector callers omit it. A guard must not perform input or escape platform handles.
++public protocol FBSimulatorSliderAdmissionGuard: Sendable {
++  func validateScreen(_ roots: [FBSimulatorAXNode], observation: FBSimulatorHIDSessionObservation,
++    allowingValueChange: Bool) throws
++  func validateTarget(_ capabilities: FBSimulatorSliderCapabilities, allowingValueChange: Bool) throws
++}
++
 +public protocol FBSimulatorSliderEndpointBackend: Sendable {
 +  func prepare(operationID: UUID, deadline: Double) async throws
 +  func finish(operationID: UUID) async
@@ -4999,6 +5008,8 @@ index 000000000..8275a90d5
 +  private let elementType: String?
 +  private let pid: Int32
 +  private let preparation: FBSimulatorAXPreparation
++  private let admissionGuard: (any FBSimulatorSliderAdmissionGuard)?
++  private var adjustmentReturned = false
 +  private var operationID: UUID?
 +  private var live: FBSimulatorHIDNativeFreshnessProvider?
 +  private var phases: [FBSimulatorSliderPhaseEvent] = []
@@ -5012,30 +5023,37 @@ index 000000000..8275a90d5
 +
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, identifier: String, expectedPID: Int32,
-+    preparation: FBSimulatorAXPreparation = .automationSession) {
++    preparation: FBSimulatorAXPreparation = .automationSession,
++    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
 +    self.selection = .identifier(identifier); self.pid = expectedPID; self.preparation = preparation
 +    self.elementType = nil
++    self.admissionGuard = admissionGuard
 +  }
 +
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, identifier: String, expectedPID: Int32,
-+    elementType: String?, preparation: FBSimulatorAXPreparation = .automationSession) {
++    elementType: String?, preparation: FBSimulatorAXPreparation = .automationSession,
++    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
 +    self.selection = .identifier(identifier); self.pid = expectedPID; self.preparation = preparation
 +    self.elementType = elementType
++    self.admissionGuard = admissionGuard
 +  }
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, label: String, expectedPID: Int32,
-+    elementType: String? = nil, preparation: FBSimulatorAXPreparation = .automationSession) {
++    elementType: String? = nil, preparation: FBSimulatorAXPreparation = .automationSession,
++    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
 +    self.selection = .label(label); self.pid = expectedPID; self.preparation = preparation
 +    self.elementType = elementType
++    self.admissionGuard = admissionGuard
 +  }
 +
 +  public func prepare(operationID: UUID, deadline: Double) async throws {
 +    guard self.operationID == nil else { throw FBSimulatorSliderError.busy }
 +    self.operationID = operationID
++    adjustmentReturned = false
 +    phases = []
 +    diagnosticOperationID = operationID
 +    phase("backend-ownership-start")
@@ -5083,7 +5101,9 @@ index 000000000..8275a90d5
 +    let (token, feed) = try boundFeed(deadline: deadline)
 +    phase("backend-target-read-start")
 +    let result = try await FBSimulatorAXWorker.shared.sliderOperation(for: simulator, observation: observation,
-+      feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType, deadline: deadline, action: nil, expected: nil)
++      feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
++      deadline: deadline, action: nil, expected: nil, admissionGuard: admissionGuard,
++      allowingValueChange: adjustmentReturned)
 +    phase("backend-target-read-returned")
 +    return result
 +  }
@@ -5107,7 +5127,10 @@ index 000000000..8275a90d5
 +      try FBSimulatorSliderEndpointController.check(deadline)
 +      phase("backend-action-target-and-dispatch-start")
 +      let verified = try await FBSimulatorAXWorker.shared.sliderOperation(for: simulator, observation: observation,
-+        feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType, deadline: deadline, action: action, expected: expected)
++        feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
++        deadline: deadline, action: action, expected: expected, admissionGuard: admissionGuard,
++        allowingValueChange: adjustmentReturned)
++      adjustmentReturned = true
 +      phase("backend-action-target-and-dispatch-returned")
 +      return FBSimulatorSliderActionReceipt(action: action, verifiedBeforeAction: verified, callStartedUptime: started,
 +        callReturnedUptime: ProcessInfo.processInfo.systemUptime, guestAcknowledged: false)
@@ -5178,7 +5201,9 @@ index 000000000..8275a90d5
 +
 +  func sliderOperation(for simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    feed: FBSimulatorHIDNativeFreshnessProvider, token: UUID, selection: FBSimulatorSliderSelection, expectedPID: Int32,
-+    elementType: String?, deadline: Double, action: FBSimulatorSliderAction?, expected: FBSimulatorSliderCapabilities?) async throws -> FBSimulatorSliderCapabilities {
++    elementType: String?, deadline: Double, action: FBSimulatorSliderAction?, expected: FBSimulatorSliderCapabilities?,
++    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil,
++    allowingValueChange: Bool = false) async throws -> FBSimulatorSliderCapabilities {
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    guard !selection.text.isEmpty, expectedPID > 0 else { throw FBSimulatorSliderError.invalidSelection }
 +    try feed.validateCurrentRevision(expected: observation)
@@ -5193,6 +5218,8 @@ index 000000000..8275a90d5
 +    guard !snapshot.roots.isEmpty, snapshot.roots.allSatisfy({ $0.pid == expectedPID }) else {
 +      throw FBSimulatorSliderError.invalidSelection
 +    }
++    try admissionGuard?.validateScreen(snapshot.roots, observation: observation,
++      allowingValueChange: allowingValueChange)
 +    let node = try FBSimulatorSliderTargetSelection.resolve(roots: snapshot.roots,
 +      selection: selection, expectedPID: expectedPID, elementType: elementType)
 +    let selected = try root.findSliderElement(matching: selection, depth: 64, deadline: deadline)
@@ -5216,11 +5243,13 @@ index 000000000..8275a90d5
 +        node: node, raw: raw, geometryStatus: "unknown")
 +    }
 +    let treeValue = try capabilities(node)
++    try admissionGuard?.validateTarget(treeValue, allowingValueChange: allowingValueChange)
 +    // Both selectors bind every sample to the actual owned root, never a descendant.
 +    let currentSnapshot = try serialize(selected, observation: observation, remoteContentOptions: nil)
 +    let currentNode = try FBSimulatorSliderTargetSelection.ownedRoot(roots: currentSnapshot.roots,
 +      selection: selection, expectedPID: expectedPID, elementType: elementType)
 +    let value = try capabilities(currentNode)
++    try admissionGuard?.validateTarget(value, allowingValueChange: allowingValueChange)
 +    try value.requireSameTarget(as: treeValue, includeValue: true)
 +    try feed.validateCurrentRevision(expected: observation)
 +    try FBSimulatorSliderEndpointController.check(deadline)
@@ -5234,6 +5263,7 @@ index 000000000..8275a90d5
 +    let final = try capabilities(finalNode)
 +    try final.requireSameTarget(as: expected, includeValue: true)
 +    guard final.raw.declaredActions.contains(action.declaredName) else { throw FBSimulatorSliderError.unsupportedAction }
++    try admissionGuard?.validateTarget(final, allowingValueChange: allowingValueChange)
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    try feed.validateCurrentRevision(expected: observation)
 +    // Native action returns void: a return is not an app acknowledgment.

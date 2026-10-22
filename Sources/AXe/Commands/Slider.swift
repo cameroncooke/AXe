@@ -4,7 +4,8 @@ import FBSimulatorControl
 
 struct Slider: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Set a slider to a deterministic value from 0 to 100 using accessibility selector targeting."
+        abstract: "Set a slider percentage, or move to a verified native endpoint.",
+        discussion: "Agent mode requires a current slider snapshot/ref, --expected-pid and --endpoint minimum or maximum. It does not accept percentage values or selectors."
     )
 
     private static let directDragSteps = 120
@@ -31,11 +32,12 @@ struct Slider: AsyncParsableCommand {
     @Option(name: [.customLong("value")], help: "Target slider value as a percentage from 0 to 100.")
     var value: Double?
 
-    @Option(name: .customLong("endpoint"), help: "Selected AX only: minimum or maximum of the verified native slider domain.")
+    @Option(name: .customLong("endpoint"), help: "Selected AX or agent mode: minimum or maximum of the verified native slider domain.")
     var endpoint: SelectedSliderEndpoint?
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
+    @OptionGroup var agentMode: AgentModeOptions
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the slider before failing (0 = no waiting, default).")
     var waitTimeout: Double = 0
@@ -47,6 +49,16 @@ struct Slider: AsyncParsableCommand {
     var simulatorUDID: String
 
     func validate() throws {
+        try agentMode.validate()
+        if agentMode.enabled {
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            guard agentMode.elementRef != nil, endpoint != nil,
+                  elementID == nil, elementLabel == nil, elementType == nil, value == nil,
+                  selectedAX.preparation == nil, waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Agent slider requires --snapshot-id, --ref and --endpoint, with no selector, percentage, preparation or polling overrides.")
+            }
+            return
+        }
         try selectedInput.validate()
         try selectedAX.validate(required: selectedInput.mode == .selected)
         if selectedInput.mode == .selected {
@@ -92,6 +104,13 @@ struct Slider: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if agentMode.enabled {
+            try validate()
+            let mode = AgentModeRequest(kind: .sliderEndpoint, expectedPID: selectedAX.expectedPID,
+                snapshotID: agentMode.snapshotID, ref: agentMode.elementRef, sliderEndpoint: endpoint?.libraryValue)
+            try AgentModeCommandAdapter.send(AgentModeCommandAdapter.request(mode, input: selectedInput), simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))

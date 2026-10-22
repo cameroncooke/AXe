@@ -55,16 +55,17 @@ enum SelectedAXOperation {
                     throw SelectedHIDFailure.invalid("Missing selected slider endpoint or selector")
                 }
                 try SelectedSliderResult.validateCapacity(result: result, context: SelectedHIDContext(live.initialObservation))
+                let sliderAdmission = try request.agentAdmission.map(AgentModeSliderAdmission.init)
                 let backend: FBSimulatorSliderBackend
                 switch ax.selectorKind {
                 case .id:
                     backend = FBSimulatorSliderBackend(simulator: simulator, observation: live.initialObservation,
                         freshnessProvider: live, identifier: selectorValue, expectedPID: ax.expectedPID,
-                        elementType: ax.elementType, preparation: ax.preparation.libraryValue)
+                        elementType: ax.elementType, preparation: ax.preparation.libraryValue, admissionGuard: sliderAdmission)
                 case .label:
                     backend = FBSimulatorSliderBackend(simulator: simulator, observation: live.initialObservation,
                         freshnessProvider: live, label: selectorValue, expectedPID: ax.expectedPID,
-                        elementType: ax.elementType, preparation: ax.preparation.libraryValue)
+                        elementType: ax.elementType, preparation: ax.preparation.libraryValue, admissionGuard: sliderAdmission)
                 default:
                     throw SelectedHIDFailure.invalid("Selected slider requires an ID or label")
                 }

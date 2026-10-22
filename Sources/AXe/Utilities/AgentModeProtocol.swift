@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -25,6 +25,7 @@ struct AgentModeRequest: Codable, Sendable {
     var postDelay: Double = 0
     var tapStyle: SelectedTapStyle? = nil
     var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
+    var sliderEndpoint: FBSimulatorSliderEndpoint? = nil
     var rowOffset: Int = 0
     var rowLimit: Int = 64
 
@@ -38,6 +39,18 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .sliderEndpoint {
+            guard ref != nil, snapshotID != nil, sliderEndpoint != nil,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, keyEvents == nil, direction == nil, tapStyle == nil,
+                  doubleTapTiming == nil, sinceScreenHash == nil, destination == nil, steps == nil,
+                  duration == 1, preDelay == 0, postDelay == 0, distance == 1,
+                  rowOffset == 0, rowLimit == 64 else {
+                throw AgentModeFailure("invalidSliderEndpoint", "An agent slider endpoint requires one snapshot/ref and minimum or maximum, without other targets, payloads or timing options.")
+            }
+        } else if sliderEndpoint != nil {
+            throw AgentModeFailure("mixedPayload", "Slider endpoints apply only to a reference slider action.")
         }
         if kind == .doubleTap {
             guard ref != nil, snapshotID != nil, let doubleTapTiming,
@@ -248,6 +261,7 @@ struct AgentModeActionReceipt: Codable, Sendable {
     let cleanup: String
     let replayed: Bool
     let quarantine: SelectedHIDQuarantine?
+    var slider: SelectedSliderResult? = nil
 }
 
 struct AgentModeCacheState: Codable, Sendable {

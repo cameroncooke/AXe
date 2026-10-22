@@ -83,6 +83,38 @@ struct AgentModeSnapshot: Sendable {
         return target
     }
 
+    func sliderNode(ref: String) throws -> FBSimulatorAXNode {
+        guard let index = referenceIndices[ref], isSliderTarget(at: index) else {
+            throw AgentModeFailure("unsupportedSliderReference", "A slider endpoint requires a visible, enabled Slider reference with a unique native ID or label.")
+        }
+        return nodes[index]
+    }
+
+    func sliderNode(kind: SelectedAXRequest.SelectorKind, value: String) throws -> FBSimulatorAXNode {
+        guard let entry = identityIndex.entry(kind: kind, value: value, type: "Slider"), entry.count == 1 else {
+            throw AgentModeFailure("unsupportedSliderReference", "The native slider selector no longer identifies one Slider.")
+        }
+        return try sliderNode(ref: elements[entry.index].ref)
+    }
+
+    private func isSliderTarget(at index: Int) -> Bool {
+        let node = nodes[index]
+        guard node.type == "Slider", node.enabled == true, node.hidden == false,
+              elements[index].state.visible, selectors[index] != nil, let frame = node.frame else { return false }
+        return [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite)
+            && frame.width > 0 && frame.height > 0
+    }
+
+    private func targetRows() -> [RuntimeSnapshotRow] {
+        let targets = RuntimeSnapshotCompactor.targets(in: elements, limit: Self.maximumElements)
+        let targetRefs = Set(targets.map { $0.element.ref })
+        let sliders = elements.indices.compactMap { index -> RuntimeSnapshotRow? in
+            guard isSliderTarget(at: index), !targetRefs.contains(elements[index].ref) else { return nil }
+            return RuntimeSnapshotCompactor.row(elements[index], action: "sliderEndpoint")
+        }
+        return targets + sliders
+    }
+
     func resolve(_ original: FBSimulatorAXNode) throws -> FBSimulatorAXNode {
         let selector = try uniqueSelector(for: original)
         return try match(kind: selector.kind, value: selector.value, type: original.type)
@@ -140,7 +172,7 @@ struct AgentModeSnapshot: Sendable {
     func capture(id: UUID, sequence: Int, udid: String, request: AgentModeRequest,
                  applicationPID: Int32, context: SelectedHIDContext,
                  unchanged: Bool, expiresIn: Double) -> AgentModeCapture {
-        let targets = RuntimeSnapshotCompactor.targets(in: elements, limit: Self.maximumElements)
+        let targets = targetRows()
         let scroll = RuntimeSnapshotCompactor.scrollAreas(in: elements, limit: Self.maximumElements)
         let text = RuntimeSnapshotCompactor.text(in: elements, limit: Self.maximumElements)
         func page(_ rows: [RuntimeSnapshotRow], requiresSelector: Bool) -> [String] {

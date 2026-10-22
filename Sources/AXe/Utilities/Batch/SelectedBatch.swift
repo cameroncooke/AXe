@@ -57,6 +57,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest()
         case "slider":
             let command = try parse(Slider.self, arguments)
+            guard !command.agentMode.enabled else {
+                throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
+            }
             request = try command.selectedRequest()
         case "swipe":
             let command = try parse(Swipe.self, arguments)
