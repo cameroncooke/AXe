@@ -1,5 +1,52 @@
 # iPhone Duo implementation checklist
 
+## Product checklist
+
+Each checkbox is one product outcome. Done applies only to the stated scope. Full Duo support remains incomplete. Prepared small additions come first in each list. Larger fixes and new capabilities follow; Cam can change the order.
+
+### Duo simulator support
+
+- [x] **Set closed, tabletop or open by name — Done.** The simulator reached and reported 0, 90 and 180 degrees. Merged into main in a32551b5. This controls the hinge; read the current screen before input. [Evidence](/Volumes/Developer/AXe/build_products/verification/named-hinge-20261022/main-candidate/native-proof/result.json).
+- [x] **Set a numeric hinge angle — Done for recorded angles.** Control how far the phone is folded and read its measured position. Wider transition combinations remain open. [Evidence](audits/2026-10-21-duo-parallel-work.md).
+- [x] **Fix taps after rotation — Done.** Find and tap the same Button in every supported phone position. Wider control types remain open. [Evidence](/Volumes/Developer/AXe/build_products/verification/rotation-capability-20261020/integrated-result.json).
+- [x] **Fix swipes after rotation — Done.** Default swipes use the current display in every supported position. Merged in e9f12719. [Evidence](/Volumes/Developer/AXe/build_products/verification/legacy-paths-20261022/native-acceptance.md).
+- [x] **Fix drags after rotation — Done.** Default drags reach the intended place in every supported position. Merged in e9f12719. [Evidence](/Volumes/Developer/AXe/build_products/verification/legacy-paths-20261022/native-acceptance.md).
+- [x] **Stop old touches when the phone folds or turns — Done for accepted paths.** Tested swipes and drags stop, release the finger and permit a fresh tap. [Evidence](/Volumes/Developer/AXe/build_products/verification/legacy-paths-20261022/main-acceptance.json).
+- [ ] **Choose the inner or outer display — In progress.** Target the intended display. Explicit selection works for supported input commands; wider command coverage remains.
+- [ ] **Keep existing typing options working on Duo — In progress.** Preserve text, file and keyboard-shortcut input. Wider field, option and cancellation checks remain.
+- [ ] **Lock the phone — Needs check.** Confirm a real locked state; a wallpaper change is insufficient.
+- [ ] **Wake the phone — Needs check.** Confirm that the phone returns to an active screen.
+- [ ] **Open Siri — Needs check.** Confirm that the system assistant opens.
+- [ ] **Open Apple Pay — Needs check.** Confirm that the payment interface opens.
+- [ ] **Power off the phone — Needs check.** Confirm the intended power-state change through the supported control path.
+- [ ] **Keep a finger pressed between commands — In progress.** Basic press, move and release passed isolated touch and batch checks. More checks and main integration remain. [Touch evidence](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/fresh-duo-post-restart/proof-v1/verification.json), [batch evidence](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/live-proof/proof-retained-v2/verification.json).
+- [ ] **Run a sequence of commands on Duo — In progress.** Run a complete workflow without another command taking control. Tap and held-finger cases passed; the typing bug blocks full acceptance. [Tap evidence](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/live-proof/proof-tap-v2/verification.json).
+- [ ] **Prevent repeated characters when typing in a batch — In progress.** Enter the requested text once. The live case requested A!q7 but produced A!!!!!!!!!!!q7. [Failed case](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/live-proof/proof-chunk1-v2/verification.json), [actual text](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/live-proof/proof-chunk1-v2/case-after.state.json).
+- [ ] **Keep capture working while the phone folds or turns — Needs check.** Preserve the correct picture as the display changes.
+- [ ] **Use controls in app windows that do not fill the display — Needs check.** Confirm correct target positions when the app has an inset.
+- [ ] **Keep existing iPhone and iPad behavior — Needs check.** Extend the current candidate's checks beyond the recorded ordinary-device cases.
+- [ ] **Ship an installable release — Needs check.** Verify release packaging, signing and supported Mac builds outside the development setup.
+
+### Improvements from the sim-use comparison
+
+The comparison supplied ideas from source review. Cam chose the XcodeBuildMCP-style agent interface; this does not claim that sim-use uses AXe's architecture. No live benchmark was run.
+
+- [ ] **Find a control from part of its label — Ready for check.** Avoid typing the full label. The isolated candidate builds; real-app checks remain.
+- [ ] **Find a control with a text pattern — Ready for check.** Match labels such as Save or Done with one search. The isolated candidate builds; real-app checks remain.
+- [ ] **Find a control within a chosen screen area — Ready for check.** Narrow a search when labels repeat. The isolated candidate builds; real-app checks remain.
+- [ ] **Report whether the keyboard is visible — Ready for check.** Show whether the screen keyboard is likely present before typing. The isolated candidate builds; real-app checks remain.
+- [x] **Provide the optional RS1 agent interface — Done for four commands.** Read compact screen state, tap, type and swipe with current target checks. Wider commands remain separate. [Evidence](/Volumes/Developer/AXe/build_products/verification/agent-integration-20261021/handoff.json).
+- [x] **Reuse screen snapshots safely — Done within the agent scope.** Reduce repeated screen output with caching, while rejecting stale references and checking fresh targets before input. [Evidence](/Volumes/Developer/AXe/build_products/verification/agent-integration-20261021/handoff.json).
+- [x] **Install the required helper with Homebrew — Done for the recorded install.** Prevent missing-helper startup failures. Isolated Debug arm64 installation passed; published release proof remains open. [Evidence](/Volumes/Developer/AXe/build_products/verification/agent-homebrew-20261021/handoff.json).
+- [ ] **Activate a switch without a coordinate tap — Not started.** Fix accessibility activation; physical switch taps already work within the recorded scope.
+- [ ] **Support more commands in agent mode — Not started.** Extend the current describe, tap, type and swipe interface.
+- [ ] **Enter Unicode text — Not started.** Enter text beyond the current US keyboard mapping.
+- [ ] **Set a slider to a chosen percentage — Not started.** Set a chosen value instead of only minimum or maximum.
+- [ ] **Move two fingers along separate paths — Not started.** Support gestures where each finger follows its own path.
+- [ ] **Recover when an app reports no accessible controls — Not started.** Add a defined recovery path instead of assuming that a cached target is safe.
+
+## Technical evidence
+
 This is the single progress record for Duo implementation and integration. The broad audit is stopped. On 21 October 2026, Cam authorized parallel worktrees, bounded simulator copies and local integration commits into main. No push is authorized.
 
 States: TODO = work remains; IMPLEMENTED = code is integrated but verification is incomplete; VERIFIED = the stated scope passed on the integrated candidate; BLOCKED = the exact named dependency prevents progress. N/A = the platform design excludes the case; it is not an unfinished AXe feature or a failed test. RECORDED = a historical observation with no reproducible current defect; it does not block core feature acceptance. ISOLATED = a native experiment passed outside the library; product integration is still pending. A group is VERIFIED only when its complete applicable scope is verified. Prior isolated results are inputs, not proof of the integrated build.
@@ -15,15 +62,19 @@ Full Duo support is not complete. This section replaces stale summary status onl
 | Homebrew helper | Integrated in f91b0aee | An isolated formula install proved helper installation/signing, framework loading and raw/agent input with Debug arm64 products. No universal or published release proof. [Handoff](/Volumes/Developer/AXe/build_products/verification/agent-homebrew-20261021/handoff.json). |
 | No-flag standalone tap | Integrated in 55939716 | Coordinate/ID taps passed seven poses, plus bounded labels/styles/switch/poll/delay checks. Four inner-landscape coordinate/ID checks passed again on combined main. [Handoff](/Volumes/Developer/AXe/build_products/verification/legacy-tap-20261022/HANDOFF.md). |
 | No-flag swipe/drag | Integrated in e9f12719 from 02136849 | 28 isolated native scenarios passed, including all seven poses, options, 125-second input, fold/rotate/signal release and fresh taps, ordinary-device input and profile rejection. Combined main passed its build, 164 existing checks and six native cases. [Report](audits/2026-10-22-duo-legacy-paths.md), [main readback](/Volumes/Developer/AXe/build_products/verification/legacy-paths-20261022/main-acceptance.json). |
-| No-flag separate touch parts | Isolated source, not built | Down/move/up routing and unmatched-release correction are prepared. Native build, export/docs and simulator proof remain. Batch is unchanged. [Handoff](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/handoff.md). |
+| No-flag separate touch parts | Isolated 09990e30; built, four scoped native cases passed | CLI ccb813f1/wire26 passed complete touch and separate BEGIN(P)/MOVE(Q)/END(R) on ordinary-iPhone portrait and fresh-Duo inner270, with real app effects, one contact per case and zero held contacts. Touch interruption, other poses, strict native UP rejection, token separation, timeout/disconnect/signal release and combined-main integration remain open. Exact receipts are below; the earlier [source handoff](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/handoff.md) keeps its original source-only limits. |
 | Audit improvement candidates | Isolated, not merged | Richer agent selectors and keyboard visibility signals build; named hinge aliases have syntax/guide checks. All three still need simulator acceptance and combined-main proof. |
 | Native continuation | Serial work under fixed guards | The owned clone completed the accepted checks without new PosterBoard crashes, with a stable SpringBoard PID per run. Its migration warning remains. The old crashing and failed-migration guests remain off. Each owned guest is shut down after a run. No complete OS-health claim. |
+
+Latest isolated touch proof, 22 October: source 09990e30, runtime-v1 CLI SHA256 ccb813f1decb62f97254a7227d4dc9706ee5291ca105f642b05b72145f676be7, unchanged rebuilt fixture 81c14060. The [ordinary-iPhone two-case proof](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/ordinary-iphone/proof-v2/verification.json) and [fresh-Duo inner270 two-case proof](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/fresh-duo-post-restart/proof-v1/verification.json) passed one tap callback and one completed pan each, including exact same-contact BEGIN/MOVE/END and no inserted MOVE at R. Both owned brokers exited and guests shut down. The [ordinary guard](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/ordinary-iphone/guard-v2/result.json) and [post-restart Duo guard](/Volumes/Developer/AXe/build_products/verification/touch-owned-parts-20261022/fresh-duo-post-restart/guard-v1/result.json) returned exit 0, no stop reason and reaped children. The Duo run used the authorised raised resource policy. Total Duo support and the remaining touch cases are not complete; earlier failures and setup refusals remain unchanged.
+
+The separate isolated batch candidate built CLI 65d830dea6df6a7c85fd2b249b0ab8cc37f47f6642712ff994130374a87e6531 and passed 173 existing checks in 19 suites. [Build/source receipt](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/build-and-checks.json), [test guard](/Volumes/Developer/AXe/build_products/verification/batch-owned-20261022/existing-tests-guard-v1/result.json). Native batch effects, stopping and ownership acceptance remain pending; the touch passes do not prove batch behavior.
 
 The source-only sim-use comparison supplied improvement ideas, not a speed or reliability ranking. Compact agent state, references, cache/invalidation and helper installation are integrated. Unicode paste, wider command support, independent two-finger paths, empty/hosted AX recovery and inset-scene work remain. The local viewer, extra video formats and platform expansion remain deferred.
 
 There are 17 parent groups and 77 scoped subitems after adding D08.LEGACY.PATHS: 68 VERIFIED, three IMPLEMENTED, three TODO, one historical ISOLATED, one N/A and one RECORDED. These overlap and are not a completion percentage. D07 is VERIFIED; the other 16 groups retain the gaps below. Historical results remain tied to their exact candidates.
 
-Latest combined-main verification: arm64 build, 164 existing checks in 18 suites, and six native cases passed on CLI SHA256 330916a44750ed70fef5aa7a8cbef617c5e16f6442a183b8e90f8f9089399328. Both new interruption checks released the contact, then tapped the current button within 0.5 point. Fixed limits remain app 8 GiB, simulators 10 GiB and owned commands 4 GiB, with the existing CPU limits. No push.
+Latest combined-main verification: arm64 build, 164 existing checks in 18 suites, and six native cases passed on CLI SHA256 330916a44750ed70fef5aa7a8cbef617c5e16f6442a183b8e90f8f9089399328. Both new interruption checks released the contact, then tapped the current button within 0.5 point. Those combined-main runs used limits of app 8 GiB, simulators 10 GiB and owned commands 4 GiB, with the existing CPU limits. No push.
 
 ## Core feature status from accepted native records
 
