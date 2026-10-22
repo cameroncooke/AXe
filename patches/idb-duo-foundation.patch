@@ -7438,10 +7438,10 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752ca118dc7c
+index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd86610cd3
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,759 @@
+@@ -0,0 +1,795 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7452,7 +7452,8 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +    case single(CGPoint)
 +    case pair(CGPoint, CGPoint)
 +  }
-+  private enum SubmissionMode { case complete, ownedPart }
++  private enum SubmissionMode: Equatable { case complete, ownedPart, legacyBatch }
++  private enum OwnedStreamMode: Equatable { case strict, legacyBatch }
 +  private struct OwnedInputState {
 +    let contactCount: Int
 +    let keys: Set<UInt32>
@@ -7474,7 +7475,8 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +  private var idleCleanupWaiters: [CheckedContinuation<Void, Never>] = []
 +  private var heldKeys = Set<UInt32>()
 +  private var heldButtons = Set<FBSimulatorHIDButton>()
-+  private var usesOwnedParts = false
++  private var ownedStreamMode: OwnedStreamMode?
++  private var usesOwnedParts: Bool { ownedStreamMode != nil }
 +  private var sentCount = 0
 +  private var lastCleanup: FBSimulatorHIDCleanupOutcome = .notNeeded
 +  private var lastCleanupEvidence: FBSimulatorHIDCleanupEvidence?
@@ -7586,6 +7588,14 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +    try await executePrepared(event, admissionGuard: nil, mode: .ownedPart)
 +  }
 +
++  /// Preserve an ordinary batch's ordered keyboard chords, including duplicate modifier codes.
++  /// Repeated keyboard DOWN credits must be released within this part. Only actual held state
++  /// continues to another part. Touch/button releases stay strict; modes cannot be mixed.
++  /// This uses the same measured connection, freshness checks and owned cleanup as submitOwnedPart.
++  public func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
++    try await executePrepared(event, admissionGuard: nil, mode: .legacyBatch)
++  }
++
 +  /// Guarded input requires a live feed so the final revision check does not await a full read.
 +  public func execute(_ event: FBSimulatorHIDEvent,
 +                      admissionGuard: any FBSimulatorHIDInputAdmissionGuard) async throws -> FBSimulatorHIDSessionReceipt {
@@ -7612,16 +7622,21 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +      guard !usesOwnedParts else { throw FBSimulatorHIDSessionError.invalidEvent("Owned-part sessions cannot execute complete input") }
 +      guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
 +      events = try Self.prepare(event, context: observation.displayContext)
-+    case .ownedPart:
++    case .ownedPart, .legacyBatch:
++      let streamMode: OwnedStreamMode = mode == .legacyBatch ? .legacyBatch : .strict
++      guard ownedStreamMode == nil || ownedStreamMode == streamMode else {
++        throw FBSimulatorHIDSessionError.invalidEvent("Owned stream submission modes cannot be mixed")
++      }
 +      guard token == nil else { throw FBSimulatorHIDSessionError.invalidToken }
 +      guard liveProvider != nil else { throw FBSimulatorHIDSessionError.invalidEvent("Owned parts require a live freshness provider") }
 +      let contactCount: Int
 +      switch contacts { case .single?: contactCount = 1; case .pair?: contactCount = 2; case nil: contactCount = 0 }
 +      do {
 +        events = try Self.prepare(event, context: observation.displayContext,
-+          ownedState: OwnedInputState(contactCount: contactCount, keys: heldKeys, buttons: heldButtons))
++          ownedState: OwnedInputState(contactCount: contactCount, keys: heldKeys, buttons: heldButtons),
++          legacyBatch: mode == .legacyBatch)
 +      } catch { throw await interrupt(error) }
-+      usesOwnedParts = true
++      ownedStreamMode = streamMode
 +    }
 +    if admissionGuard != nil || keyboardAdmissionGuard != nil, liveProvider == nil {
 +      throw FBSimulatorHIDSessionError.invalidEvent("Guarded input requires a live freshness provider")
@@ -8110,7 +8125,7 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +  }
 +
 +  private static func prepare(_ event: FBSimulatorHIDEvent, context: FBSimulatorHIDDisplayContext,
-+                              ownedState: OwnedInputState? = nil) throws -> [FBSimulatorHIDEvent] {
++                              ownedState: OwnedInputState? = nil, legacyBatch: Bool = false) throws -> [FBSimulatorHIDEvent] {
 +    var flattened: [FBSimulatorHIDEvent] = []
 +    func flatten(_ item: FBSimulatorHIDEvent) {
 +      if case let .composite(items) = item { for child in items { flatten(child) } }
@@ -8120,6 +8135,7 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +    var contactCount = ownedState?.contactCount ?? 0
 +    var keys = ownedState?.keys ?? Set<UInt32>()
 +    var buttons = ownedState?.buttons ?? Set<FBSimulatorHIDButton>()
++    var keyCredits: [UInt32: Int] = legacyBatch ? Dictionary(uniqueKeysWithValues: keys.map { ($0, 1) }) : [:]
 +    for item in flattened {
 +      switch item {
 +      case let .touch(direction, x, y):
@@ -8138,13 +8154,33 @@ index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752c
 +          throw FBSimulatorHIDSessionError.invalidEvent("Invalid delay")
 +        }
 +      case let .keyboard(direction, code):
-+        if direction == .down { keys.insert(code) }
-+        else if keys.remove(code) == nil { throw FBSimulatorHIDSessionError.invalidEvent("Key release without begin") }
++        if legacyBatch {
++          if direction == .down {
++            keyCredits[code, default: 0] += 1
++            keys.insert(code)
++          } else {
++            guard let credit = keyCredits[code], credit > 0 else {
++              throw FBSimulatorHIDSessionError.invalidEvent("Key release without begin")
++            }
++            keyCredits[code] = credit - 1
++            keys.remove(code)
++          }
++        } else {
++          if direction == .down { keys.insert(code) }
++          else if keys.remove(code) == nil { throw FBSimulatorHIDSessionError.invalidEvent("Key release without begin") }
++        }
 +      case let .button(direction, button):
 +        guard button != .applePay else { throw FBSimulatorHIDSessionError.invalidEvent("Unadapted Apple Pay event") }
 +        if direction == .down { buttons.insert(button) }
 +        else if buttons.remove(button) == nil { throw FBSimulatorHIDSessionError.invalidEvent("Button release without begin") }
 +      default: throw FBSimulatorHIDSessionError.invalidEvent("Session does not execute pose or system-state events")
++      }
++    }
++    if legacyBatch {
++      for (code, credit) in keyCredits {
++        guard credit == (keys.contains(code) ? 1 : 0) else {
++          throw FBSimulatorHIDSessionError.invalidEvent("Repeated keyboard downs must balance within one legacy batch part")
++        }
 +      }
 +    }
 +    guard ownedState != nil || (contactCount == 0 && keys.isEmpty && buttons.isEmpty) else {

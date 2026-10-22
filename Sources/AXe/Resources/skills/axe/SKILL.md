@@ -23,7 +23,7 @@ Read [Agent mode reference](references/agent-reference.md) for commands, matchin
 
 ## Selected Duo input
 
-Use ordinary `tap`, `touch`, `swipe` and `drag` without mode flags on the verified iPhone Duo profile with current logical UI coordinates. AXe measures the active display and checks boot, panel, hinge, orientation and geometry before input. Keep legacy tap selectors/styles and wait/poll options. Swipe and drag keep their existing event factories, movement duration, swipe delta and drag steps/holds. Their pre/post delays run on the host; normal text output remains. Do not request more than 100,000 movement steps on Duo; AXe rejects these paths before event allocation. Retain the existing `drag --steps` range of 1...1,000. Do not treat pose checks as an app/PID or UI-layout guard. Other devices and other commands without mode flags keep their existing routes.
+Use ordinary `tap`, `touch`, `swipe` and `drag` without mode flags on the verified iPhone Duo profile with current logical UI coordinates. AXe measures the active display and checks boot, panel, hinge, orientation and geometry before input. Keep legacy tap selectors/styles and wait/poll options. Swipe and drag keep their existing event factories, movement duration, swipe delta and drag steps/holds. Their pre/post delays run on the host; normal text output remains. Do not request more than 100,000 movement steps on Duo; AXe rejects these paths before event allocation. Retain the existing `drag --steps` range of 1...1,000. Do not treat pose checks as an app/PID or UI-layout guard. Other devices and other commands without mode flags keep their existing routes, except ordinary Duo batch below.
 
 Use ordinary Duo `touch -x X -y Y --down` to start one contact; repeat `--down` at a new point to move it. Use `--up` to end at its supplied point, with no added move. Keep the default 0.1-second hold for `--down --up`, or set `--delay 0...10`. The broker owns a successful down across command exits for 60 idle seconds. An orphan up sends zero HID events (`noOwnedContact` internally). Folding or rotation invalidates the stream and releases its original input. Refresh before a new contact; never replay uncertain input. Do not use this route to release selected-token input or claim app/PID, layout or batch guards. Explicit selected retained touch still needs its token, ends at the last held point and keeps its 30-second idle limit.
 
@@ -170,29 +170,25 @@ Most HID commands (`tap`, `swipe`, `drag`, `type`, `key`, etc.) are fire-and-for
 
 ## Step 5: Legacy batch vs discrete commands
 
-**Prefer `axe batch`** for multi-step flows. Batch executes every step in a single process invocation, which means:
-- One tool call and one AI turn instead of many — significantly reduces agent latency and cost.
-- A single HID session is reused across all steps, lowering per-step overhead.
-- Steps execute sequentially — each step runs before the next is resolved, so earlier taps can trigger navigation and later selector taps will find newly appeared elements (with `--wait-timeout`).
+Prefer `axe batch` for fixed multi-step flows: one invocation reduces tool calls and agent turns, reuses one HID session and resolves steps in order. Earlier taps can navigate before later selectors resolve with `--wait-timeout`.
 
-**Fall back to discrete commands** when:
-- A step's parameters depend on runtime inspection of a previous step's result (e.g. parsing `describe-ui` JSON to choose coordinates dynamically).
-- Using legacy `slider --value`; legacy batch steps do not support slider verification.
+The ordinary Duo source candidate owns one fixed measured display/session and common lease through all steps and host waits. Keep logical points, existing type chunks/styles and normal output. Context/native failure or cancellation stops later input without replay, even with `--continue-on-error`; pre-input errors can continue only in the same valid session. Remaining input closes at batch end and never transfers to standalone commands. Step stdin is cancellable without an EOF deadline; initial batch stdin loads before ownership. Read the [ordinary Duo batch contract](../../../../../docs/duo-batch-owned-input.md) for native, modifier and orphan-UP limits. Require matched artifacts and real app proof; build/native acceptance is pending.
 
-**Handling animations and transitions in batch:**
-- Use `--wait-timeout <seconds>` so selector taps (`--id` / `--label`) poll the accessibility tree until the element appears or the timeout expires. This is the primary mechanism for multi-screen flows.
-- Use `--poll-interval <seconds>` to control polling frequency during waiting (default 0.25s).
-- Use `--ax-cache perStep` when *not* using `--wait-timeout` but the UI still changes between steps — this ensures each selector tap gets a fresh accessibility snapshot rather than a stale cached one.
-- Insert explicit `sleep <seconds>` steps when coordinate-based taps need the UI to be stable (selectors with `--wait-timeout` are preferred over sleep where possible).
-- Keep batch output quiet by default. Add `--verbose` only when troubleshooting.
-- Selector taps in batch share direct `tap` semantics, including switch/toggle activation-point handling and `--tap-style automatic` behavior. Use batch-level `--tap-style physical|simulator` as the default for tap steps, or step-level `tap --tap-style ...` to override one step.
-- If `tap --label` reports multiple matches and no `AXUniqueId` values are exposed, fall back to `tap -x/-y` for that step.
+Use discrete commands when a step needs inspection of the prior result, or for `slider --value`; legacy batch does not support slider verification.
+
+For animations and transitions:
+- Use `--wait-timeout <seconds>` for ID/label taps to poll until the element appears or time expires; prefer this for navigation.
+- Set `--poll-interval <seconds>` to change polling frequency (default 0.25s).
+- Use `--ax-cache perStep` without waiting when UI changes between steps, so each selector gets fresh accessibility data.
+- Insert `sleep <seconds>` when coordinate taps need time to settle; prefer selector waits where possible.
+- Keep output quiet; add `--verbose` for diagnosis.
+- Retain direct tap selector and switch/toggle behavior. Set batch `--tap-style physical|simulator` as the default, or override it per tap step. The default remains `automatic`.
+- If a label has multiple matches and no unique ID, use inspected coordinates for that step.
 
 Key rules:
-- Use exactly one step source per run: `--step`, `--file`, or `--stdin`.
-- Steps run in order; default is fail-fast.
-- Add `--continue-on-error` for best-effort execution.
-- Do not pass `--udid` inside step lines; keep it at batch level.
+- Choose one step source: `--step`, `--file` or `--stdin`.
+- Run steps in order; fail-fast is the default. Use `--continue-on-error` for best effort within the Duo limits above.
+- Keep `--udid` at batch level.
 
 ## Step 6: Verify outcomes
 Batch and individual commands are execution-focused, not assertion-focused. Always suggest verification when outcomes matter:

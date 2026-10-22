@@ -8,6 +8,10 @@ struct Batch: AsyncParsableCommand {
         Batch executes multiple interaction steps in one command to reduce overhead.
         Steps are executed in order.
         Legacy mode uses one simulator/HID session and supports --continue-on-error.
+        On Duo, one measured display/session is fixed for the whole ordinary batch.
+        Folding, rotation, cancellation or an input failure stops later input without replay.
+        --continue-on-error still permits pre-input step errors while that session is valid.
+        The batch releases its remaining input before exit; no contact transfers to another command.
         Batch-level selected mode sends each complete step through the selected owner.
         It returns one JSON receipt per attempted step and stops on any failure.
         Earlier steps are not undone. AX targets and focus are read afresh per step.
@@ -65,7 +69,7 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("tap-style"), help: "Legacy default tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected mode uses per-step styles only: batch-level automatic is accepted as the default but does not change step style; physical and simulator reject.")
     var tapStyle: TapStyle = .automatic
 
-    @Flag(name: .customLong("continue-on-error"), help: "Continue executing later steps even if one step fails.")
+    @Flag(name: .customLong("continue-on-error"), help: "Continue after step errors. Duo still stops after context loss or native input failure.")
     var continueOnError: Bool = false
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for selector-based elements before failing (0 = no waiting).")
@@ -121,26 +125,51 @@ struct Batch: AsyncParsableCommand {
             throw ValidationError("No executable steps found.")
         }
 
-        let context = await MainActor.run {
-            BatchContext(
-                simulatorUDID: simulatorUDID,
-                axCachePolicy: axCachePolicy,
-                typeSubmissionMode: typeSubmissionMode,
-                typeChunkSize: typeChunkSize,
-                tapStyle: tapStyle,
-                waitTimeout: waitTimeout,
-                pollInterval: pollInterval
-            )
-        }
+        try await runOrdinaryBatch(stepLines, logger: logger)
+        print("✓ Batch completed successfully (\(stepLines.count) steps)")
+    }
 
+    @MainActor
+    private func runOrdinaryBatch(_ lines: [String], logger: AxeLogger) async throws {
+        let measured = try await LegacyDuoInput.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger)
+        let owner: SelectedHIDOwner?
+        if measured != nil {
+            guard let executable = Bundle.main.executableURL else {
+                throw SelectedHIDFailure.invalid("Missing executable")
+            }
+            owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger,
+                helperURL: executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context"))
+        } else {
+            owner = nil
+        }
+        let context = BatchContext(simulatorUDID: simulatorUDID, axCachePolicy: axCachePolicy,
+            typeSubmissionMode: typeSubmissionMode, typeChunkSize: typeChunkSize, tapStyle: tapStyle,
+            waitTimeout: waitTimeout, pollInterval: pollInterval, duoOwner: owner)
+
+        if let owner, let measured {
+            let runner = BatchPlanRunner(duoOwner: owner, logger: logger)
+            try await LegacyDuoBatchLifetime.run {
+                try await owner.withLegacyBatch(context: measured) {
+                    try await runSteps(lines, context: context, runner: runner, logger: logger)
+                }
+            }
+            return
+        }
         let session = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
         let runner = BatchPlanRunner(session: session, logger: logger)
+        try await runSteps(lines, context: context, runner: runner, logger: logger)
+    }
 
+    @MainActor
+    private func runSteps(_ lines: [String], context: BatchContext,
+                          runner: BatchPlanRunner, logger: AxeLogger) async throws {
         var failures: [String] = []
 
-        for (index, line) in stepLines.enumerated() {
+        for (index, line) in lines.enumerated() {
             var stepName = "<unparsed>"
             do {
+                try await context.validateCurrentContext()
                 let tokens = try ShellTokenizer.tokenize(line)
                 stepName = tokens.first ?? "<empty>"
                 let primitives = try await BatchStepParser.parseStepTokens(
@@ -149,12 +178,20 @@ struct Batch: AsyncParsableCommand {
                     context: context,
                     logger: logger
                 )
+                try await context.validateCurrentContext()
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
+                let stepError = error
+                if context.duoOwner != nil {
+                    do { try await context.validateCurrentContext() }
+                    catch {
+                        throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepError.localizedDescription)\nDuo batch stopped; \(error.localizedDescription). Later input was not replayed.")
+                    }
+                }
                 if continueOnError {
-                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(error.localizedDescription)")
+                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(stepError.localizedDescription)")
                 } else {
-                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(error.localizedDescription)")
+                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepError.localizedDescription)")
                 }
             }
         }
@@ -163,8 +200,6 @@ struct Batch: AsyncParsableCommand {
             let failureMessage = failures.joined(separator: "\n")
             throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failureMessage)")
         }
-
-        print("✓ Batch completed successfully (\(stepLines.count) steps)")
     }
 
     private func loadStepLines() throws -> [String] {

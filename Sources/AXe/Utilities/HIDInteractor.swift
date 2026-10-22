@@ -101,7 +101,10 @@ struct HIDInteractor {
         logger.info().log("Performing HID event...")
         try await session.hid.send(event: event, logger: logger)
         logger.info().log("HID event performed successfully.")
+        try await waitForStabilization(logger: logger)
+    }
 
+    static func waitForStabilization(logger: AxeLogger) async throws {
         if stabilizationDelayMs > 0 {
             logger.info().log("Applying stabilization delay of \(stabilizationDelayMs)ms...")
             try await Task.sleep(nanoseconds: stabilizationDelayMs * 1_000_000)

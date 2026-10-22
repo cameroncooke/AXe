@@ -17,13 +17,14 @@ final class SelectedHIDOwner {
     private var feed: FBSimulatorHIDNativeFreshnessProvider?
     private var quarantined = false
     private var maintainingRetainedInput = false
+    private var batchRunning = false
     private var quarantineReceipt: SelectedHIDQuarantine?
     private var lastRequest: SelectedHIDRequest?
     private var libraryToken: FBSimulatorHIDContactToken?
     private var observation: FBSimulatorHIDSessionObservation?
     private var lastActivity: TimeInterval
     private(set) var shouldStop = false
-    var isBusy: Bool { admission.inFlight || maintainingRetainedInput || shouldStop || quarantined }
+    var isBusy: Bool { admission.inFlight || maintainingRetainedInput || batchRunning || shouldStop || quarantined }
 
     convenience init(simulatorUDID: String, logger: AxeLogger, helperURL: URL) {
         self.init(simulatorUDID: simulatorUDID, logger: logger, helperURL: helperURL, dependencies: .live)
@@ -36,7 +37,7 @@ final class SelectedHIDOwner {
 
     func perform(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
         do {
-            guard !shouldStop, !quarantined, !maintainingRetainedInput else { throw SelectedHIDFailure.busy }
+            guard !shouldStop, !quarantined, !maintainingRetainedInput, !batchRunning else { throw SelectedHIDFailure.busy }
             try admission.enter(request)
             lastRequest = request
         }
@@ -192,7 +193,7 @@ final class SelectedHIDOwner {
     }
 
     func maintain() async {
-        guard !quarantined, !admission.inFlight, !maintainingRetainedInput else { return }
+        guard !quarantined, !admission.inFlight, !maintainingRetainedInput, !batchRunning else { return }
         if admission.token != nil, let feed, let observation {
             do { try feed.validateCurrentRevision(expected: observation) }
             catch {
@@ -260,13 +261,25 @@ final class SelectedHIDOwner {
     }
 
     private func open(_ request: SelectedHIDRequest) async throws {
+        let display = try request.selectedDisplay()
+        try await open(displayID: display.id, displayUUID: display.uuid,
+            expectedContext: request.expectedContext,
+            requiresDuo: request.legacyPath != nil || request.legacyTouch != nil) { observation in
+                try request.home?.validate(observation: observation)
+                try request.button?.validate(observation: observation)
+            }
+    }
+
+    private func open(displayID: UInt32, displayUUID: UUID, expectedContext: SelectedHIDContext?,
+                      requiresDuo: Bool,
+                      validate: (FBSimulatorHIDSessionObservation) throws -> Void = { _ in }) async throws {
         try acquireLease()
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
         let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }), simulator.state == .booted else {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
-        if request.legacyPath != nil || request.legacyTouch != nil {
+        if requiresDuo {
             guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
                 throw SelectedHIDFailure.invalid("Legacy Duo input requires the verified Duo device profile")
             }
@@ -275,17 +288,105 @@ final class SelectedHIDOwner {
                 throw SelectedHIDFailure.invalid(capability.reason)
             }
         }
-        let display = try request.selectedDisplay()
         let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
-            screenID: display.id, screenUniqueID: display.uuid)
+            screenID: displayID, screenUniqueID: displayUUID)
         self.feed = feed
         observation = feed.initialObservation
-        if let expected = request.expectedContext, expected != SelectedHIDContext(feed.initialObservation) {
+        if let expected = expectedContext, expected != SelectedHIDContext(feed.initialObservation) {
             throw SelectedHIDFailure.invalid("Measured Duo input context changed before input")
         }
-        try request.home?.validate(observation: feed.initialObservation)
-        try request.button?.validate(observation: feed.initialObservation)
+        try validate(feed.initialObservation)
         session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation, liveFreshnessProvider: feed)
+    }
+
+    /// One in-process owner for the complete ordinary batch. It never rebinds after failure.
+    func withLegacyBatch(context: SelectedHIDContext,
+                         body: @MainActor () async throws -> Void) async throws {
+        guard !isBusy, session == nil, admission.token == nil else { throw SelectedHIDFailure.busy }
+        try context.validate()
+        guard let uuid = UUID(uuidString: context.screenUUID) else {
+            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+        }
+        batchRunning = true
+        defer { batchRunning = false; lastActivity = dependencies.now() }
+        var actionError: Error?
+        do {
+            try await open(displayID: context.screenID, displayUUID: uuid,
+                expectedContext: context, requiresDuo: true)
+            try await body()
+            try await validateLegacyBatchContext()
+        } catch { actionError = error }
+
+        var cleanup = "notNeeded"
+        if let session {
+            do { cleanup = try await session.close().cleanup.rawValue }
+            catch { cleanup = "uncertain" }
+        }
+        await feed?.closeAndWait()
+        logger.info().log("Duo batch closed; cleanup=\(cleanup)")
+        if cleanup == "uncertain" {
+            let diagnostic = actionError.map { String(describing: $0) } ?? "Batch completion"
+            let result = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: UUID(),
+                brokerID: brokerID, outcome: "batchCleanupUncertain", token: nil,
+                enqueuedEventCount: 0, cleanup: cleanup, error: diagnostic,
+                context: observation.map(SelectedHIDContext.init))
+            let blocked = quarantine(result, request: nil)
+            let persistence = blocked.quarantine?.persisted == true
+                ? "Input quarantine saved; explicit recovery is required."
+                : "Input quarantine could not be saved; manual recovery is required. \(blocked.quarantine?.error ?? "")"
+            throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(diagnostic). \(persistence)")
+        }
+        clear()
+        if let actionError { throw actionError }
+    }
+
+    func validateLegacyBatchContext() async throws {
+        try Task.checkCancellation()
+        guard batchRunning, !quarantined, let session, let feed, let observation else {
+            throw SelectedHIDFailure.invalid("Missing fixed Duo batch owner")
+        }
+        try feed.validateCurrentRevision(expected: observation)
+        let state = await session.status().state
+        guard state == .ready || state == .retainedInputs else {
+            throw SelectedHIDFailure.invalid("Duo batch session is no longer usable; input was not replayed")
+        }
+        try Task.checkCancellation()
+    }
+
+    func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws {
+        try await validateLegacyBatchContext()
+        guard let session else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
+        let receipt = try await session.submitLegacyBatchPart(event)
+        logger.info().log("Duo batch part completed; events=\(receipt.enqueuedEventCount); outcome=\(receipt.outcome.rawValue)")
+        try await HIDInteractor.waitForStabilization(logger: logger)
+    }
+
+    /// Only the typed ordinary UP-only step has the legacy no-contact no-op policy.
+    /// Generic parts, including composites, retain strict native release validation.
+    func releaseLegacyBatchTouch(at point: (x: Double, y: Double)) async throws {
+        try await validateLegacyBatchContext()
+        guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
+        _ = try observation.displayContext.normalizedPoint(from: CGPoint(x: point.x, y: point.y))
+        guard await session.status().hasRetainedContact else {
+            logger.info().log("Duo batch touch up has no owned contact; no input sent")
+            return
+        }
+        try await submitLegacyBatchPart(.touch(direction: .up, x: point.x, y: point.y))
+    }
+
+    func waitForLegacyBatch(seconds: Double) async throws {
+        guard seconds.isFinite, seconds >= 0 else {
+            throw SelectedHIDFailure.invalid("Duo batch wait must be finite and non-negative")
+        }
+        let clock = ContinuousClock()
+        let start = clock.now
+        while true {
+            try await validateLegacyBatchContext()
+            let components = start.duration(to: clock.now).components
+            let elapsed = Double(components.seconds) + Double(components.attoseconds) / 1e18
+            guard elapsed < seconds else { return }
+            try await Task.sleep(for: .seconds(min(0.05, seconds - elapsed)))
+        }
     }
 
     private func quarantine(_ response: SelectedHIDResponse, request: SelectedHIDRequest?) -> SelectedHIDResponse {

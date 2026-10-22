@@ -55,6 +55,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed ordinary Duo batches to use one measured input owner, preserving ordered touch/key state, typing chunks and repeated modifier events. Changed context or input failure stops later input; blocked step stdin is cancellable, and owned input closes before exit. Build and native acceptance remain pending.
+
 - Fixed ordinary iPhone Duo `touch` routing to use the measured active display and owned contact stream. A down starts or moves one contact; up ends at its supplied point without an added move. Successful downs remain owned for up to 60 idle seconds; an orphan up sends zero HID events. Explicit selected tokens and other-device routes remain separate. Selected wire 26 rejects old wire 25 requests.
 
 - Fixed no-flag iPhone Duo swipes and drags missing the inner display in landscape. Both now use measured display context and their existing event factories, with host pre/post waits, logical coordinates and normal output. A Duo-only limit rejects paths above 100,000 movement steps before allocation; drag retains its 1...1,000-step limit. Selected wire 25 rejects old wire 24 requests.

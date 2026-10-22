@@ -6,6 +6,7 @@ enum BatchPrimitive {
     case hidBarrier(FBSimulatorHIDEvent)
     case hostSleep(TimeInterval)
     case physicalTap(point: (x: Double, y: Double), preDelay: Double?, postDelay: Double?)
+    case duoTouchUp(point: (x: Double, y: Double))
 }
 
 struct BatchPlan {
