@@ -6,7 +6,7 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 ## Step 1: Confirm runtime context
 1. Identify simulator UDID target first (`axe list-simulators`).
 2. Simulator-interaction AXe commands require `--udid <UDID>`. Commands like `list-simulators` and `init` do not.
-3. Run `axe describe-ui --udid <UDID>` to inspect the full current screen. Use `axe describe-ui --point <X,Y> --udid <UDID>` to inspect the element at a specific coordinate. Use the output to discover available `--id` and `--label` values for selector taps and slider setting, and to confirm coordinates for coordinate-based taps.
+3. Inspect the screen with `axe describe-ui --udid <UDID>`, or one point with `axe describe-ui --point <X,Y> --udid <UDID>`. Read IDs, labels and coordinates before taps or slider input.
 4. Prefer selectors (`tap --id` / `tap --label`, `slider --id` / `slider --label`) over raw coordinates. Selectors are resilient to layout changes, work across device sizes, and support element waiting where documented. For UIKit `UISwitch` and SwiftUI `Toggle` rows, selector taps activate the contained switch/toggle when the match contains exactly one such control. Default tap style is `automatic`: switches/toggles use physical touch down/up, while normal taps use simulator `tapAt`.
 
 Use `axe shutdown --udid <UUID>` for one simulator. JSON reports `shutdownCompleted` only after state readback, or `alreadyShutdown` without a request. Names/all aliases reject. This is simulator shutdown, not guest lock or power-button input. It has a 60-second budget; inspect state after failure. Do not use agent/batch options.

@@ -1,6 +1,6 @@
 # Press and hold an agent reference
 
-Status: source candidate, 22 October 2026. Build and native verification are pending.
+Status: integrated in main 9a2d07ec, 22 October 2026. The seven production files match tested candidate af6bb00b. The isolated arm64 build and 95 existing checks passed.
 
 Use a complete touch when an agent needs to press a named control or keep a finger down on it. Read a fresh snapshot, then pass that snapshot and reference:
 
@@ -18,17 +18,14 @@ The command invalidates old cache state before input. Success can include a fres
 
 This option rejects coordinates, one-sided down/up, retained contact tokens, explicit AX preparation and batch use. It does not expose new pad or slider references. Existing no-flag and explicit selected coordinate touch behavior, including a zero delay, is unchanged. Older brokers reject the new hold action kind instead of treating it as an ordinary tap.
 
-## Verification to complete
+## Recorded verification
 
-Use the existing UIKit control sample and normal app input. Do not inject sample state.
+The default reference press caused one Button callback and a complete released contact. A 0.7-second reference hold on Text entry produced a measured 0.707-second contact and fresh Select/Select All accessibility controls. The text stayed unchanged. The native edit controls were GenericElement/StaticText nodes, not Buttons. The full normal driver run remains FAIL because it expected the wrong roles; its valid subchecks are accepted separately. No after-hold screenshot was saved, so visual menu verification remains open.
 
-- Find the current Button reference. A default complete reference touch must cause exactly one button callback, touch down/up and no held contact.
-- Focus the existing Text entry field, enter text, dismiss any edit menu, and capture again. Hold its current reference for 0.7 seconds. Require the native text-edit menu in fresh accessibility and image output, with contact release. Text content must stay unchanged. The Gesture pad is not assumed to be an available reference.
-- After a real UI change, an old snapshot/ref must reject with no input and no app change. A new capture must allow input again.
-- During a longer reference hold, use Device Hub's normal Fold control after real touch down. Require cancellation and release, no later input at the old point, then a fresh reference tap on the active panel with one callback.
-- Check wrong PID, mixed coordinates, a retained token, a partial touch, invalid delay and agent batch use. Each must reject before input.
-- Check one ordinary coordinate touch and one ordinary selected coordinate touch for compatibility.
+Normal Device Hub folding during a ten-second requested hold stopped input after about 6.79 seconds and released the original contact. AXe then read two matching fresh outer-screen trees and tapped the newly found Button once. The complete fold-v7 run and cleanup passed. Earlier failed setup and timing attempts remain unchanged.
 
-Use one owned simulator at a time with the existing CPU/memory monitor. Record the exact CLI and native framework hashes, commands, effects and cleanup. Existing tests may be run; no new suite is part of this change.
+Wrong PID, stale references, coordinates mixed with references, retained tokens, partial touches, invalid delays and agent batch input rejected without app input in the saved subchecks. Existing raw and selected coordinate touches and a fresh agent tap passed. The batch rejection message was generic; a separate fix addresses its wording.
+
+[Scoped acceptance](/Volumes/Developer/AXe/build_products/verification/agent-reference-hold-20261022/scoped-acceptance.json) records exact candidate/runtime hashes, commands, effects, guard results and limits. Other target roles, positions and interruption cases remain open. No combined main build or full-tool claim is made.
 
 Security scanning remains UNVERIFIED at Cam's request. Guide checks are recorded separately in the source handoff.
