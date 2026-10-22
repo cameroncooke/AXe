@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 31
+    static let version = 32
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -73,8 +73,15 @@ struct SelectedHIDRequest: Codable, Sendable {
                   agentAdmission.context.screenID == screenID,
                   UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID,
                   agentAdmission.screenHash.utf8.count <= 64, hinge == nil, rotation == nil,
-                  home == nil, button == nil, pinch == nil, gesture == nil else {
+                  home == nil, button == nil, gesture == nil else {
                 throw AgentModeFailure("invalidAdmission", "Agent native admission does not match this complete request.")
+            }
+        }
+        if pinch != nil, let agentAdmission {
+            guard agentAdmission.target != nil,
+                  agentAdmission.selectorKind == .id || agentAdmission.selectorKind == .label,
+                  agentAdmission.selectorValue != nil else {
+                throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
             }
         }
         guard [path != nil, legacyPath != nil, legacyTouch != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {

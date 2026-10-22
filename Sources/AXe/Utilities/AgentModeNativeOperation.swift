@@ -30,11 +30,16 @@ enum AgentModeNativeOperation {
             let event = try request.completeEvent(observation: live.initialObservation)
             let guardOwner: any FBSimulatorHIDInputAdmissionGuard
             if admission.target != nil {
-                guard let path = request.path else {
-                    throw AgentModeFailure("unsupportedTargetPath", "A target admission requires a complete explicit path.")
+                let guardValue: AgentModePathAdmissionGuard
+                if let pinch = request.pinch {
+                    guardValue = try AgentModePathAdmissionGuard(simulator: simulator, feed: live,
+                        admission: admission, pinch: pinch)
+                } else if let path = request.path {
+                    guardValue = try AgentModePathAdmissionGuard(simulator: simulator, feed: live,
+                        admission: admission, path: path)
+                } else {
+                    throw AgentModeFailure("unsupportedTargetPath", "A target admission requires a complete path or pinch.")
                 }
-                let guardValue = try AgentModePathAdmissionGuard(simulator: simulator, feed: live,
-                    admission: admission, path: path)
                 pathGuard = guardValue
                 guardOwner = guardValue
             } else {

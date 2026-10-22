@@ -204,6 +204,7 @@ final class AgentModeController {
         }
         var plannedPrimitives: [SelectedHIDPrimitive] = []
         var plannedPath: SelectedHIDPath?
+        var plannedPinch: SelectedHIDPinch?
         var plannedAX: SelectedAXRequest?
         var plannedKeyboard: SelectedKeyboardRequest?
         var node: FBSimulatorAXNode?
@@ -211,6 +212,8 @@ final class AgentModeController {
             let original: FBSimulatorAXNode
             if mode.kind == .drag {
                 original = try cached.snapshot.dragNode(ref: ref)
+            } else if mode.kind == .pinch {
+                original = try cached.snapshot.pinchNode(ref: ref)
             } else if mode.kind == .sliderEndpoint {
                 original = try cached.snapshot.sliderNode(ref: ref)
             } else {
@@ -269,6 +272,14 @@ final class AgentModeController {
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: mode.preDelay, postDelay: mode.postDelay,
                 elementType: node.type, doubleTapTiming: timing)
+        case .pinch:
+            guard let node, let geometry = mode.pinch, let frame = node.frame else {
+                throw AgentModeFailure("missingPinchTarget", "The fresh pinch area or geometry is unavailable.")
+            }
+            let selector = try snapshot.uniqueSelector(for: node)
+            _ = try snapshot.pinchNode(kind: selector.kind, value: selector.value, type: node.type)
+            plannedPinch = geometry.selected(at: CGPoint(x: frame.midX, y: frame.midY),
+                duration: mode.duration, preDelay: mode.preDelay, postDelay: mode.postDelay)
         case .sliderEndpoint:
             guard let node, node.type == "Slider", let endpoint = mode.sliderEndpoint else {
                 throw AgentModeFailure("missingSliderTarget", "The fresh slider target or endpoint is unavailable.")
@@ -328,7 +339,7 @@ final class AgentModeController {
         }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: outer.requestID,
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: plannedPrimitives, path: plannedPath, ax: plannedAX,
+            primitives: plannedPrimitives, path: plannedPath, pinch: plannedPinch, ax: plannedAX,
             keyboard: plannedKeyboard, agentAdmission: admission)
         try request.validate()
         return request

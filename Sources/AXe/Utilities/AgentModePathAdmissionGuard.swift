@@ -9,9 +9,11 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     private let simulator: FBSimulator
     private let feed: FBSimulatorHIDNativeFreshnessProvider
     private let admission: AgentModeAdmission
-    private let kind: SelectedHIDPath.Kind
-    private let start: CGPoint
-    private let end: CGPoint
+    private enum Kind: String { case swipe, drag, pinch }
+    private let kind: Kind
+    private let starts: [CGPoint]
+    private let ends: [CGPoint]
+    private let centre: CGPoint?
     private let deadline: DispatchTime
     private(set) var failure: AgentModeFailure?
 
@@ -26,9 +28,31 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         self.simulator = simulator
         self.feed = feed
         self.admission = admission
-        kind = path.kind
-        start = CGPoint(x: startX, y: startY)
-        end = CGPoint(x: endX, y: endY)
+        kind = path.kind == .drag ? .drag : .swipe
+        starts = [CGPoint(x: startX, y: startY)]
+        ends = [CGPoint(x: endX, y: endY)]
+        centre = nil
+        deadline = DispatchTime.now() + 8
+    }
+
+    init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider,
+         admission: AgentModeAdmission, pinch: SelectedHIDPinch) throws {
+        try pinch.validate()
+        guard admission.target != nil,
+              admission.selectorKind == .id || admission.selectorKind == .label,
+              admission.selectorValue != nil else {
+            throw AgentModeFailure("unsupportedPinchReference", "A reference pinch requires an exact native area.")
+        }
+        self.simulator = simulator
+        self.feed = feed
+        self.admission = admission
+        kind = .pinch
+        centre = CGPoint(x: pinch.centerX, y: pinch.centerY)
+        starts = [CGPoint(x: pinch.centerX - pinch.radius, y: pinch.centerY),
+                  CGPoint(x: pinch.centerX + pinch.radius, y: pinch.centerY)]
+        let endRadius = pinch.radius * pinch.scale
+        ends = [CGPoint(x: pinch.centerX - endRadius, y: pinch.centerY),
+                CGPoint(x: pinch.centerX + endRadius, y: pinch.centerY)]
         deadline = DispatchTime.now() + 8
     }
 
@@ -36,17 +60,15 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         do {
             try checkDeadline()
             try admission.validateContext(observation)
-            if kind == .drag {
-                let size = observation.displayContext.logicalSize
-                let bounds = CGRect(origin: .zero, size: size)
-                guard bounds.contains(start), bounds.contains(end) else {
-                    throw AgentModeFailure("invalidDragGeometry", "The drag path is outside the current selected display.")
+            if kind == .drag || kind == .pinch {
+                let bounds = CGRect(origin: .zero, size: observation.displayContext.logicalSize)
+                guard (starts + ends).allSatisfy({ bounds.contains($0) }) else {
+                    throw AgentModeFailure("invalid\(kind.rawValue.capitalized)Geometry", "The \(kind.rawValue) path is outside the current selected display.")
                 }
             }
-            guard case let .touch(.down, x, y) = firstEvent, x == start.x, y == start.y else {
-                throw AgentModeFailure("\(kind.rawValue)StartChanged", "The \(kind.rawValue) start changed before input. Refresh the snapshot.")
-            }
-            let initialHit = try await pointHit(observation: observation)
+            try validateFirstEvent(firstEvent)
+            var initialHits: [FBSimulatorAXNode] = []
+            for start in starts { initialHits.append(try await pointHit(at: start, observation: observation)) }
             let tree = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
                 observation: observation, freshnessProvider: feed, policy: try policy(), preparation: .automationSession)
             guard tree.outcome == .ready, let snapshot = tree.snapshot else {
@@ -54,11 +76,16 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             }
             try checkDeadline()
             try admission.validateScreen(snapshot.roots)
-            try validateRelationship(hit: initialHit, roots: snapshot.roots)
-            // A fresh tree cannot validate an earlier point result on its own.
-            let confirmedHit = try await pointHit(observation: observation)
-            guard sameSignature(initialHit, confirmedHit) else {
-                throw AgentModeFailure("\(kind.rawValue)HitChanged", "The control at the \(kind.rawValue) start changed. Refresh the snapshot.")
+            let currentTree = try AgentModeSnapshot(roots: snapshot.roots)
+            for (start, hit) in zip(starts, initialHits) {
+                try validateRelationship(hit: hit, start: start, tree: currentTree, roots: snapshot.roots)
+            }
+            // Confirm every initial hit after the same fresh tree, before either DOWN.
+            for (start, initialHit) in zip(starts, initialHits) {
+                let confirmedHit = try await pointHit(at: start, observation: observation)
+                guard sameSignature(initialHit, confirmedHit) else {
+                    throw AgentModeFailure("\(kind.rawValue)HitChanged", "The control at the \(kind.rawValue) start changed. Refresh the snapshot.")
+                }
             }
             try checkDeadline()
             try feed.validateCurrentRevision(expected: observation)
@@ -76,7 +103,21 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         }
     }
 
-    private func pointHit(observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
+    private func validateFirstEvent(_ event: FBSimulatorHIDEvent) throws {
+        switch kind {
+        case .swipe, .drag:
+            guard case let .touch(.down, x, y) = event, starts[0] == CGPoint(x: x, y: y) else {
+                throw AgentModeFailure("\(kind.rawValue)StartChanged", "The \(kind.rawValue) start changed before input. Refresh the snapshot.")
+            }
+        case .pinch:
+            guard case let .twoFingerTouch(.down, first, second) = event,
+                  first == starts[0], second == starts[1], first != second else {
+                throw AgentModeFailure("pinchStartChanged", "The pinch starts changed before input. Refresh the snapshot.")
+            }
+        }
+    }
+
+    private func pointHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
         let result = try await FBSimulatorAXSnapshot.acquire(at: start, for: simulator,
             expectedPID: admission.expectedPID, observation: observation, freshnessProvider: feed,
             policy: try policy(), preparation: .automationSession)
@@ -90,17 +131,26 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         return hit
     }
 
-    private func validateRelationship(hit: FBSimulatorAXNode, roots: [FBSimulatorAXNode]) throws {
+    private func validateRelationship(hit: FBSimulatorAXNode, start: CGPoint, tree: AgentModeSnapshot,
+                                      roots: [FBSimulatorAXNode]) throws {
         guard let expected = admission.target, let selectorKind = admission.selectorKind,
               let value = admission.selectorValue else {
             throw AgentModeFailure("unsupportedIdentity", "The \(kind.rawValue) target has no exact native selector.")
         }
-        let tree = try AgentModeSnapshot(roots: roots)
-        let target = try tree.match(kind: selectorKind, value: value, type: expected.type)
+        let target: FBSimulatorAXNode
+        if kind == .pinch {
+            target = try tree.pinchNode(kind: selectorKind, value: value, type: expected.type)
+        } else {
+            target = try tree.match(kind: selectorKind, value: value, type: expected.type)
+        }
         try expected.validate(target)
         guard target.pid == admission.expectedPID, target.hidden != true, target.enabled != false,
-              let frame = target.frame, validFrame(frame), frame.contains(start), kind == .drag || frame.contains(end) else {
+              let frame = target.frame, validFrame(frame), frame.contains(start),
+              kind == .drag || ends.allSatisfy({ frame.contains($0) }) else {
             throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) path is outside the selected area. Refresh the snapshot.")
+        }
+        if kind == .pinch, centre != CGPoint(x: frame.midX, y: frame.midY) {
+            throw AgentModeFailure("pinchStartChanged", "The pinch centre is not the fresh area centre. Refresh the snapshot.")
         }
         if kind == .drag, start != CGPoint(x: frame.midX, y: frame.midY) {
             throw AgentModeFailure("dragStartChanged", "The drag start is not the fresh target centre. Refresh the snapshot.")
@@ -127,6 +177,12 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         guard hitCount == 1, let chain = hitChain,
               let targetIndex = chain.firstIndex(where: { sameSignature(tree.nodes[$0], target) }) else {
             throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) start is outside the selected area. Refresh the snapshot.")
+        }
+        if kind == .pinch, let hitIndex = chain.last {
+            let element = tree.elements[hitIndex]
+            guard element.state.visible, element.state.enabled else {
+                throw AgentModeFailure("pinchTargetMismatch", "A pinch start is hidden or disabled. Refresh the snapshot.")
+            }
         }
         let descendants = chain.dropFirst(targetIndex + 1)
         guard !descendants.contains(where: { index in

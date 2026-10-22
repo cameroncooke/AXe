@@ -83,6 +83,31 @@ struct AgentModeSnapshot: Sendable {
         return target
     }
 
+    func pinchNode(ref: String) throws -> FBSimulatorAXNode {
+        guard let index = referenceIndices[ref], isPinchArea(at: index) else {
+            throw AgentModeFailure("unsupportedPinchReference", "Pinch requires a visible, enabled area reference with a unique native ID or label.")
+        }
+        return nodes[index]
+    }
+
+    func pinchNode(kind: SelectedAXRequest.SelectorKind, value: String, type: String?) throws -> FBSimulatorAXNode {
+        guard let entry = identityIndex.entry(kind: kind, value: value, type: type), entry.count == 1 else {
+            throw AgentModeFailure("unsupportedPinchReference", "The native selector no longer identifies one pinch area.")
+        }
+        return try pinchNode(ref: elements[entry.index].ref)
+    }
+
+    private func isPinchArea(at index: Int) -> Bool {
+        let node = nodes[index]
+        let element = elements[index]
+        guard element.role == .other || element.role == .scrollView || element.role == .list,
+              element.state.visible, element.state.enabled,
+              node.enabled == true, node.hidden == false, selectors[index] != nil,
+              let frame = node.frame else { return false }
+        return [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite)
+            && frame.width > 0 && frame.height > 0
+    }
+
     func sliderNode(ref: String) throws -> FBSimulatorAXNode {
         guard let index = referenceIndices[ref], isSliderTarget(at: index) else {
             throw AgentModeFailure("unsupportedSliderReference", "A slider endpoint requires a visible, enabled Slider reference with a unique native ID or label.")
@@ -112,7 +137,13 @@ struct AgentModeSnapshot: Sendable {
             guard isSliderTarget(at: index), !targetRefs.contains(elements[index].ref) else { return nil }
             return RuntimeSnapshotCompactor.row(elements[index], action: "sliderEndpoint")
         }
-        return targets + sliders
+        // Preserve every existing row/action. Only add areas that lack a target row.
+        let existingRefs = Set((targets + sliders).map { $0.element.ref })
+        let areas = elements.indices.compactMap { index -> RuntimeSnapshotRow? in
+            guard isPinchArea(at: index), !existingRefs.contains(elements[index].ref) else { return nil }
+            return RuntimeSnapshotCompactor.row(elements[index], action: "pinchWithin")
+        }
+        return targets + sliders + areas
     }
 
     func resolve(_ original: FBSimulatorAXNode) throws -> FBSimulatorAXNode {

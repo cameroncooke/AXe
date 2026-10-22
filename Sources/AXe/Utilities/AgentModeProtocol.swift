@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, pinch, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -26,6 +26,7 @@ struct AgentModeRequest: Codable, Sendable {
     var tapStyle: SelectedTapStyle? = nil
     var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
     var sliderEndpoint: FBSimulatorSliderEndpoint? = nil
+    var pinch: AgentModePinch? = nil
     var rowOffset: Int = 0
     var rowLimit: Int = 64
 
@@ -39,6 +40,18 @@ struct AgentModeRequest: Codable, Sendable {
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw AgentModeFailure("invalidBounds", "Agent query and timing limits are invalid.")
+        }
+        if kind == .pinch {
+            guard ref != nil, snapshotID != nil, let pinch,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, text == nil, keyEvents == nil, direction == nil, tapStyle == nil,
+                  doubleTapTiming == nil, sliderEndpoint == nil, sinceScreenHash == nil,
+                  destination == nil, steps == nil, distance == 1, rowOffset == 0, rowLimit == 64 else {
+                throw AgentModeFailure("invalidPinch", "An agent pinch requires one snapshot/area reference and pinch geometry, without other targets or payloads.")
+            }
+            try pinch.selected(at: .zero, duration: duration, preDelay: preDelay, postDelay: postDelay).validate()
+        } else if pinch != nil {
+            throw AgentModeFailure("mixedPayload", "Reference pinch geometry applies only to an agent pinch.")
         }
         if kind == .sliderEndpoint {
             guard ref != nil, snapshotID != nil, sliderEndpoint != nil,

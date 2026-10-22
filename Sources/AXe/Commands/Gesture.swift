@@ -134,10 +134,12 @@ struct Gesture: AsyncParsableCommand {
         abstract: "Perform a preset or a complete selected gesture.",
         discussion: """
         Execute a preset, or one complete gesture on an explicit selected display.
-        Selected-only names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
+        Selected gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
         Double-tap requires -x/-y; rotate also requires --radius/--degrees.
         With --agent, double-tap instead requires a current --snapshot-id/--ref and --expected-pid.
         It uses the fresh target point; the app can change between the two taps.
+        Agent pinch uses a current area reference plus --radius/--scale, without -x/-y.
+        Both starts are checked before input; folding/rotation checks and owned release continue during motion.
         Two-finger actions require -x/-y/--x2/--y2; hold also requires --hold.
         Two-finger-swipe also requires --end-x/--end-y/--end-x2/--end-y2.
         Both straight paths share duration and delta; either finger may stay still.
@@ -147,7 +149,7 @@ struct Gesture: AsyncParsableCommand {
         The opposite endpoint remains 20 points from its edge. No Back action is inferred.
         With --edge-inset, legacy input requires the path span to be at least --delta.
         No retained token or app-recognizer completion is implied.
-        Pinch requires -x, -y, --radius, --scale and --input-mode selected.
+        Coordinate pinch requires -x, -y, --radius, --scale and --input-mode selected.
         Scale below 1 moves fingers inward; above 1 moves them outward. Scale 1 fails.
         Pinch defaults: duration 0.6 seconds, delta 5 logical points; no retained token.
         
@@ -232,17 +234,17 @@ struct Gesture: AsyncParsableCommand {
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent double-tap only: expected application PID.")
+    @Option(name: .customLong("expected-pid"), help: "Agent gesture only: expected application PID before input.")
     var expectedPID: Int32?
 
     func validate() throws {
         try agentMode.validate()
         if agentMode.enabled {
-            try validateAgentDoubleTap()
+            try validateAgentGesture()
             return
         }
         guard expectedPID == nil else {
-            throw ValidationError("--expected-pid requires gesture double-tap --agent.")
+            throw ValidationError("--expected-pid requires gesture double-tap or pinch --agent.")
         }
         try selectedInput.validate()
         if let edgeInset {
@@ -387,10 +389,14 @@ struct Gesture: AsyncParsableCommand {
         }
     }
 
-    private func validateAgentDoubleTap() throws {
+    private func validateAgentGesture() throws {
+        if case .pinch = gesture {
+            try validateAgentPinch()
+            return
+        }
         try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
         guard case .doubleTap = gesture else {
-            throw ValidationError("Gesture agent mode supports double-tap only.")
+            throw ValidationError("Gesture agent mode supports double-tap and pinch only.")
         }
         guard agentMode.elementRef != nil else {
             throw ValidationError("Agent double-tap requires --snapshot-id and --ref.")
@@ -405,8 +411,32 @@ struct Gesture: AsyncParsableCommand {
             .validate(preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
     }
 
+    private func validateAgentPinch() throws {
+        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
+        guard agentMode.elementRef != nil, let radius, let scale else {
+            throw ValidationError("Agent pinch requires --snapshot-id, --ref, --radius and --scale.")
+        }
+        guard centerX == nil, centerY == nil, degrees == nil, secondX == nil, secondY == nil,
+              endX == nil, endY == nil, secondEndX == nil, secondEndY == nil,
+              hold == nil, interval == nil, edgeInset == nil, screenWidth == nil, screenHeight == nil else {
+            throw ValidationError("Agent pinch accepts an area reference, radius, scale, duration, delta and delays only; coordinates and other gesture options are not supported.")
+        }
+        try AgentModePinch(radius: radius, scale: scale, spacing: delta ?? 5)
+            .selected(at: .zero, duration: duration ?? 0.6, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
+            .validate()
+    }
+
     func agentRequest() throws -> SelectedHIDRequest {
         try validate()
+        if case .pinch = gesture {
+            guard let radius, let scale else {
+                throw ValidationError("Agent pinch requires --radius and --scale.")
+            }
+            return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .pinch,
+                expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+                duration: duration ?? 0.6, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0,
+                pinch: .init(radius: radius, scale: scale, spacing: delta ?? 5)), input: selectedInput)
+        }
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .doubleTap,
             expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
             preDelay: preDelay ?? 0, postDelay: postDelay ?? 0,
