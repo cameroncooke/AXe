@@ -206,7 +206,7 @@ struct EdgeInsetTests {
     }
 
     @Test func oldSelectedWireRejectsBeforeAdmission() throws {
-        #expect(SelectedHIDRequest.version == 28)
+        #expect(SelectedHIDRequest.version == 32)
         let path = try command(.swipeFromLeftEdge, inset: "1").selectedPath()
         let request = SelectedHIDRequest(version: 27, requestID: UUID(), screenID: 3, screenUUID: UUID(uuidString: screen),
             operation: .complete, token: nil, primitives: [], path: path)
