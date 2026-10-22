@@ -68,6 +68,12 @@ final class BatchContext {
         catch { cachedRoots = nil; throw error }
     }
 
+    func validateInputBoundary() async throws {
+        guard let duoOwner else { return }
+        do { try await duoOwner.validateLegacyBatchBoundary() }
+        catch { cachedRoots = nil; throw error }
+    }
+
     func inputPoint(_ point: (x: Double, y: Double), roots: [AccessibilityElement]? = nil,
                     logger: AxeLogger) async throws -> (x: Double, y: Double) {
         if duoOwner != nil { return point }

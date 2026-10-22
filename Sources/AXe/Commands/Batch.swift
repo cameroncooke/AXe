@@ -178,7 +178,7 @@ struct Batch: AsyncParsableCommand {
                     context: context,
                     logger: logger
                 )
-                try await context.validateCurrentContext()
+                try await context.validateInputBoundary()
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
                 let stepError = error

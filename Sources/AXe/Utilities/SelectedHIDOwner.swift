@@ -314,7 +314,7 @@ final class SelectedHIDOwner {
             try await open(displayID: context.screenID, displayUUID: uuid,
                 expectedContext: context, requiresDuo: true)
             try await body()
-            try await validateLegacyBatchContext()
+            try await validateLegacyBatchBoundary()
         } catch { actionError = error }
 
         var cleanup = "notNeeded"
@@ -351,6 +351,12 @@ final class SelectedHIDOwner {
             throw SelectedHIDFailure.invalid("Duo batch session is no longer usable; input was not replayed")
         }
         try Task.checkCancellation()
+    }
+
+    func validateLegacyBatchBoundary() async throws {
+        try await validateLegacyBatchContext()
+        guard let session else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
+        try await session.validateLegacyBatchBoundary()
     }
 
     func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws {

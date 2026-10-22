@@ -1,16 +1,3 @@
-AXe selected Duo foundation
-
-Base: 604c51013438f0c3603b720a05a44b7c5b8f286d
-Source: /private/tmp/axe-duo-public-complete-gestures-20261018/axe/idb_checkout
-Accepted wire 9 library bytes plus the typed focus/enabled/hidden snapshot follow-up.
-Focus postimage SHA256: 98a4faa145218f2ea12e4a4a8d92c5a0b51bbf4e66b53a8a63b0aff4abd2e39a
-Generated projects and copy artifacts excluded.
-Normal project.yml generation includes the new source files.
-The later hosted-input-timed-readiness library remains a separate integration item;
-its acquisition, dispatcher and HID variants are not overlaid here.
-
-Follow-up: keyboard key-down admission and explicit native semantic press with final target re-selection.
-
 diff --git a/FBSimulatorControl/Commands/FBAXIdentityRoutingEvidence.swift b/FBSimulatorControl/Commands/FBAXIdentityRoutingEvidence.swift
 new file mode 100644
 index 0000000000000000000000000000000000000000..4685be3a3ede9a849db66288c7435b8cacd6cbdf
@@ -7438,10 +7425,10 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd86610cd3
+index 0000000000000000000000000000000000000000..912e92edcedcf024e6116b28f2d300abb3bddf5b
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,795 @@
+@@ -0,0 +1,811 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7591,9 +7578,24 @@ index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd
 +  /// Preserve an ordinary batch's ordered keyboard chords, including duplicate modifier codes.
 +  /// Repeated keyboard DOWN credits must be released within this part. Only actual held state
 +  /// continues to another part. Touch/button releases stay strict; modes cannot be mixed.
-+  /// This uses the same measured connection, freshness checks and owned cleanup as submitOwnedPart.
++  /// This uses the same measured connection and owned cleanup as submitOwnedPart. The first
++  /// part performs a full context read; later parts use the continuous live feed, including
++  /// after drain. Call validateLegacyBatchBoundary before each ordinary command step.
 +  public func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
 +    try await executePrepared(event, admissionGuard: nil, mode: .legacyBatch)
++  }
++
++  /// Refresh the full context at a command boundary only when all input is released.
++  /// While a touch, key or button is held, the continuous feed guards the original context
++  /// without extending that hold with guest helper work. Failure invalidates the session.
++  public func validateLegacyBatchBoundary() async throws {
++    try enter()
++    defer { inFlight = false }
++    guard ownedStreamMode == nil || ownedStreamMode == .legacyBatch, token == nil, liveProvider != nil else {
++      throw FBSimulatorHIDSessionError.invalidEvent("Legacy batch boundary requires a live batch session")
++    }
++    do { try await checkFreshness(authoritative: !hasOwnedInput) }
++    catch { throw await interrupt(error) }
 +  }
 +
 +  /// Guarded input requires a live feed so the final revision check does not await a full read.
@@ -7616,6 +7618,7 @@ index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd
 +    try enter()
 +    defer { inFlight = false }
 +    lastExecutionEvidence = nil
++    let firstLegacyBatchPart = mode == .legacyBatch && ownedStreamMode == nil
 +    let events: [FBSimulatorHIDEvent]
 +    switch mode {
 +    case .complete:
@@ -7660,7 +7663,7 @@ index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd
 +    var drainCompleted = false
 +    state = .executing
 +    do {
-+      try await checkFreshness(authoritative: true)
++      try await checkFreshness(authoritative: mode != .legacyBatch || firstLegacyBatchPart)
 +      for item in events {
 +        try Task.checkCancellation()
 +        if case let .delay(seconds) = item {
@@ -7699,7 +7702,7 @@ index 0000000000000000000000000000000000000000..46a8837947b77e5f7d417973ae2636bd
 +      try await completeDrain()
 +      drainCompleted = true
 +      phase = .finalContextCheck
-+      try await checkFreshness(authoritative: true)
++      try await checkFreshness(authoritative: mode != .legacyBatch)
 +      let retained = usesOwnedParts && hasOwnedInput
 +      state = retained ? .retainedInputs : .ready
 +      if usesOwnedParts {

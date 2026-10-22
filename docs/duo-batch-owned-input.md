@@ -1,6 +1,6 @@
 # Ordinary Duo batch input
 
-Status: source candidate only, 22 October 2026. This batch change has not been built or run in a simulator. It is not accepted for main integration. Use matched AXe and FBSimulatorControl artifacts after verification.
+Status: source fix candidate, 22 October 2026. The earlier matched batch build passed tap and retained-touch checks, but one-event typing chunks caused repeated characters. The boundary-check fix below has not been built or run in a simulator. It is not accepted for main integration. Use matched AXe and FBSimulatorControl artifacts after verification.
 
 The ordinary no-flag `batch` command uses one measured Duo display, native session and common input lease for its whole ordered run. Other devices keep the prior batch route. Selected batch and agent command behavior are unchanged. No CLI option or wire change is added.
 
@@ -20,7 +20,9 @@ Accessibility cache policies remain available. They do not prove current app lay
 
 ## Native batch part API
 
-`FBSimulatorHIDSession.submitLegacyBatchPart(_:)` uses the same fixed live context, transport, owned input state, freshness checks, drain and cleanup as `submitOwnedPart(_:)`. Only one stream mode can be used in a session. Close it before changing between strict owned parts, legacy batch parts, complete input or explicit retained contacts.
+`FBSimulatorHIDSession.submitLegacyBatchPart(_:)` uses the fixed live context, transport, owned input state, drain and cleanup of `submitOwnedPart(_:)`. Its first part performs a full context read. Every primitive, delay and later part uses the continuous native feed, including after drain. This avoids full guest helper reads between key down and key up or during a physical tap hold. Strict owned parts and complete input keep their existing full-read boundaries.
+
+Call `validateLegacyBatchBoundary()` after command conversion and before its first part, then once at normal batch completion. When no touch, key or button is held, it reads and compares the full context. When input is held across steps, it uses the live feed without extending that hold with guest helper work. A failed check invalidates the fixed session and releases owned input. The feed and idle monitor remain active throughout. Only one stream mode can be used in a session. Close it before changing between strict owned parts, legacy batch parts, complete input or explicit retained contacts.
 
 The batch API preserves duplicate modifier codes and a target key that also appears among modifiers. It does not deduplicate or reorder events. Per-part keyboard down credits must cover every up, and extra repeated-down credits must be consumed within that same part. Only actual held key state can continue to another part. Cleanup tracks the existing actual held set, so it releases each still-held key once.
 
