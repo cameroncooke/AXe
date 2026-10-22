@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added standalone `key-combo --agent` for complete modifier shortcuts on a current focused TextField reference, with snapshot/PID/focus checks and owned key release. Raw and selected combinations remain unchanged; agent batch and focus-ID overrides reject. Build and native verification remain pending.
+- Added standalone `key-combo --agent` for complete modifier shortcuts on a current focused TextField reference, with snapshot/PID/focus checks and owned key release. Raw and selected combinations remain unchanged; agent batch and focus-ID overrides reject. The isolated build, 42 existing checks and 15 scoped native subchecks passed. A later older selected-path timeout and a separate startup failure remain recorded.
 
 - Added standalone `key --agent` for one default key down/up on a current focused TextField reference, with snapshot/PID/focus checks and owned release. Duration, focus-ID overrides and batch use reject; raw and selected key behavior is unchanged. Focused Backspace, stale/wrong-app/unfocused rejection and raw/selected compatibility passed on the isolated Duo outer-portrait candidate.
 
@@ -66,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Fixed selected `tap --semantic-press` treating a true native reply as switch success. It now requires fresh Boolean value change on the same target within the original budget, preserves native reply/delivery evidence and rejects older reply-only success at the caller. No action is retried; physical taps are unchanged. Build and native verification are pending.
+- Fixed selected `tap --semantic-press` treating a true native reply as switch success. It now requires fresh Boolean value change on the same target within the original budget, preserves native reply/delivery evidence and rejects older reply-only success at the caller. No action is retried; physical taps are unchanged. The isolated library/CLI build, 92 existing checks and three off-to-on Duo cases passed. The no-change refusal branch has no live proof.
 
 - Fixed ordinary batch validation errors showing a generic system error instead of the command message. Cleanup and input receipts are unchanged.
 
