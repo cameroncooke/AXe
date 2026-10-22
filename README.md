@@ -74,6 +74,8 @@ axe swipe --agent --udid "$UDID" --expected-pid "$APP_PID" \
 
 Capture discovers the measured active display unless an explicit selected pair is supplied. A positive current app PID is required. Compact RS/1-style JSON includes bounded `ref|action|role|label|value|id` rows, snapshot identity, context, cache status and action receipts. Use the capture paging options in `describe-ui --help` for omitted rows. `--since-screen-hash <hash>` still reads the current UI before reporting it unchanged. Cache reuse also checks a separate exact native fingerprint. The compact RS/1 `screenHash` uses normalized data; a matching hash alone does not prove unchanged raw UI.
 
+Agent captures include `keyboard` evidence from the selected app's existing accessibility read, including unchanged and replacement captures. `state: "likelyVisible"` means visible Button IDs or labels match keyboard-key signals; `"unknown"` means no supported evidence was found, not that the keyboard is hidden. `source: "accessibility-key-signals"`, `scope: "selected-application"` and the four `signals` fields (`idChromeCount`, `globeSeen`, `letterKeyCount`, `chromeKeyCount`) show the basis. Counts use distinct matching IDs, labels and Latin letters. This heuristic adds no native query, does not prove keyboard focus and does not change typing checks.
+
 References belong to one immutable snapshot and expire with the broker cache. Reference and coordinate actions require `--snapshot-id`; a ref alone is not a stable identifier. The runtime reads current context and accessibility data before input. A changed screen or boot, app, display, hinge, rotation or geometry invalidates old state. Refresh and choose the new ref; AXe does not silently reuse old coordinates. After an action, use its replacement capture or read a new snapshot. Cache loss and uncertain input require a fresh observation; input is never replayed automatically.
 
 Typing keeps the existing US keyboard mapping and 256-byte limit. First tap and inspect the field; it must already be focused. Ref swipes use bounded current element geometry; `up` moves the finger up. Coordinate tap/swipe forms remain available with an agent snapshot, but do not prove an AX recipient. Other commands keep their existing interfaces and do not yet accept `--agent`. The existing native input and touch-release checks remain authoritative.
@@ -280,3 +282,5 @@ AXe is an independent open-source iOS Simulator automation project and is not af
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
 Third-party licensing notices, including Meta's IDB MIT attribution, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+
+The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's root MIT licence is unchanged.

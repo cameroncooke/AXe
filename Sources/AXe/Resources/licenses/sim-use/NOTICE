@@ -1,0 +1,26 @@
+sim-use
+Copyright 2026 LY Corporation
+
+This product includes software developed at LY Corporation.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not
+use the files in this project except in compliance with the License. A copy
+of the License is provided in the LICENSE file at the root of this repository
+and is also available at http://www.apache.org/licenses/LICENSE-2.0.
+
+--------------------------------------------------------------------------------
+
+This product is derived from AXe (https://github.com/cameroncooke/AXe),
+Copyright (c) 2025 Cameron Cooke, originally licensed under the MIT License.
+The fork was cut from AXe v1.6.0 in April 2026 and has since been substantially
+modified by LY Corporation. The relicensing of this derivative work under the
+Apache License, Version 2.0 is permitted by the sublicensing grant of the MIT
+License.
+
+This product includes software developed by Facebook idb
+(https://github.com/facebook/idb), Copyright (c) Meta Platforms, Inc. and
+affiliates, licensed under the MIT License. sim-use links against XCFrameworks
+built from idb to drive the iOS Simulator HID and accessibility pipelines.
+
+The full text of the above third-party licenses is reproduced in the
+THIRD_PARTY_LICENSES file at the root of this repository.

@@ -127,6 +127,7 @@ struct AgentModeCapture: Codable, Sendable {
     let textCount: Int
     let truncated: Bool
     let expiresInSeconds: Double
+    let keyboard: AgentModeKeyboardObservation?
 }
 
 struct AgentModeActionReceipt: Codable, Sendable {

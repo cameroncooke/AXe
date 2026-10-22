@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added agent-only `tap --label-contains`, `--label-regex` with Foundation regex syntax, and logical-point `--frame` filters for explicit selectors. Queries use bounded fresh native-tree resolution, reject ambiguity and retain exact native target/context checks before input. Existing exact/ref routes and no-flag behavior remain. Older brokers reject new selector payloads rather than ignore filters.
+- Added optional agent-capture software-keyboard evidence from the existing selected app accessibility read, with separate signal counts and `likelyVisible` or `unknown` state. Missing evidence never reports the keyboard as hidden; raw no-flag output is unchanged.
 
 - Added opt-in `--agent` snapshots and guarded reference actions on `describe-ui`, `tap`, `type` and `swipe`, with compact RS/1-style output, bounded broker state, immutable snapshot IDs and fresh context/target validation. Existing commands without the flag retain their raw output and coordinate route. Selected wire 23 rejects old wire 22 requests.
 

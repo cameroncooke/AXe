@@ -58,7 +58,8 @@ let package = Package(
             ],
             path: "Sources/AXe",
             resources: [
-                .copy("Resources/skills")
+                .copy("Resources/skills"),
+                .copy("Resources/licenses")
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"] + idbPrivateHeaderSearchFlags)

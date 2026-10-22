@@ -13,6 +13,8 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 
 Use `--agent` on `describe-ui`, `tap`, `type` or `swipe` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
 
+Read `capture.keyboard` as keyboard-like AX evidence for the selected app. `likelyVisible` is a heuristic; `unknown` does not mean hidden. It does not prove focus or change typing checks.
+
 1. Capture with `axe describe-ui --agent --udid <UDID> --expected-pid <PID>`.
 2. Pass its immutable `--snapshot-id` with ref/coordinate actions. Refresh after UI or context changes; never replay uncertain input.
 3. For tap selectors, use exact ID/label/value, `--label-contains`, or Foundation `--label-regex`. Optional `--frame` uses decimal logical points; exclude refs/coordinates.
