@@ -117,6 +117,14 @@ echo "Complex text with any characters!" | axe type --stdin --udid <UDID>
 axe type --file input.txt --udid <UDID>
 ```
 
+## Clipboard staging
+
+```bash
+printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UUID>
+```
+
+Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md). Build and native proof are pending.
+
 ## Keyboard
 
 ```bash

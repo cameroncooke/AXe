@@ -67,6 +67,20 @@ Success prints JSON with `source: "simctl"`, `udid`, `initialState`, `finalState
 axe shutdown --udid "$UDID"
 ```
 
+## Clipboard copy
+
+Use `axe clipboard copy --stdin --udid <UUID>` to stage 1...65536 valid UTF-8 bytes in one booted simulator clipboard. Stdin ends at EOF and preserves every byte, including line endings and combining characters. Names, `booted` and `all` aliases reject; AXe does not boot the device.
+
+```bash
+printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid "$UDID"
+```
+
+The command sends one public CoreDevice copy, then one exact readback, with no retry or fallback. Success prints only a JSON receipt: `source: "appleCoreDevicePasteboard"`, `operation: "copy"`, `outcome: "stagedAndVerified"`, `simulatorUDID`, `utf8Length`, `sha256`, `verified: true`, `inserted: false`, `clipboardReplaced: true` and `sharedClipboardMayChange: true`. It does not insert text or change the existing US HID `type` command. No agent, selected-screen or batch options apply.
+
+This replaces the general clipboard and can affect the Mac or other devices through sharing. AXe does not save prior content or restore it. Raw child streams and unexpected readback stay private. A failed or interrupted copy can already have changed the clipboard; preserve the result and do not replay automatically. Readback is an observation, not an atomic clipboard or recipient guarantee. Each child has a 30-second bound; CoreDevice copy/readback use `--timeout 8`. Stdin waits for EOF without a deadline and observes cancellation. SIGINT/SIGTERM cancel and await owned child cleanup; SIGKILL cleanup is not guaranteed.
+
+Get a fresh UI capture before separate app actions and verify the actual destination. The new command is source-only pending build and native proof. The earlier known-fixture composition and Cmd+V failure do not prove this new product command. [Full clipboard contract](Skills/CLI/axe/references/clipboard-reference.md).
+
 ## Agent mode (experimental)
 
 Add `--agent` to `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo`, `key-sequence`, `slider`, `gesture double-tap` or complete reference `touch` for provider-free stateful control. Commands without the flag retain raw accessibility output and logical coordinate semantics. This mode is separate from `axe agent <goal>` and does not need a model or API key.

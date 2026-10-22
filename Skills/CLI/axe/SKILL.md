@@ -11,6 +11,8 @@ description: Provides agent-ready AXe CLI usage guidance for iOS Simulator autom
 
 Use `axe shutdown --udid <UUID>` for one simulator. JSON reports `shutdownCompleted` only after state readback, or `alreadyShutdown` without a request. Names/all aliases reject. This is simulator shutdown, not guest lock or power-button input. It has a 60-second budget; inspect state after failure. Do not use agent/batch options.
 
+Stage UTF-8 with `axe clipboard copy --stdin --udid <UUID>`. It replaces shared clipboard; `inserted: false` means staged only. Read [Clipboard staging](references/clipboard-reference.md).
+
 ## Optional agent mode
 
 Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo`, `key-sequence`, `slider`, `gesture double-tap` or complete reference `touch` for stateful JSON. This flag is separate from `axe agent <goal>` and needs no model key.
@@ -147,7 +149,7 @@ Stop normally with SIGINT or SIGTERM and await the actual exit. Capture cleanup 
 
 ## Step 2: Choose the right command
 
-Available commands: `init`, `tap`, `slider`, `swipe`, `drag`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `hinge`, `rotate`, `batch`, `agent`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`, `shutdown`. Run `axe --help` or `axe <command> --help` for full options.
+Available commands: `init`, `tap`, `slider`, `swipe`, `drag`, `gesture`, `touch`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `hinge`, `rotate`, `batch`, `agent`, `describe-ui`, `screenshot`, `record-video`, `stream-video`, `list-simulators`, `shutdown`, `clipboard copy`. Run `axe --help` or `axe <command> --help` for full options.
 
 Common examples:
 ```bash
