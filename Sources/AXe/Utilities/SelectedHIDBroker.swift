@@ -104,7 +104,7 @@ enum SelectedHIDBroker {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await agentController.perform(request)
                             }
-                        } else if request.legacyPath != nil || (request.ax?.kind == .tap && request.ax?.waitPolicy != nil) {
+                        } else if request.legacyPath != nil || request.legacyTouch != nil || (request.ax?.kind == .tap && request.ax?.waitPolicy != nil) {
                             agentController.invalidate()
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await owner.perform(request)

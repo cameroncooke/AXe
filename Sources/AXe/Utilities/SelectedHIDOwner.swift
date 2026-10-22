@@ -42,6 +42,7 @@ final class SelectedHIDOwner {
         }
         catch { return response(request, outcome: "rejectedBeforeInput", error: error) }
         defer { admission.finish(); lastActivity = dependencies.now() }
+        if request.legacyTouch != nil { return await performLegacyTouch(request) }
         if request.agentAdmission != nil, request.ax == nil, request.keyboard == nil {
             do {
                 try acquireLease()
@@ -140,6 +141,56 @@ final class SelectedHIDOwner {
         }
     }
 
+    private func performLegacyTouch(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
+        var beforeCount = 0
+        do {
+            guard let touch = request.legacyTouch, let expected = request.expectedContext else {
+                throw SelectedHIDFailure.invalid("Missing measured Duo touch payload")
+            }
+            let hadContact = admission.origin == .legacyTouch
+            if session == nil { try await open(request) }
+            guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned Duo touch session") }
+            beforeCount = await session.status().enqueuedEventCount
+            guard expected == SelectedHIDContext(observation) else {
+                throw SelectedHIDFailure.invalid("Duo touch context changed while input was retained")
+            }
+            // An unpaired up cannot release input owned by another selected route.
+            // Do not send it on a replacement display after idle invalidation.
+            let receipt: FBSimulatorHIDSessionReceipt
+            if touch.up && !touch.down && !hadContact {
+                receipt = try await session.close()
+            } else {
+                receipt = try await session.submitOwnedPart(touch.event())
+            }
+            let count = await session.status().enqueuedEventCount - beforeCount
+            if touch.up {
+                let cleanup = try await session.close().cleanup.rawValue
+                guard cleanup != "uncertain" else { throw SelectedHIDFailure.invalid("Duo touch cleanup is uncertain") }
+                let result = response(request, outcome: hadContact || touch.down ? receipt.outcome.rawValue : "noOwnedContact",
+                    count: count, cleanup: cleanup)
+                await feed?.closeAndWait()
+                clear()
+                return result
+            }
+            admission.retain(request, token: admission.token ?? UUID(), origin: .legacyTouch)
+            return response(request, outcome: receipt.outcome.rawValue, count: count)
+        } catch {
+            var cleanup = "notNeeded"
+            var count = 0
+            if let session {
+                let status = await session.status()
+                count = max(0, status.enqueuedEventCount - beforeCount)
+                if let closed = try? await session.close() { cleanup = closed.cleanup.rawValue }
+                else { cleanup = "uncertain" }
+            }
+            let result = response(request, outcome: "failedNoReplay", count: count, cleanup: cleanup, error: error)
+            await feed?.closeAndWait()
+            if cleanup == "uncertain" { return quarantine(result, request: request) }
+            clear()
+            return result
+        }
+    }
+
     func maintain() async {
         guard !quarantined, !admission.inFlight, !maintainingRetainedInput else { return }
         if admission.token != nil, let feed, let observation {
@@ -150,7 +201,8 @@ final class SelectedHIDOwner {
                 return
             }
         }
-        guard dependencies.now() - lastActivity >= 30 else { return }
+        let idleTimeout: TimeInterval = admission.origin == .legacyTouch ? 60 : 30
+        guard dependencies.now() - lastActivity >= idleTimeout else { return }
         await shutdown()
     }
 
@@ -214,9 +266,9 @@ final class SelectedHIDOwner {
         guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }), simulator.state == .booted else {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
-        if request.legacyPath != nil {
+        if request.legacyPath != nil || request.legacyTouch != nil {
             guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
-                throw SelectedHIDFailure.invalid("Legacy Duo paths require the verified Duo device profile")
+                throw SelectedHIDFailure.invalid("Legacy Duo input requires the verified Duo device profile")
             }
             let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
             guard capability.hinge == .supported else {

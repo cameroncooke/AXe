@@ -186,10 +186,10 @@ struct SelectedBatchSliderTests {
         #expect(SelectedBatchRunner.completed(try response(item), for: item))
     }
 
-    @Test func wireSeventeenRejectsFilteredRequestBeforeOwnership() throws {
+    @Test func wireTwentyFiveRejectsFilteredRequestBeforeOwnership() throws {
         let current = try request(minimum + " --element-type Slider")
-        #expect(current.version == 25)
-        let old = SelectedHIDRequest(version: 17, requestID: current.requestID,
+        #expect(current.version == 26)
+        let old = SelectedHIDRequest(version: 25, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [], ax: current.ax)
         var admission = SelectedHIDAdmission()
@@ -316,7 +316,7 @@ struct SelectedBatchSliderTests {
             screenUniqueID: fault == .screenUUID ? UUID().uuidString : screen, axDisplayID: 3,
             displayContext: FBSimulatorHIDDisplayContext(hidTarget: 3,
                 nativePixelSize: CGSize(width: 900, height: 1800), scale: 3, rotation: .rot0), poseRevision: "test-pose")
-        var result = SelectedHIDResponse(version: fault == .version ? 1 : item.version,
+        var result = SelectedHIDResponse(version: fault == .version ? 25 : item.version,
             requestID: fault == .requestIdentity ? UUID() : identity ?? item.requestID,
             brokerID: UUID(), outcome: fault == .outerOutcome ? "enqueuedAndDrained" : wire.outcome,
             token: fault == .token ? UUID() : nil, enqueuedEventCount: fault == .hidEvents ? 1 : 0,

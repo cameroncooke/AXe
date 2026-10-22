@@ -7438,10 +7438,10 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb3ae4c931
+index 0000000000000000000000000000000000000000..878abd1ec40c93c7fba8c4d055f3752ca118dc7c
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,717 @@
+@@ -0,0 +1,759 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7451,6 +7451,12 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +  private enum Contacts: Sendable {
 +    case single(CGPoint)
 +    case pair(CGPoint, CGPoint)
++  }
++  private enum SubmissionMode { case complete, ownedPart }
++  private struct OwnedInputState {
++    let contactCount: Int
++    let keys: Set<UInt32>
++    let buttons: Set<FBSimulatorHIDButton>
 +  }
 +
 +  private let transport: any FBSimulatorHIDTransport
@@ -7468,6 +7474,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +  private var idleCleanupWaiters: [CheckedContinuation<Void, Never>] = []
 +  private var heldKeys = Set<UInt32>()
 +  private var heldButtons = Set<FBSimulatorHIDButton>()
++  private var usesOwnedParts = false
 +  private var sentCount = 0
 +  private var lastCleanup: FBSimulatorHIDCleanupOutcome = .notNeeded
 +  private var lastCleanupEvidence: FBSimulatorHIDCleanupEvidence?
@@ -7570,6 +7577,15 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +    try await executePrepared(event, admissionGuard: nil)
 +  }
 +
++  /// Submit part of one owned logical-coordinate stream. Held single-contact, key and button
++  /// state survives successful calls. Releases must match input retained here or begun in this part.
++  /// An execution failure releases this session's possible input.
++  /// Existing explicit retained tokens cannot enter this mode. Once started, it rejects complete
++  /// execute and explicit retained-contact calls until the session is closed.
++  public func submitOwnedPart(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
++    try await executePrepared(event, admissionGuard: nil, mode: .ownedPart)
++  }
++
 +  /// Guarded input requires a live feed so the final revision check does not await a full read.
 +  public func execute(_ event: FBSimulatorHIDEvent,
 +                      admissionGuard: any FBSimulatorHIDInputAdmissionGuard) async throws -> FBSimulatorHIDSessionReceipt {
@@ -7585,12 +7601,28 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +
 +  private func executePrepared(_ event: FBSimulatorHIDEvent,
 +                               admissionGuard: (any FBSimulatorHIDInputAdmissionGuard)?,
-+                               keyboardAdmissionGuard: (any FBSimulatorHIDKeyboardAdmissionGuard)? = nil) async throws -> FBSimulatorHIDSessionReceipt {
++                               keyboardAdmissionGuard: (any FBSimulatorHIDKeyboardAdmissionGuard)? = nil,
++                               mode: SubmissionMode = .complete) async throws -> FBSimulatorHIDSessionReceipt {
 +    try enter()
 +    defer { inFlight = false }
 +    lastExecutionEvidence = nil
-+    guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
-+    let events = try Self.prepare(event, context: observation.displayContext)
++    let events: [FBSimulatorHIDEvent]
++    switch mode {
++    case .complete:
++      guard !usesOwnedParts else { throw FBSimulatorHIDSessionError.invalidEvent("Owned-part sessions cannot execute complete input") }
++      guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
++      events = try Self.prepare(event, context: observation.displayContext)
++    case .ownedPart:
++      guard token == nil else { throw FBSimulatorHIDSessionError.invalidToken }
++      guard liveProvider != nil else { throw FBSimulatorHIDSessionError.invalidEvent("Owned parts require a live freshness provider") }
++      let contactCount: Int
++      switch contacts { case .single?: contactCount = 1; case .pair?: contactCount = 2; case nil: contactCount = 0 }
++      do {
++        events = try Self.prepare(event, context: observation.displayContext,
++          ownedState: OwnedInputState(contactCount: contactCount, keys: heldKeys, buttons: heldButtons))
++      } catch { throw await interrupt(error) }
++      usesOwnedParts = true
++    }
 +    if admissionGuard != nil || keyboardAdmissionGuard != nil, liveProvider == nil {
 +      throw FBSimulatorHIDSessionError.invalidEvent("Guarded input requires a live freshness provider")
 +    }
@@ -7653,13 +7685,18 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +      drainCompleted = true
 +      phase = .finalContextCheck
 +      try await checkFreshness(authoritative: true)
-+      state = .ready
++      let retained = usesOwnedParts && hasOwnedInput
++      state = retained ? .retainedInputs : .ready
++      if usesOwnedParts {
++        if retained { startRetainedMonitor() }
++        else { stopRetainedMonitor() }
++      }
 +      lastExecutionEvidence = .init(operationID: operationID, boundObservation: observation,
 +        phase: .completed, plannedPrimitiveCount: planned, sentPrimitiveCount: sentCount - before,
 +        allInputsReleasedBeforeCleanup: contacts == nil && heldKeys.isEmpty && heldButtons.isEmpty,
 +        drainCompleted: drainCompleted, interruption: nil, cleanup: .notNeeded,
 +        startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
-+      return receipt(.enqueuedAndDrained, started: started, before: before)
++      return receipt(retained ? .retained : .enqueuedAndDrained, started: started, before: before)
 +    } catch {
 +      let released = contacts == nil && heldKeys.isEmpty && heldButtons.isEmpty
 +      let sent = sentCount - before
@@ -7737,6 +7774,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +  private func beginContacts(_ next: Contacts) async throws -> FBSimulatorHIDSessionReceipt {
 +    try enter()
 +    defer { inFlight = false }
++    guard !usesOwnedParts else { throw FBSimulatorHIDSessionError.invalidEvent("Owned-part sessions cannot create explicit contact tokens") }
 +    guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
 +    try validate(next)
 +    let started = ProcessInfo.processInfo.systemUptime
@@ -7779,10 +7817,12 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +    } catch { throw await interrupt(error) }
 +  }
 +
-+  /// Observe only the existing local feed while a retained caller is idle. The task does not
++  private var hasOwnedInput: Bool { contacts != nil || !heldKeys.isEmpty || !heldButtons.isEmpty }
++
++  /// Observe only the existing local feed while owned input is idle. The task does not
 +  /// retain the session across sleeps. Actor admission keeps cleanup separate from caller input.
 +  private func startRetainedMonitor() {
-+    guard liveProvider != nil, contacts != nil, token != nil, retainedMonitor == nil else { return }
++    guard liveProvider != nil, hasOwnedInput, usesOwnedParts || token != nil, retainedMonitor == nil else { return }
 +    let monitorID = UUID()
 +    retainedMonitorID = monitorID
 +    retainedMonitor = Task { [weak self] in
@@ -7802,7 +7842,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +  }
 +
 +  private func maintainRetainedInput(_ monitorID: UUID) async -> Bool {
-+    guard retainedMonitorID == monitorID, contacts != nil, token != nil,
++    guard retainedMonitorID == monitorID, hasOwnedInput, usesOwnedParts || token != nil,
 +          let liveProvider else { return false }
 +    // A caller that owns admission continues to use its normal freshness checks.
 +    guard !inFlight else { return true }
@@ -8069,16 +8109,17 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +      enqueuedEventCount: sentCount - before, elapsedSeconds: ProcessInfo.processInfo.systemUptime - started, cleanup: cleanup)
 +  }
 +
-+  private static func prepare(_ event: FBSimulatorHIDEvent, context: FBSimulatorHIDDisplayContext) throws -> [FBSimulatorHIDEvent] {
++  private static func prepare(_ event: FBSimulatorHIDEvent, context: FBSimulatorHIDDisplayContext,
++                              ownedState: OwnedInputState? = nil) throws -> [FBSimulatorHIDEvent] {
 +    var flattened: [FBSimulatorHIDEvent] = []
 +    func flatten(_ item: FBSimulatorHIDEvent) {
 +      if case let .composite(items) = item { for child in items { flatten(child) } }
 +      else { flattened.append(item) }
 +    }
 +    flatten(event.event(for: .dtuhid))
-+    var contactCount = 0
-+    var keys = Set<UInt32>()
-+    var buttons = Set<FBSimulatorHIDButton>()
++    var contactCount = ownedState?.contactCount ?? 0
++    var keys = ownedState?.keys ?? Set<UInt32>()
++    var buttons = ownedState?.buttons ?? Set<FBSimulatorHIDButton>()
 +    for item in flattened {
 +      switch item {
 +      case let .touch(direction, x, y):
@@ -8087,6 +8128,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +        if direction == .up && contactCount == 0 { throw FBSimulatorHIDSessionError.invalidEvent("Touch release without begin") }
 +        contactCount = direction == .down ? 1 : 0
 +      case let .twoFingerTouch(direction, first, second):
++        guard ownedState == nil else { throw FBSimulatorHIDSessionError.invalidEvent("Owned parts support one touch contact only") }
 +        try validatePoint(first, context: context); try validatePoint(second, context: context)
 +        guard contactCount == 0 || contactCount == 2 else { throw FBSimulatorHIDSessionError.invalidEvent("Mixed contact counts") }
 +        if direction == .up && contactCount == 0 { throw FBSimulatorHIDSessionError.invalidEvent("Touch release without begin") }
@@ -8105,7 +8147,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +      default: throw FBSimulatorHIDSessionError.invalidEvent("Session does not execute pose or system-state events")
 +      }
 +    }
-+    guard contactCount == 0, keys.isEmpty, buttons.isEmpty else {
++    guard ownedState != nil || (contactCount == 0 && keys.isEmpty && buttons.isEmpty) else {
 +      throw FBSimulatorHIDSessionError.invalidEvent("Complete gesture must release all inputs; use retained contact API")
 +    }
 +    return flattened
@@ -8161,6 +8203,7 @@ index 0000000000000000000000000000000000000000..eea21382226aa6672291725cafb052fb
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSessionTypes.swift b/FBSimulatorControl/HID/FBSimulatorHIDSessionTypes.swift
 new file mode 100644
+index 0000000000000000000000000000000000000000..3925a8b78c8aa36d10086b84c178c10b0b4706a2
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSessionTypes.swift
 @@ -0,0 +1,210 @@
@@ -8207,7 +8250,7 @@ new file mode 100644
 +}
 +
 +public enum FBSimulatorHIDSessionState: String, Sendable {
-+  case ready, executing, retainedContacts, draining, invalidated, closed
++  case ready, executing, retainedContacts, retainedInputs, draining, invalidated, closed
 +}
 +
 +/// These describe transport actions, never fixture/UI confirmation.
@@ -8265,13 +8308,13 @@ new file mode 100644
 +  public let requestedDelaySeconds: Double
 +}
 +
-+/// Last complete-execute phase. This is transport evidence, not a UI result.
++/// Last complete or owned-part execute phase. This is transport evidence, not a UI result.
 +public enum FBSimulatorHIDExecutionPhase: String, Sendable {
 +  case beforeInput, admission, primitive, delay, drain, finalContextCheck, completed
 +}
 +
-+/// Frozen only when one complete execute call returns or throws. Close preserves it.
-+/// Nil means no complete execute reached execution after its preflight checks.
++/// Frozen when one complete or owned-part execute call returns or throws. Close preserves it.
++/// Nil means no execute reached execution after its preflight checks.
 +public struct FBSimulatorHIDExecutionEvidence: Sendable {
 +  public let operationID: UUID
 +  public let boundObservation: FBSimulatorHIDSessionObservation

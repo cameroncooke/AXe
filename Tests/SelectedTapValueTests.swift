@@ -24,7 +24,7 @@ struct SelectedTapValueTests {
         let original = try valueRequest(value)
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(decoded.version == 25 && decoded.requestID == original.requestID)
+        #expect(decoded.version == 26 && decoded.requestID == original.requestID)
         #expect(decoded.screenID == 3 && decoded.screenUUID == UUID(uuidString: screen))
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         let ax = try #require(decoded.ax)
@@ -100,7 +100,7 @@ struct SelectedTapValueTests {
 
     @Test func oldWireAndMixedPayloadsRejectBeforeOwnership() throws {
         let current = try valueRequest()
-        let old = SelectedHIDRequest(version: 14, requestID: current.requestID,
+        let old = SelectedHIDRequest(version: 25, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [], ax: current.ax)
         var withHome = current

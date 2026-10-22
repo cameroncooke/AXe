@@ -35,7 +35,7 @@ struct SelectedSideButtonTests {
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(direct))
         try decoded.validate()
         let payload = try #require(decoded.button)
-        #expect(SelectedHIDRequest.version == 25 && decoded.version == 25)
+        #expect(SelectedHIDRequest.version == 26 && decoded.version == 26)
         #expect(payload.kind == .sideButton && payload.duration == duration && payload.expectedBoot == "boot-one")
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen && decoded.home == nil)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -88,7 +88,7 @@ struct SelectedSideButtonTests {
                 screenUUID: screen, operation: operation, token: token,
                 primitives: primitives, button: clean.button)
         }
-        var invalid = [make(version: 19), make(token: UUID()), make(screenID: nil),
+        var invalid = [make(version: 25), make(token: UUID()), make(screenID: nil),
                        make(primitives: [.touch(.down, x: 1, y: 2)])]
         invalid += [SelectedHIDRequest.Operation.begin, .move, .end, .close].map { make(operation: $0) }
         invalid.append(SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
@@ -209,7 +209,7 @@ struct SelectedSideButtonTests {
         if fault == .executionCleanup { wire.executionCleanup = "uncertain" }
         if fault == .reversedTime { wire.finishedUptime = 0 }
         let execution = try JSONDecoder().decode(SelectedButtonExecutionEvidence.self, from: JSONEncoder().encode(wire))
-        var result = SelectedHIDResponse(version: fault == .wrongVersion ? 19 : SelectedHIDRequest.version,
+        var result = SelectedHIDResponse(version: fault == .wrongVersion ? 25 : SelectedHIDRequest.version,
             requestID: fault == .wrongRequest ? UUID() : request.requestID, brokerID: UUID(),
             outcome: fault == .failed ? "failedNoReplay" : "enqueuedAndDrained", token: nil,
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,

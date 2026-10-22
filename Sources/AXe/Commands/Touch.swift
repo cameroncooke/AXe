@@ -106,6 +106,16 @@ struct Touch: AsyncParsableCommand {
 
         logger.info().log("Performing touch events at (\(pointX), \(pointY))")
 
+        if let context = try await LegacyDuoInput.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+        ) {
+            let touch = LegacyDuoTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
+            try await LegacyDuoInput.perform(touch: touch, context: context,
+                simulatorUDID: simulatorUDID, logger: logger)
+            logger.info().log("Touch events completed successfully")
+            return
+        }
+
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: (x: pointX, y: pointY),
             for: simulatorUDID,

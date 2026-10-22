@@ -94,6 +94,30 @@ enum LegacyDuoInput {
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
     }
 
+    static func perform(
+        touch: LegacyDuoTouch,
+        context: SelectedHIDContext,
+        simulatorUDID: String,
+        logger: AxeLogger
+    ) async throws {
+        try touch.validate()
+        guard let uuid = UUID(uuidString: context.screenUUID) else {
+            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+        }
+        let request = SelectedHIDRequest(
+            version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
+            primitives: [], expectedContext: context, legacyTouch: touch
+        )
+        if touch.down { logger.info().log("Touch down") }
+        if touch.down && touch.up {
+            let hold = touch.delay ?? TapTiming.defaultHoldDuration
+            if hold > 0 { logger.info().log("Delay: \(hold) seconds") }
+        }
+        if touch.up { logger.info().log("Touch up") }
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: nil)
+    }
+
     private static func send(
         _ request: SelectedHIDRequest,
         simulatorUDID: String,

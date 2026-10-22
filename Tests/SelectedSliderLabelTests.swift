@@ -55,8 +55,8 @@ struct SelectedSliderLabelTests {
     @Test func labelRequestRejectsOldWireBeforeOwnership() throws {
         let current = try Slider.parse(["--label", "Horizontal value", "--endpoint", "maximum",
             "--expected-pid", "42", "--udid", udid] + selection).selectedRequest()
-        #expect(current.version == 25)
-        let old = SelectedHIDRequest(version: 18, requestID: current.requestID,
+        #expect(current.version == 26)
+        let old = SelectedHIDRequest(version: 25, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [], ax: current.ax)
         var admission = SelectedHIDAdmission()
