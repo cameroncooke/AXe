@@ -188,7 +188,7 @@ struct SelectedBatchSliderTests {
 
     @Test func oldWireRejectsFilteredRequestBeforeOwnership() throws {
         let current = try request(minimum + " --element-type Slider")
-        #expect(current.version == 28)
+        #expect(current.version == SelectedHIDRequest.version)
         let old = SelectedHIDRequest(version: 27, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [], ax: current.ax)
