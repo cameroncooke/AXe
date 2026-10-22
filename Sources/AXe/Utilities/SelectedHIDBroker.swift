@@ -23,7 +23,7 @@ enum SelectedHIDBroker {
                 child.standardError = FileHandle.nullDevice; try child.run()
             }, sleeper: { _ = usleep($0) }, expectedVersion: SelectedHIDRequest.version)
         defer { Darwin.close(descriptor) }
-        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: 120_000, writeMilliseconds: 2000)
+        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
         return try exchange(data, requestID: request.requestID, descriptor: descriptor,
             maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
     }
@@ -104,7 +104,7 @@ enum SelectedHIDBroker {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await agentController.perform(request)
                             }
-                        } else if request.ax?.kind == .tap, request.ax?.waitPolicy != nil {
+                        } else if request.legacyPath != nil || (request.ax?.kind == .tap && request.ax?.waitPolicy != nil) {
                             agentController.invalidate()
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await owner.perform(request)

@@ -3,7 +3,7 @@ import FBControlCore
 import FBSimulatorControl
 
 /// Keep the legacy CLI surface while using the measured input owner on the verified Duo.
-enum LegacyDuoTap {
+enum LegacyDuoInput {
     @MainActor
     static func captureContext(
         simulatorUDID: String,
@@ -43,7 +43,7 @@ enum LegacyDuoTap {
         )
         let observation = try await reader.observation()
         guard observation.bootIdentity == discovery.bootIdentity else {
-            throw SelectedHIDFailure.invalid("Simulator boot changed during Duo tap preparation")
+            throw SelectedHIDFailure.invalid("Simulator boot changed during Duo input preparation")
         }
         return SelectedHIDContext(observation)
     }
@@ -72,9 +72,36 @@ enum LegacyDuoTap {
             expectedContext: context
         )
         logger.info().log("Duo tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
+    }
+
+    static func perform(
+        path: LegacyDuoPath,
+        context: SelectedHIDContext,
+        simulatorUDID: String,
+        postDelay: Double?,
+        logger: AxeLogger
+    ) async throws {
+        guard let uuid = UUID(uuidString: context.screenUUID) else {
+            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+        }
+        let request = SelectedHIDRequest(
+            version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
+            primitives: [], expectedContext: context, legacyPath: path
+        )
+        logger.info().log("Duo \(path.kind.rawValue) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
+    }
+
+    private static func send(
+        _ request: SelectedHIDRequest,
+        simulatorUDID: String,
+        postDelay: Double?
+    ) async throws {
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
-            throw CLIError(errorDescription: "Duo tap failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+            throw CLIError(errorDescription: "Duo input failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
         }
         try await wait(postDelay)
     }

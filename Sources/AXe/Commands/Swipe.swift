@@ -167,6 +167,25 @@ struct Swipe: AsyncParsableCommand {
         logger.info().log("Performing swipe from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
+        if let context = try await LegacyDuoInput.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+        ) {
+            notifySwipe(startX: startX, startY: startY, endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
+            let path = LegacyDuoPath(kind: .swipe, startX: startX, startY: startY,
+                endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
+            try await LegacyDuoInput.perform(path: path, context: context,
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger)
+        } else {
+            try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
+                swipeDuration: swipeDuration, swipeDelta: swipeDelta, logger: logger)
+        }
+
+        logger.info().log("Swipe gesture completed successfully")
+    }
+    private func performLegacySwipe(
+        startX: Double, startY: Double, endX: Double, endY: Double,
+        swipeDuration: Double, swipeDelta: Double, logger: AxeLogger
+    ) async throws {
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
             points: [(x: startX, y: startY), (x: endX, y: endY)],
             for: simulatorUDID,
@@ -175,19 +194,7 @@ struct Swipe: AsyncParsableCommand {
         let physicalStart = physicalPoints[0]
         let physicalEnd = physicalPoints[1]
 
-        // Broadcast swipe notification for external listeners
-        NotificationCenter.default.post(
-            name: .hidSwipePerformed,
-            object: nil,
-            userInfo: [
-                "startX": startX,
-                "startY": startY,
-                "endX": endX,
-                "endY": endY,
-                "duration": swipeDuration,
-                "delta": swipeDelta
-            ]
-        )
+        notifySwipe(startX: startX, startY: startY, endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
 
         // Create swipe events with timing controls
         var events: [FBSimulatorHIDEvent] = []
@@ -226,8 +233,28 @@ struct Swipe: AsyncParsableCommand {
                 logger: logger
             )
         
-        logger.info().log("Swipe gesture completed successfully")
     }
+
+    private func notifySwipe(
+        startX: Double, startY: Double, endX: Double, endY: Double,
+        duration: Double, delta: Double
+    ) {
+        // Broadcast swipe notification for external listeners
+        NotificationCenter.default.post(
+            name: .hidSwipePerformed,
+            object: nil,
+            userInfo: [
+                "startX": startX,
+                "startY": startY,
+                "endX": endX,
+                "endY": endY,
+                "duration": duration,
+                "delta": delta
+            ]
+        )
+
+    }
+
 }
 
 // MARK: - Notification Extension
