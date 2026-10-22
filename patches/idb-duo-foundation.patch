@@ -11469,7 +11469,7 @@ diff --git a/FBSimulatorControl/Commands/FBAXSemanticPressGate.swift b/FBSimulat
 new file mode 100644
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBAXSemanticPressGate.swift
-@@ -0,0 +1,138 @@
+@@ -0,0 +1,157 @@
 +@_implementationOnly import AccessibilityPlatformTranslation
 +import CoreFoundation
 +import Foundation
@@ -11509,8 +11509,27 @@ new file mode 100644
 +  public var reply: FBSimulatorAXPressReply?
 +  public var failure: String?
 +  public var target: FBSimulatorAXPressTarget?
++  public var stateBefore: Bool?
++  public var stateAfter: Bool?
++  public var readbackCount: Int?
 +  public let guestEffectProved = false
 +  public let hidEventCount = 0
++}
++
++/// Decode only the Boolean forms already returned for a native CheckBox.
++/// Neither arbitrary numeric truthiness nor localized value labels are accepted.
++enum FBAXSwitchBoolean {
++  static func decode(_ raw: Any?) throws -> Bool {
++    if let text = raw as? String {
++      if text == "0" { return false }
++      if text == "1" { return true }
++    } else if let number = raw as? NSNumber {
++      if CFGetTypeID(number) == CFBooleanGetTypeID() { return number.boolValue }
++      if number.decimalValue == Decimal.zero { return false }
++      if number.decimalValue == Decimal(1) { return true }
++    }
++    throw FBAXPressError.rejected("Semantic CheckBox value is not a strict Boolean or 0/1")
++  }
 +}
 +
 +struct FBAXPressBinding: Equatable, Sendable {
@@ -11612,7 +11631,7 @@ diff --git a/FBSimulatorControl/Commands/FBSimulatorAXSemanticPress.swift b/FBSi
 new file mode 100644
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXSemanticPress.swift
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,381 @@
 +@_implementationOnly import AccessibilityPlatformTranslation
 +import AppKit
 +import Foundation
@@ -11627,7 +11646,8 @@ new file mode 100644
 +  public let displayID: UInt32
 +}
 +
-+/// Explicit semantic action. This never calls accessibilityPerformPress, HID or a mouse fallback.
++/// AXe submits one native action, with no accessibilityPerformPress, HID or mouse fallback.
++/// The native action may still produce guest touch events.
 +public enum FBSimulatorAXSemanticPress {
 +  public static func perform(for simulator: FBSimulator, expectedPID: Int32, identifier: String,
 +    observation: FBSimulatorHIDSessionObservation,
@@ -11835,12 +11855,27 @@ new file mode 100644
 +    }
 +  }
 +
-+  func send(provider: any FBSimulatorHIDLiveFreshnessProvider,
-+    observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorAXPressReceipt {
++  private func requireCurrentIdentity() throws {
 +    guard try Self.read(native, request: request, identifier: identifier, pid: pid,
 +      context: rootContext, display: display, budget: budget, routing: routing) == target,
 +      let translation = native.translation, ObjectIdentifier(translation) == translationIdentity,
-+      translation.rawElementData == originalRawData,
++      translation.rawElementData == originalRawData else {
++      throw FBAXPressError.rejected("Semantic target identity changed during value read")
++    }
++  }
++
++  func readBooleanState() throws -> Bool {
++    try requireCurrentIdentity()
++    let value = try FBAXSwitchBoolean.decode(native.axValue())
++    try budget.check(); try Task.checkCancellation()
++    try requireCurrentIdentity()
++    return value
++  }
++
++  func send(provider: any FBSimulatorHIDLiveFreshnessProvider,
++    observation: FBSimulatorHIDSessionObservation, expectedState: Bool) throws -> FBSimulatorAXPressReceipt {
++    try requireCurrentIdentity()
++    guard let translation = native.translation,
 +      let translator = request.translator, translator.supportsDelegateTokens,
 +      (translator.bridgeTokenDelegate as AnyObject?) === dispatcher,
 +      let action = AXPTranslatorRequest.request(withTranslation: translation) as? AXPTranslatorRequest else {
@@ -11856,6 +11891,9 @@ new file mode 100644
 +      try provider.validateCurrentRevision(expected: observation)
 +    }
 +    guard request.semanticPressGate == nil else { throw FBAXPressError.rejected("Semantic action already armed") }
++    guard try readBooleanState() == expectedState else {
++      throw FBAXPressError.rejected("Semantic CheckBox value changed before action; no input")
++    }
 +    request.semanticPressGate = gate
 +    defer { request.semanticPressGate = nil }
 +    try budget.check(); try provider.validateCurrentRevision(expected: observation)
@@ -11917,25 +11955,60 @@ new file mode 100644
 +      try budget.check()
 +      // Fresh frontmost identity after the full provider await. No target query retries.
 +      let finalRoot = try await commands.accessibilityElementForAcquisition(request: request(), worker: self)
-+      receipt = try {
-+        defer { finalRoot.close() }
-+        guard finalRoot.acquisitionPID == expectedPID else { throw FBAXPressError.rejected("Frontmost PID changed") }
-+        let finalContext = try finalRoot.identityRootContext(budget: budget, routing: routing)
-+        try FBAXSemanticPressSelection.validateRootDisplay(finalContext.display, selected: observation.axDisplayID)
-+        guard finalContext.translationPID == initialContext.translationPID,
-+              finalContext.translationObjectID == initialContext.translationObjectID,
-+              try FBAXSemanticPressSelection.positive(finalContext.windowContext, attribute: "12") == context else {
++      defer { finalRoot.close() }
++      func selection(from handle: FBAccessibilityElement) throws -> FBAXSemanticPressSelection {
++        guard handle.acquisitionPID == expectedPID else { throw FBAXPressError.rejected("Frontmost PID changed") }
++        let currentContext = try handle.identityRootContext(budget: budget, routing: routing)
++        try FBAXSemanticPressSelection.validateRootDisplay(currentContext.display, selected: observation.axDisplayID)
++        guard currentContext.translationPID == initialContext.translationPID,
++              currentContext.translationObjectID == initialContext.translationObjectID,
++              try FBAXSemanticPressSelection.positive(currentContext.windowContext, attribute: "12") == context else {
 +          throw FBAXPressError.rejected("Frontmost window changed")
 +        }
-+        let finalSelection = try finalRoot.semanticPressSelection(identifier: identifier, pid: expectedPID,
++        let current = try handle.semanticPressSelection(identifier: identifier, pid: expectedPID,
 +          rootContext: context, display: observation.axDisplayID, budget: budget, routing: routing)
-+        try finalSelection.requireSame(as: selected)
-+        // The fresh tree's unique target stays owned until the one send returns.
-+        return try finalSelection.send(provider: provider, observation: observation)
-+      }()
++        try current.requireSame(as: selected)
++        return current
++      }
++      let finalSelection = try selection(from: finalRoot)
++      let before = try finalSelection.readBooleanState()
++      receipt.stateBefore = before
++      // The fresh tree's unique target stays owned until the one send returns.
++      receipt = try finalSelection.send(provider: provider, observation: observation, expectedState: before)
++      receipt.stateBefore = before
++      guard receipt.outcome == "nativeReplyAccepted" else { return receipt }
++      receipt.readbackCount = 0
++      // Read-only samples share the original eight-second transaction budget.
++      // A native reply does not authorize a second action, even when no change is seen.
++      for attempt in 1...4 {
++        try budget.check(); try Task.checkCancellation()
++        try await validateSelection(simulator, observation: observation, provider: provider)
++        try budget.check()
++        let valueRoot = try await commands.accessibilityElementForAcquisition(request: request(), worker: self)
++        let after = try {
++          defer { valueRoot.close() }
++          let current = try selection(from: valueRoot)
++          let value = try current.readBooleanState()
++          try provider.validateCurrentRevision(expected: observation)
++          try budget.check(); try Task.checkCancellation()
++          return value
++        }()
++        receipt.readbackCount = attempt
++        receipt.stateAfter = after
++        if after != before {
++          receipt.outcome = "switchValueChangedObserved"
++          return receipt
++        }
++        if attempt < 4 { try await Task.sleep(nanoseconds: 100_000_000) }
++      }
++      receipt.outcome = "failedNoReplay"
++      receipt.failure = "Semantic CheckBox value did not change after one native press; no replay"
 +    } catch {
 +      receipt.failure = String(reflecting: error)
-+      if receipt.translatorCallAttempted { receipt.delivery = "uncertain"; receipt.outcome = "failedNoReplay" }
++      if receipt.translatorCallAttempted {
++        if receipt.delivery != "nativeReplyAccepted" { receipt.delivery = "uncertain" }
++        receipt.outcome = "failedNoReplay"
++      }
 +    }
 +    return receipt
 +  }

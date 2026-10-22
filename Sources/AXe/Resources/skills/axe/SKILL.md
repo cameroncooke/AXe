@@ -47,7 +47,7 @@ Selected `tap --value <text>` uses the legacy scalar text conversion for AXValue
 
 Selected selector taps use HID and strict target validation. A rejected hit does not trigger semantic AXPress or legacy input. The automatic legacy switch/toggle behavior above does not establish selected Duo switch support. Full keyboard, media, batch and agent coverage remain incomplete; do not bypass a selected rejection by sending legacy input. Complete selected batch steps use the route below.
 
-For one exact native `CheckBox`, `tap --semantic-press --id <ID>` is an explicit AXPress action with the selected options and `--expected-pid`. Coordinates, labels, values, delays and every explicit tap style are rejected. This action has no HID or mouse fallback and requires the inspected host framework image UUID. A native reply does not prove an app effect. Verify the actual switch value; never replay an uncertain send.
+For native `CheckBox` only, use `tap --semantic-press --id <ID>` with selected options and `--expected-pid`. Coordinates, labels, values, delays and explicit styles reject. The inspected host image is required; no HID/mouse fallback occurs. Success is `switchValueChangedObserved` after fresh same-target Boolean change within the original eight-second budget. Reply/delivery stay separate. Verify app callbacks; zero AXe HID does not mean zero guest touches. Never replay.
 
 Ordinary Duo `type` preserves literal/file/stdin loading, US mapping and plain output. It uses one measured owned session with startup readiness, context checks, signal cancellation and key release. It remains stateless, with no added PID/focus guard or selected text limit. Never replay partial or uncertain input. Other-device typing and optional agent behavior are unchanged.
 

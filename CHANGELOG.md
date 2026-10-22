@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed selected `tap --semantic-press` treating a true native reply as switch success. It now requires fresh Boolean value change on the same target within the original budget, preserves native reply/delivery evidence and rejects older reply-only success at the caller. No action is retried; physical taps are unchanged. Build and native verification are pending.
+
 - Fixed ordinary batch validation errors showing a generic system error instead of the command message. Cleanup and input receipts are unchanged.
 
 - Fixed ordinary Duo standalone typing to use the existing measured owned session, including startup readiness, context checks, signal cancellation and key cleanup. Literal/file/stdin loading, US mapping, plain output and other-device routes are preserved.

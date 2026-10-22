@@ -8,7 +8,7 @@ struct Tap: AsyncParsableCommand {
         abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
     )
 
-    @Flag(name: .customLong("semantic-press"), help: "Selected AX only: send one explicit AXPress to an exact native CheckBox ID. No HID or mouse fallback; a native reply is not effect proof.")
+    @Flag(name: .customLong("semantic-press"), help: "Selected AX only: send one AXPress to an exact native CheckBox ID and require a fresh Boolean value change. No HID or mouse fallback; readback is not app callback proof.")
     var semanticPress = false
 
     @Option(name: .customShort("x"), help: "The X coordinate of the point to tap.")
@@ -275,7 +275,11 @@ struct Tap: AsyncParsableCommand {
             return
         }
         if selectedInput.mode == .selected {
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            let request = try selectedRequest()
+            let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+            // Preserve the broker receipt even when an older broker lacks value readback.
+            try SelectedHIDBroker.printResponse(response)
+            if semanticPress { try requireSemanticReadback(response, request: request) }
             return
         }
         let logger = AxeLogger()
@@ -334,6 +338,29 @@ struct Tap: AsyncParsableCommand {
 
         logger.info().log("Tap completed successfully")
         print("✓ Tap at \(resolvedDescription) completed successfully")
+    }
+
+    private func requireSemanticReadback(_ response: SelectedHIDResponse, request: SelectedHIDRequest) throws {
+        guard response.outcome == "switchValueChangedObserved", response.enqueuedEventCount == 0,
+              response.cleanup == "notNeeded", let ax = response.ax, ax.kind == .semanticPress,
+              ax.expectedPID == request.ax?.expectedPID, ax.failure == nil,
+              let press = ax.press, press.outcome == "switchValueChangedObserved",
+              press.delivery == "nativeReplyAccepted", press.failure == nil,
+              press.translatorCallAttempted, press.callbackCount == 1, press.sendCount == 1,
+              press.reply?.nativeResponsePresent == true, press.reply?.error == "0", press.reply?.value == true,
+              let before = press.stateBefore, let after = press.stateAfter, before != after,
+              let reads = press.readbackCount, (1...4).contains(reads),
+              let target = press.target, target.identifier == request.ax?.selectorValue,
+              target.pid == request.ax?.expectedPID, target.contextID > 0, target.displayID > 0,
+              let objectID = UInt64(target.objectID), objectID > 0, String(objectID) == target.objectID,
+              let context = response.context, context.screenID == request.screenID,
+              UUID(uuidString: context.screenUUID) == request.screenUUID,
+              [target.frame.minX, target.frame.minY, target.frame.width, target.frame.height].allSatisfy(\.isFinite),
+              target.frame.width > 0, target.frame.height > 0,
+              CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(target.frame) else {
+            throw CLIError(errorDescription: "Semantic switch value change is unproved; inspect the preserved receipt. No input was replayed.")
+        }
+        try context.validate()
     }
 
     private func performLegacyTap(resolution: TapResolution, logger: AxeLogger) async throws {
