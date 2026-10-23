@@ -11,6 +11,7 @@ final class SelectedHIDOwner {
     private let logger: AxeLogger
     private let helperURL: URL
     private let dependencies: SelectedAXDependencies
+    private let sliderValueOwner = SelectedSliderValueOwner()
     private var admission = SelectedHIDAdmission()
     private var lease: HIDInputLease?
     private var session: FBSimulatorHIDSession?
@@ -61,8 +62,14 @@ final class SelectedHIDOwner {
         if request.ax != nil || request.hinge != nil || request.keyboard != nil || request.rotation != nil {
             do {
                 try acquireLease()
-                let result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL)
-                if result.cleanup == "uncertain" || result.ax?.slider?.delivery == "uncertain" || result.hinge?.failure?.delivery == .uncertain || result.rotation?.failure?.delivery == .uncertain {
+                let result: SelectedHIDResponse
+                if request.ax?.kind == .sliderPercentage {
+                    result = await SelectedAXOperation.perform(request, simulatorUDID: simulatorUDID,
+                        brokerID: brokerID, logger: logger, helperURL: helperURL, valueOwner: sliderValueOwner)
+                } else {
+                    result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL)
+                }
+                if result.cleanup == "uncertain" || result.ax?.slider?.delivery == "uncertain" || result.ax?.sliderValue?.delivery == "uncertain" || result.hinge?.failure?.delivery == .uncertain || result.rotation?.failure?.delivery == .uncertain {
                     return quarantine(result, request: request)
                 }
                 clear()
@@ -415,6 +422,7 @@ final class SelectedHIDOwner {
     }
 
     private func clear() {
+        sliderValueOwner.clear()
         session = nil; feed = nil; libraryToken = nil; observation = nil; lease = nil; lastRequest = nil; admission.clear()
     }
     private func response(_ request: SelectedHIDRequest, outcome: String, count: Int = 0,

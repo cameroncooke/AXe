@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, pinch, complete }
+    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, sliderPercentage, pinch, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -26,6 +26,7 @@ struct AgentModeRequest: Codable, Sendable {
     var tapStyle: SelectedTapStyle? = nil
     var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
     var sliderEndpoint: FBSimulatorSliderEndpoint? = nil
+    var sliderPercentage: Double? = nil
     var pinch: AgentModePinch? = nil
     var rowOffset: Int = 0
     var rowLimit: Int = 64
@@ -53,14 +54,22 @@ struct AgentModeRequest: Codable, Sendable {
         } else if pinch != nil {
             throw AgentModeFailure("mixedPayload", "Reference pinch geometry applies only to an agent pinch.")
         }
-        if kind == .sliderEndpoint {
-            guard ref != nil, snapshotID != nil, sliderEndpoint != nil,
+        if kind == .sliderPercentage {
+            guard let sliderPercentage, sliderPercentage.isFinite, (0...100).contains(sliderPercentage) else {
+                throw AgentModeFailure("invalidSliderPercentage", "An agent slider percentage requires a finite value in 0...100.")
+            }
+        } else if sliderPercentage != nil {
+            throw AgentModeFailure("mixedPayload", "Slider percentages apply only to a reference slider percentage action.")
+        }
+        if kind == .sliderEndpoint || kind == .sliderPercentage {
+            guard ref != nil, snapshotID != nil,
+                  (kind == .sliderEndpoint ? sliderEndpoint != nil : sliderEndpoint == nil),
                   point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
                   elementType == nil, text == nil, keyEvents == nil, direction == nil, tapStyle == nil,
                   doubleTapTiming == nil, sinceScreenHash == nil, destination == nil, steps == nil,
                   duration == 1, preDelay == 0, postDelay == 0, distance == 1,
                   rowOffset == 0, rowLimit == 64 else {
-                throw AgentModeFailure("invalidSliderEndpoint", "An agent slider endpoint requires one snapshot/ref and minimum or maximum, without other targets, payloads or timing options.")
+                throw AgentModeFailure("invalidSliderEndpoint", "An agent slider requires one snapshot/ref and exactly one endpoint or percentage, without other targets, payloads or timing options.")
             }
         } else if sliderEndpoint != nil {
             throw AgentModeFailure("mixedPayload", "Slider endpoints apply only to a reference slider action.")
@@ -275,6 +284,7 @@ struct AgentModeActionReceipt: Codable, Sendable {
     let replayed: Bool
     let quarantine: SelectedHIDQuarantine?
     var slider: SelectedSliderResult? = nil
+    var sliderValue: SelectedSliderValueResult? = nil
 }
 
 struct AgentModeCacheState: Codable, Sendable {

@@ -411,6 +411,8 @@ function verify_idb_base_state() {
     "FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift|clientType = 2"
     "FBSimulatorControl/Commands/FBAXTranslationRequest.swift|@_implementationOnly import AccessibilityPlatformTranslation"
     "FBSimulatorControl/HID/FBSimulatorHID.swift|public let transportType"
+    "FBSimulatorControl/HID/FBSimulatorHIDSession.swift|admissionGuard: any FBSimulatorHIDInputAdmissionGuard"
+    "FBSimulatorControl/Commands/FBSimulatorSlider.swift|public func beginPhysicalValueFeedback"
     "FBSimulatorControl/HID/FBSimulatorHIDEvent.swift|event.event(for: transportType)"
     "FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m|XCUIDeviceRemoteAutomationSession"
   )

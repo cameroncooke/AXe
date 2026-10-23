@@ -137,9 +137,9 @@ struct SelectedTapSimulatorTests {
     }
 
     @Test func oldWireCannotSilentlyDropSimulatorStyle() throws {
-        #expect(SelectedHIDRequest.version == 33)
+        #expect(SelectedHIDRequest.version == 34)
         let current = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "simulator"]).selectedRequest()
-        let old = SelectedHIDRequest(version: 32, requestID: current.requestID, screenID: current.screenID,
+        let old = SelectedHIDRequest(version: 33, requestID: current.requestID, screenID: current.screenID,
             screenUUID: current.screenUUID, operation: .complete, token: nil, primitives: [], ax: current.ax)
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }

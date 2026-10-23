@@ -71,7 +71,12 @@ let package = Package(
                 .unsafeFlags([
                     "-Xlinker", "-dead_strip",
                     "-Xlinker", "-headerpad_max_install_names",
-                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path" // Simpler rpath for SPM-handled XCFrameworks
+                    "-Xlinker", "-rpath", "-Xlinker", "@executable_path",
+                    // The isolated Slider read worker uses declared AXP bridge types.
+                    // This is a compile input; its headers are not distributed.
+                    "-Xlinker", "-weak_library", "-Xlinker",
+                    idbPrivateHeadersDirectory.appendingPathComponent(
+                        "AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd").path
                 ])
             ],
             plugins: ["VersionPlugin"]

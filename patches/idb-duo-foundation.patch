@@ -4810,10 +4810,10 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2
  }
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
 new file mode 100644
-index 000000000..158d65c47
+index 0000000..a0bd20e
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
-@@ -0,0 +1,462 @@
+@@ -0,0 +1,482 @@
 +import AppKit
 +import Foundation
 +
@@ -5010,6 +5010,7 @@ index 000000000..158d65c47
 +  private let preparation: FBSimulatorAXPreparation
 +  private let admissionGuard: (any FBSimulatorSliderAdmissionGuard)?
 +  private var adjustmentReturned = false
++  private var physicalValueFeedback = false
 +  private var operationID: UUID?
 +  private var live: FBSimulatorHIDNativeFreshnessProvider?
 +  private var phases: [FBSimulatorSliderPhaseEvent] = []
@@ -5054,6 +5055,7 @@ index 000000000..158d65c47
 +    guard self.operationID == nil else { throw FBSimulatorSliderError.busy }
 +    self.operationID = operationID
 +    adjustmentReturned = false
++    physicalValueFeedback = false
 +    phases = []
 +    diagnosticOperationID = operationID
 +    phase("backend-ownership-start")
@@ -5088,6 +5090,7 @@ index 000000000..158d65c47
 +    live = nil
 +    await FBSimulatorAXWorker.shared.closeSliderLease(for: simulator, token: operationID)
 +    self.operationID = nil
++    physicalValueFeedback = false
 +  }
 +
 +  private func boundFeed(deadline: Double) throws -> (UUID, FBSimulatorHIDNativeFreshnessProvider) {
@@ -5103,7 +5106,7 @@ index 000000000..158d65c47
 +    let result = try await FBSimulatorAXWorker.shared.sliderOperation(for: simulator, observation: observation,
 +      feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
 +      deadline: deadline, action: nil, expected: nil, admissionGuard: admissionGuard,
-+      allowingValueChange: adjustmentReturned)
++      allowingValueChange: adjustmentReturned || physicalValueFeedback)
 +    phase("backend-target-read-returned")
 +    return result
 +  }
@@ -5116,7 +5119,24 @@ index 000000000..158d65c47
 +    return try await read(deadline: deadline)
 +  }
 +
++  /// Admit value changes caused by one real guarded pickup owned by this operation.
++  /// Endpoint adjustments cannot enter this phase, and this phase cannot perform endpoint steps.
++  public func beginPhysicalValueFeedback(operationID: UUID,
++    session: FBSimulatorHIDSession, beginReceipt: FBSimulatorHIDSessionReceipt,
++    deadline: Double) async throws {
++    guard self.operationID == operationID, !adjustmentReturned, !physicalValueFeedback else {
++      throw FBSimulatorSliderError.invalidSelection
++    }
++    let (_, feed) = try boundFeed(deadline: deadline)
++    try await session.validateSliderValuePickup(beginReceipt, expected: observation)
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    physicalValueFeedback = true
++    phase("physical-owned-value-feedback-start")
++  }
++
 +  public func step(_ action: FBSimulatorSliderAction, expected: FBSimulatorSliderCapabilities, deadline: Double) async throws -> FBSimulatorSliderActionReceipt {
++    guard !physicalValueFeedback else { throw FBSimulatorSliderError.unsupportedAction }
 +    let started = ProcessInfo.processInfo.systemUptime
 +    do {
 +      let (token, feed) = try boundFeed(deadline: deadline)
@@ -5129,7 +5149,7 @@ index 000000000..158d65c47
 +      let verified = try await FBSimulatorAXWorker.shared.sliderOperation(for: simulator, observation: observation,
 +        feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
 +        deadline: deadline, action: action, expected: expected, admissionGuard: admissionGuard,
-+        allowingValueChange: adjustmentReturned)
++        allowingValueChange: adjustmentReturned || physicalValueFeedback)
 +      adjustmentReturned = true
 +      phase("backend-action-target-and-dispatch-returned")
 +      return FBSimulatorSliderActionReceipt(action: action, verifiedBeforeAction: verified, callStartedUptime: started,
@@ -7506,10 +7526,10 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..dc44b434dbb1a0ad471a40688fc6f852d1a3f8bf
+index 0000000..c79901b
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,819 @@
+@@ -0,0 +1,855 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7631,6 +7651,20 @@ index 0000000000000000000000000000000000000000..dc44b434dbb1a0ad471a40688fc6f852
 +  public func status() -> FBSimulatorHIDSessionStatus {
 +    FBSimulatorHIDSessionStatus(state: state, hasRetainedContact: contacts != nil,
 +      enqueuedEventCount: sentCount, lastCleanup: lastCleanup)
++  }
++
++  /// Checks a real retained single-contact receipt before Slider-owned value feedback starts.
++  /// This does not send input or change session ownership.
++  func validateSliderValuePickup(_ receipt: FBSimulatorHIDSessionReceipt,
++    expected: FBSimulatorHIDSessionObservation) throws {
++    guard observation == expected, !inFlight, !usesOwnedParts,
++          state == .retainedContacts, case .single? = contacts,
++          heldKeys.isEmpty, heldButtons.isEmpty, sentCount == 1,
++          receipt.outcome == .retained, receipt.enqueuedEventCount == 1,
++          receipt.cleanup == .notNeeded, let receiptToken = receipt.token,
++          receiptToken == token, receiptToken.sessionID == sessionID else {
++      throw FBSimulatorHIDSessionError.invalidEvent("Slider value feedback requires this session's retained pickup")
++    }
 +  }
 +
 +  /// Pure full-composite validation. Execution repeats this check before sending.
@@ -7823,6 +7857,14 @@ index 0000000000000000000000000000000000000000..dc44b434dbb1a0ad471a40688fc6f852
 +    try await beginContacts(.single(point))
 +  }
 +
++  /// Validate the initial pickup inside this session's input reservation. Requires a live
++  /// feed and checks its revision again after the guard returns, before the first DOWN.
++  /// The guard must not call back into this HID session.
++  public func begin(at point: CGPoint,
++                    admissionGuard: any FBSimulatorHIDInputAdmissionGuard) async throws -> FBSimulatorHIDSessionReceipt {
++    try await beginContacts(.single(point), admissionGuard: admissionGuard)
++  }
++
 +  public func beginTwoFinger(first: CGPoint, second: CGPoint) async throws -> FBSimulatorHIDSessionReceipt {
 +    try await beginContacts(.pair(first, second))
 +  }
@@ -7878,17 +7920,31 @@ index 0000000000000000000000000000000000000000..dc44b434dbb1a0ad471a40688fc6f852
 +    return receipt(.closed, started: started, before: before, cleanup: cleanup)
 +  }
 +
-+  private func beginContacts(_ next: Contacts) async throws -> FBSimulatorHIDSessionReceipt {
++  private func beginContacts(_ next: Contacts,
++                             admissionGuard: (any FBSimulatorHIDInputAdmissionGuard)? = nil) async throws -> FBSimulatorHIDSessionReceipt {
 +    try enter()
 +    defer { inFlight = false }
 +    guard !usesOwnedParts else { throw FBSimulatorHIDSessionError.invalidEvent("Owned-part sessions cannot create explicit contact tokens") }
 +    guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
 +    try validate(next)
++    if admissionGuard != nil, liveProvider == nil {
++      throw FBSimulatorHIDSessionError.invalidEvent("Guarded input requires a live freshness provider")
++    }
 +    let started = ProcessInfo.processInfo.systemUptime
 +    let before = sentCount
 +    state = .executing
 +    do {
 +      try await checkFreshness(authoritative: true)
++      if let admissionGuard {
++        do { try await admissionGuard.validate(observation: observation, firstEvent: Self.event(next, direction: .down)) }
++        catch is CancellationError { throw CancellationError() }
++        catch where Task.isCancelled { throw CancellationError() }
++        catch {
++          throw FBSimulatorHIDSessionError.interrupted(
++            reason: .inputAdmissionRejected(String(reflecting: error)), cleanup: .notNeeded)
++        }
++        try Task.checkCancellation()
++      }
 +      try await checkFreshness()
 +      try await dispatch(Self.event(next, direction: .down))
 +      try Task.checkCancellation()

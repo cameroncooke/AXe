@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 33
+    static let version = 34
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID

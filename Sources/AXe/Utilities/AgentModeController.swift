@@ -105,7 +105,7 @@ final class AgentModeController {
             let result = await owner.perform(native)
             action = AgentModeActionReceipt(kind: mode.kind, outcome: result.outcome,
                 enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
-                quarantine: result.quarantine, slider: result.ax?.slider)
+                quarantine: result.quarantine, slider: result.ax?.slider, sliderValue: result.ax?.sliderValue)
             guard result.error == nil, result.cleanup != "uncertain" else {
                 return failure(request, AgentModeFailure("nativeActionFailed", result.error ?? "Native cleanup is uncertain."),
                                native: result, action: action)
@@ -314,7 +314,7 @@ final class AgentModeController {
                 original = try cached.snapshot.dragNode(ref: ref)
             } else if mode.kind == .pinch {
                 original = try cached.snapshot.pinchNode(ref: ref)
-            } else if mode.kind == .sliderEndpoint {
+            } else if mode.kind == .sliderEndpoint || mode.kind == .sliderPercentage {
                 original = try cached.snapshot.sliderNode(ref: ref)
             } else {
                 let action: RuntimeElementAction
@@ -380,6 +380,16 @@ final class AgentModeController {
             _ = try snapshot.pinchNode(kind: selector.kind, value: selector.value, type: node.type)
             plannedPinch = geometry.selected(at: CGPoint(x: frame.midX, y: frame.midY),
                 duration: mode.duration, preDelay: mode.preDelay, postDelay: mode.postDelay)
+        case .sliderPercentage:
+            guard let node, node.type == "Slider", let percentage = mode.sliderPercentage else {
+                throw AgentModeFailure("missingSliderTarget", "The fresh slider target or percentage is unavailable.")
+            }
+            let selector = try snapshot.uniqueSelector(for: node)
+            let endpoint = SelectedAXRequest.endpoint(forPercentage: percentage)
+            plannedAX = SelectedAXRequest(kind: endpoint == nil ? .sliderPercentage : .sliderEndpoint,
+                expectedPID: pid, preparation: .automationSession,
+                endpoint: endpoint, selectorKind: selector.kind, selectorValue: selector.value,
+                preDelay: 0, postDelay: 0, elementType: node.type, percentage: endpoint == nil ? percentage : nil)
         case .sliderEndpoint:
             guard let node, node.type == "Slider", let endpoint = mode.sliderEndpoint else {
                 throw AgentModeFailure("missingSliderTarget", "The fresh slider target or endpoint is unavailable.")

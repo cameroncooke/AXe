@@ -71,7 +71,7 @@ struct SelectedAXDoubleTapTiming: Codable, Sendable {
 }
 
 struct SelectedAXRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, semanticPress }
+    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, sliderPercentage, semanticPress }
     enum SelectorKind: String, Codable, Sendable { case id, label, value }
     let kind: Kind
     let expectedPID: Int32
@@ -87,11 +87,21 @@ struct SelectedAXRequest: Codable, Sendable {
     var waitPolicy: SelectedAXWaitPolicy? = nil
     var holdDuration: Double? = nil
     var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
+    var percentage: Double? = nil
+
+    static func endpoint(forPercentage value: Double) -> FBSimulatorSliderEndpoint? {
+        if value == 0 { return .minimum }
+        if value == 100 { return .maximum }
+        return nil
+    }
 
     func validate() throws {
         guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
         guard preDelay.isFinite, postDelay.isFinite, (0...10).contains(preDelay), (0...10).contains(postDelay) else {
             throw SelectedHIDFailure.invalid("Selected AX delays must be finite and in 0...10 seconds")
+        }
+        if kind != .sliderPercentage, percentage != nil {
+            throw SelectedHIDFailure.invalid("Only a selected slider percentage accepts a percentage payload")
         }
         if kind != .describePoint, point != nil {
             throw SelectedHIDFailure.invalid("Only a selected point description accepts a point payload")
@@ -112,8 +122,8 @@ struct SelectedAXRequest: Codable, Sendable {
             try waitPolicy.validate()
         }
         if let elementType {
-            guard kind == .tap || kind == .hold || kind == .doubleTap || kind == .sliderEndpoint, !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw SelectedHIDFailure.invalid("Only a selected tap, reference hold, double-tap or slider endpoint accepts a nonempty element type")
+            guard kind == .tap || kind == .hold || kind == .doubleTap || kind == .sliderEndpoint || kind == .sliderPercentage, !elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw SelectedHIDFailure.invalid("Only a selected tap, reference hold, double-tap or slider accepts a nonempty element type")
             }
         }
         switch kind {
@@ -151,6 +161,13 @@ struct SelectedAXRequest: Codable, Sendable {
                   !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   selectorValue.utf8.count <= 4096, preDelay == 0, postDelay == 0 else {
                 throw SelectedHIDFailure.invalid("Semantic press requires an exact ID and no delays")
+            }
+        case .sliderPercentage:
+            guard endpoint == nil, let percentage, percentage.isFinite, percentage > 0, percentage < 100,
+                  selectorKind == .id || selectorKind == .label, let selectorValue,
+                  !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  selectorValue.utf8.count <= 4096, preDelay == 0, postDelay == 0 else {
+                throw SelectedHIDFailure.invalid("Selected physical slider percentage requires an ID or label, a finite value strictly between 0 and 100 and no endpoint or delays")
             }
         case .sliderEndpoint:
             guard endpoint != nil, selectorKind == .id || selectorKind == .label, let selectorValue,
@@ -267,6 +284,7 @@ struct SelectedAXResult: Codable, Sendable {
     let preparation: SelectedAXPreparation
     var failure: SelectedAXFailure?
     var slider: SelectedSliderResult?
+    var sliderValue: SelectedSliderValueResult?
     var press: FBSimulatorAXPressReceipt?
     var acquisition: SelectedAXAcquisition?
     var roots: [FBSimulatorAXNode]?

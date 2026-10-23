@@ -57,6 +57,9 @@ enum SelectedBatchStep {
             request = try command.selectedRequest()
         case "slider":
             let command = try parse(Slider.self, arguments)
+            guard command.value == nil else {
+                throw ValidationError("Selected slider percentages require a standalone command and are not supported in batch steps.")
+            }
             guard !command.agentMode.enabled else {
                 throw ValidationError("Agent mode requires standalone commands and is not supported in batch steps.")
             }

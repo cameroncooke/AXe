@@ -7,7 +7,8 @@ import FBSimulatorControl
 @MainActor
 enum SelectedAXOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL) async -> SelectedHIDResponse {
+                        brokerID: UUID, logger: AxeLogger, helperURL: URL,
+                        valueOwner: SelectedSliderValueOwner? = nil) async -> SelectedHIDResponse {
         guard let ax = request.ax else {
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: "rejectedBeforeInput", token: nil, enqueuedEventCount: 0,
@@ -77,6 +78,26 @@ enum SelectedAXOperation {
                 return response(request, brokerID: brokerID, result: result, observation: observation,
                     outcome: receipt.outcome, count: 0, cleanup: "notNeeded",
                     error: receipt.outcome == "failed" ? "Selected slider failed: " + (result.slider?.reason ?? "unknown") : nil)
+            }
+            if ax.kind == .sliderPercentage {
+                guard let valueOwner, let percentage = ax.percentage,
+                      let selectorKind = ax.selectorKind, let selectorValue = ax.selectorValue else {
+                    throw SelectedHIDFailure.invalid("Missing owned slider percentage operation or selector")
+                }
+                let sliderAdmission = try request.agentAdmission.map(AgentModeSliderAdmission.init)
+                let operation = SelectedSliderValueOperation(simulator: simulator,
+                    observation: live.initialObservation, live: live, helperURL: helperURL,
+                    selectorKind: selectorKind, selectorValue: selectorValue, expectedPID: ax.expectedPID,
+                    elementType: ax.elementType, preparation: ax.preparation.libraryValue,
+                    admissionGuard: sliderAdmission)
+                let execution = await valueOwner.run(operation, percent: percentage)
+                result.sliderValue = execution.receipt
+                if execution.error != nil { result.failure = .sliderFailed }
+                if execution.cleanup == "uncertain" { result.failure = .cleanupUncertain }
+                await live.closeAndWait()
+                return response(request, brokerID: brokerID, result: result, observation: observation,
+                    outcome: execution.outcome, count: execution.enqueuedEventCount,
+                    cleanup: execution.cleanup, error: execution.error)
             }
             let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 4)
             if ax.kind == .describe || ax.kind == .describePoint {
