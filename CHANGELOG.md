@@ -84,7 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed `scripts/build.sh sign-executable` leaving the copied resource bundle unsigned. It now signs and strictly verifies `AXe_AXe.bundle` before the existing CLI signing step. The local before/after check passed all seven payload signatures without changing resource assets, native frameworks or the helper.
 
-- Fixed release extraction failing on framework links whose targets are absent. Metadata cleanup now acts on the links. Local arm64 package extraction, all seven strict signatures, relocated startup and bundled skill access passed; universal builds and distribution installation remain unverified.
+- Fixed release extraction failing on framework links whose targets are absent. Metadata cleanup now acts on the links. Local arm64 package extraction, all seven strict signatures, relocated startup and bundled skill access passed. One local Homebrew `--skip-link` installation also passed install/post_install, seven strict signatures, version and resource-output checks. Public post_install re-signs the CLI, helper and frameworks ad hoc; one selected slider action from the installed keg also passed. Linked installation and universal/Intel checks remain unverified.
 
 - Fixed selected `tap --semantic-press` treating a true native reply as switch success. It now requires fresh Boolean value change on the same target within the original budget, preserves native reply/delivery evidence and rejects older reply-only success at the caller. No action is retried; physical taps are unchanged. The isolated library/CLI build, 92 existing checks and three off-to-on Duo cases passed. The no-change refusal branch has no live proof.
 
