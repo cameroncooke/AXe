@@ -3,10 +3,13 @@ import Foundation
 
 struct Batch: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Execute ordered legacy steps or guarded complete selected steps.",
+        abstract: "Execute ordered legacy, selected or optional agent steps.",
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
         Steps are executed in order.
+        --agent --file steps.json --expected-pid PID accepts 1...8 exact-ID tap/type steps.
+        It resolves each target again, stops on failed action/refresh or changed device context,
+        and reports completed steps without rollback or replay. See the agent guide for JSON.
         Legacy mode uses one simulator/HID session and supports --continue-on-error.
         On Duo, one measured display/session is fixed for the whole ordinary batch.
         Folding, rotation, cancellation or an input failure stops later input without replay.
@@ -48,6 +51,12 @@ struct Batch: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
 
+    @Flag(name: .customLong("agent"), help: "Execute 1...8 JSON tap/type steps with fresh native IDs and one agent result.")
+    var agentMode = false
+
+    @Option(name: .customLong("expected-pid"), help: "Agent batch only: require this app PID for every step.")
+    var expectedPID: Int32?
+
     @Option(name: .customLong("step"), help: "Step to execute. Repeat for multiple steps.")
     var steps: [String] = []
 
@@ -83,6 +92,17 @@ struct Batch: AsyncParsableCommand {
 
     func validate() throws {
         try selectedInput.validate()
+        if agentMode {
+            guard let expectedPID, expectedPID > 0, file != nil, steps.isEmpty, !useStdin,
+                  selectedInput.screenID == nil, selectedInput.screenUUID == nil,
+                  selectedInput.mode != .selected, !continueOnError, !verbose, axCachePolicy == .perBatch,
+                  typeSubmissionMode == .chunked, typeChunkSize == 200, tapStyle == .automatic,
+                  waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Agent batch requires --file JSON and a positive --expected-pid; screen, legacy batch settings, stdin and continued errors are unsupported.")
+            }
+        } else if expectedPID != nil {
+            throw ValidationError("Batch-level --expected-pid requires --agent; selected steps keep their own PID options.")
+        }
         if selectedInput.mode == .selected {
             guard !continueOnError, axCachePolicy == .perBatch, typeSubmissionMode == .chunked,
                   typeChunkSize == 200, tapStyle == .automatic, waitTimeout == 0, pollInterval == 0.25 else {
@@ -110,6 +130,12 @@ struct Batch: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if agentMode {
+            try validate()
+            guard let file, let expectedPID else { throw ValidationError("Missing agent batch file or PID.") }
+            try AgentBatchCommandAdapter.run(file: file, expectedPID: expectedPID, simulatorUDID: simulatorUDID)
+            return
+        }
         if selectedInput.mode == .selected {
             let lines = try loadStepLines()
             guard !lines.isEmpty else { throw ValidationError("No executable steps found.") }

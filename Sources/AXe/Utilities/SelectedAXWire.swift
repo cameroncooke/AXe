@@ -43,7 +43,7 @@ enum SelectedAXWire {
                     brokerID: response.brokerID, outcome: response.outcome, token: response.token,
                     enqueuedEventCount: response.enqueuedEventCount, cleanup: response.cleanup,
                     error: failure.message, context: response.context, quarantine: response.quarantine)
-                summary.agent = AgentModeResult(error: failure, action: agent.data.action,
+                summary.agent = AgentModeResult(error: failure, action: agent.data.action, batch: agent.data.batch,
                     cache: AgentModeCacheState(status: quarantine == nil ? "invalidated" : "quarantined",
                         reason: failure.code, requiresRefresh: true),
                     context: agent.data.context ?? response.context, quarantine: quarantine,

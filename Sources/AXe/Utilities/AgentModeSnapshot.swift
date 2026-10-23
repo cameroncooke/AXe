@@ -73,6 +73,16 @@ struct AgentModeSnapshot: Sendable {
         return nodes[index]
     }
 
+    func reference(id: String, action: RuntimeElementAction) throws -> String {
+        guard let entry = identityIndex.entry(kind: .id, value: id, type: nil), entry.count == 1,
+              nodes[entry.index].identifier == id else {
+            throw AgentModeFailure("batchTargetMissing", "The batch ID does not identify one exact current native target.")
+        }
+        let ref = elements[entry.index].ref
+        _ = try node(ref: ref, requiredAction: action)
+        return ref
+    }
+
     func dragNode(ref: String) throws -> FBSimulatorAXNode {
         let target = try node(ref: ref, requiredAction: .touch)
         let targets = RuntimeSnapshotCompactor.targets(in: elements, limit: Self.maximumElements)

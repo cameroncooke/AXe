@@ -287,6 +287,7 @@ struct AgentModeResult: Codable, Sendable {
     struct Data: Codable, Sendable {
         let capture: AgentModeCapture?
         let action: AgentModeActionReceipt?
+        let batch: AgentBatchReceipt?
         let cache: AgentModeCacheState
         let context: SelectedHIDContext?
         let quarantine: SelectedHIDQuarantine?
@@ -299,14 +300,14 @@ struct AgentModeResult: Codable, Sendable {
     let nextSteps: [String]
 
     init(error: AgentModeFailure? = nil, capture: AgentModeCapture? = nil,
-         action: AgentModeActionReceipt? = nil, cache: AgentModeCacheState,
+         action: AgentModeActionReceipt? = nil, batch: AgentBatchReceipt? = nil, cache: AgentModeCacheState,
          context: SelectedHIDContext? = nil, quarantine: SelectedHIDQuarantine? = nil,
          nextSteps: [String] = []) {
         schema = "axe.output.agent-result"
         schemaVersion = "1"
         didError = error != nil
         self.error = error
-        data = Data(capture: capture, action: action, cache: cache,
+        data = Data(capture: capture, action: action, batch: batch, cache: cache,
                     context: capture?.context ?? context, quarantine: quarantine)
         self.nextSteps = nextSteps
     }

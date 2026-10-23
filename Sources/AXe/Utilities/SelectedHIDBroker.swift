@@ -23,9 +23,9 @@ enum SelectedHIDBroker {
                 child.standardError = FileHandle.nullDevice; try child.run()
             }, sleeper: { _ = usleep($0) }, expectedVersion: SelectedHIDRequest.version)
         defer { Darwin.close(descriptor) }
-        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
+        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
         return try exchange(data, requestID: request.requestID, descriptor: descriptor,
-            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
+            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
     }
     static func exchange(_ data: Data, requestID: UUID, descriptor: Int32,
                          maximumResponseBytes: Int = HIDBroker.maximumMessageBytes) throws -> SelectedHIDResponse {
@@ -99,7 +99,11 @@ enum SelectedHIDBroker {
                         }
                         let response: SelectedHIDResponse
                         if rejectedWhileBusy || agentController.isBusy {
-                            response = request.agent == nil ? owner.rejectBusy(request) : agentController.reject(request)
+                            response = request.agent == nil && request.agentBatch == nil ? owner.rejectBusy(request) : agentController.reject(request)
+                        } else if request.agentBatch != nil {
+                            response = await SelectedHIDClientLifetime.run(descriptor: client) {
+                                await agentController.performBatch(request)
+                            }
                         } else if request.agent != nil {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await agentController.perform(request)
@@ -114,7 +118,7 @@ enum SelectedHIDBroker {
                             response = await owner.perform(request)
                         }
                         try await offMain {
-                            let maximumBytes = request.ax == nil && request.keyboard == nil && request.agent == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
+                            let maximumBytes = request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
                             let bytes = try SelectedAXWire.boundedResponse(response, maximumBytes: maximumBytes)
                             try HIDBroker.writeAll(bytes, to: client)
                         }

@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 32
+    static let version = 33
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -21,6 +21,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var button: SelectedButtonRequest? = nil
     var rotation: SelectedRotationRequest? = nil
     var agent: AgentModeRequest? = nil
+    var agentBatch: AgentBatchRequest? = nil
     var agentAdmission: AgentModeAdmission? = nil
     var expectedContext: SelectedHIDContext? = nil
     var legacyPath: LegacyDuoPath? = nil
@@ -28,6 +29,17 @@ struct SelectedHIDRequest: Codable, Sendable {
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if let agentBatch {
+            try agentBatch.validate()
+            guard operation == .complete, token == nil, screenID == nil, screenUUID == nil,
+                  primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
+                  hinge == nil, keyboard == nil, home == nil, button == nil, rotation == nil,
+                  agent == nil, agentAdmission == nil, expectedContext == nil,
+                  legacyPath == nil, legacyTouch == nil else {
+                throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
+            }
+            return
+        }
         if legacyPath != nil || legacyTouch != nil, expectedContext == nil {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }

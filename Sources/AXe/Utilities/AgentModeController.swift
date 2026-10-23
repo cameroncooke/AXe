@@ -44,6 +44,10 @@ final class AgentModeController {
         guard !isBusy, !owner.isBusy else { return reject(request) }
         isBusy = true
         defer { isBusy = false }
+        return await performReserved(request)
+    }
+
+    private func performReserved(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
         var action: AgentModeActionReceipt?
         do {
             try request.validate()
@@ -136,6 +140,102 @@ final class AgentModeController {
             let reason = error as? AgentModeFailure
                 ?? AgentModeFailure("observationFailed", nativeFailure?.response.error ?? String(describing: error))
             return failure(request, reason, native: nativeFailure?.response, action: action)
+        }
+    }
+
+    /// One broker reservation; native input ownership remains per complete action.
+    func performBatch(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
+        guard !isBusy, !owner.isBusy else { return reject(request) }
+        isBusy = true
+        defer { isBusy = false }
+        var receipts: [AgentBatchStepReceipt] = []
+        var completed = 0
+        var currentIndex: Int?
+        var currentRequestID = UUID()
+        var last: SelectedHIDResponse?
+
+        func finish(_ error: AgentModeFailure?) -> SelectedHIDResponse {
+            if error != nil { record = nil }
+            let prior = last?.agent?.data
+            let quarantine = prior?.quarantine ?? last?.quarantine
+            let cache = error == nil ? (prior?.cache ?? AgentModeCacheState(
+                status: "invalidated", reason: "missingCapture", requiresRefresh: true)) : AgentModeCacheState(
+                status: quarantine == nil ? "invalidated" : "quarantined", reason: error?.code, requiresRefresh: true)
+            let batch = AgentBatchReceipt(totalSteps: request.agentBatch?.steps.count ?? 0,
+                completedSteps: completed, steps: receipts, stoppedAt: error == nil ? nil : currentIndex ?? 1)
+            var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
+                brokerID: owner.brokerID, outcome: error == nil ? "completed" : "stopped", token: nil,
+                enqueuedEventCount: receipts.reduce(0) { $0 + ($1.receipt?.enqueuedEventCount ?? 0) },
+                cleanup: last?.cleanup ?? "notNeeded", error: error?.message,
+                context: last?.context, quarantine: quarantine)
+            response.agent = AgentModeResult(error: error, capture: error == nil ? prior?.capture : nil,
+                batch: batch, cache: cache, context: last?.context, quarantine: quarantine,
+                nextSteps: error == nil ? [] : [
+                    "Inspect each step receipt. Completed steps were not undone; no step was replayed.",
+                    quarantine == nil ? "Read a fresh snapshot before deciding the next action. Do not resubmit the batch."
+                        : "Complete explicit input recovery before another action. Do not resubmit the batch.",
+                ])
+            return response
+        }
+
+        do {
+            try request.validate()
+            guard let batch = request.agentBatch else {
+                throw AgentModeFailure("missingBatch", "The agent batch request is missing.")
+            }
+            var initial = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+            initial.agent = AgentModeRequest(kind: .describe, expectedPID: batch.expectedPID)
+            last = await performReserved(initial)
+            guard let initialResult = last?.agent, !initialResult.didError, let baseline = record?.context else {
+                throw last?.agent?.error ?? AgentModeFailure("batchObservationFailed", "The initial batch observation failed.")
+            }
+            for (offset, step) in batch.steps.enumerated() {
+                currentIndex = offset + 1
+                currentRequestID = UUID()
+                try Task.checkCancellation()
+                guard let current = record, current.context == baseline else {
+                    throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Later steps were stopped.")
+                }
+                let ref = try current.snapshot.reference(id: step.id,
+                    action: step.action == .tap ? .tap : .typeText)
+                var action = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: currentRequestID,
+                    screenID: baseline.screenID, screenUUID: UUID(uuidString: baseline.screenUUID),
+                    operation: .complete, token: nil, primitives: [])
+                action.agent = AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
+                    expectedPID: batch.expectedPID, snapshotID: current.id, ref: ref, text: step.text)
+                let response = await performReserved(action)
+                last = response
+                guard let result = response.agent else {
+                    throw AgentModeFailure("missingBatchResult", "A batch step returned no agent result. Its outcome must be inspected.")
+                }
+                let didComplete = result.data.action?.outcome == "enqueuedAndDrained"
+                    && result.data.action?.cleanup != "uncertain"
+                if didComplete { completed += 1 }
+                receipts.append(AgentBatchStepReceipt(index: offset + 1, action: step.action,
+                    status: didComplete ? "completed" : "failed", requestID: currentRequestID,
+                    receipt: result.data.action, error: result.error, cache: result.data.cache,
+                    context: result.data.context))
+                if let error = result.error { throw error }
+                guard didComplete, !result.data.cache.requiresRefresh, record != nil else {
+                    throw AgentModeFailure("batchRefreshFailed", "The step ended without a usable replacement snapshot. Later steps were stopped; completed input was not replayed.")
+                }
+                guard record?.context == baseline else {
+                    throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Later steps were stopped.")
+                }
+            }
+            return finish(nil)
+        } catch {
+            let failure = error as? AgentModeFailure
+                ?? AgentModeFailure("batchStopped", String(describing: error))
+            if let currentIndex, receipts.last?.index != currentIndex,
+               let batch = request.agentBatch, batch.steps.indices.contains(currentIndex - 1) {
+                receipts.append(AgentBatchStepReceipt(index: currentIndex, action: batch.steps[currentIndex - 1].action,
+                    status: "rejectedBeforeInput", requestID: currentRequestID, receipt: nil, error: failure,
+                    cache: AgentModeCacheState(status: "invalidated", reason: failure.code, requiresRefresh: true),
+                    context: last?.context))
+            }
+            return finish(failure)
         }
     }
 
@@ -366,6 +466,8 @@ final class AgentModeController {
             error: error.message, context: native?.context)
         response.quarantine = native?.quarantine
         response.agent = AgentModeResult(error: error, action: action,
+            batch: request.agentBatch.map { AgentBatchReceipt(totalSteps: $0.steps.count,
+                completedSteps: 0, steps: [], stoppedAt: 1) },
             cache: cache ?? AgentModeCacheState(status: "invalidated", reason: error.code, requiresRefresh: true),
             context: native?.context, quarantine: native?.quarantine,
             nextSteps: nextSteps ?? (native?.quarantine != nil
