@@ -67,6 +67,12 @@ The comparison supplied ideas from source review. Cam chose the XcodeBuildMCP-st
 
 ## Technical evidence
 
+### 23 October 2026: one inner-screen percentage target passed with the new native phase
+
+Isolated V8 binary 3cac98f8 reached 63.26821518 for the requested 63.25 on open inner screen 3 at rotation 90. The app and native values agreed. One contact produced 48 dispatched movements, 41 recorded app MOVE callbacks and 39 valueChanged callbacks, then released. All six pickup read seals passed. Five native stability windows used five fresh reads each and reached 0.219–0.228 seconds of unchanged value. The final native node/raw values matched, input cleanup closed, and the owned simulator reached Shutdown. The earlier V7 read failure did not recur in this run; its cause is still not established.
+
+Command: `/usr/bin/python3 -B /Volumes/Developer/AXe/build_products/verification/slider-percentage-20261023/controller-v8/manual-proof/run-root-inner-normal-v1.py`. The run passed in 78.46 seconds at 16.737 GiB, with no resource stop or crash. This proves one isolated inner target, not public command or all-position coverage. Public source checkpoint 7c09a394 separately passed the matched native/CLI build, packaging and 51 existing checks in eight suites. It remains isolated while current-screen command checks are prepared. [Inner result](/Volumes/Developer/AXe/build_products/verification/slider-percentage-20261023/controller-v8/manual-proof/inner-normal-proof-v1/verification.json). [Build record](/Volumes/Developer/AXe/build_products/verification/slider-percentage-public-20261023/build-scoped-acceptance-v2.json).
+
 ### 23 October 2026: inner-screen slider check stopped at value validation
 
 Isolated V7 binary 078b945f opened Duo to 180 degrees and used inner screen 3 at rotation 90. The guarded touch-down passed. The app recorded the same 24 movement points, with at most 0.163 point error, then a released touch. The second value read failed with invalidDomain; its failed sample was not saved. Source permits more than one cause, so a changing value between reads remains a hypothesis. No target completed and the second target did not start. Native cleanup released and drained input, and the owned simulator reached Shutdown. The separate app observation after cleanup reported 63.8733, outside the requested 63.25 ± 0.07 band; it is not successful target proof.
