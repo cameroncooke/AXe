@@ -4,6 +4,12 @@ Full Duo support is incomplete. This report reconciles the [canonical checklist]
 
 ## Latest completed work
 
+### 23 October 2026: isolated slider percentage control
+
+The isolated controller moved the normal outer-portrait Slider from 50 to 63.27345276 for a 63.25 request, then found it again and moved it to 37.72455215 for a 37.75 request. Errors were below 0.03 percentage points, within the existing 0.07 tolerance. Native and app values agreed while held and after release. Each action used one contact and 36 movements; app callbacks were 49 and 45. Six fresh, sealed read phases per action proved the current Slider parent, token, PID, window and display before pickup. The controller did not use app thumb coordinates. All observed read children exited, both contacts released, broker cleanup passed and E reached Shutdown. Guard: 82.09 seconds, peak combined 15.89 GiB, exit 0, reaped, no stop or crash.
+
+This is prototype proof, not a public AXe percentage feature. The feedback first visited about 96.8064 and 4.3912 before reaching the requested values. That large sweep must be removed before library integration. Other screens, orientations, controls, domains, refusal and interruption paths remain unverified for percentage control. Existing endpoint and raw percentage commands are unchanged. [Acceptance](/Volumes/Developer/AXe/build_products/verification/slider-percentage-20261023/controller-v1/scoped-acceptance-v1.md).
+
 ### 23 October 2026: Release build attempt
 
 The clean `f4fd3030` source started an arm64 Release build with one compiler job and existing native artifacts. The guard stopped it after 30.16 seconds at 12.089 GiB combined (12.055 GiB app group; 1.192 GiB command group). SIGINT ended the build, it was reaped, no crash was reported, and the last combined sample fell to 10.897 GiB. No compiler error was reported before the stop. This is an incomplete build, not a Release pass or a proved source failure. No retry or policy change was made. [Command and result](/Volumes/Developer/AXe/build_products/verification/release-packaging-20261023/release-cli-v1/guard/result.json).
