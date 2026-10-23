@@ -36,7 +36,7 @@ Each checkbox is one product outcome. Done applies only to the stated scope. Ful
 - [x] **Use controls in a smaller app window — Done for checked actions.** Ordinary ID/coordinate taps and exact ASCII typing passed in one open inner-landscape window. On 8558f716, one fresh agent Button reference also changed its count once and released its contact in that inset window. Selected input, other inset agent controls, positions and system multitasking remain unverified. [Ordinary proof](/Volumes/Developer/AXe/build_products/verification/inset-window-20261022/public-window-v7/scoped-acceptance.json), [agent Button proof](/Volumes/Developer/AXe/build_products/verification/agent-inset-window-20261023/scoped-acceptance.json).
 - [x] **Keep core iPhone and iPad input working — Done for checked portrait profiles.** Candidate af6bb00b passed six real actions on each device: fresh lookup/ID tap, swipe, selected pinch, field focus, literal typing and Return. All contacts released; cleanup passed. Other profiles, orientations, options, media and cancellation remain open. [Proof](/Volumes/Developer/AXe/build_products/verification/ordinary-core-20261022/acceptance.json).
 - [x] **Extract and start the Apple-silicon package locally — Done for the checked archive.** The ZIP preserved all files and links. All seven signatures, relocated startup, bundled framework loading and skill output passed. Extraction fix merged in f759a3ef. [Proof](/Volumes/Developer/AXe/build_products/verification/release-packaging-20261023/host-acceptance-v5.md).
-- [ ] **Produce and verify the distribution release — Needs check.** A new Release build, universal support, distribution signing, notarization and installation remain unverified.
+- [ ] **Produce and verify the distribution release — Needs check.** The new arm64 Release attempt stopped at the resource guard before completion; no compiler error was reported. Universal support, distribution signing, notarization and installation remain unverified. [Attempt](/Volumes/Developer/AXe/build_products/verification/release-packaging-20261023/release-cli-v1/guard/result.json).
 
 ### Improvements from the sim-use comparison
 
@@ -66,6 +66,10 @@ The comparison supplied ideas from source review. Cam chose the XcodeBuildMCP-st
 - [ ] **Improve recovery when an app reports no accessible controls — Needs a current failure case.** AXe already takes up to four fresh reads in one native eight-second budget and invalidates references after failure. Short waits between those reads are a proposed enhancement. Recovery of controls owned by another process needs a separate design; neither is a proved current cache defect. [Source plan](/Volumes/Developer/AXe/build_products/verification/agent-empty-ax-recovery-20261022/plan.md).
 
 ## Technical evidence
+
+### 23 October 2026: Release build attempt
+
+The clean `f4fd3030` source started an arm64 Release build with one compiler job and existing native artifacts. The guard stopped it after 30.16 seconds at 12.089 GiB combined (12.055 GiB app group; 1.192 GiB command group). SIGINT ended the build, it was reaped, no crash was reported, and the last combined sample fell to 10.897 GiB. No compiler error was reported before the stop. This is an incomplete build, not a Release pass or a proved source failure. No retry or policy change was made. [Command and result](/Volumes/Developer/AXe/build_products/verification/release-packaging-20261023/release-cli-v1/guard/result.json).
 
 ### 23 October 2026: Wallet availability
 
