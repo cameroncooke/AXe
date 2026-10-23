@@ -28,7 +28,8 @@ sanitize_release_payload() {
   local payload_dir="$1"
 
   find "$payload_dir" -type f \( -name "._*" -o -name ".DS_Store" \) -delete
-  xattr -cr "$payload_dir"
+  # Clear link metadata without following framework links to absent nested bundles.
+  xattr -crs "$payload_dir"
 }
 
 copy_release_payload() {

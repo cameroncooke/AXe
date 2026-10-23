@@ -77,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed release extraction failing on framework links whose targets are absent. Metadata cleanup now acts on the links. Local arm64 package extraction, all seven strict signatures, relocated startup and bundled skill access passed; universal builds and distribution installation remain unverified.
+
 - Fixed selected `tap --semantic-press` treating a true native reply as switch success. It now requires fresh Boolean value change on the same target within the original budget, preserves native reply/delivery evidence and rejects older reply-only success at the caller. No action is retried; physical taps are unchanged. The isolated library/CLI build, 92 existing checks and three off-to-on Duo cases passed. The no-change refusal branch has no live proof.
 
 - Fixed ordinary batch validation errors showing a generic system error instead of the command message. Cleanup and input receipts are unchanged.
