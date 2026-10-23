@@ -4,6 +4,12 @@ Full Duo support is incomplete. This report reconciles the [canonical checklist]
 
 ## Latest completed work
 
+### 23 October 2026: Wallet availability
+
+The owned Duo inventory listed 27 installed apps and no `com.apple.Passbook` Wallet app. The check sent no Apple Pay button input and made no account or card changes. The six public inventory/boot/shutdown commands completed; owned broker cleanup passed and shutdown returned 0. Guard: 5.75 seconds, peak combined 11.416 GiB, exit 0, reaped, no stop or crash. Accepted runtime bytes stayed unchanged. This explains a missing prerequisite for testing the normal Wallet screen on this device; it does not prove all simulator payment APIs are unavailable or identify the cause of the earlier clock-screen result. Payment UI acceptance remains open. [Proof](/Volumes/Developer/AXe/build_products/verification/apple-pay-availability-20261023/scoped-acceptance.json).
+
+The alternate native parent reader later matched the fresh Group to the exact native Slider, including token, window, display and object equality. That read completed, but its full run failed the memory guard at 14.964 GiB combined; completion before the stop signal is not proved. This is useful identity evidence, not an accepted controller run. The isolated percentage controller must prove fresh pickup and release in a guard-clear run before any library change. [Completed-read limits](/Volumes/Developer/AXe/build_products/verification/slider-parent-20261023/native-parent-v1/scoped-completed-read-acceptance.json).
+
 ### 23 October 2026: record through screen changes
 
 Main `14febfdf` adds `record-video --follow-active-display`. Two movies passed on candidate `f4fd3030` / CLI `d345e622`: outer portrait → inner landscape → inner portrait, and inner landscape → closed outer portrait. All 14 frames decoded with increasing timestamps, upright controls, fixed movie dimensions and proportional black bars. Both movies saved on SIGINT; the recorder and observed capture children exited, and owned Duo E shut down. Requested 1 FPS produced about 0.39 and 0.41 FPS, with maximum gaps of 3.22 and 2.52 seconds. This proves the checked changes, not smooth animation or every angle/rate.
