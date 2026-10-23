@@ -112,9 +112,8 @@ final class SelectedSliderValueOperation {
 
     private func perform(percent: Double) async throws -> String {
         // Numeric endpoints are dispatched to the semantic endpoint route before this owner exists.
-        guard percent.isFinite, percent > 0, percent < 100, expectedPID > 0,
-              observation.screenID == 1, observation.displayContext.rotation == .rot0 else {
-            throw SliderValueFailure.rejected("Interior Slider values require the active outer portrait display")
+        guard percent.isFinite, percent > 0, percent < 100, expectedPID > 0 else {
+            throw SliderValueFailure.rejected("Interior Slider values require a finite percentage above 0 and below 100, and a current app PID")
         }
         try check()
         let bounded = SliderValueDeadlineFeed(base: live, deadline: deadline)

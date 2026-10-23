@@ -296,9 +296,8 @@ enum SliderPickupReadPhase {
             result.context = before
             let point = CGPoint(x: pointX, y: pointY)
             let size = observation.displayContext.logicalSize
-            guard observation.screenID == 1, observation.displayContext.rotation == .rot0,
-                  pointX >= 0, pointY >= 0, pointX < size.width, pointY < size.height else {
-                throw SliderPickupReadError.rejected("Slider pickup requires the active outer portrait display and an in-bounds point")
+            guard pointX >= 0, pointY >= 0, pointX < size.width, pointY < size.height else {
+                throw SliderPickupReadError.rejected("Slider pickup requires an in-bounds point on the current selected display")
             }
             let normalized = try observation.displayContext.normalizedPoint(from: point)
             let nativePoint = CGPoint(x: normalized.x * observation.displayContext.nativePixelSize.width / observation.displayContext.scale,
