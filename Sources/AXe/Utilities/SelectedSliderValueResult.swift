@@ -16,6 +16,7 @@ struct SelectedSliderValueResult: Codable, Sendable {
     let moves: Int
     let pickupReadPhases: Int
     let elapsedSeconds: Double
+    let nativeReadDiagnostic: SliderValueNativeReadDiagnostic?
     let replayed = false
 }
 
@@ -38,7 +39,7 @@ final class SelectedSliderValueOwner {
                 reason: "Slider input owner requires external recovery. Do not repeat input.",
                 delivery: "uncertain", requestedPercent: percent, initialValue: nil, finalValue: nil,
                 nativeTarget: nil, domainMinimum: nil, domainMaximum: nil, tolerance: nil,
-                moves: 0, pickupReadPhases: 0, elapsedSeconds: 0)
+                moves: 0, pickupReadPhases: 0, elapsedSeconds: 0, nativeReadDiagnostic: nil)
             return SelectedSliderValueExecution(receipt: receipt, outcome: "rejectedBeforeInput",
                 error: receipt.reason, enqueuedEventCount: 0, cleanup: "uncertain")
         }

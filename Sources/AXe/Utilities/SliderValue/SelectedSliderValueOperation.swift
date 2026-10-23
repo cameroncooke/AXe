@@ -39,7 +39,7 @@ final class SelectedSliderValueOperation {
     private let expectedPID: Int32
     private let elementType: String?
     private let preparation: FBSimulatorAXPreparation
-    private let admissionGuard: (any FBSimulatorSliderAdmissionGuard)?
+    private let readDiagnostics: SliderValueReadDiagnostics
     private let operationID = UUID()
     private var backend: FBSimulatorSliderBackend?
     private var session: FBSimulatorHIDSession?
@@ -63,7 +63,7 @@ final class SelectedSliderValueOperation {
         self.simulator = simulator; self.observation = observation; self.live = live
         self.helperURL = helperURL; self.selectorKind = selectorKind; self.selectorValue = selectorValue
         self.expectedPID = expectedPID; self.elementType = elementType; self.preparation = preparation
-        self.admissionGuard = admissionGuard
+        readDiagnostics = SliderValueReadDiagnostics(admissionGuard: admissionGuard)
     }
 
     func run(percent: Double) async -> SelectedSliderValueExecution {
@@ -96,7 +96,8 @@ final class SelectedSliderValueOperation {
             requestedPercent: percent, initialValue: initialValue, finalValue: finalValue, nativeTarget: nativeTarget,
             domainMinimum: domain?.minimum, domainMaximum: domain?.maximum, tolerance: domain?.tolerance,
             moves: moveCount, pickupReadPhases: pickupHelper?.readPhases ?? 0,
-            elapsedSeconds: ProcessInfo.processInfo.systemUptime - started)
+            elapsedSeconds: ProcessInfo.processInfo.systemUptime - started,
+            nativeReadDiagnostic: failure == nil ? nil : readDiagnostics.failureSnapshot())
         return SelectedSliderValueExecution(receipt: receipt,
             outcome: executionOutcome,
             error: receipt.reason, enqueuedEventCount: finished.count, cleanup: finished.cleanup)
@@ -122,16 +123,16 @@ final class SelectedSliderValueOperation {
         case .id:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
                 freshnessProvider: bounded, identifier: selectorValue, expectedPID: expectedPID,
-                elementType: elementType, preparation: preparation, admissionGuard: admissionGuard)
+                elementType: elementType, preparation: preparation, admissionGuard: readDiagnostics)
         case .label:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
                 freshnessProvider: bounded, label: selectorValue, expectedPID: expectedPID,
-                elementType: elementType, preparation: preparation, admissionGuard: admissionGuard)
+                elementType: elementType, preparation: preparation, admissionGuard: readDiagnostics)
         default: throw SliderValueFailure.rejected("Slider value requires an exact ID or label")
         }
         backend = reader
         try await reader.prepare(operationID: operationID, deadline: deadline)
-        let initial = try await reader.read(deadline: deadline)
+        let initial = try await readNative(reader, phase: "initial", deadline: deadline)
         let domain = try initial.requireDomain()
         self.domain = domain
         let initialValue = try initial.requireValue()
@@ -143,7 +144,7 @@ final class SelectedSliderValueOperation {
             throw SliderValueFailure.rejected("Slider value requires an enabled visible horizontal Slider")
         }
         if abs(initialValue - requested) <= domain.tolerance {
-            let final = try await reader.readFinal(deadline: deadline)
+            let final = try await readNative(reader, phase: "alreadyAtValueFinal", deadline: deadline, final: true)
             try final.requireSameTarget(as: initial, includeValue: true)
             finalValue = try final.requireValue()
             return "alreadyAtValue"
@@ -154,7 +155,7 @@ final class SelectedSliderValueOperation {
         let admitted = try await helper.prepare(before: initial)
         let pickup = admitted.pickup
         currentPoint = pickup
-        let confirmed = try await reader.read(deadline: deadline)
+        let confirmed = try await readNative(reader, phase: "beforePickup", deadline: deadline)
         try confirmed.requireSameTarget(as: initial, includeValue: true)
         try check()
         guard deadline - ProcessInfo.processInfo.systemUptime > 3 else {
@@ -266,7 +267,7 @@ final class SelectedSliderValueOperation {
             throw SliderValueFailure.rejected("Slider contact did not end and drain")
         }
         let stable = try await settledValue(initial: initial, released: true)
-        let final = try await reader.readFinal(deadline: deadline)
+        let final = try await readNative(reader, phase: "final", deadline: deadline, final: true)
         try final.requireSameTarget(as: stable, includeValue: false)
         finalValue = try final.requireValue()
         guard abs(try stable.requireValue() - requested) <= domain.tolerance,
@@ -275,6 +276,21 @@ final class SelectedSliderValueOperation {
         }
         try check()
         return "reached"
+    }
+
+    private func readNative(_ backend: FBSimulatorSliderBackend, phase: String, deadline: Double,
+        final: Bool = false) async throws -> FBSimulatorSliderCapabilities {
+        readDiagnostics.beginRead(phase)
+        do {
+            let value: FBSimulatorSliderCapabilities
+            if final { value = try await backend.readFinal(deadline: deadline) }
+            else { value = try await backend.read(deadline: deadline) }
+            readDiagnostics.endRead()
+            return value
+        } catch {
+            readDiagnostics.endRead(error: error)
+            throw error
+        }
     }
 
     private func settledValue(initial: FBSimulatorSliderCapabilities, released: Bool) async throws -> FBSimulatorSliderCapabilities {
@@ -288,7 +304,7 @@ final class SelectedSliderValueOperation {
             guard await session.status().hasRetainedContact == !released else {
                 throw SliderValueFailure.rejected("Slider contact changed before native feedback")
             }
-            let sample = try await backend.read(deadline: until)
+            let sample = try await readNative(backend, phase: released ? "releasedSettle" : "heldSettle", deadline: until)
             let returned = ProcessInfo.processInfo.systemUptime
             try check()
             guard returned < until else { break }
