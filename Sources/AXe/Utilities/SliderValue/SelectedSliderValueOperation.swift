@@ -247,7 +247,7 @@ final class SelectedSliderValueOperation {
             if iteration == 3 {
                 let scale = Double(observation.displayContext.scale)
                 guard scale.isFinite, scale > 0 else { throw SliderValueFailure.rejected("Display pixel scale is invalid") }
-                x = CGFloat((Double(x) * scale).rounded(.toNearestOrAwayFromZero) / scale)
+                x = CGFloat((Double(x) * scale).rounded(direction > 0 ? .up : .down) / scale)
                 let roundedDistance = Double(x - currentPoint.x)
                 guard roundedDistance * direction > 0, abs(roundedDistance) <= previousPathLength else {
                     throw SliderValueFailure.rejected("Pixel correction exceeds the preceding path length")
