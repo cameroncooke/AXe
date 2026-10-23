@@ -211,8 +211,8 @@ def main():
             device_type = device.get('deviceTypeIdentifier', '')
             if 'iPhone' not in device_type or ('iPhone-Duo' in device_type) != (kind == 'duo'):
                 raise RuntimeError(f'{kind} has wrong device type: {device_type}')
-            if device['state'] != 'Shutdown':
-                raise RuntimeError(f'{kind} must be shut down first; this runner uses dedicated test devices')
+            if device['state'] not in ('Shutdown', 'Booted'):
+                raise RuntimeError(f'{kind} is not ready to boot or use: {device["state"]}')
         xcodegen = shutil.which('xcodegen')
         if not xcodegen:
             raise RuntimeError('XcodeGen is required. Install it, then rerun.')
@@ -227,7 +227,7 @@ def main():
         run('build-playground', ['xcodebuild', 'build', '-project', str(generated / 'AxePlayground.xcodeproj'),
                                '-scheme', 'AxePlayground', '-configuration', 'Debug', '-sdk', 'iphonesimulator',
                                '-destination', 'generic/platform=iOS Simulator', '-derivedDataPath', str(derived),
-                               '-jobs', '2', 'CODE_SIGNING_ALLOWED=NO'], timeout=600)
+                               '-jobs', '1', 'CODE_SIGNING_ALLOWED=NO'], timeout=600)
         app = derived / 'Build/Products/Debug-iphonesimulator/AxePlayground.app'
         if not app.is_dir():
             raise RuntimeError('Built playground app is missing')
@@ -243,17 +243,18 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
             file = ROOT / 'Tests' / name
             report['sourceHashes']['Tests/' + name] = digest(file)
             shutil.copyfile(file, sources / name)
-        run('build-checks', ['xcrun', 'swift', 'build', '--package-path', str(package), '--build-tests', '--jobs', '2'], timeout=300)
+        run('build-checks', ['xcrun', 'swift', 'build', '--package-path', str(package), '--build-tests', '--jobs', '1'], timeout=300)
         hub = Path(developer).parent / 'Applications/DeviceHub.app'
         if hub.is_dir():
             run('start-device-hub', ['open', '-g', str(hub)])
         for kind, identifier in requested:
             device = devices[identifier]
-            case = dict(kind=kind, udid=identifier, runtime=device['runtime'], name=device['name'], status='RUNNING')
+            case = dict(kind=kind, udid=identifier, runtime=device['runtime'], name=device['name'], initialState=device['state'], status='RUNNING')
             report['devices'].append(case)
             owned = identifier
             try:
-                run(kind + '-boot', ['xcrun', 'simctl', 'boot', identifier])
+                if device['state'] == 'Shutdown':
+                    run(kind + '-boot', ['xcrun', 'simctl', 'boot', identifier])
                 run(kind + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=180)
                 run(kind + '-install', ['xcrun', 'simctl', 'install', identifier, str(app)])
                 suites = [('PlaygroundCoreTests', 8), ('PlaygroundAgentTests', 4)]
@@ -287,10 +288,13 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                 print(str(error), file=sys.stderr)
             finally:
                 if commands.interrupted_by is None:
-                    run(kind + '-shutdown', ['xcrun', 'simctl', 'shutdown', identifier], timeout=45, shutdown=True)
+                    final_inventory = json.loads(run(kind + '-final-state', ['xcrun', 'simctl', 'list', 'devices', '-j']))
+                    final_rows = [row for rows in final_inventory['devices'].values() for row in rows
+                                  if row['udid'] == identifier]
+                    case['leftBooted'] = len(final_rows) == 1 and final_rows[0]['state'] == 'Booted'
+                    if not case['leftBooted']:
+                        case.update(status='FAIL', finalStateError='The simulator did not remain booted')
                     owned = None
-                    commands.shutdown_child = None
-                    case['shutdown'] = True
                 save()
         report['status'] = 'PASS' if all(item['status'] == 'PASS' for item in report['devices']) else 'FAIL'
     except (RunInterrupted, KeyboardInterrupt) as error:

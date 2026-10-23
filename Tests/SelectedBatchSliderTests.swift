@@ -18,9 +18,9 @@ struct SelectedBatchSliderTests {
     }
     private let minimum = "slider --id feature.slider --endpoint minimum --expected-pid 123"
 
-    @Test(arguments: ["minimum", "maximum"], ["automation-session", "existing-bridge"])
-    func endpointRequestMatchesStandalone(endpoint: String, preparation: String) throws {
-        let line = "slider --id feature.slider --endpoint \(endpoint) --expected-pid 123 --ax-preparation \(preparation)"
+    @Test(arguments: ["minimum", "maximum"])
+    func endpointRequestMatchesStandalone(endpoint: String) throws {
+        let line = "slider --id feature.slider --endpoint \(endpoint) --expected-pid 123"
         let batch = try request(line)
         let standalone = try Slider.parse(Array(ShellTokenizer.tokenize(line).dropFirst()) + ["--udid", udid] + selection)
         let direct = try standalone.selectedRequest()
@@ -29,7 +29,7 @@ struct SelectedBatchSliderTests {
         #expect(try encoder.encode(batch.ax) == encoder.encode(direct.ax))
         #expect(batch.ax?.kind == .sliderEndpoint && batch.ax?.expectedPID == 123)
         #expect(batch.ax?.selectorKind == .id && batch.ax?.selectorValue == "feature.slider")
-        #expect(batch.ax?.endpoint?.rawValue == endpoint && batch.ax?.preparation.rawValue == preparation)
+        #expect(batch.ax?.endpoint?.rawValue == endpoint)
         #expect(batch.operation == .complete && batch.token == nil && batch.primitives.isEmpty)
         #expect(batch.path == nil && batch.keyboard == nil && batch.hinge == nil)
         #expect(batch.screenID == 3 && batch.screenUUID == UUID(uuidString: screen))
@@ -139,7 +139,7 @@ struct SelectedBatchSliderTests {
     @Test(arguments: ["Slider", "slider", "Button", " Slider "], ["minimum", "maximum"])
     func exactTypeIsPreservedByStandaloneBatchAndWire(type: String, endpoint: String) throws {
         let arguments = ["--id", "feature.slider", "--endpoint", endpoint, "--expected-pid", "123",
-                         "--element-type", type, "--ax-preparation", "existing-bridge"]
+                         "--element-type", type]
         let direct = try Slider.parse(arguments + ["--udid", udid] + selection).selectedRequest()
         let batch = try SelectedBatchStep.request(["slider"] + arguments, input: options(), simulatorUDID: udid)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
@@ -147,7 +147,7 @@ struct SelectedBatchSliderTests {
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: encoder.encode(batch))
         try decoded.validate()
         #expect(decoded.ax?.elementType == type && decoded.ax?.selectorKind == .id)
-        #expect(decoded.ax?.expectedPID == 123 && decoded.ax?.preparation == .existingBridge)
+        #expect(decoded.ax?.expectedPID == 123)
         #expect(decoded.ax?.endpoint?.rawValue == endpoint && decoded.primitives.isEmpty)
         #expect(direct.requestID != batch.requestID)
     }
@@ -236,7 +236,7 @@ struct SelectedBatchSliderTests {
 
     enum ReceiptFault: String, CaseIterable {
         case version, requestIdentity, screenID, screenUUID, cleanup, hidEvents, error, token, quarantine
-        case missingAX, missingSlider, kind, pid, preparation, endpoint, outerOutcome, delivery
+        case missingAX, missingSlider, kind, pid, endpoint, outerOutcome, delivery
         case reason, truncatedReason, attemptCount, actionArrayCount, actionLimit, failedStaleContext
     }
 
@@ -307,8 +307,7 @@ struct SelectedBatchSliderTests {
         }
         let slider = try JSONDecoder().decode(SelectedSliderResult.self, from: JSONEncoder().encode(wire))
         var ax = SelectedAXResult(kind: fault == .kind ? .describe : .sliderEndpoint,
-            expectedPID: fault == .pid ? 124 : expected.expectedPID,
-            preparation: fault == .preparation ? .existingBridge : expected.preparation)
+            expectedPID: fault == .pid ? 124 : expected.expectedPID)
         ax.slider = fault == .missingSlider ? nil : slider
         if fault == .failedStaleContext { ax.failure = .sliderFailed }
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: udid, bootIdentity: "test-boot",

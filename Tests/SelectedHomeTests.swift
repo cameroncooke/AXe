@@ -35,7 +35,7 @@ struct SelectedHomeTests {
         let original = try parse().selectedRequest()
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(SelectedHIDRequest.version == 34)
+        #expect(SelectedHIDRequest.version == 35)
         #expect(decoded.requestID == original.requestID && decoded.version == SelectedHIDRequest.version)
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -123,7 +123,7 @@ struct SelectedHomeTests {
         var item = request(); item.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25); invalid.append(item)
         item = request(); item.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10); invalid.append(item)
         item = request(); item.gesture = .doubleTap(.init(point: .init(x: 50, y: 100))); invalid.append(item)
-        item = request(); item.ax = .init(kind: .describe, expectedPID: 123, preparation: .existingBridge,
+        item = request(); item.ax = .init(kind: .describe, expectedPID: 123,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0); invalid.append(item)
         item = request(); item.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(item)
         item = request(); item.hinge = .init(kind: .read, expectedBootIdentity: nil,

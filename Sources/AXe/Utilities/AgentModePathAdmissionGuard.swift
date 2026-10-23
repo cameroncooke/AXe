@@ -70,7 +70,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             var initialHits: [FBSimulatorAXNode] = []
             for start in starts { initialHits.append(try await pointHit(at: start, observation: observation)) }
             let tree = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-                observation: observation, freshnessProvider: feed, policy: try policy(), preparation: .automationSession)
+                observation: observation, freshnessProvider: feed, policy: try policy())
             guard tree.outcome == .ready, let snapshot = tree.snapshot else {
                 throw AgentModeFailure("\(kind.rawValue)TreeReadFailed", "The \(kind.rawValue) target could not be confirmed before input. Refresh the snapshot.")
             }
@@ -120,7 +120,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     private func pointHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
         let result = try await FBSimulatorAXSnapshot.acquire(at: start, for: simulator,
             expectedPID: admission.expectedPID, observation: observation, freshnessProvider: feed,
-            policy: try policy(), preparation: .automationSession)
+            policy: try policy())
         guard result.outcome == .ready, let snapshot = result.snapshot, snapshot.roots.count == 1,
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
               hit.type?.isEmpty == false, hit.hidden != true, hit.enabled != false,

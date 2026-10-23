@@ -293,7 +293,7 @@ final class AgentModeController {
     private func observe(display: ActivePanelIdentity, pid: Int32) async throws -> SelectedHIDResponse {
         var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil, primitives: [])
-        request.ax = SelectedAXRequest(kind: .describe, expectedPID: pid, preparation: .automationSession,
+        request.ax = SelectedAXRequest(kind: .describe, expectedPID: pid,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
         let result = await owner.perform(request)
         guard result.error == nil, result.cleanup != "uncertain" else {
@@ -354,7 +354,7 @@ final class AgentModeController {
         case .tap:
             if let node {
                 let selector = try snapshot.uniqueSelector(for: node)
-                plannedAX = SelectedAXRequest(kind: .tap, expectedPID: pid, preparation: .automationSession,
+                plannedAX = SelectedAXRequest(kind: .tap, expectedPID: pid,
                     endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                     preDelay: mode.preDelay, postDelay: mode.postDelay, elementType: node.type, tapStyle: mode.tapStyle)
             } else if let point = mode.point {
@@ -368,7 +368,7 @@ final class AgentModeController {
                 throw AgentModeFailure("missingHoldTarget", "The fresh hold target is unavailable.")
             }
             let selector = try snapshot.uniqueSelector(for: node)
-            plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid, preparation: .automationSession,
+            plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid,
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type, holdDuration: mode.duration)
         case .doubleTap:
@@ -376,7 +376,7 @@ final class AgentModeController {
                 throw AgentModeFailure("missingDoubleTapTarget", "The fresh double-tap target or timing is unavailable.")
             }
             let selector = try snapshot.uniqueSelector(for: node)
-            plannedAX = SelectedAXRequest(kind: .doubleTap, expectedPID: pid, preparation: .automationSession,
+            plannedAX = SelectedAXRequest(kind: .doubleTap, expectedPID: pid,
                 endpoint: nil, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: mode.preDelay, postDelay: mode.postDelay,
                 elementType: node.type, doubleTapTiming: timing)
@@ -395,7 +395,7 @@ final class AgentModeController {
             let selector = try snapshot.uniqueSelector(for: node)
             let endpoint = SelectedAXRequest.endpoint(forPercentage: percentage)
             plannedAX = SelectedAXRequest(kind: endpoint == nil ? .sliderPercentage : .sliderEndpoint,
-                expectedPID: pid, preparation: .automationSession,
+                expectedPID: pid,
                 endpoint: endpoint, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type, percentage: endpoint == nil ? percentage : nil)
         case .sliderEndpoint:
@@ -403,7 +403,7 @@ final class AgentModeController {
                 throw AgentModeFailure("missingSliderTarget", "The fresh slider target or endpoint is unavailable.")
             }
             let selector = try snapshot.uniqueSelector(for: node)
-            plannedAX = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: pid, preparation: .automationSession,
+            plannedAX = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: pid,
                 endpoint: endpoint, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type)
         case .keyPress, .keyCombo, .keySequence:

@@ -57,7 +57,7 @@ enum SelectedAXWire {
                 return try encodeResponse(summary, maximumBytes: maximumBytes)
             }
             // Do not emit partial JSON. Preserve input accounting and mark evidence omitted.
-            var summary = response.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID, preparation: $0.preparation) }
+            var summary = response.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID) }
             summary?.failure = .responseTooLarge
             // The scalar slider receipt is bounded before its first action.
             summary?.slider = response.ax?.slider

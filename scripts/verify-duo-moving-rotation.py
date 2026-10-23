@@ -160,9 +160,9 @@ try:
     else:
         assert active['displayID'] == context['screenID'] and int(fresh['activePanel']['currentOrientation'][3:]) != context['rotation']
     next_selection = ['--udid', device, '--input-mode', 'selected', '--screen-id', str(active['displayID']), '--screen-uuid', active['uniqueID']]
-    description = run('fresh-description', [cli, 'describe-ui'] + next_selection + ['--expected-pid', str(context['pid']), '--ax-preparation', 'automation-session'])
+    description = run('fresh-description', [cli, 'describe-ui'] + next_selection + ['--expected-pid', str(context['pid'])])
     assert any(n.get('AXUniqueId') == 'feature.tap' for n in nodes(description))
-    tap = run('fresh-tap', [cli, 'tap', '--id', 'feature.tap'] + next_selection + ['--expected-pid', str(context['pid']), '--ax-preparation', 'automation-session'])
+    tap = run('fresh-tap', [cli, 'tap', '--id', 'feature.tap'] + next_selection + ['--expected-pid', str(context['pid'])])
     final = state('after-tap.json')
     assert tap['outcome'] == 'enqueuedAndDrained' and tap['enqueuedEventCount'] == 2 and tap['cleanup'] == 'notNeeded'
     assert 'error' not in tap and 'quarantine' not in tap

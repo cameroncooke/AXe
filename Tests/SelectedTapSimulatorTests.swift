@@ -59,8 +59,7 @@ struct SelectedTapSimulatorTests {
         ["--value", " Ready "], ["--value", " Ready ", "--element-type", "TextField"]
     ])
     func selectorStyleTypeAndDelaysReachWireAndBatch(selectorArguments: [String]) throws {
-        let arguments = selectorArguments + ["--expected-pid", "42", "--tap-style", "simulator",
-            "--ax-preparation", "existing-bridge", "--pre-delay", "0.2", "--post-delay", "0.3"]
+        let arguments = selectorArguments + ["--expected-pid", "42", "--tap-style", "simulator", "--pre-delay", "0.2", "--post-delay", "0.3"]
         let direct = try parse(arguments).selectedRequest()
         let batch = try SelectedBatchStep.request(["tap"] + arguments,
             input: SelectedInputOptions.parse(selection), simulatorUDID: udid)
@@ -71,7 +70,7 @@ struct SelectedTapSimulatorTests {
         try decoded.validate()
         let ax = try #require(decoded.ax)
         #expect(ax.kind == .tap && ax.tapStyle == .simulator && ax.expectedPID == 42)
-        #expect(ax.preparation == .existingBridge && ax.preDelay == 0.2 && ax.postDelay == 0.3)
+        #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3)
         #expect(ax.selectorValue == selectorArguments[1])
         #expect(ax.elementType == (selectorArguments.count == 4 ? selectorArguments[3] : nil))
         #expect(ax.selectorKind?.rawValue == String(selectorArguments[0].dropFirst(2)))
@@ -109,7 +108,7 @@ struct SelectedTapSimulatorTests {
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])
     func styleCannotEnterOtherAXOperations(kind: SelectedAXRequest.Kind) throws {
-        var ax = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+        var ax = SelectedAXRequest(kind: kind, expectedPID: 42,
             endpoint: kind == .sliderEndpoint ? .minimum : nil,
             selectorKind: kind == .sliderEndpoint || kind == .semanticPress ? .id : nil,
             selectorValue: kind == .sliderEndpoint || kind == .semanticPress ? "target" : nil,
@@ -137,9 +136,9 @@ struct SelectedTapSimulatorTests {
     }
 
     @Test func oldWireCannotSilentlyDropSimulatorStyle() throws {
-        #expect(SelectedHIDRequest.version == 34)
+        #expect(SelectedHIDRequest.version == 35)
         let current = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "simulator"]).selectedRequest()
-        let old = SelectedHIDRequest(version: 33, requestID: current.requestID, screenID: current.screenID,
+        let old = SelectedHIDRequest(version: 34, requestID: current.requestID, screenID: current.screenID,
             screenUUID: current.screenUUID, operation: .complete, token: nil, primitives: [], ax: current.ax)
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }

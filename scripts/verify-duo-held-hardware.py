@@ -28,7 +28,6 @@ parser.add_argument('--public', action='store_true', help='Use the real public C
 args = parser.parse_args()
 assert args.pid > 0 and 0 <= args.fold_angle <= 180
 args.case = ('public-held-' if args.public else 'library-held-') + args.button + '-' + args.mode
-args.preparation = 'existing-bridge'
 spec = importlib.util.spec_from_file_location('duo_controls', Path(__file__).with_name('verify-duo-controls.py'))
 controls = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(controls)

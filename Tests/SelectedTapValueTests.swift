@@ -29,7 +29,7 @@ struct SelectedTapValueTests {
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         let ax = try #require(decoded.ax)
         #expect(ax.kind == .tap && ax.selectorKind == .value && ax.selectorValue == value)
-        #expect(ax.expectedPID == 42 && ax.preparation == .automationSession && ax.elementType == nil)
+        #expect(ax.expectedPID == 42 && ax.elementType == nil)
         guard case .value(let raw) = try #require(ax.selector) else {
             Issue.record("Value did not reach the library selector"); return
         }
@@ -38,8 +38,7 @@ struct SelectedTapValueTests {
 
     @Test(arguments: ["Button", "button", " Button "])
     func exactOptionalTypeAndDelaysAreSharedWithBatch(type: String) throws {
-        let arguments = ["--value", " Ready ", "--element-type", type, "--expected-pid", "42",
-                         "--ax-preparation", "existing-bridge", "--pre-delay", "0.2", "--post-delay", "0.3"]
+        let arguments = ["--value", " Ready ", "--element-type", type, "--expected-pid", "42", "--pre-delay", "0.2", "--post-delay", "0.3"]
         let direct = try parse(arguments).selectedRequest()
         let batch = try SelectedBatchStep.request(["tap"] + arguments,
             input: SelectedInputOptions.parse(selection), simulatorUDID: udid)
@@ -47,7 +46,7 @@ struct SelectedTapValueTests {
         #expect(try encoder.encode(direct.ax) == encoder.encode(batch.ax))
         #expect(direct.requestID != batch.requestID)
         let ax = try #require(batch.ax)
-        #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3 && ax.preparation == .existingBridge)
+        #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3)
         guard case .valueWithType(let value, let elementType) = try #require(ax.selector) else {
             Issue.record("Value type filter was lost"); return
         }
@@ -86,7 +85,7 @@ struct SelectedTapValueTests {
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])
     func valueCannotEnterOtherAXOperations(kind: SelectedAXRequest.Kind) throws {
-        let ax = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+        let ax = SelectedAXRequest(kind: kind, expectedPID: 42,
             endpoint: kind == .sliderEndpoint ? .minimum : nil, selectorKind: .value,
             selectorValue: "Ready", preDelay: 0, postDelay: 0,
             point: kind == .describePoint ? .init(x: 1, y: 2) : nil)

@@ -70,7 +70,7 @@ struct SelectedAXWaitTests {
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])
     func waitCannotEnterOtherAXKinds(kind: SelectedAXRequest.Kind) throws {
-        let ax = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+        let ax = SelectedAXRequest(kind: kind, expectedPID: 42,
             endpoint: kind == .sliderEndpoint ? .minimum : nil,
             selectorKind: kind == .sliderEndpoint || kind == .semanticPress ? .id : nil,
             selectorValue: kind == .sliderEndpoint || kind == .semanticPress ? "target" : nil,

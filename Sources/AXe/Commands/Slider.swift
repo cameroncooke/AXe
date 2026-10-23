@@ -57,8 +57,8 @@ struct Slider: AsyncParsableCommand {
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
             guard agentMode.elementRef != nil, (endpoint != nil) != (value != nil),
                   elementID == nil, elementLabel == nil, elementType == nil,
-                  selectedAX.preparation == nil, waitTimeout == 0, pollInterval == 0.25 else {
-                throw ValidationError("Agent slider requires --snapshot-id, --ref and exactly one --endpoint or --value, with no selector, preparation or polling overrides.")
+                  waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Agent slider requires --snapshot-id, --ref and exactly one --endpoint or --value, with no selector or polling overrides.")
             }
             return
         }
@@ -244,8 +244,7 @@ struct Slider: AsyncParsableCommand {
             throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
         }
         let expectedPID = try await frontmostApplicationPID(logger: logger)
-        let ax = SelectedAXRequest(kind: .sliderPercentage, expectedPID: expectedPID,
-            preparation: .automationSession, endpoint: nil,
+        let ax = SelectedAXRequest(kind: .sliderPercentage, expectedPID: expectedPID, endpoint: nil,
             selectorKind: elementID != nil ? .id : .label, selectorValue: elementID ?? elementLabel,
             preDelay: 0, postDelay: 0, elementType: elementType, percentage: targetNormalized * 100)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),

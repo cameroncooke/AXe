@@ -39,9 +39,9 @@ struct SelectedAXSemanticPressTests {
     }
 
     @Test func wireSemanticPressRejectsWrongSelectorAndDelay() {
-        for value in [SelectedAXRequest(kind: .semanticPress, expectedPID: 42, preparation: .existingBridge,
+        for value in [SelectedAXRequest(kind: .semanticPress, expectedPID: 42,
             endpoint: nil, selectorKind: .label, selectorValue: "Switch", preDelay: 0, postDelay: 0),
-            SelectedAXRequest(kind: .semanticPress, expectedPID: 42, preparation: .existingBridge,
+            SelectedAXRequest(kind: .semanticPress, expectedPID: 42,
             endpoint: nil, selectorKind: .id, selectorValue: "feature.switch", preDelay: 0, postDelay: 1)] {
             #expect(throws: (any Error).self) { try value.validate() }
         }

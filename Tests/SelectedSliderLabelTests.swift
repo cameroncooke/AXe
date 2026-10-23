@@ -13,8 +13,7 @@ struct SelectedSliderLabelTests {
 
     @Test(arguments: ["minimum", "maximum"], [nil, "Slider", "Button"] as [String?])
     func labelRequestMatchesStandaloneAndBatch(endpoint: String, type: String?) throws {
-        var args = ["--label", "Horizontal value", "--endpoint", endpoint, "--expected-pid", "42",
-                    "--ax-preparation", "existing-bridge"]
+        var args = ["--label", "Horizontal value", "--endpoint", endpoint, "--expected-pid", "42"]
         if let type { args += ["--element-type", type] }
         let direct = try Slider.parse(args + ["--udid", udid] + selection).selectedRequest()
         let batch = try SelectedBatchStep.request(["slider"] + args,
@@ -24,7 +23,7 @@ struct SelectedSliderLabelTests {
         #expect(direct.requestID != batch.requestID && direct.primitives.isEmpty && batch.primitives.isEmpty)
         #expect(batch.ax?.selectorKind == .label && batch.ax?.selectorValue == "Horizontal value")
         #expect(batch.ax?.elementType == type && batch.ax?.expectedPID == 42)
-        #expect(batch.ax?.endpoint?.rawValue == endpoint && batch.ax?.preparation == .existingBridge)
+        #expect(batch.ax?.endpoint?.rawValue == endpoint)
         try JSONDecoder().decode(SelectedHIDRequest.self, from: encoder.encode(batch)).validate()
     }
 
@@ -83,7 +82,7 @@ struct SelectedSliderLabelTests {
     }
 
     @Test func sliderValueSelectorRemainsUnsupportedOnWire() throws {
-        let ax = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: 42, preparation: .existingBridge,
+        let ax = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: 42,
             endpoint: .maximum, selectorKind: .value, selectorValue: "50", preDelay: 0, postDelay: 0)
         #expect(throws: (any Error).self) { try ax.validate() }
     }

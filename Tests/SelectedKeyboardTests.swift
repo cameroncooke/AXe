@@ -83,7 +83,7 @@ struct SelectedKeyboardTests {
     @Test func mixedInputPayloadsCannotReachKeyboardOwner() throws {
         let clean = request([.down(4), .up(4)])
         var ax = clean
-        ax.ax = .init(kind: .describe, expectedPID: 123, preparation: .existingBridge,
+        ax.ax = .init(kind: .describe, expectedPID: 123,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
         var pinch = clean
         pinch.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10)

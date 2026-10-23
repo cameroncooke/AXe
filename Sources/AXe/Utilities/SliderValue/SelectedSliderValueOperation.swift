@@ -38,7 +38,6 @@ final class SelectedSliderValueOperation {
     private let selectorValue: String
     private let expectedPID: Int32
     private let elementType: String?
-    private let preparation: FBSimulatorAXPreparation
     private let readDiagnostics: SliderValueReadDiagnostics
     private let operationID = UUID()
     private var backend: FBSimulatorSliderBackend?
@@ -58,11 +57,11 @@ final class SelectedSliderValueOperation {
     init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
          live: FBSimulatorHIDNativeFreshnessProvider, helperURL: URL,
          selectorKind: SelectedAXRequest.SelectorKind, selectorValue: String, expectedPID: Int32,
-         elementType: String?, preparation: FBSimulatorAXPreparation,
+         elementType: String?,
          admissionGuard: (any FBSimulatorSliderAdmissionGuard)?) {
         self.simulator = simulator; self.observation = observation; self.live = live
         self.helperURL = helperURL; self.selectorKind = selectorKind; self.selectorValue = selectorValue
-        self.expectedPID = expectedPID; self.elementType = elementType; self.preparation = preparation
+        self.expectedPID = expectedPID; self.elementType = elementType
         readDiagnostics = SliderValueReadDiagnostics(admissionGuard: admissionGuard)
     }
 
@@ -123,11 +122,11 @@ final class SelectedSliderValueOperation {
         case .id:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
                 freshnessProvider: bounded, identifier: selectorValue, expectedPID: expectedPID,
-                elementType: elementType, preparation: preparation, admissionGuard: readDiagnostics)
+                elementType: elementType, admissionGuard: readDiagnostics)
         case .label:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
                 freshnessProvider: bounded, label: selectorValue, expectedPID: expectedPID,
-                elementType: elementType, preparation: preparation, admissionGuard: readDiagnostics)
+                elementType: elementType, admissionGuard: readDiagnostics)
         default: throw SliderValueFailure.rejected("Slider value requires an exact ID or label")
         }
         backend = reader

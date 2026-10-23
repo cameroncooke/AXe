@@ -108,8 +108,7 @@ struct SelectedTapAutomaticTests {
         ["--value", " Ready "], ["--value", " Ready ", "--element-type", "TextField"]
     ])
     func selectorTypeDelaysAndAutomaticStyleReachWireAndBatch(selector: [String]) throws {
-        let arguments = selector + ["--expected-pid", "42", "--tap-style", "automatic",
-            "--ax-preparation", "existing-bridge", "--pre-delay", "0.2", "--post-delay", "0.3"]
+        let arguments = selector + ["--expected-pid", "42", "--tap-style", "automatic", "--pre-delay", "0.2", "--post-delay", "0.3"]
         let direct = try parse(arguments).selectedRequest()
         let batch = try SelectedBatchStep.request(["tap"] + arguments,
             input: SelectedInputOptions.parse(selection), simulatorUDID: udid)
@@ -121,7 +120,7 @@ struct SelectedTapAutomaticTests {
         #expect(ax.tapStyle == .automatic && ax.selectorValue == selector[1] && ax.expectedPID == 42)
         #expect(ax.selectorKind?.rawValue == String(selector[0].dropFirst(2)) && ax.selector != nil)
         #expect(ax.elementType == (selector.count == 4 ? selector[3] : nil))
-        #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3 && ax.preparation == .existingBridge)
+        #expect(ax.preDelay == 0.2 && ax.postDelay == 0.3)
         #expect(direct.requestID != batch.requestID && decoded.version == SelectedHIDRequest.version)
         let target = try node(#"{"type":"Button","subrole":"AXSwitch"}"#)
         #expect(try ax.tapEvent(at: CGPoint(x: 10, y: 20), target: target) == .tapAt(x: 10, y: 20, duration: 0.1))
@@ -154,7 +153,7 @@ struct SelectedTapAutomaticTests {
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .sliderEndpoint, .semanticPress])
     func automaticCannotEnterOtherAXKinds(kind: SelectedAXRequest.Kind) throws {
-        let ax = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+        let ax = SelectedAXRequest(kind: kind, expectedPID: 42,
             endpoint: kind == .sliderEndpoint ? .minimum : nil,
             selectorKind: kind == .sliderEndpoint || kind == .semanticPress ? .id : nil,
             selectorValue: kind == .sliderEndpoint || kind == .semanticPress ? "target" : nil,

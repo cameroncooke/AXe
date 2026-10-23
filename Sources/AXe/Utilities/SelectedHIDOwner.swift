@@ -428,7 +428,7 @@ final class SelectedHIDOwner {
     private func response(_ request: SelectedHIDRequest, outcome: String, count: Int = 0,
                           cleanup: String = "notNeeded", error: Error? = nil, includeToken: Bool = false,
                           buttonExecution: SelectedButtonExecutionEvidence? = nil) -> SelectedHIDResponse {
-        var ax = request.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID, preparation: $0.preparation) }
+        var ax = request.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID) }
         if error != nil { ax?.failure = .setupFailed }
         var hinge = request.hinge.map(SelectedHingeResult.init)
         if let readinessError = error as? FBSimulatorHingeReadinessError { hinge?.readinessPreflightFailure = readinessError }

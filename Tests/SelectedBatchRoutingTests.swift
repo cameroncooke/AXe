@@ -73,7 +73,6 @@ struct SelectedBatchRoutingTests {
         #expect(first.primitives.isEmpty && next.primitives.isEmpty)
         #expect(first.ax?.selectorValue == "dynamic.target" && next.ax?.selectorValue == "dynamic.target")
         #expect(first.ax?.expectedPID == 123 && first.ax?.kind == .tap)
-        #expect(first.ax?.preparation == .automationSession)
     }
 
     @Test(arguments: ["button HOME", "sleep inf", "touch -x 10 -y 20 --down",

@@ -35,7 +35,7 @@ struct SelectedSideButtonTests {
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(direct))
         try decoded.validate()
         let payload = try #require(decoded.button)
-        #expect(SelectedHIDRequest.version == 34 && decoded.version == SelectedHIDRequest.version)
+        #expect(SelectedHIDRequest.version == 35 && decoded.version == SelectedHIDRequest.version)
         #expect(payload.kind == .sideButton && payload.duration == duration && payload.expectedBoot == "boot-one")
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen && decoded.home == nil)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
@@ -95,7 +95,7 @@ struct SelectedSideButtonTests {
             screenUUID: nil, operation: .complete, token: nil, primitives: [], button: clean.button))
         var mixed = clean; mixed.home = .init(duration: nil, expectedBoot: nil); invalid.append(mixed)
         mixed = clean; mixed.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(mixed)
-        mixed = clean; mixed.ax = .init(kind: .describe, expectedPID: 123, preparation: .existingBridge,
+        mixed = clean; mixed.ax = .init(kind: .describe, expectedPID: 123,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0); invalid.append(mixed)
         mixed = clean; mixed.hinge = .init(kind: .read, expectedBootIdentity: nil, degrees: nil,
             toleranceDegrees: nil, timeoutSeconds: nil); invalid.append(mixed)
@@ -218,7 +218,7 @@ struct SelectedSideButtonTests {
         if request.home != nil { result.home = execution }
         else if fault != .missingButton { result.button = .init(kind: .sideButton, execution: execution) }
         if fault == .mixedHome { result.home = execution }
-        if fault == .mixedAX { result.ax = .init(kind: .describe, expectedPID: 123, preparation: .existingBridge) }
+        if fault == .mixedAX { result.ax = .init(kind: .describe, expectedPID: 123) }
         return result
     }
 

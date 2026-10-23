@@ -102,9 +102,6 @@ struct Swipe: AsyncParsableCommand {
 
     private func validateAgent() throws {
         try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
-        guard selectedAX.preparation == nil else {
-            throw ValidationError("Agent swipe does not accept --ax-preparation.")
-        }
         let coordinates = [startX, startY, endX, endY]
         if agentMode.elementRef != nil {
             guard coordinates.allSatisfy({ $0 == nil }), agentDirection != nil, delta == nil else {

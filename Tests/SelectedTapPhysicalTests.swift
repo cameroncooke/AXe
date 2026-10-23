@@ -39,7 +39,7 @@ struct SelectedTapPhysicalTests {
         ["--label", "Tap target", "--expected-pid", "42"],
         ["--label", "Tap target", "--expected-pid", "42", "--element-type", "Button", "--post-delay", "0.3"],
         ["--value", " Ready ", "--expected-pid", "42"],
-        ["--value", " Ready ", "--expected-pid", "42", "--element-type", "TextField", "--ax-preparation", "existing-bridge"]
+        ["--value", " Ready ", "--expected-pid", "42", "--element-type", "TextField"]
     ])
     func physicalAndOmittedStyleProduceEquivalentRequests(arguments: [String]) throws {
         let implicit = try parse(arguments)

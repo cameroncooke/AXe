@@ -47,8 +47,8 @@ struct Drag: AsyncParsableCommand {
         try agentMode.validate()
         if agentMode.enabled {
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
-            guard startX == nil, startY == nil, agentMode.elementRef != nil, selectedAX.preparation == nil else {
-                throw ValidationError("Agent drag requires --ref and does not accept --start-x, --start-y or --ax-preparation.")
+            guard startX == nil, startY == nil, agentMode.elementRef != nil else {
+                throw ValidationError("Agent drag requires --ref and does not accept --start-x or --start-y.")
             }
             _ = try agentRequest()
             return

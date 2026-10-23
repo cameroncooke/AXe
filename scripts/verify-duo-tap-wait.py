@@ -184,7 +184,7 @@ class Check:
         return value
 
     def describe(self, name, identifier, selection=None):
-        value = self.axe(name, "describe-ui", ["--ax-preparation", "automation-session"], selection)
+        value = self.axe(name, "describe-ui", [], selection)
         matches = [node for node in walk(value.get("ax", {}).get("roots", [])) if node.get("AXUniqueId") == identifier]
         require(len(matches) == 1 and matches[0].get("pid") == self.args.pid and matches[0].get("enabled"),
                 "A visible owned button is not unique: " + identifier)
@@ -232,7 +232,7 @@ class Check:
         while True:
             require(self.children["target"].poll() is None, "Wait client exited before the owner witness")
             name = "owner-witness-" + str(len(attempts) + 1)
-            value = self.axe(name, "describe-ui", ["--ax-preparation", "existing-bridge"], expected=None)
+            value = self.axe(name, "describe-ui", [], expected=None)
             attempts.append(name)
             save(self.out / "owner-witness.json", dict(attempts=attempts, matched=None))
             state = self.snapshot(name + "-state")

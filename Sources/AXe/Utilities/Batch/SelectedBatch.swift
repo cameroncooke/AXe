@@ -300,7 +300,7 @@ enum SelectedBatchRunner {
               response.context?.screenID == request.screenID,
               response.context.flatMap({ UUID(uuidString: $0.screenUUID) }) == request.screenUUID,
               actual.kind == expected.kind, actual.expectedPID == expected.expectedPID,
-              actual.preparation == expected.preparation, actual.failure == nil, actual.press == nil,
+              actual.failure == nil, actual.press == nil,
               slider.endpoint == expected.endpoint, slider.outcome == response.outcome,
               slider.reason == nil, !slider.reasonTruncated,
               slider.actionAttempts == slider.actionsReturned,

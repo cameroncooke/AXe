@@ -9,13 +9,13 @@ struct SelectedDescribePointTests {
         "--screen-uuid", "769ED878-389B-4346-9C56-CB0703AB3E58", "--expected-pid", "42"]
 
     @Test func selectedPointProducesOneReadOnlyPayload() throws {
-        let command = try DescribeUI.parse(selected + ["--point", "150,250", "--ax-preparation", "existing-bridge"])
+        let command = try DescribeUI.parse(selected + ["--point", "150,250"])
         let request = try command.selectedRequest()
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(request))
         try decoded.validate()
         #expect(decoded.version == SelectedHIDRequest.version && decoded.ax?.kind == .describePoint)
         #expect(decoded.ax?.point?.x == 150 && decoded.ax?.point?.y == 250)
-        #expect(decoded.ax?.expectedPID == 42 && decoded.ax?.preparation == .existingBridge)
+        #expect(decoded.ax?.expectedPID == 42)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         #expect(decoded.ax?.selector == nil && decoded.path == nil && decoded.keyboard == nil)
     }
@@ -45,7 +45,7 @@ struct SelectedDescribePointTests {
 
     @Test func pointPayloadCannotEnterActionOrTreeKinds() throws {
         for kind in [SelectedAXRequest.Kind.describe, .tap, .semanticPress, .sliderEndpoint] {
-            let request = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+            let request = SelectedAXRequest(kind: kind, expectedPID: 42,
                 endpoint: kind == .sliderEndpoint ? .minimum : nil,
                 selectorKind: kind == .describe ? nil : .id,
                 selectorValue: kind == .describe ? nil : "feature.switch", preDelay: 0, postDelay: 0,
@@ -53,11 +53,11 @@ struct SelectedDescribePointTests {
             #expect(throws: (any Error).self) { try request.validate() }
         }
         for request in [
-            SelectedAXRequest(kind: .describePoint, expectedPID: 42, preparation: .existingBridge,
+            SelectedAXRequest(kind: .describePoint, expectedPID: 42,
                 endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0),
-            SelectedAXRequest(kind: .describePoint, expectedPID: 42, preparation: .existingBridge,
+            SelectedAXRequest(kind: .describePoint, expectedPID: 42,
                 endpoint: nil, selectorKind: .id, selectorValue: "x", preDelay: 0, postDelay: 0, point: .init(x: 1, y: 2)),
-            SelectedAXRequest(kind: .describePoint, expectedPID: 42, preparation: .existingBridge,
+            SelectedAXRequest(kind: .describePoint, expectedPID: 42,
                 endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 1, point: .init(x: 1, y: 2))
         ] {
             #expect(throws: (any Error).self) { try request.validate() }

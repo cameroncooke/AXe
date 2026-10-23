@@ -81,7 +81,7 @@ struct SelectedTapElementTypeTests {
 
     @Test(arguments: [SelectedAXRequest.Kind.describe, .describePoint, .semanticPress])
     func typeCannotBeSmuggledIntoOtherAXOperations(kind: SelectedAXRequest.Kind) throws {
-        var ax = SelectedAXRequest(kind: kind, expectedPID: 42, preparation: .existingBridge,
+        var ax = SelectedAXRequest(kind: kind, expectedPID: 42,
             endpoint: nil,
             selectorKind: kind == .semanticPress ? .id : nil,
             selectorValue: kind == .semanticPress ? "target" : nil,

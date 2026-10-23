@@ -1769,27 +1769,12 @@ index 0ebd3bb..4fb5522 100644
    private static func stringValue(forKey key: FBAXSearchableKey, from element: FBAXPlatformElement) -> String? {
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
 new file mode 100644
-index 0000000..c41a2b5
+index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d0da70479
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
-@@ -0,0 +1,442 @@
+@@ -0,0 +1,412 @@
 +import FBControlCore
 +import Foundation
-+
-+/// Preparation is explicit. Existing-bridge mode does not enable AX and never
-+/// retries with an automation session when a read fails.
-+public enum FBSimulatorAXPreparation: String, Codable, Sendable {
-+  case automationSession, existingBridge
-+
-+  // One policy controls both acquisition and final target validation. The closure
-+  // is not evaluated in existing-bridge mode, including when that read fails.
-+  func beginLease(_ begin: () throws -> FBSimulatorAccessibilityLease?) rethrows -> FBSimulatorAccessibilityLease? {
-+    switch self {
-+    case .automationSession: return try begin()
-+    case .existingBridge: return nil
-+    }
-+  }
-+}
 +
 +public enum FBSimulatorAXAcquisitionOutcome: String, Codable, Sendable {
 +  case ready, notReady, cancelled, deadlineExceeded, requestTimedOut, processChanged, contextChanged, failed
@@ -1873,19 +1858,18 @@ index 0000000..c41a2b5
 +extension FBSimulatorAXSnapshot {
 +  /// Explicit bounded acquisition. Each empty response is retained in the result.
 +  /// A changed PID fails immediately; this operation never waits for another app.
-+  /// Synchronous bootstrap enable and local lease close retain their inherited bounds.
++  /// Reads use standard IDB accessibility validation.
 +  public static func acquire(
 +    for simulator: FBSimulator, expectedPID: Int32,
 +    observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider,
-+    policy: FBSimulatorAXAcquisitionPolicy,
-+    preparation: FBSimulatorAXPreparation = .automationSession
++    policy: FBSimulatorAXAcquisitionPolicy
 +  ) async throws -> FBSimulatorAXAcquisition {
 +    guard expectedPID > 0 else { throw FBSimulatorAXSnapshotError.invalidSelection }
 +    let budget = FBAXAcquisitionBudget(seconds: policy.timeoutSeconds)
 +    return await withTaskCancellationHandler(operation: {
 +      await FBSimulatorAXWorker.shared.acquire(for: simulator, expectedPID: expectedPID,
-+        observation: observation, provider: freshnessProvider, policy: policy, budget: budget, preparation: preparation)
++        observation: observation, provider: freshnessProvider, policy: policy, budget: budget)
 +    }, onCancel: { budget.stop(.cancelled) })
 +  }
 +}
@@ -1895,11 +1879,9 @@ index 0000000..c41a2b5
 +               observation: FBSimulatorHIDSessionObservation,
 +               provider: any FBSimulatorHIDFreshnessProvider,
 +               policy: FBSimulatorAXAcquisitionPolicy,
-+               budget: FBAXAcquisitionBudget,
-+               preparation: FBSimulatorAXPreparation = .automationSession) async -> FBSimulatorAXAcquisition {
++               budget: FBAXAcquisitionBudget) async -> FBSimulatorAXAcquisition {
 +    var phases: [FBSimulatorAXAcquisitionPhase] = []
 +    var attempts: [FBSimulatorAXAcquisitionAttempt] = []
-+    var lease: FBSimulatorAccessibilityLease?
 +    var snapshot: FBSimulatorAXSnapshot?
 +    var outcome: FBSimulatorAXAcquisitionOutcome = .notReady
 +    var failure: String?
@@ -1916,9 +1898,9 @@ index 0000000..c41a2b5
 +      try await validateSelection(simulator, observation: observation, provider: provider)
 +      try budget.check()
 +      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
-+      phase(preparation == .automationSession ? "bootstrap-start" : "existing-bridge-read-no-automation-preparation")
-+      lease = try preparation.beginLease { try commands.beginAccessibilityForSnapshot() }
-+      if preparation == .automationSession { phase("bootstrap-returned") }
++      phase("standard-read")
++      try budget.check(); try Task.checkCancellation()
++      try commands.validateAccessibility()
 +      try budget.check()
 +      try Task.checkCancellation()
 +      for index in 1...policy.maximumAttempts {
@@ -1987,13 +1969,7 @@ index 0000000..c41a2b5
 +        endUptime: ProcessInfo.processInfo.systemUptime, rootPID: pendingAttempt.pid,
 +        outcome: outcome, jsonData: pendingAttempt.data))
 +    }
-+    if let lease {
-+      phase("close-start")
-+      lease.close()
-+      phase("close-returned-local-only")
-+    } else {
-+      phase("close-not-acquired")
-+    }
++    phase("standard-read-finished")
 +    if outcome == .ready {
 +      do { try budget.check(); try Task.checkCancellation() }
 +      catch {
@@ -2016,8 +1992,7 @@ index 0000000..c41a2b5
 +    at point: CGPoint, for simulator: FBSimulator, expectedPID: Int32,
 +    observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider,
-+    policy: FBSimulatorAXAcquisitionPolicy,
-+    preparation: FBSimulatorAXPreparation = .automationSession
++    policy: FBSimulatorAXAcquisitionPolicy
 +  ) async throws -> FBSimulatorAXAcquisition {
 +    guard expectedPID > 0 else { throw FBSimulatorAXSnapshotError.invalidSelection }
 +    _ = try FBAXPointReadRules.nativePoint(point, observation: observation)
@@ -2026,7 +2001,7 @@ index 0000000..c41a2b5
 +    let budget = FBAXAcquisitionBudget(seconds: policy.timeoutSeconds)
 +    return await withTaskCancellationHandler(operation: {
 +      await FBSimulatorAXWorker.shared.acquirePoint(point, for: simulator, expectedPID: expectedPID,
-+        observation: observation, provider: freshnessProvider, budget: budget, preparation: preparation)
++        observation: observation, provider: freshnessProvider, budget: budget)
 +    }, onCancel: { budget.stop(.cancelled) })
 +  }
 +}
@@ -2065,10 +2040,8 @@ index 0000000..c41a2b5
 +  func acquirePoint(_ point: CGPoint, for simulator: FBSimulator, expectedPID: Int32,
 +                    observation: FBSimulatorHIDSessionObservation,
 +                    provider: any FBSimulatorHIDFreshnessProvider,
-+                    budget: FBAXAcquisitionBudget,
-+                    preparation: FBSimulatorAXPreparation) async -> FBSimulatorAXAcquisition {
++                    budget: FBAXAcquisitionBudget) async -> FBSimulatorAXAcquisition {
 +    var phases: [FBSimulatorAXAcquisitionPhase] = []
-+    var lease: FBSimulatorAccessibilityLease?
 +    var snapshot: FBSimulatorAXSnapshot?
 +    var data: Data?
 +    var rootPID: Int32 = 0
@@ -2086,9 +2059,9 @@ index 0000000..c41a2b5
 +      try await validateSelection(simulator, observation: observation, provider: provider)
 +      try budget.check()
 +      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
-+      phase(preparation == .automationSession ? "bootstrap-start" : "existing-bridge-read-no-automation-preparation")
-+      lease = try preparation.beginLease { try commands.beginAccessibilityForSnapshot() }
-+      if preparation == .automationSession { phase("bootstrap-returned") }
++      phase("standard-read")
++      try budget.check(); try Task.checkCancellation()
++      try commands.validateAccessibility()
 +      try budget.check()
 +      rootPID = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
 +      try FBAXPointReadRules.frontmost(rootPID, expectedPID: expectedPID)
@@ -2127,13 +2100,7 @@ index 0000000..c41a2b5
 +              case .staleContext = selection { outcome = .contextChanged }
 +      else { outcome = .failed }
 +    }
-+    if let lease {
-+      phase("close-start")
-+      lease.close()
-+      phase("close-returned-local-only")
-+    } else {
-+      phase("close-not-acquired")
-+    }
++    phase("standard-read-finished")
 +    if outcome == .ready {
 +      do { try budget.check(); try Task.checkCancellation() }
 +      catch {
@@ -2197,6 +2164,9 @@ index 0000000..c41a2b5
 +    guard simulator.udid == observation.simulatorUDID else { throw FBSimulatorAXSnapshotError.wrongSimulator }
 +    try provider.validateCurrentRevision(expected: observation)
 +    let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
++    try budget.check(); try Task.checkCancellation()
++    try commands.validateAccessibility()
++    try budget.check()
 +    let request = FBAXTranslationRequest(kind: .frontmostApplication,
 +      pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
 +    request.acquisitionBudget = budget
@@ -2217,10 +2187,10 @@ index 0000000..c41a2b5
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXHostedWebPoint.swift b/FBSimulatorControl/Commands/FBSimulatorAXHostedWebPoint.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..b5659a242a5021e3be66989301ef2cc34be517a0
+index 0000000000000000000000000000000000000000..19c004317672f9a074d5cc5c7b60606b9bd724a9
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXHostedWebPoint.swift
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,327 @@
 +@_implementationOnly import AccessibilityPlatformTranslation
 +import Foundation
 +import CoreGraphics
@@ -2254,7 +2224,7 @@ index 0000000000000000000000000000000000000000..b5659a242a5021e3be66989301ef2cc3
 +    self.budget = budget; self.reservation = reservation
 +  }
 +
-+  /// Existing bridge only. No automation start, retry, or context override.
++  /// Standard IDB validation once. No retry or context override.
 +  /// The same deadline covers open, session setup, and final admission.
 +  public static func open(for simulator: FBSimulator, expectedPID: Int32,
 +                          exactLabel: String, point: CGPoint,
@@ -2489,6 +2459,9 @@ index 0000000000000000000000000000000000000000..b5659a242a5021e3be66989301ef2cc3
 +      try budget.check(); try Task.checkCancellation()
 +      // Session execute already performed a full authoritative read. It owns inFlight.
 +      try provider.validateCurrentRevision(expected: observation)
++      try budget.check(); try Task.checkCancellation()
++      try commands.validateAccessibility()
++      try budget.check()
 +      let rootRequest = FBAXTranslationRequest(kind: .frontmostApplication,
 +        pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
 +      rootRequest.acquisitionBudget = budget; rootRequest.identityRoutingRecorder = routing
@@ -3446,10 +3419,10 @@ index 0000000000000000000000000000000000000000..bea2406b0bb9ee8a9dd439771502215c
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift b/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift
 new file mode 100644
-index 000000000..3aad1d6f3
+index 0000000000000000000000000000000000000000..dc8e38c509bfbb0503532c5ebee24ba90b9fcf4e
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift
-@@ -0,0 +1,667 @@
+@@ -0,0 +1,658 @@
 +import Foundation
 +import CoreGraphics
 +import Darwin
@@ -3509,7 +3482,6 @@ index 000000000..3aad1d6f3
 +  public let snapshot: FBSimulatorAXSnapshot
 +  public let reference: FBSimulatorAXReference
 +  public let point: CGPoint
-+  public let preparation: FBSimulatorAXPreparation
 +  private let simulator: FBSimulator
 +  private let provider: any FBSimulatorHIDLiveFreshnessProvider
 +  private let expectedPID: Int32
@@ -3526,10 +3498,8 @@ index 000000000..3aad1d6f3
 +               expectedPID: Int32, selector: FBSimulatorAXSelector,
 +               acquisition: FBSimulatorAXAcquisition, snapshot: FBSimulatorAXSnapshot,
 +               reference: FBSimulatorAXReference, point: CGPoint,
-+               budget: FBAXAcquisitionBudget, reservation: FBAXTargetReservation,
-+               preparation: FBSimulatorAXPreparation) {
++               budget: FBAXAcquisitionBudget, reservation: FBAXTargetReservation) {
 +    self.simulator = simulator; self.provider = provider; self.expectedPID = expectedPID
-+    self.preparation = preparation
 +    self.selector = selector; self.acquisition = acquisition; self.snapshot = snapshot
 +    self.reference = reference; self.point = point; self.budget = budget; self.reservation = reservation
 +  }
@@ -3541,15 +3511,14 @@ index 000000000..3aad1d6f3
 +                          observation: FBSimulatorHIDSessionObservation,
 +                          freshnessProvider: any FBSimulatorHIDLiveFreshnessProvider,
 +                          policy: FBSimulatorAXAcquisitionPolicy,
-+                          point: CGPoint? = nil,
-+                          preparation: FBSimulatorAXPreparation = .automationSession) async throws -> FBSimulatorAXTargetOperation {
++                          point: CGPoint? = nil) async throws -> FBSimulatorAXTargetOperation {
 +    guard expectedPID > 0 else { throw FBSimulatorAXSnapshotError.invalidSelection }
 +    let reservation = try FBAXTargetReservation.acquire()
 +    let budget = FBAXAcquisitionBudget(seconds: policy.timeoutSeconds)
 +    return try await withTaskCancellationHandler(operation: {
 +      let acquisition = await FBSimulatorAXWorker.shared.acquire(for: simulator,
 +        expectedPID: expectedPID, observation: observation, provider: freshnessProvider,
-+        policy: policy, budget: budget, preparation: preparation)
++        policy: policy, budget: budget)
 +      guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
 +        throw FBSimulatorAXTargetOpenFailure(acquisition: acquisition, failureDescription: acquisition.failureDescription)
 +      }
@@ -3562,7 +3531,7 @@ index 000000000..3aad1d6f3
 +        try Task.checkCancellation()
 +        return FBSimulatorAXTargetOperation(simulator: simulator, provider: freshnessProvider,
 +          expectedPID: expectedPID, selector: selector, acquisition: acquisition,
-+          snapshot: snapshot, reference: reference, point: chosen, budget: budget, reservation: reservation, preparation: preparation)
++          snapshot: snapshot, reference: reference, point: chosen, budget: budget, reservation: reservation)
 +      } catch {
 +        throw FBSimulatorAXTargetOpenFailure(acquisition: acquisition, failureDescription: String(reflecting: error))
 +      }
@@ -3583,7 +3552,7 @@ index 000000000..3aad1d6f3
 +      validation = try await withTaskCancellationHandler(operation: {
 +        try await FBSimulatorAXWorker.shared.validateTarget(for: simulator,
 +          expectedPID: expectedPID, selector: selector, reference: reference, point: point,
-+          observation: observation, provider: provider, budget: budget, preparation: preparation)
++          observation: observation, provider: provider, budget: budget)
 +      }, onCancel: { budget.stop(.cancelled) })
 +      try budget.check()
 +      try Task.checkCancellation()
@@ -3720,16 +3689,13 @@ index 000000000..3aad1d6f3
 +                      selector: FBSimulatorAXSelector, reference: FBSimulatorAXReference,
 +                      point: CGPoint, observation: FBSimulatorHIDSessionObservation,
 +                      provider: any FBSimulatorHIDLiveFreshnessProvider,
-+                      budget: FBAXAcquisitionBudget,
-+                      preparation: FBSimulatorAXPreparation) async throws -> FBSimulatorAXTargetValidation {
++                      budget: FBAXAcquisitionBudget) async throws -> FBSimulatorAXTargetValidation {
 +    try budget.check(); try Task.checkCancellation()
 +    let started = ProcessInfo.processInfo.systemUptime
 +    // execute already completed the authoritative read. Do not put another slow
 +    // full-context read between the final hit/PID check and the first input.
 +    try provider.validateCurrentRevision(expected: observation)
 +    let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
-+    let lease = try preparation.beginLease { try commands.beginAccessibilityForSnapshot() }
-+    defer { lease?.close() }
 +    try budget.check()
 +    let rootRequest = FBAXTranslationRequest(kind: .frontmostApplication,
 +      pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
@@ -3780,9 +3746,6 @@ index 000000000..3aad1d6f3
 +        freshRoots = tree.roots
 +        try budget.check(); try Task.checkCancellation()
 +        if reference.node.type == "CheckBox" {
-+          guard preparation == .automationSession else {
-+            throw FBAXNativeSwitchError.rejected("Native switch ancestry requires automation-session preparation")
-+          }
 +          target = try FBAXTargetValidationRules.nativeSwitchTarget(result.roots, freshRoots: tree.roots,
 +            expected: reference.node, selector: selector, expectedPID: expectedPID, hitPID: hitPID, point: point)
 +          guard let identifier = target.identifier, !identifier.isEmpty, let frame = target.frame else {
@@ -3947,8 +3910,9 @@ index 000000000..3aad1d6f3
 +  init(simulator: FBSimulator, identifier: String, frame: CGRect,
 +       displayID: UInt32, token: FBAXSimulatorDeviceToken, budget: FBAXAcquisitionBudget) throws {
 +    try budget.check()
++    try FBSimulatorControlFrameworkLoader.accessibilityAutomationFrameworks.loadPrivateFrameworks(simulator.logger)
 +    guard !identifier.isEmpty, let deviceClass = NSClassFromString("XCUIDevice") else {
-+      throw FBAXNativeSwitchError.rejected("Named native switch requires automation-session preparation")
++      throw FBAXNativeSwitchError.rejected("Named native switch classes are unavailable")
 +    }
 +    let factory = try Self.method(deviceClass, "iOSDeviceForSimulatorDevice:", "@24@0:8@16", isClassMethod: true)
 +    guard let device = unsafeBitCast(factory, to: Factory.self)(deviceClass,
@@ -4118,124 +4082,16 @@ index 000000000..3aad1d6f3
 +  deinit { close() }
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59cf07a7621 100644
+index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45b903cc15 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
 +++ b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-@@ -85,116 +85,201 @@
-   // MARK: AsyncAccessibilityOperations
+@@ -86,7 +86,16 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
  
    public func accessibilityElement(at point: CGPoint) async throws -> FBAccessibilityElement {
--    try validateAccessibility()
+     try validateAccessibility()
 -    let request = FBAXTranslationRequest(kind: .point(point))
--    return try await accessibilityElement(request: request, remediationPermitted: false)
--  }
--
--  public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
--    try validateAccessibility()
--    let request = FBAXTranslationRequest(kind: .frontmostApplication)
--    return try await accessibilityElement(request: request, remediationPermitted: true)
--  }
--
--  public func accessibilityElementMatching(value: String, forKey key: FBAXSearchableKey, depth: UInt) async throws -> FBAccessibilityElement {
--    try validateAccessibility()
--    let request = FBAXTranslationRequest(kind: .frontmostApplication)
--    let root = try await accessibilityElement(request: request, remediationPermitted: true)
--    return try root.findElement(withValue: value, forKey: key, depth: depth)
--  }
--
--  // MARK: Private
--
--  // Uses the CoreSimulator accessibility API via
--  // -[SimDevice sendAccessibilityRequestAsync:completionQueue:completionHandler:].
--  // This API requires Xcode 12+ to have been installed on the host at some point.
--  private func validateAccessibility() throws {
--    guard let simulator else {
--      throw FBAccessibilityError.simulatorDeallocated
--    }
--    guard simulator.state == .booted else {
--      throw FBAccessibilityError.simulatorNotBooted(description: "\(simulator)")
--    }
--    let selector = NSSelectorFromString("sendAccessibilityRequestAsync:completionQueue:completionHandler:")
--    guard simulator.device.responds(to: selector) else {
--      throw FBAccessibilityError.accessibilityUnavailable
--    }
--    try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
--    if Self.requiresAccessibilityBootstrap(for: simulator.osVersion.version) {
--      try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
--        forSimulatorDevice: simulator.device,
--        timeout: 5,
--        logger: simulator.logger
--      )
--    }
--  }
--
--  // Returns an FBAccessibilityElement wrapping the platform element for the given request.
--  // The handle owns the request's token and pops it on close.
--  //
--  // When remediationPermitted and a stale SpringBoard is detected (zero accessibility frame +
--  // dead pid), the original request's token is popped manually (it is not wrapped in a handle
--  // yet at that point), CoreSimulatorBridge is restarted, and the lookup retries with a fresh
--  // request. The retry passes remediationPermitted=false, bounding it to a single attempt.
--  private func accessibilityElement(request: FBAXTranslationRequest, remediationPermitted: Bool) async throws -> FBAccessibilityElement {
--    guard let simulator else {
--      throw FBAccessibilityError.simulatorDeallocated
--    }
--    guard let dispatcher = resolvedDispatcher else {
--      throw FBAccessibilityError.dispatcherUnavailable
--    }
--    let element = try await dispatcher.platformElement(withRequest: request, simulator: simulator)
--    if !remediationPermitted {
--      return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
--    }
--    if try await !Self.remediationRequired(forSimulator: simulator, element: element) {
--      return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
--    }
--    // The request's token was pushed by the dispatcher but is not yet wrapped in an
--    // FBAccessibilityElement, so pop it manually before discarding the request.
--    dispatcher.popRequest(request)
--    let nextRequest = request.cloneWithNewToken()
--    try await Self.remediateSpringBoard(forSimulator: simulator)
--    return try await accessibilityElement(request: nextRequest, remediationPermitted: false)
--  }
--
--  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement) async throws -> Bool {
--    // A quick check: a non-zero accessibility frame indicates a healthy element.
--    if !element.axFrame().equalTo(.zero) {
--      return false
--    }
--    // Otherwise confirm whether the translation object's pid represents a real process.
--    // If it does not, we likely got the pid of a crashed SpringBoard; restarting
--    // CoreSimulatorBridge lets launchd bring a fresh SpringBoard (and bridge) back up.
--    let pid = element.axTranslationPid
--    do {
--      _ = try await bridgeFBFuture(simulator.serviceName(forProcessIdentifier: pid))
--      return false
--    } catch {
--      simulator.logger?.log("Frontmost accessibility hierarchy is stale: the root element has a zero frame and its owning pid \(pid) is no longer a registered launchd service. SpringBoard has crashed and CoreSimulator's \(coreSimulatorBridgeServiceName) is still bound to the dead pid; restarting \(coreSimulatorBridgeServiceName) to recover.")
--      return true
--    }
--  }
--
--  private static func remediateSpringBoard(forSimulator simulator: FBSimulator) async throws {
--    do {
--      _ = try await bridgeFBFuture(simulator.stopService(withName: coreSimulatorBridgeServiceName))
--    } catch {
--      throw FBAccessibilityError.springBoardRemediationFailed(serviceName: coreSimulatorBridgeServiceName)
--    }
--  }
--}
--
--// MARK: - FBSimulator+AsyncAccessibilityCommands
--
--extension FBSimulator: AsyncAccessibilityCommands {
--
--  public func accessibilityElement(at point: CGPoint) async throws -> FBAccessibilityElement {
--    try await accessibilityCommands().accessibilityElement(at: point)
--  }
--
--  public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
--    try await accessibilityCommands().accessibilityElementForFrontmostApplication()
-+    try await accessibilityElement(atNativePoint: point, displayID: 0)
++    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: 0)
++    return try await accessibilityElement(request: request, remediationPermitted: false)
 +  }
 +
 +  /// Resolves a point in the selected display's unrotated logical coordinate space.
@@ -4244,15 +4100,13 @@ index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59c
 +  public func accessibilityElement(atNativePoint point: CGPoint, displayID: UInt32) async throws -> FBAccessibilityElement {
 +    try validateAccessibility()
 +    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: displayID)
-+    return try await accessibilityElement(request: request, remediationPermitted: false)
-+  }
-+
-+  public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
-+    try validateAccessibility()
-+    let request = FBAXTranslationRequest(kind: .frontmostApplication)
-+    return try await accessibilityElement(request: request, remediationPermitted: true)
-+  }
-+
+     return try await accessibilityElement(request: request, remediationPermitted: false)
+   }
+ 
+@@ -96,6 +105,13 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+     return try await accessibilityElement(request: request, remediationPermitted: true)
+   }
+ 
 +  /// Selected-display whole tree. Context supplies the remote hit-test transform.
 +  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
 +    try validateAccessibility()
@@ -4260,15 +4114,15 @@ index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59c
 +    return try await accessibilityElement(request: request, remediationPermitted: true)
 +  }
 +
-+  public func accessibilityElementMatching(value: String, forKey key: FBAXSearchableKey, depth: UInt) async throws -> FBAccessibilityElement {
-+    try validateAccessibility()
-+    let request = FBAXTranslationRequest(kind: .frontmostApplication)
-+    let root = try await accessibilityElement(request: request, remediationPermitted: true)
-+    return try root.findElement(withValue: value, forKey: key, depth: depth)
-+  }
-+
+   public func accessibilityElementMatching(value: String, forKey key: FBAXSearchableKey, depth: UInt) async throws -> FBAccessibilityElement {
+     try validateAccessibility()
+     let request = FBAXTranslationRequest(kind: .frontmostApplication)
+@@ -103,12 +119,45 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+     return try root.findElement(withValue: value, forKey: key, depth: depth)
+   }
+ 
 +  // Snapshot handles are acquired and consumed on the same worker. This internal
-+  // boundary retains bootstrap and the existing bounded remediation path.
++  // boundary uses standard IDB validation with the existing bounded remediation path.
 +  func accessibilityElementForSnapshot(request: FBAXTranslationRequest,
 +                                       worker: isolated FBSimulatorAXWorker) async throws -> FBAccessibilityElement {
 +    try Task.checkCancellation()
@@ -4282,6 +4136,7 @@ index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59c
 +      remediationPermitted: remediationPermitted, isolation: worker)
 +  }
 +
++  // The operation owner performs standard validation once before these rechecks.
 +  // Acquisition never uses the legacy bridge-restart recovery path.
 +  func accessibilityElementForAcquisition(request: FBAXTranslationRequest,
 +                                          worker: isolated FBSimulatorAXWorker) async throws -> FBAccessibilityElement {
@@ -4289,28 +4144,6 @@ index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59c
 +    try request.acquisitionBudget?.check()
 +    try validateAccessibility(bootstrap: false)
 +    return try await accessibilityElement(request: request, remediationPermitted: false, isolation: worker)
-+  }
-+
-+  // The worker retains this lease until all lazy AX reads and context checks finish.
-+  func beginAccessibilityForSnapshot() throws -> FBSimulatorAccessibilityLease? {
-+    try validateAccessibility(bootstrap: false)
-+    guard let simulator else { throw FBAccessibilityError.simulatorDeallocated }
-+    guard Self.requiresAccessibilityBootstrap(for: simulator.osVersion.version) else { return nil }
-+    return try FBSimulatorControlFrameworkLoader.beginAccessibility(
-+      forSimulatorDevice: simulator.device, timeout: 5, logger: simulator.logger)
-+  }
-+
-+  // Scoped endpoint acquisition: only the AX worker can prepare or consume this lease.
-+  func prepareSliderAcquisition(deadline: Double,
-+    worker: isolated FBSimulatorAXWorker) throws -> FBSimulatorAccessibilityLease? {
-+    try FBSimulatorSliderEndpointController.check(deadline)
-+    try validateAccessibility(bootstrap: false)
-+    guard let simulator else { throw FBAccessibilityError.simulatorDeallocated }
-+    guard Self.requiresAccessibilityBootstrap(for: simulator.osVersion.version) else { return nil }
-+    let remaining = deadline - ProcessInfo.processInfo.systemUptime
-+    try FBSimulatorSliderEndpointController.check(deadline)
-+    return try FBSimulatorControlFrameworkLoader.beginAccessibility(forSimulatorDevice: simulator.device,
-+      timeout: min(5, remaining), logger: simulator.logger)
 +  }
 +
 +  func accessibilityElementForSliderLease(request: FBAXTranslationRequest,
@@ -4321,118 +4154,88 @@ index db911121c11531d60acd1546ea7009c087f60531..e2dcee90472c7b177a1663d379e7f59c
 +    return try await accessibilityElement(request: request, remediationPermitted: false, isolation: worker)
 +  }
 +
-+  // MARK: Private
-+
-+  // Uses the CoreSimulator accessibility API via
-+  // -[SimDevice sendAccessibilityRequestAsync:completionQueue:completionHandler:].
-+  // This API requires Xcode 12+ to have been installed on the host at some point.
-+  private func validateAccessibility(bootstrap: Bool = true) throws {
-+    guard let simulator else {
-+      throw FBAccessibilityError.simulatorDeallocated
-+    }
-+    guard simulator.state == .booted else {
-+      throw FBAccessibilityError.simulatorNotBooted(description: "\(simulator)")
-+    }
-+    let selector = NSSelectorFromString("sendAccessibilityRequestAsync:completionQueue:completionHandler:")
-+    guard simulator.device.responds(to: selector) else {
-+      throw FBAccessibilityError.accessibilityUnavailable
-+    }
-+    try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
+   // MARK: Private
+ 
+   // Uses the CoreSimulator accessibility API via
+   // -[SimDevice sendAccessibilityRequestAsync:completionQueue:completionHandler:].
+   // This API requires Xcode 12+ to have been installed on the host at some point.
+-  private func validateAccessibility() throws {
++  func validateAccessibility(bootstrap: Bool = true) throws {
+     guard let simulator else {
+       throw FBAccessibilityError.simulatorDeallocated
+     }
+@@ -120,7 +169,7 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+       throw FBAccessibilityError.accessibilityUnavailable
+     }
+     try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
+-    if Self.requiresAccessibilityBootstrap(for: simulator.osVersion.version) {
 +    if bootstrap && Self.requiresAccessibilityBootstrap(for: simulator.osVersion.version) {
-+      try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
-+        forSimulatorDevice: simulator.device,
-+        timeout: 5,
-+        logger: simulator.logger
-+      )
-+    }
-+  }
-+
-+  // Returns an FBAccessibilityElement wrapping the platform element for the given request.
-+  // The handle owns the request's token and pops it on close.
-+  //
-+  // When remediationPermitted and a stale SpringBoard is detected (zero accessibility frame +
-+  // dead pid), the original request's token is popped manually (it is not wrapped in a handle
-+  // yet at that point), CoreSimulatorBridge is restarted, and the lookup retries with a fresh
-+  // request. The retry passes remediationPermitted=false, bounding it to a single attempt.
+       try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
+         forSimulatorDevice: simulator.device,
+         timeout: 5,
+@@ -136,29 +185,37 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+   // dead pid), the original request's token is popped manually (it is not wrapped in a handle
+   // yet at that point), CoreSimulatorBridge is restarted, and the lookup retries with a fresh
+   // request. The retry passes remediationPermitted=false, bounding it to a single attempt.
+-  private func accessibilityElement(request: FBAXTranslationRequest, remediationPermitted: Bool) async throws -> FBAccessibilityElement {
 +  private func accessibilityElement(request: FBAXTranslationRequest, remediationPermitted: Bool, isolation: isolated (any Actor)? = #isolation) async throws -> FBAccessibilityElement {
-+    guard let simulator else {
-+      throw FBAccessibilityError.simulatorDeallocated
-+    }
-+    guard let dispatcher = resolvedDispatcher else {
-+      throw FBAccessibilityError.dispatcherUnavailable
-+    }
+     guard let simulator else {
+       throw FBAccessibilityError.simulatorDeallocated
+     }
+     guard let dispatcher = resolvedDispatcher else {
+       throw FBAccessibilityError.dispatcherUnavailable
+     }
+-    let element = try await dispatcher.platformElement(withRequest: request, simulator: simulator)
 +    let element = try await dispatcher.platformElement(withRequest: request, simulator: simulator, isolation: isolation)
 +    var transferred = false
 +    defer { if !transferred { dispatcher.popRequest(request) } }
 +    try Task.checkCancellation()
-+    if !remediationPermitted {
+     if !remediationPermitted {
 +      transferred = true
-+      return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
-+    }
+       return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
+     }
+-    if try await !Self.remediationRequired(forSimulator: simulator, element: element) {
 +    if try await !Self.remediationRequired(forSimulator: simulator, element: element, isolation: isolation) {
 +      try Task.checkCancellation()
 +      transferred = true
-+      return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
-+    }
-+    // The request's token was pushed by the dispatcher but is not yet wrapped in an
-+    // FBAccessibilityElement, so pop it manually before discarding the request.
-+    dispatcher.popRequest(request)
+       return FBAccessibilityElement(element: element, request: request, dispatcher: dispatcher, simulator: simulator)
+     }
+     // The request's token was pushed by the dispatcher but is not yet wrapped in an
+     // FBAccessibilityElement, so pop it manually before discarding the request.
+     dispatcher.popRequest(request)
 +    transferred = true
-+    let nextRequest = request.cloneWithNewToken()
+     let nextRequest = request.cloneWithNewToken()
 +    try Task.checkCancellation()
-+    try await Self.remediateSpringBoard(forSimulator: simulator)
+     try await Self.remediateSpringBoard(forSimulator: simulator)
+-    return try await accessibilityElement(request: nextRequest, remediationPermitted: false)
 +    return try await accessibilityElement(request: nextRequest, remediationPermitted: false, isolation: isolation)
-+  }
-+
+   }
+ 
+-  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement) async throws -> Bool {
 +  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement, isolation: isolated (any Actor)? = #isolation) async throws -> Bool {
-+    // A quick check: a non-zero accessibility frame indicates a healthy element.
-+    if !element.axFrame().equalTo(.zero) {
-+      return false
-+    }
-+    // Otherwise confirm whether the translation object's pid represents a real process.
-+    // If it does not, we likely got the pid of a crashed SpringBoard; restarting
-+    // CoreSimulatorBridge lets launchd bring a fresh SpringBoard (and bridge) back up.
-+    let pid = element.axTranslationPid
-+    do {
-+      _ = try await bridgeFBFuture(simulator.serviceName(forProcessIdentifier: pid))
-+      return false
-+    } catch {
-+      simulator.logger?.log("Frontmost accessibility hierarchy is stale: the root element has a zero frame and its owning pid \(pid) is no longer a registered launchd service. SpringBoard has crashed and CoreSimulator's \(coreSimulatorBridgeServiceName) is still bound to the dead pid; restarting \(coreSimulatorBridgeServiceName) to recover.")
-+      return true
-+    }
-+  }
-+
-+  private static func remediateSpringBoard(forSimulator simulator: FBSimulator) async throws {
-+    do {
-+      _ = try await bridgeFBFuture(simulator.stopService(withName: coreSimulatorBridgeServiceName))
-+    } catch {
-+      throw FBAccessibilityError.springBoardRemediationFailed(serviceName: coreSimulatorBridgeServiceName)
-+    }
-+  }
-+}
-+
-+// MARK: - FBSimulator+AsyncAccessibilityCommands
-+
-+extension FBSimulator: AsyncAccessibilityCommands {
-+
-+  public func accessibilityElement(at point: CGPoint) async throws -> FBAccessibilityElement {
-+    try await accessibilityCommands().accessibilityElement(at: point)
-+  }
-+
+     // A quick check: a non-zero accessibility frame indicates a healthy element.
+     if !element.axFrame().equalTo(.zero) {
+       return false
+@@ -193,10 +250,19 @@ extension FBSimulator: AsyncAccessibilityCommands {
+     try await accessibilityCommands().accessibilityElement(at: point)
+   }
+ 
 +  /// Uses a selected-display native point rather than the default display query.
 +  public func accessibilityElement(atNativePoint point: CGPoint, displayID: UInt32) async throws -> FBAccessibilityElement {
 +    try await accessibilityCommands().accessibilityElement(atNativePoint: point, displayID: displayID)
 +  }
 +
-+  public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
-+    try await accessibilityCommands().accessibilityElementForFrontmostApplication()
-+  }
-+
-+  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
-+    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
+   public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
+     try await accessibilityCommands().accessibilityElementForFrontmostApplication()
    }
  
++  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
++    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
++  }
++
    public func accessibilityElementMatching(
+     value: String,
+     forKey key: FBAXSearchableKey,
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
 index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2c454e053 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
@@ -4810,10 +4613,10 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2
  }
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
 new file mode 100644
-index 0000000..a0bd20e
+index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd5edc9b01
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
-@@ -0,0 +1,482 @@
+@@ -0,0 +1,475 @@
 +import AppKit
 +import Foundation
 +
@@ -5007,7 +4810,6 @@ index 0000000..a0bd20e
 +  private let selection: FBSimulatorSliderSelection
 +  private let elementType: String?
 +  private let pid: Int32
-+  private let preparation: FBSimulatorAXPreparation
 +  private let admissionGuard: (any FBSimulatorSliderAdmissionGuard)?
 +  private var adjustmentReturned = false
 +  private var physicalValueFeedback = false
@@ -5024,29 +4826,28 @@ index 0000000..a0bd20e
 +
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, identifier: String, expectedPID: Int32,
-+    preparation: FBSimulatorAXPreparation = .automationSession,
 +    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
-+    self.selection = .identifier(identifier); self.pid = expectedPID; self.preparation = preparation
++    self.selection = .identifier(identifier); self.pid = expectedPID
 +    self.elementType = nil
 +    self.admissionGuard = admissionGuard
 +  }
 +
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, identifier: String, expectedPID: Int32,
-+    elementType: String?, preparation: FBSimulatorAXPreparation = .automationSession,
++    elementType: String?,
 +    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
-+    self.selection = .identifier(identifier); self.pid = expectedPID; self.preparation = preparation
++    self.selection = .identifier(identifier); self.pid = expectedPID
 +    self.elementType = elementType
 +    self.admissionGuard = admissionGuard
 +  }
 +  public init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    freshnessProvider: any FBSimulatorHIDFreshnessProvider, label: String, expectedPID: Int32,
-+    elementType: String? = nil, preparation: FBSimulatorAXPreparation = .automationSession,
++    elementType: String? = nil,
 +    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil) {
 +    self.simulator = simulator; self.observation = observation; self.provider = freshnessProvider
-+    self.selection = .label(label); self.pid = expectedPID; self.preparation = preparation
++    self.selection = .label(label); self.pid = expectedPID
 +    self.elementType = elementType
 +    self.admissionGuard = admissionGuard
 +  }
@@ -5070,10 +4871,10 @@ index 0000000..a0bd20e
 +      guard feed.initialObservation == observation else { throw FBSimulatorSliderError.staleContext }
 +      try feed.validateCurrentRevision(expected: observation)
 +      try FBSimulatorSliderEndpointController.check(deadline)
-+      phase(preparation == .automationSession ? "backend-bootstrap-start" : "backend-existing-bridge-no-automation-preparation")
++      phase("backend-ax-admission-start")
 +      try await FBSimulatorAXWorker.shared.prepareSliderLease(for: simulator, token: operationID,
-+        deadline: deadline, preparation: preparation)
-+      if preparation == .automationSession { phase("backend-bootstrap-returned") }
++        deadline: deadline)
++      phase("backend-ax-admission-returned")
 +      try feed.validateCurrentRevision(expected: observation)
 +      try FBSimulatorSliderEndpointController.check(deadline)
 +    } catch {
@@ -5190,28 +4991,23 @@ index 0000000..a0bd20e
 +struct FBSimulatorSliderAcquisitionLease {
 +  let commands: FBSimulatorAccessibilityCommands
 +  var prepared: Bool
-+  var automation: FBSimulatorAccessibilityLease?
 +}
 +
 +extension FBSimulatorAXWorker {
 +  func claimSliderLease(for simulator: FBSimulator, token: UUID) throws {
 +    try sliderLeases.claim(device: simulator.udid, token: token,
 +      value: FBSimulatorSliderAcquisitionLease(commands: FBSimulatorAccessibilityCommands(simulator: simulator),
-+        prepared: false, automation: nil))
++        prepared: false))
 +  }
-+  func prepareSliderLease(for simulator: FBSimulator, token: UUID, deadline: Double,
-+    preparation: FBSimulatorAXPreparation) throws {
++  func prepareSliderLease(for simulator: FBSimulator, token: UUID, deadline: Double) throws {
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    var lease = try sliderLeases.value(device: simulator.udid, token: token)
-+    lease.automation = try preparation.beginLease {
-+      try lease.commands.prepareSliderAcquisition(deadline: deadline, worker: self)
-+    }
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    lease.prepared = true
 +    try sliderLeases.update(device: simulator.udid, token: token, value: lease)
 +  }
 +  func closeSliderLease(for simulator: FBSimulator, token: UUID) {
-+    sliderLeases.release(device: simulator.udid, token: token)?.automation?.close()
++    _ = sliderLeases.release(device: simulator.udid, token: token)
 +  }
 +  func sliderLease(for simulator: FBSimulator, token: UUID) throws -> FBSimulatorSliderAcquisitionLease {
 +    let lease = try sliderLeases.value(device: simulator.udid, token: token)
@@ -10338,863 +10134,6 @@ index 0000000000000000000000000000000000000000..10917b03c1b6e764be74280235b381b4
 +        return SpawnResult(pid: pid, code: result)
 +    }
 +}
-diff --git a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
-index a9e8a8380c2f24f31331a9c70e90d94f55283cf5..3bdae82edfc9968d2d153624b746ad1d8c6ce697 100644
---- a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
-+++ b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.h
-@@ -9,33 +9,45 @@
- 
- #import <FBControlCore/FBControlCore.h>
- 
--/**
-- A Class for handling Framework Loading of Private Frameworks that FBSimulatorControl depends on.
-- */
--@interface FBSimulatorControlFrameworkLoader : FBControlCoreFrameworkLoader
--
--/**
-- The Frameworks needed for most operations.
-- */
--@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *essentialFrameworks;
--
--/**
-- The frameworks needed for Accessibility operations.
-- */
--@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityFrameworks;
--
--/**
-- The Xcode frameworks needed to bootstrap simulator Accessibility on Xcode 27+.
-- */
--@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityAutomationFrameworks;
--
--/**
-- Starts a short-lived remote automation session and asks it to load Accessibility.
-- */
--+ (BOOL)bootstrapAccessibilityForSimulatorDevice:(nonnull id)simulatorDevice
--                                         timeout:(NSTimeInterval)timeout
--                                          logger:(nullable id<FBControlCoreLogger>)logger
--                                           error:(NSError * _Nullable * _Nullable)error;
-+/** Owns one loaded remote automation session through an AX operation.
-+ close returns after Apple's local invalidate call returns. It is not a server acknowledgement.
-+ */
-+@interface FBSimulatorAccessibilityLease : NSObject
-+- (void)close;
-+@end
-+
-+/**
-+ A Class for handling Framework Loading of Private Frameworks that FBSimulatorControl depends on.
-+ */
-+@interface FBSimulatorControlFrameworkLoader : FBControlCoreFrameworkLoader
-+
-+/**
-+ The Frameworks needed for most operations.
-+ */
-+@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *essentialFrameworks;
-+
-+/**
-+ The frameworks needed for Accessibility operations.
-+ */
-+@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityFrameworks;
-+
-+/**
-+ The Xcode frameworks needed to bootstrap simulator Accessibility on Xcode 27+.
-+ */
-+@property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *accessibilityAutomationFrameworks;
-+
-+/**
-+ Starts a short-lived remote automation session and asks it to load Accessibility.
-+ */
-++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(nonnull id)simulatorDevice
-+                                         timeout:(NSTimeInterval)timeout
-+                                          logger:(nullable id<FBControlCoreLogger>)logger
-+                                           error:(NSError * _Nullable * _Nullable)error;
-+
-+/** Acquires a session without invalidating it before the AX operation. */
-++ (nullable FBSimulatorAccessibilityLease *)beginAccessibilityForSimulatorDevice:(nonnull id)simulatorDevice
-+    timeout:(NSTimeInterval)timeout logger:(nullable id<FBControlCoreLogger>)logger
-+    error:(NSError * _Nullable * _Nullable)error;
- 
- /**
-  All of the Frameworks for operations involving the HID and Framebuffer.
-diff --git a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
-index 35714fa948b5f81476b850f1ce09cd8883e66b8c..08e719f792e7ced67c62779c73b70c9f6fd9fc7e 100644
---- a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
-+++ b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
-@@ -28,315 +28,466 @@
-   }
- }
- 
--@interface FBSimulatorAccessibilityBootstrapAttempt : NSObject
--
--@property (nonatomic, strong, readonly) dispatch_group_t group;
--@property (nonatomic, assign) BOOL success;
--@property (nonatomic, copy, nullable) NSError *error;
--
--@end
--
--@implementation FBSimulatorAccessibilityBootstrapAttempt
--
--- (instancetype)init
--{
--  self = [super init];
--  if (!self) {
--    return nil;
--  }
--  _group = dispatch_group_create();
--  dispatch_group_enter(_group);
--  return self;
--}
--
--@end
--
--@interface FBSimulatorAccessibilitySessionRequest : NSObject
--
--- (void)completeWithSession:(nullable id)session error:(nullable NSError *)error;
--- (nullable id)sessionByMarkingTimedOut;
--- (nullable id)session;
--- (nullable NSError *)error;
--
--@end
--
--@implementation FBSimulatorAccessibilitySessionRequest
--{
--  NSLock *_lock;
--  id _session;
--  NSError *_error;
--  BOOL _timedOut;
--}
--
--- (instancetype)init
--{
--  self = [super init];
--  if (!self) {
--    return nil;
--  }
--  _lock = [NSLock new];
--  return self;
--}
--
--- (void)completeWithSession:(id)session error:(NSError *)error
--{
--  [_lock lock];
--  BOOL timedOut = _timedOut;
--  if (!timedOut) {
--    _session = session;
--    _error = error;
--  }
--  [_lock unlock];
--  if (timedOut && session) {
--    FBSimulatorInvalidateAutomationSession(session);
--  }
--}
--
--- (id)sessionByMarkingTimedOut
--{
--  [_lock lock];
--  _timedOut = YES;
--  id session = _session;
--  _session = nil;
--  [_lock unlock];
--  return session;
--}
--
--- (id)session
--{
--  [_lock lock];
--  id session = _session;
--  [_lock unlock];
--  return session;
--}
--
--- (NSError *)error
--{
--  [_lock lock];
--  NSError *error = _error;
--  [_lock unlock];
--  return error;
--}
--
--@end
--
--@interface FBSimulatorControlFrameworkLoader ()
--
--+ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice
--                                                 timeout:(NSTimeInterval)timeout
--                                                  logger:(nullable id<FBControlCoreLogger>)logger
--                                                   error:(NSError **)error;
--
--@end
--
--static void FBSimulatorControl_SimLogHandler(int level, const char *function, int lineNumber, NSString *format, ...)
--{
--  va_list args;
--  va_start(args, format);
--  NSString *string = [[NSString alloc] initWithFormat:format arguments:args];
--  va_end(args);
--  id<FBControlCoreLogger> logger = [FBControlCoreGlobalConfiguration.defaultLogger.debug withName:@"CoreSimulator"];
--  [logger log:string];
--}
--
--@interface FBSimulatorControlFrameworkLoader_Essential : FBSimulatorControlFrameworkLoader
--
--@end
--
--@implementation FBSimulatorControlFrameworkLoader
--
--#pragma mark Initializers
--
--+ (FBSimulatorControlFrameworkLoader *)essentialFrameworks
--{
--  static dispatch_once_t onceToken;
--  static FBSimulatorControlFrameworkLoader *loader;
--  dispatch_once(&onceToken, ^{
--    loader = [FBSimulatorControlFrameworkLoader_Essential loaderWithName:@"FBSimulatorControl"
--                                                              frameworks:@[
--                FBWeakFramework.CoreSimulator,
--              ]];
--  });
--  return loader;
--}
--
--+ (FBSimulatorControlFrameworkLoader *)accessibilityFrameworks
--{
--  static dispatch_once_t onceToken;
--  static FBSimulatorControlFrameworkLoader *loader;
--  dispatch_once(&onceToken, ^{
--    loader = [FBSimulatorControlFrameworkLoader loaderWithName:@"FBSimulatorControl"
--                                                    frameworks:@[
--                FBWeakFramework.AccessibilityPlatformTranslation,
--              ]];
--  });
--  return loader;
--}
--
--+ (FBSimulatorControlFrameworkLoader *)accessibilityAutomationFrameworks
--{
--  static dispatch_once_t onceToken;
--  static FBSimulatorControlFrameworkLoader *loader;
--  dispatch_once(&onceToken, ^{
--    loader = [FBSimulatorControlFrameworkLoader loaderWithName:@"FBSimulatorControl"
--                                                    frameworks:@[
--                FBWeakFramework.XCTDaemonControl,
--                FBWeakFramework.XCUIAutomation,
--              ]];
--  });
--  return loader;
--}
--
--+ (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
--{
--  static dispatch_once_t onceToken;
--  static dispatch_queue_t stateQueue;
--  static NSMapTable *states;
--  dispatch_once(&onceToken, ^{
--    stateQueue = dispatch_queue_create("com.facebook.FBSimulatorControl.AccessibilityBootstrap", DISPATCH_QUEUE_SERIAL);
--    states = [NSMapTable weakToStrongObjectsMapTable];
--  });
--
--  __block FBSimulatorAccessibilityBootstrapAttempt *attempt;
--  __block BOOL ownsAttempt = NO;
--  dispatch_sync(stateQueue, ^{
--    id state = [states objectForKey:simulatorDevice];
--    if ([state isKindOfClass:FBSimulatorAccessibilityBootstrapAttempt.class]) {
--      attempt = state;
--    } else {
--      attempt = [FBSimulatorAccessibilityBootstrapAttempt new];
--      [states setObject:attempt forKey:simulatorDevice];
--      ownsAttempt = YES;
--    }
--  });
--  if (!ownsAttempt) {
--    dispatch_group_wait(attempt.group, DISPATCH_TIME_FOREVER);
--    if (!attempt.success && error) {
--      *error = attempt.error;
--    }
--    return attempt.success;
--  }
--
--  NSError *bootstrapError = nil;
--  BOOL success = [self performAccessibilityBootstrapForSimulatorDevice:simulatorDevice
--                                                               timeout:timeout
--                                                                logger:logger
--                                                                 error:&bootstrapError];
--  attempt.success = success;
--  attempt.error = bootstrapError;
--  dispatch_sync(stateQueue, ^{
--    if ([states objectForKey:simulatorDevice] == attempt) {
--      [states removeObjectForKey:simulatorDevice];
--    }
--  });
--  dispatch_group_leave(attempt.group);
--  if (!success && error) {
--    *error = bootstrapError;
--  }
--  return success;
--}
--
--+ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
--{
--  if (![self.accessibilityAutomationFrameworks loadPrivateFrameworks:logger error:error]) {
--    return NO;
--  }
--
--  Class providerClass = NSClassFromString(@"XCUIDeviceRemoteDaemonConnectionProvider");
--  SEL providerSelector = NSSelectorFromString(@"connectionProviderForSimDevice:");
--  if (![providerClass respondsToSelector:providerSelector]) {
--    if (error) {
--      *error = FBSimulatorAccessibilityBootstrapError(1, @"XCUIDeviceRemoteDaemonConnectionProvider.connectionProviderForSimDevice: is unavailable");
--    }
--    return NO;
--  }
--  id provider = ((id (*)(id, SEL, id))objc_msgSend)(providerClass, providerSelector, simulatorDevice);
--  if (!provider) {
--    if (error) {
--      *error = FBSimulatorAccessibilityBootstrapError(2, @"Could not create the simulator remote daemon connection provider");
--    }
--    return NO;
--  }
--
--  Class sessionClass = NSClassFromString(@"XCUIDeviceRemoteAutomationSession");
--  SEL requestSelector = NSSelectorFromString(@"requestSessionWithDaemonConnectionProvider:completion:");
--  if (![sessionClass respondsToSelector:requestSelector]) {
--    if (error) {
--      *error = FBSimulatorAccessibilityBootstrapError(3, @"XCUIDeviceRemoteAutomationSession request API is unavailable");
--    }
--    return NO;
--  }
--
--  dispatch_semaphore_t sessionSemaphore = dispatch_semaphore_create(0);
--  FBSimulatorAccessibilitySessionRequest *sessionRequest = [FBSimulatorAccessibilitySessionRequest new];
--  id sessionCompletion = ^(id returnedSession, NSError *returnedError) {
--    [sessionRequest completeWithSession:returnedSession error:returnedError];
--    dispatch_semaphore_signal(sessionSemaphore);
--  };
--  ((void (*)(id, SEL, id, id))objc_msgSend)(sessionClass, requestSelector, provider, sessionCompletion);
--  if (dispatch_semaphore_wait(sessionSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) != 0) {
--    id lateSession = [sessionRequest sessionByMarkingTimedOut];
--    if (lateSession) {
--      FBSimulatorInvalidateAutomationSession(lateSession);
--    }
--    if (error) {
--      *error = FBSimulatorAccessibilityBootstrapError(4, @"Timed out creating the simulator remote automation session");
--    }
--    return NO;
--  }
--  id session = sessionRequest.session;
--  if (!session) {
--    if (error) {
--      *error = sessionRequest.error ?: FBSimulatorAccessibilityBootstrapError(5, @"Could not create the simulator remote automation session");
--    }
--    return NO;
--  }
--
--  @try {
--    SEL enableSelector = NSSelectorFromString(@"enableAutomationModeWithError:");
--    if ([session respondsToSelector:enableSelector]) {
--      NSError *enableError = nil;
--      BOOL enabled = ((BOOL (*)(id, SEL, NSError **))objc_msgSend)(session, enableSelector, &enableError);
--      if (!enabled) {
--        if (error) {
--          *error = enableError ?: FBSimulatorAccessibilityBootstrapError(6, @"Could not enable simulator automation mode");
--        }
--        return NO;
--      }
--    }
--
--    SEL loadSelector = NSSelectorFromString(@"loadAccessibilityWithTimeout:reply:");
--    if (![session respondsToSelector:loadSelector]) {
--      if (error) {
--        *error = FBSimulatorAccessibilityBootstrapError(7, @"Remote automation session cannot load Accessibility");
--      }
--      return NO;
--    }
--    dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(0);
--    __block BOOL loaded = NO;
--    __block NSError *loadError = nil;
--    id loadReply = ^(BOOL returnedLoaded, NSError *returnedError) {
--      loaded = returnedLoaded;
--      loadError = returnedError;
--      dispatch_semaphore_signal(loadSemaphore);
--    };
--    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, timeout, loadReply);
--    if (dispatch_semaphore_wait(loadSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 1) * NSEC_PER_SEC))) != 0) {
--      if (error) {
--        *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out loading simulator Accessibility");
--      }
--      return NO;
--    }
--    if (!loaded) {
--      if (error) {
--        *error = loadError ?: FBSimulatorAccessibilityBootstrapError(9, @"The simulator rejected the Accessibility load request");
--      }
--      return NO;
--    }
--    [logger log:@"Bootstrapped simulator Accessibility through a short-lived remote automation session"];
--    return YES;
--  } @finally {
--    FBSimulatorInvalidateAutomationSession(session);
-+@interface FBSimulatorAccessibilityLease ()
-+- (instancetype)initWithSession:(id)session logger:(nullable id<FBControlCoreLogger>)logger;
-+@end
-+
-+@implementation FBSimulatorAccessibilityLease {
-+  NSLock *_lock;
-+  id _session;
-+  id<FBControlCoreLogger> _logger;
-+}
-+- (instancetype)initWithSession:(id)session logger:(id<FBControlCoreLogger>)logger
-+{
-+  self = [super init];
-+  if (!self) { return nil; }
-+  _lock = [NSLock new];
-+  _session = session;
-+  _logger = logger;
-+  return self;
-+}
-+- (void)close
-+{
-+  [_lock lock];
-+  // Keep the lock through invalidate. Concurrent close cannot return before cleanup.
-+  if (_session) {
-+    [_logger log:@"AX bootstrap phase=close-start"];
-+    FBSimulatorInvalidateAutomationSession(_session);
-+    _session = nil;
-+    [_logger log:@"AX bootstrap phase=close-returned acknowledgement=local-only"];
-+  }
-+  [_lock unlock];
-+}
-+- (void)dealloc { [self close]; }
-+@end
-+
-+static NSError *FBSimulatorBootstrapPhaseError(NSString *phase, NSError *underlying)
-+{
-+  return [NSError errorWithDomain:FBSimulatorAccessibilityBootstrapErrorDomain code:10
-+    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Accessibility bootstrap failed during %@", phase],
-+               @"phase": phase, NSUnderlyingErrorKey: underlying}];
-+}
-+
-+@interface FBSimulatorAccessibilityBootstrapAttempt : NSObject
-+
-+@property (nonatomic, strong, readonly) dispatch_group_t group;
-+@property (nonatomic, assign) BOOL success;
-+@property (nonatomic, copy, nullable) NSError *error;
-+
-+@end
-+
-+@implementation FBSimulatorAccessibilityBootstrapAttempt
-+
-+- (instancetype)init
-+{
-+  self = [super init];
-+  if (!self) {
-+    return nil;
-+  }
-+  _group = dispatch_group_create();
-+  dispatch_group_enter(_group);
-+  return self;
-+}
-+
-+@end
-+
-+@interface FBSimulatorAccessibilitySessionRequest : NSObject
-+
-+- (void)completeWithSession:(nullable id)session error:(nullable NSError *)error;
-+- (nullable id)sessionByMarkingTimedOut;
-+- (nullable id)session;
-+- (nullable NSError *)error;
-+
-+@end
-+
-+@implementation FBSimulatorAccessibilitySessionRequest
-+{
-+  NSLock *_lock;
-+  id _session;
-+  NSError *_error;
-+  BOOL _timedOut;
-+}
-+
-+- (instancetype)init
-+{
-+  self = [super init];
-+  if (!self) {
-+    return nil;
-+  }
-+  _lock = [NSLock new];
-+  return self;
-+}
-+
-+- (void)completeWithSession:(id)session error:(NSError *)error
-+{
-+  [_lock lock];
-+  BOOL timedOut = _timedOut;
-+  if (!timedOut) {
-+    _session = session;
-+    _error = error;
-+  }
-+  [_lock unlock];
-+  if (timedOut && session) {
-+    FBSimulatorInvalidateAutomationSession(session);
-+  }
-+}
-+
-+- (id)sessionByMarkingTimedOut
-+{
-+  [_lock lock];
-+  _timedOut = YES;
-+  id session = _session;
-+  _session = nil;
-+  [_lock unlock];
-+  return session;
-+}
-+
-+- (id)session
-+{
-+  [_lock lock];
-+  id session = _session;
-+  [_lock unlock];
-+  return session;
-+}
-+
-+- (NSError *)error
-+{
-+  [_lock lock];
-+  NSError *error = _error;
-+  [_lock unlock];
-+  return error;
-+}
-+
-+@end
-+
-+@interface FBSimulatorControlFrameworkLoader ()
-+
-++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice
-+                                                 timeout:(NSTimeInterval)timeout
-+                                                  logger:(nullable id<FBControlCoreLogger>)logger
-+                                                   error:(NSError **)error;
-+
-+@end
-+
-+static void FBSimulatorControl_SimLogHandler(int level, const char *function, int lineNumber, NSString *format, ...)
-+{
-+  va_list args;
-+  va_start(args, format);
-+  NSString *string = [[NSString alloc] initWithFormat:format arguments:args];
-+  va_end(args);
-+  id<FBControlCoreLogger> logger = [FBControlCoreGlobalConfiguration.defaultLogger.debug withName:@"CoreSimulator"];
-+  [logger log:string];
-+}
-+
-+@interface FBSimulatorControlFrameworkLoader_Essential : FBSimulatorControlFrameworkLoader
-+
-+@end
-+
-+@implementation FBSimulatorControlFrameworkLoader
-+
-+#pragma mark Initializers
-+
-++ (FBSimulatorControlFrameworkLoader *)essentialFrameworks
-+{
-+  static dispatch_once_t onceToken;
-+  static FBSimulatorControlFrameworkLoader *loader;
-+  dispatch_once(&onceToken, ^{
-+    loader = [FBSimulatorControlFrameworkLoader_Essential loaderWithName:@"FBSimulatorControl"
-+                                                              frameworks:@[
-+                FBWeakFramework.CoreSimulator,
-+              ]];
-+  });
-+  return loader;
-+}
-+
-++ (FBSimulatorControlFrameworkLoader *)accessibilityFrameworks
-+{
-+  static dispatch_once_t onceToken;
-+  static FBSimulatorControlFrameworkLoader *loader;
-+  dispatch_once(&onceToken, ^{
-+    loader = [FBSimulatorControlFrameworkLoader loaderWithName:@"FBSimulatorControl"
-+                                                    frameworks:@[
-+                FBWeakFramework.AccessibilityPlatformTranslation,
-+              ]];
-+  });
-+  return loader;
-+}
-+
-++ (FBSimulatorControlFrameworkLoader *)accessibilityAutomationFrameworks
-+{
-+  static dispatch_once_t onceToken;
-+  static FBSimulatorControlFrameworkLoader *loader;
-+  dispatch_once(&onceToken, ^{
-+    loader = [FBSimulatorControlFrameworkLoader loaderWithName:@"FBSimulatorControl"
-+                                                    frameworks:@[
-+                FBWeakFramework.XCTDaemonControl,
-+                FBWeakFramework.XCUIAutomation,
-+              ]];
-+  });
-+  return loader;
-+}
-+
-++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
-+{
-+  static dispatch_once_t onceToken;
-+  static dispatch_queue_t stateQueue;
-+  static NSMapTable *states;
-+  dispatch_once(&onceToken, ^{
-+    stateQueue = dispatch_queue_create("com.facebook.FBSimulatorControl.AccessibilityBootstrap", DISPATCH_QUEUE_SERIAL);
-+    states = [NSMapTable weakToStrongObjectsMapTable];
-+  });
-+
-+  __block FBSimulatorAccessibilityBootstrapAttempt *attempt;
-+  __block BOOL ownsAttempt = NO;
-+  dispatch_sync(stateQueue, ^{
-+    id state = [states objectForKey:simulatorDevice];
-+    if ([state isKindOfClass:FBSimulatorAccessibilityBootstrapAttempt.class]) {
-+      attempt = state;
-+    } else {
-+      attempt = [FBSimulatorAccessibilityBootstrapAttempt new];
-+      [states setObject:attempt forKey:simulatorDevice];
-+      ownsAttempt = YES;
-+    }
-+  });
-+  if (!ownsAttempt) {
-+    dispatch_group_wait(attempt.group, DISPATCH_TIME_FOREVER);
-+    if (!attempt.success && error) {
-+      *error = attempt.error;
-+    }
-+    return attempt.success;
-+  }
-+
-+  NSError *bootstrapError = nil;
-+  BOOL success = [self performAccessibilityBootstrapForSimulatorDevice:simulatorDevice
-+                                                               timeout:timeout
-+                                                                logger:logger
-+                                                                 error:&bootstrapError];
-+  attempt.success = success;
-+  attempt.error = bootstrapError;
-+  dispatch_sync(stateQueue, ^{
-+    if ([states objectForKey:simulatorDevice] == attempt) {
-+      [states removeObjectForKey:simulatorDevice];
-+    }
-+  });
-+  dispatch_group_leave(attempt.group);
-+  if (!success && error) {
-+    *error = bootstrapError;
-+  }
-+  return success;
-+}
-+
-++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
-+{
-+  if (![self.accessibilityAutomationFrameworks loadPrivateFrameworks:logger error:error]) {
-+    return NO;
-+  }
-+
-+  Class providerClass = NSClassFromString(@"XCUIDeviceRemoteDaemonConnectionProvider");
-+  SEL providerSelector = NSSelectorFromString(@"connectionProviderForSimDevice:");
-+  if (![providerClass respondsToSelector:providerSelector]) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(1, @"XCUIDeviceRemoteDaemonConnectionProvider.connectionProviderForSimDevice: is unavailable");
-+    }
-+    return NO;
-+  }
-+  id provider = ((id (*)(id, SEL, id))objc_msgSend)(providerClass, providerSelector, simulatorDevice);
-+  if (!provider) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(2, @"Could not create the simulator remote daemon connection provider");
-+    }
-+    return NO;
-+  }
-+
-+  Class sessionClass = NSClassFromString(@"XCUIDeviceRemoteAutomationSession");
-+  SEL requestSelector = NSSelectorFromString(@"requestSessionWithDaemonConnectionProvider:completion:");
-+  if (![sessionClass respondsToSelector:requestSelector]) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(3, @"XCUIDeviceRemoteAutomationSession request API is unavailable");
-+    }
-+    return NO;
-+  }
-+
-+  dispatch_semaphore_t sessionSemaphore = dispatch_semaphore_create(0);
-+  FBSimulatorAccessibilitySessionRequest *sessionRequest = [FBSimulatorAccessibilitySessionRequest new];
-+  id sessionCompletion = ^(id returnedSession, NSError *returnedError) {
-+    [sessionRequest completeWithSession:returnedSession error:returnedError];
-+    dispatch_semaphore_signal(sessionSemaphore);
-+  };
-+  ((void (*)(id, SEL, id, id))objc_msgSend)(sessionClass, requestSelector, provider, sessionCompletion);
-+  if (dispatch_semaphore_wait(sessionSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) != 0) {
-+    id lateSession = [sessionRequest sessionByMarkingTimedOut];
-+    if (lateSession) {
-+      FBSimulatorInvalidateAutomationSession(lateSession);
-+    }
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(4, @"Timed out creating the simulator remote automation session");
-+    }
-+    return NO;
-+  }
-+  id session = sessionRequest.session;
-+  if (!session) {
-+    if (error) {
-+      *error = sessionRequest.error ?: FBSimulatorAccessibilityBootstrapError(5, @"Could not create the simulator remote automation session");
-+    }
-+    return NO;
-+  }
-+
-+  @try {
-+    SEL enableSelector = NSSelectorFromString(@"enableAutomationModeWithError:");
-+    if ([session respondsToSelector:enableSelector]) {
-+      NSError *enableError = nil;
-+      BOOL enabled = ((BOOL (*)(id, SEL, NSError **))objc_msgSend)(session, enableSelector, &enableError);
-+      if (!enabled) {
-+        if (error) {
-+          *error = enableError ?: FBSimulatorAccessibilityBootstrapError(6, @"Could not enable simulator automation mode");
-+        }
-+        return NO;
-+      }
-+    }
-+
-+    SEL loadSelector = NSSelectorFromString(@"loadAccessibilityWithTimeout:reply:");
-+    if (![session respondsToSelector:loadSelector]) {
-+      if (error) {
-+        *error = FBSimulatorAccessibilityBootstrapError(7, @"Remote automation session cannot load Accessibility");
-+      }
-+      return NO;
-+    }
-+    dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(0);
-+    __block BOOL loaded = NO;
-+    __block NSError *loadError = nil;
-+    id loadReply = ^(BOOL returnedLoaded, NSError *returnedError) {
-+      loaded = returnedLoaded;
-+      loadError = returnedError;
-+      dispatch_semaphore_signal(loadSemaphore);
-+    };
-+    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, timeout, loadReply);
-+    if (dispatch_semaphore_wait(loadSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 1) * NSEC_PER_SEC))) != 0) {
-+      if (error) {
-+        *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out loading simulator Accessibility");
-+      }
-+      return NO;
-+    }
-+    if (!loaded) {
-+      if (error) {
-+        *error = loadError ?: FBSimulatorAccessibilityBootstrapError(9, @"The simulator rejected the Accessibility load request");
-+      }
-+      return NO;
-+    }
-+    [logger log:@"Bootstrapped simulator Accessibility through a short-lived remote automation session"];
-+    return YES;
-+  } @finally {
-+    FBSimulatorInvalidateAutomationSession(session);
-+  }
-+}
-+
-++ (FBSimulatorAccessibilityLease *)beginAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
-+{
-+  if (![self.accessibilityAutomationFrameworks loadPrivateFrameworks:logger error:error]) {
-+    return nil;
-+  }
-+
-+  Class providerClass = NSClassFromString(@"XCUIDeviceRemoteDaemonConnectionProvider");
-+  SEL providerSelector = NSSelectorFromString(@"connectionProviderForSimDevice:");
-+  if (![providerClass respondsToSelector:providerSelector]) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(1, @"XCUIDeviceRemoteDaemonConnectionProvider.connectionProviderForSimDevice: is unavailable");
-+    }
-+    return nil;
-+  }
-+  id provider = ((id (*)(id, SEL, id))objc_msgSend)(providerClass, providerSelector, simulatorDevice);
-+  if (!provider) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(2, @"Could not create the simulator remote daemon connection provider");
-+    }
-+    return nil;
-+  }
-+
-+  Class sessionClass = NSClassFromString(@"XCUIDeviceRemoteAutomationSession");
-+  SEL requestSelector = NSSelectorFromString(@"requestSessionWithDaemonConnectionProvider:completion:");
-+  if (![sessionClass respondsToSelector:requestSelector]) {
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(3, @"XCUIDeviceRemoteAutomationSession request API is unavailable");
-+    }
-+    return nil;
-+  }
-+
-+  [logger log:@"AX bootstrap phase=session-request"];
-+  dispatch_semaphore_t sessionSemaphore = dispatch_semaphore_create(0);
-+  FBSimulatorAccessibilitySessionRequest *sessionRequest = [FBSimulatorAccessibilitySessionRequest new];
-+  id sessionCompletion = ^(id returnedSession, NSError *returnedError) {
-+    [sessionRequest completeWithSession:returnedSession error:returnedError];
-+    dispatch_semaphore_signal(sessionSemaphore);
-+  };
-+  ((void (*)(id, SEL, id, id))objc_msgSend)(sessionClass, requestSelector, provider, sessionCompletion);
-+  if (dispatch_semaphore_wait(sessionSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) != 0) {
-+    id lateSession = [sessionRequest sessionByMarkingTimedOut];
-+    if (lateSession) {
-+      FBSimulatorInvalidateAutomationSession(lateSession);
-+    }
-+    if (error) {
-+      *error = FBSimulatorAccessibilityBootstrapError(4, @"Timed out creating the simulator remote automation session");
-+    }
-+    return nil;
-+  }
-+  id session = sessionRequest.session;
-+  if (!session) {
-+    if (error) {
-+      *error = FBSimulatorBootstrapPhaseError(@"session-request", sessionRequest.error ?: FBSimulatorAccessibilityBootstrapError(5, @"Could not create the simulator remote automation session"));
-+    }
-+    return nil;
-+  }
-+
-+  BOOL transferred = NO;
-+  @try {
-+    [logger log:@"AX bootstrap phase=session-created"];
-+    SEL enableSelector = NSSelectorFromString(@"enableAutomationModeWithError:");
-+    if ([session respondsToSelector:enableSelector]) {
-+      [logger log:@"AX bootstrap phase=enable"];
-+      NSError *enableError = nil;
-+      BOOL enabled = ((BOOL (*)(id, SEL, NSError **))objc_msgSend)(session, enableSelector, &enableError);
-+      if (!enabled) {
-+        if (error) {
-+          *error = FBSimulatorBootstrapPhaseError(@"enable", enableError ?: FBSimulatorAccessibilityBootstrapError(6, @"Could not enable simulator automation mode"));
-+        }
-+        return nil;
-+      }
-+    }
-+
-+    SEL loadSelector = NSSelectorFromString(@"loadAccessibilityWithTimeout:reply:");
-+    if (![session respondsToSelector:loadSelector]) {
-+      if (error) {
-+        *error = FBSimulatorAccessibilityBootstrapError(7, @"Remote automation session cannot load Accessibility");
-+      }
-+      return nil;
-+    }
-+    [logger log:@"AX bootstrap phase=load"];
-+    dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(0);
-+    __block BOOL loaded = NO;
-+    __block NSError *loadError = nil;
-+    id loadReply = ^(BOOL returnedLoaded, NSError *returnedError) {
-+      loaded = returnedLoaded;
-+      loadError = returnedError;
-+      dispatch_semaphore_signal(loadSemaphore);
-+    };
-+    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, timeout, loadReply);
-+    if (dispatch_semaphore_wait(loadSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 1) * NSEC_PER_SEC))) != 0) {
-+      if (error) {
-+        *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out loading simulator Accessibility");
-+      }
-+      return nil;
-+    }
-+    if (!loaded) {
-+      if (error) {
-+        *error = FBSimulatorBootstrapPhaseError(@"load", loadError ?: FBSimulatorAccessibilityBootstrapError(9, @"The simulator rejected the Accessibility load request"));
-+      }
-+      return nil;
-+    }
-+    [logger log:@"AX bootstrap phase=loaded session-retained=true"];
-+    FBSimulatorAccessibilityLease *lease = [[FBSimulatorAccessibilityLease alloc] initWithSession:session logger:logger];
-+    transferred = YES;
-+    return lease;
-+  } @finally {
-+    if (!transferred) { FBSimulatorInvalidateAutomationSession(session); }
-   }
- }
- 
 diff --git a/PrivateHeaders/AccessibilityPlatformTranslation/AXPTranslator.h b/PrivateHeaders/AccessibilityPlatformTranslation/AXPTranslator.h
 index 03c34635df1736e4337907745c5dd3c51aacc78c..c058a1b0ee3eba54cb7277c8287201ea0d5628e8 100644
 --- a/PrivateHeaders/AccessibilityPlatformTranslation/AXPTranslator.h
@@ -11715,9 +10654,10 @@ new file mode 100644
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXSemanticPress.swift b/FBSimulatorControl/Commands/FBSimulatorAXSemanticPress.swift
 new file mode 100644
+index 0000000000000000000000000000000000000000..aff4137ee3573faf2fc06d8463a7219dd58b6587
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXSemanticPress.swift
-@@ -0,0 +1,381 @@
+@@ -0,0 +1,380 @@
 +@_implementationOnly import AccessibilityPlatformTranslation
 +import AppKit
 +import Foundation
@@ -11737,8 +10677,7 @@ new file mode 100644
 +public enum FBSimulatorAXSemanticPress {
 +  public static func perform(for simulator: FBSimulator, expectedPID: Int32, identifier: String,
 +    observation: FBSimulatorHIDSessionObservation,
-+    freshnessProvider: any FBSimulatorHIDLiveFreshnessProvider,
-+    preparation: FBSimulatorAXPreparation = .automationSession) async throws -> FBSimulatorAXPressReceipt {
++    freshnessProvider: any FBSimulatorHIDLiveFreshnessProvider) async throws -> FBSimulatorAXPressReceipt {
 +    guard expectedPID > 0, !identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
 +          identifier.utf8.count <= 4096 else { throw FBSimulatorAXSnapshotError.invalidSelection }
 +    let reservation = try FBAXTargetReservation.acquire()
@@ -11747,7 +10686,7 @@ new file mode 100644
 +    return await withTaskCancellationHandler(operation: {
 +      await FBSimulatorAXWorker.shared.semanticPress(for: simulator, expectedPID: expectedPID,
 +        identifier: identifier, observation: observation, provider: freshnessProvider,
-+        preparation: preparation, budget: budget)
++        budget: budget)
 +    }, onCancel: { budget.stop(.cancelled) })
 +  }
 +}
@@ -12002,17 +10941,17 @@ new file mode 100644
 +extension FBSimulatorAXWorker {
 +  func semanticPress(for simulator: FBSimulator, expectedPID: Int32, identifier: String,
 +    observation: FBSimulatorHIDSessionObservation, provider: any FBSimulatorHIDLiveFreshnessProvider,
-+    preparation: FBSimulatorAXPreparation, budget: FBAXAcquisitionBudget) async -> FBSimulatorAXPressReceipt {
++    budget: FBAXAcquisitionBudget) async -> FBSimulatorAXPressReceipt {
 +    var receipt = FBSimulatorAXPressReceipt()
-+    var lease: FBSimulatorAccessibilityLease?
 +    var root: FBAccessibilityElement?
-+    defer { root?.close(); lease?.close() }
++    defer { root?.close() }
 +    do {
 +      try budget.check(); try Task.checkCancellation(); try FBAXPressImage.validate()
 +      try await validateSelection(simulator, observation: observation, provider: provider)
 +      try budget.check()
 +      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
-+      lease = try preparation.beginLease { try commands.beginAccessibilityForSnapshot() }
++      try budget.check(); try Task.checkCancellation()
++      try commands.validateAccessibility()
 +      try budget.check()
 +      let routing = FBAXIdentityRoutingRecorder()
 +      func request() -> FBAXTranslationRequest {

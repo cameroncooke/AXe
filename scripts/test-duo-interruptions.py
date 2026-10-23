@@ -353,7 +353,7 @@ class Check:
 
     def fresh_tap(self, catalogue, before, original_context):
         selection = [*self.selection(catalogue), '--expected-pid', str(self.args.pid)]
-        tree = self.axe('fresh-description', 'describe-ui', ['--ax-preparation', 'automation-session'], selection)
+        tree = self.axe('fresh-description', 'describe-ui', [], selection)
         context = tree['context']
         if self.args.change == 'fold':
             require(context['poseRevision'] != original_context['poseRevision'],

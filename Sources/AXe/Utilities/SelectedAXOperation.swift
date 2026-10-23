@@ -14,7 +14,7 @@ enum SelectedAXOperation {
                 brokerID: brokerID, outcome: "rejectedBeforeInput", token: nil, enqueuedEventCount: 0,
                 cleanup: "notNeeded", error: "Missing AX payload", context: nil)
         }
-        var result = SelectedAXResult(kind: ax.kind, expectedPID: ax.expectedPID, preparation: ax.preparation)
+        var result = SelectedAXResult(kind: ax.kind, expectedPID: ax.expectedPID)
         var observation: FBSimulatorHIDSessionObservation?
         var feed: FBSimulatorHIDNativeFreshnessProvider?
         var target: FBSimulatorAXTargetOperation?
@@ -39,7 +39,7 @@ enum SelectedAXOperation {
                 guard let identifier = ax.selectorValue else { throw SelectedHIDFailure.invalid("Missing semantic press ID") }
                 let receipt = try await FBSimulatorAXSemanticPress.perform(for: simulator,
                     expectedPID: ax.expectedPID, identifier: identifier, observation: live.initialObservation,
-                    freshnessProvider: live, preparation: ax.preparation.libraryValue)
+                    freshnessProvider: live)
                 result.press = receipt
                 let valueChanged = receipt.outcome == "switchValueChangedObserved"
                 if !valueChanged { result.failure = .pressFailed }
@@ -62,11 +62,11 @@ enum SelectedAXOperation {
                 case .id:
                     backend = FBSimulatorSliderBackend(simulator: simulator, observation: live.initialObservation,
                         freshnessProvider: live, identifier: selectorValue, expectedPID: ax.expectedPID,
-                        elementType: ax.elementType, preparation: ax.preparation.libraryValue, admissionGuard: sliderAdmission)
+                        elementType: ax.elementType, admissionGuard: sliderAdmission)
                 case .label:
                     backend = FBSimulatorSliderBackend(simulator: simulator, observation: live.initialObservation,
                         freshnessProvider: live, label: selectorValue, expectedPID: ax.expectedPID,
-                        elementType: ax.elementType, preparation: ax.preparation.libraryValue, admissionGuard: sliderAdmission)
+                        elementType: ax.elementType, admissionGuard: sliderAdmission)
                 default:
                     throw SelectedHIDFailure.invalid("Selected slider requires an ID or label")
                 }
@@ -88,7 +88,7 @@ enum SelectedAXOperation {
                 let operation = SelectedSliderValueOperation(simulator: simulator,
                     observation: live.initialObservation, live: live, helperURL: helperURL,
                     selectorKind: selectorKind, selectorValue: selectorValue, expectedPID: ax.expectedPID,
-                    elementType: ax.elementType, preparation: ax.preparation.libraryValue,
+                    elementType: ax.elementType,
                     admissionGuard: sliderAdmission)
                 let execution = await valueOwner.run(operation, percent: percentage)
                 result.sliderValue = execution.receipt
@@ -107,10 +107,10 @@ enum SelectedAXOperation {
                     result.point = point
                     acquisition = try await FBSimulatorAXSnapshot.acquire(at: CGPoint(x: point.x, y: point.y),
                         for: simulator, expectedPID: ax.expectedPID, observation: live.initialObservation,
-                        freshnessProvider: live, policy: policy, preparation: ax.preparation.libraryValue)
+                        freshnessProvider: live, policy: policy)
                 } else {
                     acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: ax.expectedPID,
-                        observation: live.initialObservation, freshnessProvider: live, policy: policy, preparation: ax.preparation.libraryValue)
+                        observation: live.initialObservation, freshnessProvider: live, policy: policy)
                 }
                 result.acquisition = try SelectedAXAcquisition(acquisition)
                 result.roots = acquisition.snapshot?.roots
@@ -129,8 +129,7 @@ enum SelectedAXOperation {
                     try live.validateCurrentRevision(expected: live.initialObservation)
                     let probePolicy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: timeout, maximumAttempts: 4)
                     let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: ax.expectedPID,
-                        observation: live.initialObservation, freshnessProvider: live, policy: probePolicy,
-                        preparation: ax.preparation.libraryValue)
+                        observation: live.initialObservation, freshnessProvider: live, policy: probePolicy)
                     try Task.checkCancellation()
                     guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
                         throw SelectedAXWaitAcquisitionFailure(acquisition: acquisition)
@@ -143,8 +142,7 @@ enum SelectedAXOperation {
             // Starts before the library budget. It can reject earlier, never extend it.
             let deadline = DispatchTime.now() + policy.timeoutSeconds
             let operation = try await FBSimulatorAXTargetOperation.open(for: simulator, expectedPID: ax.expectedPID,
-                selector: selector, observation: live.initialObservation, freshnessProvider: live, policy: policy,
-                preparation: ax.preparation.libraryValue)
+                selector: selector, observation: live.initialObservation, freshnessProvider: live, policy: policy)
             target = operation
             if let agentAdmission = request.agentAdmission {
                 try agentAdmission.validateScreen(await operation.snapshot.roots)

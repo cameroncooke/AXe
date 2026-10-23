@@ -107,7 +107,7 @@ private final class AgentModeFreshScreenGuard: FBSimulatorHIDInputAdmissionGuard
         try admission.validateContext(observation)
         let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 1)
         let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-            observation: observation, freshnessProvider: feed, policy: policy, preparation: .automationSession)
+            observation: observation, freshnessProvider: feed, policy: policy)
         guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
             throw AgentModeFailure("admissionReadFailed", "The native screen could not be confirmed before input.")
         }

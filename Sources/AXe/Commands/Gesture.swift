@@ -483,6 +483,17 @@ struct Gesture: AsyncParsableCommand {
         logger.info().log("Coordinates: (\(coords.startX), \(coords.startY)) to (\(coords.endX), \(coords.endY))")
         logger.info().log("Duration: \(gestureDuration)s, Delta: \(gestureDelta)px")
         
+        if let context = try await LegacyDuoInput.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+        ) {
+            let path = LegacyDuoPath(kind: .swipe, startX: coords.startX, startY: coords.startY,
+                endX: coords.endX, endY: coords.endY, duration: gestureDuration, delta: gestureDelta)
+            try await LegacyDuoInput.perform(path: path, context: context,
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger)
+            logger.info().log("Gesture completed successfully")
+            return
+        }
+
         // Create gesture events with timing controls
         var events: [FBSimulatorHIDEvent] = []
         

@@ -102,5 +102,4 @@ struct SelectedKeyboardResult: Codable, Sendable {
     var lastValidatedTarget: FBSimulatorAXNode?
     var validatedKeyDownCount = 0
     let atomicRecipientGuarantee = false
-    let preparation = "existing-bridge"
 }

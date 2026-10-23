@@ -25,7 +25,6 @@ parser.add_argument('--out', required=True)
 args = parser.parse_args()
 assert args.pid > 0 and 0 <= args.fold_angle <= 180
 args.case = 'held-key-' + args.mode
-args.preparation = 'existing-bridge'
 module_file = Path(__file__).with_name('verify-duo-controls.py')
 spec = importlib.util.spec_from_file_location('duo_controls', module_file)
 controls = importlib.util.module_from_spec(spec)

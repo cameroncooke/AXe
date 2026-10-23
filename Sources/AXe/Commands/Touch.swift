@@ -49,8 +49,8 @@ struct Touch: AsyncParsableCommand {
         if agentMode.enabled {
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
             guard touchDown, touchUp, agentMode.elementRef != nil, pointX == nil, pointY == nil,
-                  contactToken == nil, selectedAX.preparation == nil else {
-                throw ValidationError("Agent touch requires --ref, --down and --up, without coordinates, a contact token or AX preparation.")
+                  contactToken == nil else {
+                throw ValidationError("Agent touch requires --ref, --down and --up, without coordinates or a contact token.")
             }
             _ = try agentRequest()
             return

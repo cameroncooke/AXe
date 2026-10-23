@@ -101,8 +101,7 @@ class Check:
         return state
 
     def description(self, name, catalogue, pid):
-        result = self.axe(name, 'describe-ui', *self.selection(catalogue), '--expected-pid', str(pid),
-                          '--ax-preparation', self.args.preparation)
+        result = self.axe(name, 'describe-ui', *self.selection(catalogue), '--expected-pid', str(pid))
         hits = [v for v in walk(result) if v.get('AXUniqueId') == 'feature.tap' and v.get('frame')]
         frames = {tuple(v['frame'][key] for key in ['x', 'y', 'width', 'height']) for v in hits}
         assert len(frames) == 1, frames
@@ -114,8 +113,7 @@ class Check:
         self.description('fresh-description', catalogue, pid)
         before = self.state('before-tap')
         response = self.axe('fresh-tap', 'tap', '--id', 'feature.tap', '--element-type', 'Button',
-                            '--tap-style', 'physical', '--expected-pid', str(pid),
-                            '--ax-preparation', 'existing-bridge', *self.selection(catalogue))
+                            '--tap-style', 'physical', '--expected-pid', str(pid), *self.selection(catalogue))
         assert response['outcome'] == 'enqueuedAndDrained' and response['enqueuedEventCount'] == 2
         assert response['cleanup'] == 'notNeeded' and not response.get('quarantine')
         target = response['ax']['target']
@@ -229,8 +227,7 @@ class Check:
         assert before['counts'] == after['counts'] and before['windowTouchTrace'] == after['windowTouchTrace']
         changed = original['activePanel']['identity'] != final['activePanel']['identity']
         if changed:
-            rejected = self.axe('stale-panel-tap', 'tap', '--id', 'feature.tap', '--expected-pid', str(self.args.pid),
-                                '--ax-preparation', 'existing-bridge', *self.selection(original), expected=1)
+            rejected = self.axe('stale-panel-tap', 'tap', '--id', 'feature.tap', '--expected-pid', str(self.args.pid), *self.selection(original), expected=1)
             assert rejected['enqueuedEventCount'] == 0 and rejected['cleanup'] == 'notNeeded'
             assert 'inactiveSelection' in json.dumps(rejected)
             assert self.state('after-rejection') == after
@@ -256,7 +253,6 @@ def main():
     parser.add_argument('--out', required=True)
     parser.add_argument('--pid', type=int)
     parser.add_argument('--degrees', type=float)
-    parser.add_argument('--preparation', choices=['automation-session', 'existing-bridge'], default='automation-session')
     args = parser.parse_args()
     if args.case in ['return', 'refind', 'batch-side', 'hinge'] and (args.pid is None or args.pid <= 0):
         parser.error('This check requires the actual current fixture PID')

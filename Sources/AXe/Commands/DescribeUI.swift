@@ -34,8 +34,8 @@ struct DescribeUI: AsyncParsableCommand {
     func validate() throws {
         try agentMode.validate()
         if agentMode.enabled {
-            guard point == nil, agentMode.elementRef == nil, selectedAX.preparation == nil else {
-                throw ValidationError("Agent describe-ui does not accept --point, --ref or --ax-preparation.")
+            guard point == nil, agentMode.elementRef == nil else {
+                throw ValidationError("Agent describe-ui does not accept --point or --ref.")
             }
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
             if let sinceScreenHash, sinceScreenHash.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

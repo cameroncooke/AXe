@@ -148,8 +148,8 @@ struct Tap: AsyncParsableCommand {
 
     private func validateAgent() throws {
         try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
-        guard !semanticPress, selectedAX.preparation == nil, waitTimeout == 0, pollInterval == 0.25 else {
-            throw ValidationError("Agent tap does not accept semantic press, AX preparation or polling overrides.")
+        guard !semanticPress, waitTimeout == 0, pollInterval == 0.25 else {
+            throw ValidationError("Agent tap does not accept semantic press or polling overrides.")
         }
         let selectors = [elementID, elementLabel, elementValue, labelContains, labelRegex].compactMap { $0 }
         let hasPoint = pointX != nil || pointY != nil

@@ -89,7 +89,7 @@ def invoke(args, name, verb, extra, ax=False):
     argv = [str(args.axe), verb, *extra, "--udid", args.udid, "--input-mode", "selected",
             "--screen-id", str(args.screen_id), "--screen-uuid", args.screen_uuid]
     if ax:
-        argv += ["--expected-pid", str(args.pid), "--ax-preparation", "existing-bridge"]
+        argv += ["--expected-pid", str(args.pid)]
     receipt = decode(command(args, name, argv))
     write_json(args.output / (name + "-receipt.json"), receipt)
     context = receipt["context"]

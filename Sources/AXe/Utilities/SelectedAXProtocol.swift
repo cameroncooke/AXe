@@ -1,14 +1,6 @@
 import Foundation
 import FBSimulatorControl
 
-enum SelectedAXPreparation: String, Codable, Sendable {
-    case automationSession = "automation-session"
-    case existingBridge = "existing-bridge"
-    var libraryValue: FBSimulatorAXPreparation {
-        self == .automationSession ? .automationSession : .existingBridge
-    }
-}
-
 enum SelectedAXFailure: String, Codable, Sendable {
     case ownershipRejected, acquisitionFailed, targetRejected, pressFailed, sliderFailed, inputFailed, cleanupUncertain, responseTooLarge, setupFailed, waitTimedOut, waitCancelled
 }
@@ -75,7 +67,6 @@ struct SelectedAXRequest: Codable, Sendable {
     enum SelectorKind: String, Codable, Sendable { case id, label, value }
     let kind: Kind
     let expectedPID: Int32
-    let preparation: SelectedAXPreparation
     let endpoint: FBSimulatorSliderEndpoint?
     let selectorKind: SelectorKind?
     let selectorValue: String?
@@ -281,7 +272,6 @@ struct SelectedAXResult: Codable, Sendable {
     let schemaVersion = 1
     let kind: SelectedAXRequest.Kind
     let expectedPID: Int32
-    let preparation: SelectedAXPreparation
     var failure: SelectedAXFailure?
     var slider: SelectedSliderResult?
     var sliderValue: SelectedSliderValueResult?

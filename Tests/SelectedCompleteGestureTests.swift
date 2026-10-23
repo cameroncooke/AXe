@@ -87,7 +87,7 @@ struct SelectedCompleteGestureTests {
         var path = request(value)
         path.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25)
         var ax = request(value)
-        ax.ax = .init(kind: .describe, expectedPID: 1, preparation: .existingBridge,
+        ax.ax = .init(kind: .describe, expectedPID: 1,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
         var hinge = try SelectedHingeRequest(kind: .read, expectedBootIdentity: nil,
             degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil).brokerRequest()

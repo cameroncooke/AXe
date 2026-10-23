@@ -14,16 +14,17 @@ struct PlaygroundDuoTests {
         let app = try DuoPlaygroundSession()
         let original = try await app.catalogue()
         let initialPID = try await app.launch()
-        _ = try await app.waitForButtonState("Initial", catalogue: original, pid: initialPID, bootstrap: true)
+        let initial = try await app.catalogue(boot: original.bootIdentity)
+        _ = try await app.waitForButtonState("Initial", catalogue: initial, pid: initialPID)
         _ = try await app.setPose(.open, boot: original.bootIdentity)
         var panels: [DuoPlaygroundPose: DuoPanelIdentity] = [:]
 
         for pose in [DuoPlaygroundPose.closed, .tabletop, .open] {
             let pid = try await app.launch()
             let before = try await app.catalogue(boot: original.bootIdentity)
-            _ = try await app.waitForButtonState("Initial", catalogue: before, pid: pid, bootstrap: true)
+            _ = try await app.waitForButtonState("Initial", catalogue: before, pid: pid)
             let catalogue = try await app.setPose(pose, boot: original.bootIdentity)
-            let fresh = try await app.waitForButtonState("Initial", catalogue: catalogue, pid: pid, bootstrap: true)
+            let fresh = try await app.waitForButtonState("Initial", catalogue: catalogue, pid: pid)
             try await app.tapAndVerify(catalogue: catalogue, pid: pid, fresh: fresh)
             panels[pose] = catalogue.activePanel.identity
             app.report("hinge \(pose.rawValue)", catalogue: catalogue)
@@ -60,7 +61,9 @@ struct PlaygroundDuoTests {
         let original = try await app.catalogue()
         let open = try await app.setPose(.open, boot: original.bootIdentity)
         let pid = try await app.launch()
-        _ = try await app.waitForButtonState("Initial", catalogue: open, pid: pid, bootstrap: true)
+        let launched = try await app.catalogue(boot: original.bootIdentity)
+        try #require(launched.activePanel.identity == open.activePanel.identity)
+        _ = try await app.waitForButtonState("Initial", catalogue: launched, pid: pid)
         let old = try await agent.timedCapture(pid: pid)
         let oldButton = try old.capture.target(id: "slider-value-button")
 
@@ -73,7 +76,7 @@ struct PlaygroundDuoTests {
             after = try await app.rotateRight(catalogue: before)
             try #require(after.activePanel.identity == open.activePanel.identity)
         }
-        _ = try await app.waitForButtonState("Initial", catalogue: after, pid: pid, bootstrap: true)
+        _ = try await app.waitForButtonState("Initial", catalogue: after, pid: pid)
         try await agent.requireRefusal(oldButton.ref, capture: old, pid: pid)
         _ = try await app.waitForButtonState("Initial", catalogue: after, pid: pid)
 
@@ -101,24 +104,23 @@ struct PlaygroundDuoTests {
         let original = try await app.catalogue()
         let start = try await app.setPose(pose, boot: original.bootIdentity)
         let expectedPositions = pose == .open ? Set([0, 90, 180, 270]) : Set([0, 90, 270])
-        let startingRotation = try start.activePanel.rotationDegrees()
-        var observedPositions = Set([startingRotation])
+        var observedPositions = Set<Int>()
 
         for _ in 0..<expectedPositions.count {
             let pid = try await app.launch()
             let before = try await app.catalogue(boot: original.bootIdentity)
-            _ = try await app.waitForButtonState("Initial", catalogue: before, pid: pid, bootstrap: true)
+            _ = try await app.waitForButtonState("Initial", catalogue: before, pid: pid)
             let after = try await app.rotateRight(catalogue: before)
             #expect(after.activePanel.identity == start.activePanel.identity)
-            observedPositions.insert(try after.activePanel.rotationDegrees())
-            let fresh = try await app.waitForButtonState("Initial", catalogue: after, pid: pid, bootstrap: true)
+            let fresh = try await app.waitForButtonState("Initial", catalogue: after, pid: pid)
             try await app.tapAndVerify(catalogue: after, pid: pid, fresh: fresh)
+            observedPositions.insert(try after.activePanel.rotationDegrees())
             app.report("rotate right, hinge \(pose.rawValue)", catalogue: after)
         }
 
         let final = try await app.catalogue(boot: original.bootIdentity)
         #expect(observedPositions == expectedPositions)
-        #expect(try final.activePanel.rotationDegrees() == startingRotation)
+        #expect(final.activePanel.identity == start.activePanel.identity)
     }
 }
 
@@ -226,33 +228,77 @@ private struct DuoPlaygroundSession {
     }
 
     func waitForButtonState(
-        _ expected: String, catalogue: DuoCatalogue, pid: Int32, bootstrap: Bool = false
+        _ expected: String, catalogue: DuoCatalogue, pid: Int32
     ) async throws -> DuoSnapshot {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
-        var preparation = bootstrap ? "automation-session" : "existing-bridge"
         var lastValue = "missing"
-        repeat {
-            let response: DuoCLIResponse = try await decode([
-                "describe-ui", "--expected-pid", String(pid), "--ax-preparation", preparation,
-            ] + selection(catalogue))
-            try response.requireSuccess()
-            guard let context = response.context, let roots = response.ax?.roots, response.ax?.expectedPID == pid else {
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            try Task.checkCancellation()
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { break }
+            let response = try await buttonDescription(catalogue: catalogue, pid: pid, timeout: remaining)
+            guard ProcessInfo.processInfo.systemUptime < deadline else { break }
+            guard let context = response.context, let ax = response.ax else {
                 throw TestError.unexpectedState("Selected description has no matching app or measured context.")
             }
-            try context.requireMatch(catalogue)
-            preparation = "existing-bridge"
-            let snapshot = DuoSnapshot(context: context, roots: roots)
-            lastValue = UIStateParser.findElement(in: roots, withIdentifier: stateID)?.value ?? "missing"
-            if lastValue == expected, let button = UIStateParser.findElement(in: roots, withIdentifier: buttonID),
-               button.type == "Button", button.enabled == true, let frame = button.frame,
-               [frame.x, frame.y, frame.width, frame.height].allSatisfy(\.isFinite),
-               frame.x >= 0, frame.y >= 0, frame.width > 0, frame.height > 0,
-               frame.x + frame.width <= context.logicalWidth, frame.y + frame.height <= context.logicalHeight {
-                return snapshot
+            if let acquisition = ax.acquisition, acquisition.outcome == .notReady {
+                lastValue = "notReady for PID \(pid), attempts=\(acquisition.attempts.count)"
+            } else {
+                guard let roots = ax.roots else {
+                    throw TestError.unexpectedState("Ready selected description has no roots.")
+                }
+                let snapshot = DuoSnapshot(context: context, roots: roots)
+                lastValue = UIStateParser.findElement(in: roots, withIdentifier: stateID)?.value ?? "missing"
+                if lastValue == expected, let button = UIStateParser.findElement(in: roots, withIdentifier: buttonID),
+                   button.type == "Button", button.enabled == true, let frame = button.frame,
+                   [frame.x, frame.y, frame.width, frame.height].allSatisfy(\.isFinite),
+                   frame.x >= 0, frame.y >= 0, frame.width > 0, frame.height > 0,
+                   frame.x + frame.width <= context.logicalWidth, frame.y + frame.height <= context.logicalHeight {
+                    return snapshot
+                }
             }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        } while ProcessInfo.processInfo.systemUptime < deadline
-        throw TestError.unexpectedState("Playground button did not become ready with state \(expected); last state: \(lastValue).")
+            let pause = min(0.2, deadline - ProcessInfo.processInfo.systemUptime)
+            if pause > 0 { try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000)) }
+        }
+        throw TestError.unexpectedState("Playground button did not become ready within 10 seconds with state \(expected); last state: \(lastValue).")
+    }
+
+    private func buttonDescription(catalogue: DuoCatalogue, pid: Int32, timeout: TimeInterval) async throws -> DuoCLIResponse {
+        let arguments = ["describe-ui", "--expected-pid", String(pid)] + selection(catalogue)
+        let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
+        let result = try await CommandRunner.run(command, allowFailure: true, timeout: timeout)
+        // printResponse writes one compact JSON line before any failure diagnostic on stderr.
+        // CommandRunner appends stderr after stdout; no error-text search is used here.
+        let receiptLine = result.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+        let response: DuoCLIResponse
+        do {
+            response = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(receiptLine.utf8))
+        } catch {
+            throw TestError.invalidJSON("Selected description exit=\(result.exitCode): \(error)\n\(result.output.prefix(4096))")
+        }
+        guard let context = response.context, let ax = response.ax,
+              ax.schemaVersion == 1, ax.kind == "describe", ax.expectedPID == pid else {
+            throw TestError.unexpectedState("Selected description has the wrong kind, app or measured context.")
+        }
+        try context.requireMatch(catalogue)
+        guard response.enqueuedEventCount == 0, response.cleanup == "notNeeded", response.quarantine == nil else {
+            throw TestError.unexpectedState("Selected description has input or uncertain cleanup evidence.")
+        }
+        if result.exitCode == 0 {
+            try response.requireSuccess("ready")
+            guard ax.failure == nil, ax.acquisition?.outcome == .ready else {
+                throw TestError.unexpectedState("Successful selected description lacks a ready acquisition.")
+            }
+            return response
+        }
+        guard result.exitCode == 1, response.outcome == "failedBeforeInput", response.error != nil,
+              ax.failure == .acquisitionFailed, let acquisition = ax.acquisition,
+              acquisition.outcome == .notReady, acquisition.failureDescription == nil,
+              !acquisition.attempts.isEmpty,
+              acquisition.attempts.allSatisfy({ $0.outcome == .notReady && $0.rootPID == pid }) else {
+            throw TestError.commandError("Selected description exit=\(result.exitCode) is terminal.\n\(result.output.prefix(4096))")
+        }
+        return response
     }
 
     func tapAndVerify(catalogue: DuoCatalogue, pid: Int32, fresh: DuoSnapshot) async throws {
@@ -261,7 +307,7 @@ private struct DuoPlaygroundSession {
         }
         let response: DuoCLIResponse = try await decode([
             "tap", "--id", buttonID, "--element-type", "Button", "--tap-style", "physical",
-            "--expected-pid", String(pid), "--ax-preparation", "existing-bridge",
+            "--expected-pid", String(pid),
         ] + selection(catalogue))
         try response.requireSuccess("enqueuedAndDrained")
         // Direct native hits have hitPID only. A second hit exists for descendant/switch validation.
@@ -410,9 +456,33 @@ private struct DuoCLIResponse: Decodable {
     }
 
     struct AX: Decodable {
+        let schemaVersion: Int
+        let kind: String
         let expectedPID: Int32
+        let failure: AXFailure?
+        let acquisition: Acquisition?
         let roots: [UIElement]?
         let validation: Validation?
+    }
+
+    enum AXFailure: String, Decodable {
+        case ownershipRejected, acquisitionFailed, targetRejected, pressFailed, sliderFailed, inputFailed
+        case cleanupUncertain, responseTooLarge, setupFailed, waitTimedOut, waitCancelled
+    }
+
+    enum AcquisitionOutcome: String, Decodable {
+        case ready, notReady, cancelled, deadlineExceeded, requestTimedOut, processChanged, contextChanged, failed
+    }
+
+    struct Acquisition: Decodable {
+        let outcome: AcquisitionOutcome
+        let attempts: [AcquisitionAttempt]
+        let failureDescription: String?
+    }
+
+    struct AcquisitionAttempt: Decodable {
+        let rootPID: Int32
+        let outcome: AcquisitionOutcome
     }
 
     struct Validation: Decodable {

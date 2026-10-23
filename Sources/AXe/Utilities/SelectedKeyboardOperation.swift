@@ -115,7 +115,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         }
         let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: remaining, maximumAttempts: 1)
         let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: request.expectedPID,
-            observation: feed.initialObservation, freshnessProvider: feed, policy: policy, preparation: .existingBridge)
+            observation: feed.initialObservation, freshnessProvider: feed, policy: policy)
         _ = try remainingSeconds()
         guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
             throw SelectedHIDFailure.invalid("Keyboard focus read failed: \(acquisition.outcome.rawValue)")

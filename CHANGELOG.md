@@ -78,6 +78,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Removed the new Duo `--ax-preparation` option and retained AX-preparation layer. Selected reads and physical target checks keep the normal IDB accessibility-readiness check, including the original short-lived bootstrap where required by the existing runtime policy. Original v1.8.0 IDB bootstrap behavior, native slider/switch identity sessions and HID input remain unchanged. CLI wire 35 rejects older requests; matched rebuilt native frameworks are required. Earlier transition and core failures remain recorded. Current Debug core checks passed seven of eight; Slider75 refused before input. Four of five Duo transition checks passed. The outer repeat made three real callbacks, then failed its final orientation assertion; all twelve ordinary-iPhone core/agent checks passed. The corrected Duo test run passed four of five cases; its final rotation-agent read failed with a disconnected channel before input. The exact rotation case passed separately after explicit guest-service restart on the same boot/data; automatic recovery is not claimed. All four Duo agent checks also passed. These current results use the matched Debug runtime; fresh universal Release, package and local-install checks remain pending.
+
 - Build IDB from a tracked patch against the exact fork base without discarding unexpected source changes. Builds accept `arm64`, `x86_64` or both; actual Intel simulator execution remains unverified.
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
 
@@ -121,6 +123,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed universal builds rejected by the Duo arm64 guard and AX linker stub tags. The build now uses SDK-backed exports and matching simulator helper slices, with slice and platform checks. The local universal Release build, ZIP round trip, seven strict ad-hoc payload signatures and Apple silicon host startup checks passed. Actual Intel simulator execution remains unverified.
 
 - Fixed no-flag Duo interior slider percentages missing the requested value. The command now uses the existing measured native value-feedback route with a fresh frontmost app PID and owned input. Final AX tolerance and stability checks, the native 15-second budget, no-flag 0/100 and other-device drag behavior remain unchanged. The same Debug candidate passed the existing 75-then-40 app-value check on one Duo outer display in portrait and one ordinary iPhone. An earlier Duo deadline refusal remains recorded; other controls, poses and interruptions remain unverified.
+
+- Fixed no-flag Duo scroll presets using legacy geometry after rotation. Presets now use the measured active display and existing owned input. The previously failed scroll check passed twice on the current Debug candidate at measured outer rotation90; wider preset and position combinations remain unverified.
 
 ## [v1.8.0] - 2026-07-20
 

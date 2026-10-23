@@ -97,7 +97,7 @@ struct SelectedBatchHomeTests {
             outcome: fault == .failed ? "failedNoReplay" : "enqueuedAndDrained", token: nil,
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,
             context: try context(), home: fault == .missingHome ? nil : home)
-        if fault == .mixed { actual.ax = .init(kind: .describe, expectedPID: 123, preparation: .existingBridge) }
+        if fault == .mixed { actual.ax = .init(kind: .describe, expectedPID: 123) }
         return actual
     }
 
