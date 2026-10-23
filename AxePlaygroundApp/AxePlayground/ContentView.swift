@@ -234,6 +234,7 @@ struct BatchTestView: View {
         .padding()
         .navigationTitle("Batch Test")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("batch-test-screen")
     }
 }

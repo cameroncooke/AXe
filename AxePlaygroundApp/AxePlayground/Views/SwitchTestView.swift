@@ -46,6 +46,7 @@ struct SwitchTestView: View {
         .padding()
         .navigationTitle("Switch Test")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("switch-test-screen")
     }
 }

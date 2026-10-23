@@ -15,9 +15,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-SIMULATOR_NAME="iPhone 17 Pro"
+SIMULATOR_NAME="${SIMULATOR_NAME:-iPhone 17 Pro}"
 SIMULATOR_UDID="${SIMULATOR_UDID:-}"
-PLAYGROUND_PROJECT="AxePlaygroundApp/AxePlayground.xcodeproj"
+PLAYGROUND_PROJECT="build_products/playground-project/AxePlayground.xcodeproj"
 PLAYGROUND_SCHEME="AxePlayground"
 BUNDLE_ID="com.cameroncooke.AxePlayground"
 
@@ -66,6 +66,10 @@ show_usage() {
     echo "  SwipeTests          Run only swipe tests"
     echo "  DragTests           Run only drag tests"
     echo "  SliderTests         Run only slider tests"
+    echo "  PlaygroundCoreTests Run the portable iPhone/Duo core action checks"
+    echo "  PlaygroundAgentTests Run optional agent capture and reference checks"
+    echo "  PlaygroundDuoTests  Run Duo hinge/rotation checks with AXE_DUO_E2E=1"
+    echo "  PresentationFixtureTests Run the app presentation checks"
     echo "  DescribeUITests     Run only describe-ui tests"
     echo "  InitTests           Run only init tests"
     echo "  KeyComboTests       Run only key-combo tests"
@@ -139,7 +143,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests)
+        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundDuoTests|PresentationFixtureTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -155,6 +159,16 @@ if [[ "$UNIT_TESTS" == true ]] &&
    [[ "$BUILD_ONLY" == true || "$TESTS_ONLY" == true || "$CLEAN_BUILD" == true || -n "$TEST_FILTER" ]]; then
     print_error "--unit-tests cannot be combined with build, E2E test, clean, or test-filter options."
     exit 1
+fi
+
+if [[ "$TEST_FILTER" == "PlaygroundDuoTests" ]]; then
+    case "$(printf '%s' "${AXE_DUO_E2E:-0}" | tr '[:upper:]' '[:lower:]')" in
+        1|true|yes) ;;
+        *)
+            print_error "PlaygroundDuoTests requires AXE_DUO_E2E=1. No simulator work started."
+            exit 1
+            ;;
+    esac
 fi
 
 # Function to check prerequisites
@@ -181,6 +195,11 @@ check_prerequisites() {
 
     if [[ "$UNIT_TESTS" != true ]] && ! command -v jq &> /dev/null; then
         print_error "jq not found. Install jq to select the matching simulator runtime."
+        exit 1
+    fi
+
+    if [[ "$UNIT_TESTS" != true ]] && ! command -v python3 &> /dev/null; then
+        print_error "python3 is required to verify executed Playground test results."
         exit 1
     fi
 
@@ -379,6 +398,11 @@ build_playground_app() {
     print_info "App path: $APP_PATH"
 }
 
+generate_playground_project() {
+    mkdir -p build_products/playground-project
+    xcodegen generate --spec AxePlaygroundApp/project.yml --project build_products/playground-project
+}
+
 landscape_orientation_menu_available() {
     local enabled_items
     enabled_items=$(osascript \
@@ -388,6 +412,34 @@ landscape_orientation_menu_available() {
         2>/dev/null || true)
 
     [[ "$enabled_items" == true,\ true,\ true,\ true* ]]
+}
+
+playground_expected_count() {
+    case "$1" in
+        PlaygroundCoreTests) printf '8' ;;
+        PlaygroundAgentTests) printf '4' ;;
+        PlaygroundDuoTests) printf '5' ;;
+    esac
+}
+
+verify_playground_results() {
+    python3 - "$1" "$2" <<'PY'
+from pathlib import Path
+import sys
+import xml.etree.ElementTree as ET
+
+xml = Path(sys.argv[1])
+expected = int(sys.argv[2])
+try:
+    tests = list(ET.parse(xml).getroot().iter('testcase'))
+except (OSError, ET.ParseError) as error:
+    raise SystemExit('No valid Swift Testing results: ' + str(error))
+skipped = [test for test in tests if test.find('skipped') is not None]
+failed = [test for test in tests if test.find('failure') is not None or test.find('error') is not None]
+if len(tests) != expected or skipped or failed:
+    raise SystemExit(f'Expected {expected} executed Playground checks; got {len(tests)}, skipped {len(skipped)}, failed {len(failed)}. Results: {xml}')
+print(f'Verified {expected} executed Playground checks, zero skips and failures. Results: {xml}')
+PY
 }
 
 # Function to run tests
@@ -430,9 +482,24 @@ run_tests() {
     run_swift_test() {
         local filter="$1"
         local args=(--filter "$filter")
+        local expected_count
+        local report_directory=""
+        expected_count="$(playground_expected_count "$filter")"
+        if [[ -n "$expected_count" ]]; then
+            mkdir -p build_products/test-runner-results || return 1
+            report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
+            args+=(--xunit-output "$report_directory/results.xml")
+            print_info "Playground result directory: $report_directory"
+        fi
         [[ "$VERBOSE" == true ]] && args+=(--verbose)
         print_info "Test command: swift test --skip-build --no-parallel --filter $filter"
-        run_selected_swift test --skip-build --no-parallel "${args[@]}"
+        if ! run_selected_swift test --skip-build --no-parallel "${args[@]}"; then
+            return 1
+        fi
+        if [[ -n "$expected_count" ]]; then
+            verify_playground_results "$report_directory/results-swift-testing.xml" "$expected_count" || return 1
+        fi
+        return 0
     }
 
     if [[ -n "$TEST_FILTER" ]]; then
@@ -459,6 +526,9 @@ run_tests() {
             "KeySequenceTests"
             "KeyTests"
             "ListSimulatorsTests"
+            "PlaygroundCoreTests"
+            "PlaygroundAgentTests"
+            "PresentationFixtureTests"
             "RecordVideoTests"
             "StreamVideoDebugTests"
             "StreamVideoTests"
@@ -549,6 +619,7 @@ main() {
     boot_simulator
 
     if [[ "$TESTS_ONLY" != true ]]; then
+        generate_playground_project
         build_idb_xcframeworks
         clean_build
         build_axe

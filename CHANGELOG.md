@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Added a tracked XcodeGen Playground project and serial iPhone/Duo CLI checks with app-state readback, optional agent-reference checks, and Duo hinge/rotation checks. Each native result is recorded separately; skipped or failed checks do not establish coverage.
 - Add standalone selected and optional agent slider percentages with current target checks, guarded retained input and bounded native value feedback. Interior values use the current measured display context and require horizontal native scrubber geometry that increases from left to right; numeric 0/100 use the existing endpoint route before input. Raw sliders and endpoint batches stay unchanged. CLI wire 34 and matching native frameworks are required. Isolated controllers checked outer portrait and inner rotation 90 only; the incremental CLI build and public simulator verification remain pending. RTL, custom and vertical Sliders remain unproved.
 - Added optional `batch --agent --file` for 1...8 exact-ID tap/type steps on one app, with fresh target resolution, existing per-action input guards, ordered completion receipts and stop-on-failure without rollback or replay. Legacy and selected batches are unchanged. CLI wire 33 carries the batch request; native frameworks and RS/1 rows are unchanged. The isolated build, four guide checks and 132 existing checks in 13 suites passed across separate runs. Six outer-portrait checks proved an ordered field tap/type/Button workflow, refusals and raw/selected compatibility. One fold after a released first tap stopped the remaining steps and allowed a fresh outer reference tap. Earlier failures remain recorded; mid-action interruption and other workflows remain unverified.
 
@@ -81,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
 
 ### Fixed
+- Keep child control identifiers distinct in grouped Playground screens.
 
 - Fixed `scripts/build.sh sign-executable` leaving the copied resource bundle unsigned. It now signs and strictly verifies `AXe_AXe.bundle` before the existing CLI signing step. The local before/after check passed all seven payload signatures without changing resource assets, native frameworks or the helper.
 

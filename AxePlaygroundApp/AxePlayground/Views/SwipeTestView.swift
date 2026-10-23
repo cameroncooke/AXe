@@ -163,6 +163,7 @@ struct SwipeTestView: View {
             }
         }
         .ignoresSafeArea(.all) // Full screen coverage
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("swipe-test-screen")
     }
     
@@ -327,4 +328,4 @@ struct SwipePathShape: Shape {
 
 #Preview {
     SwipeTestView()
-} 
+}

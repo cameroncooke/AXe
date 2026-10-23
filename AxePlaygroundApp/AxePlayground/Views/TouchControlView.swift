@@ -147,6 +147,7 @@ struct TouchControlView: View {
         }
         .navigationTitle("Touch Control")
         .navigationBarTitleDisplayMode(.inline)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("touch-control-screen")
     }
     
