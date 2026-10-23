@@ -1,0 +1,27 @@
+# Video recording modes
+
+For one fixed measured panel:
+
+```bash
+axe record-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --expected-boot <BOOT_ID> --output selected.mp4
+```
+
+Both screen options are required; the boot check is optional. Every frame must match the first frame's boot, screen identity, orientation, hinge pose and geometry. A context change or capture error fails without retargeting or stale-frame continuation.
+
+To follow the active panel through folding and rotation:
+
+```bash
+axe record-video --udid <UDID> --follow-active-display --expected-boot <BOOT_ID> --output active.mp4
+```
+
+This explicit mode rejects either screen option. The boot check is optional before the first accepted frame; every later frame must keep that first frame's boot. Each frame discovers the measured active ID/UUID under the common lease and uses unchanged before/after context checks. Only complete validated frames enter the movie. A new panel or orientation can be accepted between frames.
+
+The first accepted frame determines the even video dimensions after --scale (0.1...1.0, default 1.0). Upright frames fit without stretching or cropping; black bars fill unused space. Native PNG pixels are already upright. The encoder keeps one fixed canvas and one timeline. It does not encode every transition animation or rotate pixels again. A player can hold the previous frame across a capture gap.
+
+Only typed lock-busy or context-transition errors can start a fresh read-only attempt. There are at most ten attempts for each frame. Recovery starts no further attempt after a 30-second window from its first failure; 250ms waits hold no input lease. Each native operation keeps its existing timeout and cleanup bounds, so an in-flight operation can finish after that window. Boot changes, quarantine, uncertain cleanup, generic unavailable errors, malformed frames and writer errors remain fatal. There is no input replay or alternate capture backend. Logs preserve each recovered error. A separate input command may still meet a busy lease during a capture.
+
+Both modes require the signed cadisplay-context helper beside AXe. Do not add --agent, --input-mode or --expected-pid. --fps is 1...30 (default 10) and --quality is 1...100 (default 80). FPS is a requested maximum, not a guaranteed rate. Surface identity and native frame presentation time are unavailable; timestamps use monotonic host acceptance time. Follow-active JSON includes observedContextChanges, maximumFrameGapSeconds, recoveryAttempts and recoveryWaitSeconds. These are observations, not a count of all physical transitions or proof of smooth animation.
+
+SIGINT and SIGTERM request a normal stop: cancel and await capture, finish validated frames, then publish a completed MP4 and JSON receipt. Existing destinations are never replaced. A stop before the first accepted frame, task cancellation or uncertain cleanup produces no successful output. Late signals can arrive after publication; parent termination and SIGKILL cleanup are not guaranteed. Input between frames is possible. Without a selected pair or --follow-active-display, legacy recording and path-only output stay unchanged.
+
+Follow-active source is prepared; build and native movie verification are pending. Fixed-screen recording and streaming keep their existing scope.

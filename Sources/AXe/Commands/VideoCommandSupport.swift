@@ -256,7 +256,7 @@ final class H264StreamRecorder: @unchecked Sendable {
     /// Selected recording must yield so stop signals and task cancellation can be handled.
     /// The single recording owner serializes all writer calls.
     @MainActor
-    func appendSelected(image: CGImage, presentationTime: CMTime) async throws {
+    func appendSelected(image: CGImage, presentationTime: CMTime, aspectFit: Bool = false) async throws {
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         while !input.isReadyForMoreMediaData {
             try Task.checkCancellation()
@@ -272,7 +272,7 @@ final class H264StreamRecorder: @unchecked Sendable {
         guard writer.status == .writing else {
             throw CLIError(errorDescription: "Video writer stopped before frame append")
         }
-        try appendReady(image: image, presentationTime: presentationTime)
+        try appendReady(image: image, presentationTime: presentationTime, aspectFit: aspectFit)
     }
 
     @MainActor
@@ -285,7 +285,7 @@ final class H264StreamRecorder: @unchecked Sendable {
         }
     }
 
-    private func appendReady(image: CGImage, presentationTime: CMTime) throws {
+    private func appendReady(image: CGImage, presentationTime: CMTime, aspectFit: Bool = false) throws {
         guard let pixelBuffer = Self.makePixelBuffer(width: width, height: height, adaptor: adaptor) else {
             throw VideoProcessingError.failedToAllocatePixelBuffer
         }
@@ -306,7 +306,18 @@ final class H264StreamRecorder: @unchecked Sendable {
         }
 
         context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: CGFloat(height), width: CGFloat(width), height: -CGFloat(height)))
+        if aspectFit {
+            context.setFillColor(CGColor(gray: 0, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)))
+            let factor = min(CGFloat(width) / CGFloat(image.width), CGFloat(height) / CGFloat(image.height))
+            let fittedWidth = CGFloat(image.width) * factor
+            let fittedHeight = CGFloat(image.height) * factor
+            let x = (CGFloat(width) - fittedWidth) / 2
+            let y = (CGFloat(height) - fittedHeight) / 2
+            context.draw(image, in: CGRect(x: x, y: y + fittedHeight, width: fittedWidth, height: -fittedHeight))
+        } else {
+            context.draw(image, in: CGRect(x: 0, y: CGFloat(height), width: CGFloat(width), height: -CGFloat(height)))
+        }
 
         guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
             throw CLIError(errorDescription: "Failed to append frame: \(writer.error?.localizedDescription ?? "Unknown error")")

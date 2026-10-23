@@ -55,8 +55,41 @@ final class SelectedMediaCapture {
     }
 
     func capture(simulator: FBSimulator, helper: URL, screenID: UInt32,
-                         screenUUID: UUID, expectedBoot: String?,
-                         initial: FBSimulatorHIDSessionObservation?) async throws -> FBSimulatorSelectedScreenshot? {
+                 screenUUID: UUID, expectedBoot: String?,
+                 initial: FBSimulatorHIDSessionObservation?) async throws -> FBSimulatorSelectedScreenshot? {
+        try await captureOwned(simulator: simulator) {
+            let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
+                helperURL: helper, screenID: screenID, screenUniqueID: screenUUID,
+                expectedBootIdentity: expectedBoot)
+            let before = try frame.before.observation.sessionObservation()
+            let after = try frame.after.observation.sessionObservation()
+            try Self.requireSameFrame(initial: initial ?? before, before: before, after: after)
+            return frame
+        }
+    }
+
+    /// Discovery and this one frame share the lease. A later frame can use a new active panel.
+    func captureActive(simulator: FBSimulator, helper: URL,
+                       expectedBoot: String?) async throws -> FBSimulatorSelectedScreenshot? {
+        try await captureOwned(simulator: simulator) {
+            let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
+            if let expectedBoot, discovery.bootIdentity != expectedBoot {
+                throw CLIError(errorDescription: "Follow-active recording stopped: simulator boot changed")
+            }
+            let panel = discovery.readback.snapshot.activePanel.identity
+            let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
+                helperURL: helper, screenID: panel.displayID, screenUniqueID: panel.uniqueID,
+                expectedBootIdentity: discovery.bootIdentity)
+            let before = try frame.before.observation.sessionObservation()
+            let after = try frame.after.observation.sessionObservation()
+            try Self.requireSameFrame(initial: before, before: before, after: after)
+            return frame
+        }
+    }
+
+    private func captureOwned(simulator: FBSimulator,
+                              operation: @escaping @MainActor () async throws -> FBSimulatorSelectedScreenshot)
+        async throws -> FBSimulatorSelectedScreenshot? {
         try Task.checkCancellation()
         guard !stopRequested else { return nil }
         precondition(captureTask == nil)
@@ -64,12 +97,7 @@ final class SelectedMediaCapture {
             try Task.checkCancellation()
             let lease = try HIDInputLease.acquire(simulatorUDID: simulator.udid)
             defer { withExtendedLifetime(lease) {} }
-            let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
-                helperURL: helper, screenID: screenID, screenUniqueID: screenUUID,
-                expectedBootIdentity: expectedBoot)
-            let before = try frame.before.observation.sessionObservation()
-            let after = try frame.after.observation.sessionObservation()
-            try Self.requireSameFrame(initial: initial ?? before, before: before, after: after)
+            let frame = try await operation()
             try Task.checkCancellation()
             return frame
         }

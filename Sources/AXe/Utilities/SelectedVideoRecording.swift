@@ -117,7 +117,7 @@ enum SelectedVideoRecording {
         }
     }
 
-    private static func outputURL(_ provided: String?) throws -> URL {
+    static func outputURL(_ provided: String?) throws -> URL {
         let manager = FileManager.default
         let timestamp = ISO8601DateFormatter().string(from: Date())
         let filename = "axe-video-\(timestamp).mp4"

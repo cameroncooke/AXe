@@ -284,11 +284,24 @@ axe record-video --udid "$UDID" --screen-id "$SCREEN_ID" \
   --screen-uuid "$SCREEN_UUID" --expected-boot "$BOOT_ID" --output ./selected.mp4
 ```
 
-The paired screen options select one measured active panel. The signed `cadisplay-context` helper must be beside AXe. Each frame uses the selected PNG capture and must match the first frame's boot, display identity, orientation, hinge pose and geometry. A changed context or capture error fails the recording; it does not retarget another screen or continue with stale frames. Recording across rotation or folding remains incomplete.
+The paired screen options select one measured active panel. The signed `cadisplay-context` helper must be beside AXe. Each frame uses the selected PNG capture and must match the first frame's boot, display identity, orientation, hinge pose and geometry. A changed context or capture error fails the recording; it does not retarget another screen or continue with stale frames. Use the separate follow-active mode below when the selected panel can change.
 
 `SIGINT` and `SIGTERM` request a normal stop. AXe cancels and awaits any in-flight capture, finishes the validated frames and publishes the completed MP4 without replacing an existing destination. A stop before the first accepted frame, task cancellation or unconfirmed cleanup produces no successful output. A late signal can arrive after publication. Parent termination and `SIGKILL` cleanup are not guaranteed.
 
-The input lease covers each capture, not the entire recording. Input can run between frames; an overlapping input request can receive a busy error. FPS is a requested maximum; context validation and capture can reduce the actual rate. Surface identity and native frame presentation time are unavailable. Success prints a JSON receipt. Without the screen pair, recording retains its legacy route and path-only stdout.
+The input lease covers each capture, not the entire recording. Input can run between frames; an overlapping input request can receive a busy error. FPS is a requested maximum; context validation and capture can reduce the actual rate. Surface identity and native frame presentation time are unavailable. Success prints a JSON receipt. Without the screen pair or follow-active flag, recording retains its legacy route and path-only stdout.
+
+## Follow the active display while recording
+
+```bash
+axe record-video --udid "$UDID" --follow-active-display \
+  --expected-boot "$BOOT_ID" --output ./active.mp4
+```
+
+This explicit mode follows freshly measured active display IDs and UUIDs on one simulator boot. It rejects `--screen-id` and `--screen-uuid`. Every individual frame still requires unchanged before/after context. The first accepted frame fixes the video size; later upright images fit inside it with black bars, without stretching or cropping.
+
+Typed lock or transition failures permit bounded fresh read-only attempts after cleanup. Quarantine, reboot, uncertain cleanup and other capture errors stop the recording. Timestamps preserve host elapsed time; a player may hold the previous frame across gaps. JSON reports accepted frames, observed context changes, maximum frame gap and recovery waits. This does not promise smooth transition animation or the requested FPS. Existing selected and legacy routes remain unchanged.
+
+Build and native movie verification are pending. See the [full recording contract](Skills/CLI/axe/references/recording-reference.md) and [verification plan](docs/follow-active-recording.md).
 
 ## Selected video streams
 

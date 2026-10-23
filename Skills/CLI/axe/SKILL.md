@@ -126,11 +126,7 @@ For selected capture, `SIGINT` and `SIGTERM` request cancellation. AXe waits for
 
 ## Selected video recording
 
-Use `axe record-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --expected-boot <BOOT_ID> --output selected.mp4` for one measured active panel. Both screen options are required; the boot check is optional. The signed helper must be beside AXe. Do not add `--input-mode` or `--expected-pid`.
-
-Every frame must match the first frame's boot, screen identity, orientation, hinge pose and geometry. A context change or capture error fails without retargeting or stale-frame continuation. Recording across rotation or folding remains incomplete. FPS is a requested maximum, not a guaranteed rate.
-
-`SIGINT` and `SIGTERM` request a normal stop: cancel and await any capture, finish validated frames, then publish a completed MP4 and JSON receipt. Existing destinations are never replaced. A stop before the first accepted frame, task cancellation or uncertain cleanup produces no successful output. Late signals can arrive after publication; parent termination and `SIGKILL` cleanup are not guaranteed. The common input lease covers each capture only; input between frames is possible, while overlapping input can receive busy. Surface identity and native frame presentation time remain unavailable. Legacy recording is unchanged.
+Use the paired `--screen-id`/`--screen-uuid` options for a fixed panel, or `--follow-active-display` for a fixed-canvas movie that follows measured display changes on one boot. Do not combine these modes. Read the [recording contract](references/recording-reference.md) for options, bounded transition recovery, stop/publication rules and proof limits. Follow-active build and native verification are pending.
 
 ## Selected video streams
 

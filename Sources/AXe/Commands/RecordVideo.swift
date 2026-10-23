@@ -25,24 +25,30 @@ struct RecordVideo: AsyncParsableCommand {
     @Option(help: "Output MP4 file path. Defaults to axe-video-<timestamp>.mp4 in the current directory.")
     var output: String?
 
+    @Flag(name: .customLong("follow-active-display"), help: "Follow measured display changes on one boot, fitting upright frames into a fixed video canvas.")
+    var followActiveDisplay = false
+
     @Option(name: .customLong("screen-id"), help: "Record this measured active display; requires --screen-uuid.")
     var screenID: UInt32?
 
     @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from list-simulators --displays; no retargeting.")
     var screenUUID: String?
 
-    @Option(name: .customLong("expected-boot"), help: "Selected recording only: reject a different simulator boot identity.")
+    @Option(name: .customLong("expected-boot"), help: "Selected or follow-active recording only: reject a different simulator boot identity.")
     var expectedBoot: String?
 
     func validate() throws {
+        if followActiveDisplay, screenID != nil || screenUUID != nil {
+            throw ValidationError("--follow-active-display cannot be combined with --screen-id or --screen-uuid.")
+        }
         guard (screenID == nil) == (screenUUID == nil) else {
             throw ValidationError("Selected recording requires both --screen-id and --screen-uuid.")
         }
         if let screenUUID, UUID(uuidString: screenUUID) == nil {
             throw ValidationError("Selected recording requires a valid display UUID.")
         }
-        if let expectedBoot, screenID == nil || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw ValidationError("--expected-boot requires selected recording and a nonempty boot identity.")
+        if let expectedBoot, (!followActiveDisplay && screenID == nil) || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw ValidationError("--expected-boot requires selected or follow-active recording and a nonempty boot identity.")
         }
 
         guard fps >= 1 && fps <= 30 else {
@@ -59,6 +65,11 @@ struct RecordVideo: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if followActiveDisplay {
+            try await FollowActiveVideoRecording.run(simulatorUDID: simulatorUDID, expectedBoot: expectedBoot,
+                output: output, fps: fps, quality: quality, scale: scale)
+            return
+        }
         if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
             try await SelectedVideoRecording.run(simulatorUDID: simulatorUDID, screenID: screenID,
                 screenUUID: uuid, expectedBoot: expectedBoot, output: output, fps: fps, quality: quality, scale: scale)
