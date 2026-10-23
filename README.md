@@ -301,7 +301,7 @@ This explicit mode follows freshly measured active display IDs and UUIDs on one 
 
 Typed lock or transition failures permit bounded fresh read-only attempts after cleanup. Quarantine, reboot, uncertain cleanup and other capture errors stop the recording. Timestamps preserve host elapsed time; a player may hold the previous frame across gaps. JSON reports accepted frames, observed context changes, maximum frame gap and recovery waits. This does not promise smooth transition animation or the requested FPS. Existing selected and legacy routes remain unchanged.
 
-Build and native movie verification are pending. See the [full recording contract](Skills/CLI/axe/references/recording-reference.md) and [verification plan](docs/follow-active-recording.md).
+Candidate `f4fd3030` passed two Duo movies at requested 1 FPS and scale 0.25: outer portrait → inner landscape → inner portrait (8 frames, 348×508), then inner landscape → closed outer portrait (6 frames, 712×500). All frames decoded with increasing timestamps, upright content and proportional black bars; SIGINT saved both movies and all observed capture children exited. Actual rates were 0.3935 and 0.4091 FPS, so this is not smooth animation capture. See the [full recording contract](Skills/CLI/axe/references/recording-reference.md) and [verification results and limits](docs/follow-active-recording.md).
 
 ## Selected video streams
 

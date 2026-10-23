@@ -126,7 +126,7 @@ For selected capture, `SIGINT` and `SIGTERM` request cancellation. AXe waits for
 
 ## Selected video recording
 
-Use the paired `--screen-id`/`--screen-uuid` options for a fixed panel, or `--follow-active-display` for a fixed-canvas movie that follows measured display changes on one boot. Do not combine these modes. Read the [recording contract](references/recording-reference.md) for options, bounded transition recovery, stop/publication rules and proof limits. Follow-active build and native verification are pending.
+Use the paired `--screen-id`/`--screen-uuid` options for a fixed panel, or `--follow-active-display` for a fixed-canvas movie that follows measured display changes on one boot. Do not combine these modes. Read the [recording contract](references/recording-reference.md) for options, bounded transition recovery, stop/publication rules and proof limits. Scoped Duo opening, closing and rotation proof passed; see that reference for limits.
 
 ## Selected video streams
 

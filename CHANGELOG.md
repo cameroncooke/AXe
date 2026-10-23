@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Added explicit `record-video --follow-active-display` for one-boot measured display changes, with per-frame context checks, bounded read-only transition recovery and a fixed aspect-fit canvas. Existing selected and legacy recording stay unchanged. Movie gap statistics are reported; build and native verification are pending.
+- Added explicit `record-video --follow-active-display` for one-boot measured display changes, with per-frame context checks, bounded read-only transition recovery and a fixed aspect-fit canvas. Existing selected and legacy recording stay unchanged. Movie gap statistics are reported. Two low-rate Duo movies passed opening, closing and inner rotation checks, with decoded fixed-canvas frames, proportional black bars and clean SIGINT save; this does not prove smooth animation.
 
 - Added standalone `gesture pinch --agent` for a current area reference, with fresh checks on both starting-point hits before either touch starts. Existing target/scroll actions, raw presets and selected coordinate gestures remain unchanged. The complete pinch uses existing motion bounds, context checks and both-contact release; agent batches reject. CLI wire 32 adds the request without native or RS/1 changes. The isolated build and ten scoped normal checks passed. One fold and one inner 90→180 rotation each released both contacts and allowed a fresh reference Button tap. Earlier failed runs remain recorded; other controls, positions and change combinations remain unverified.
 
