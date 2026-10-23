@@ -67,6 +67,12 @@ The comparison supplied ideas from source review. Cam chose the XcodeBuildMCP-st
 
 ## Technical evidence
 
+### 23 October 2026: inner-screen slider check stopped at value validation
+
+Isolated V7 binary 078b945f opened Duo to 180 degrees and used inner screen 3 at rotation 90. The guarded touch-down passed. The app recorded the same 24 movement points, with at most 0.163 point error, then a released touch. The second value read failed with invalidDomain; its failed sample was not saved. Source permits more than one cause, so a changing value between reads remains a hypothesis. No target completed and the second target did not start. Native cleanup released and drained input, and the owned simulator reached Shutdown. The separate app observation after cleanup reported 63.8733, outside the requested 63.25 ± 0.07 band; it is not successful target proof.
+
+Command: `/usr/bin/python3 -B /Volumes/Developer/AXe/build_products/verification/slider-percentage-20261023/controller-v7/manual-proof/run-root-inner-normal-v1.py`. Build passed in 33.27 seconds at 12.375 GiB. The native run failed in 66.21 seconds at 17.322 GiB, with no resource stop or crash. This result does not establish inner percentage support. Public command work remains isolated. [Saved failure review](/Volumes/Developer/AXe/build_products/verification/slider-percentage-20261023/controller-v7/failed-run-review-inner-v7.md).
+
 ### 23 October 2026: guarded slider pickup and direct value feedback
 
 The isolated V6 controller passed both requested values with the new native touch-down guard and native-only value feedback: 63.27345276 for 63.25, then 37.72455215 for 37.75. Each action used one released contact and 48 dispatched movements; UIKit recorded 39 and 40 MOVE callbacks, with 36 and 40 valueChanged callbacks. Ten native stability windows each used five or six fresh reads and reached 0.201–0.253 seconds of unchanged value inside the original two-second cap. App files were checked afterward and did not control movement or wait completion. The first four pickup reads ran before BEGIN; the last two and a fresh native target/value/domain/context check ran inside its reservation. Both guards accepted the exact first DOWN. All twelve read seals and observed child cleanup passed. Normal guard: 70.86 seconds, peak combined 17.375 GiB, exit 0, reaped, no stop or crash.
