@@ -202,17 +202,24 @@ struct Slider: AsyncParsableCommand {
         targetNormalized: Double,
         logger: AxeLogger
     ) async throws -> String {
-        let dragPlan = try makeDragPlan(
-            for: initialMatch.element,
-            applicationFrame: initialMatch.applicationFrame,
-            targetNormalized: targetNormalized
-        )
-        logger.info().log(
-            "Setting slider \(initialMatch.selectorDescription) from AXValue \(formatNormalized(dragPlan.currentNormalized)) toward \(formatNormalized(dragPlan.targetNormalized)) with low-level HID drag"
-        )
+        if targetNormalized > 0, targetNormalized < 1,
+           let context = try await LegacyDuoInput.captureContext(
+               simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+           ) {
+            try await performDuoSliderValue(context: context, targetNormalized: targetNormalized, logger: logger)
+        } else {
+            let dragPlan = try makeDragPlan(
+                for: initialMatch.element,
+                applicationFrame: initialMatch.applicationFrame,
+                targetNormalized: targetNormalized
+            )
+            logger.info().log(
+                "Setting slider \(initialMatch.selectorDescription) from AXValue \(formatNormalized(dragPlan.currentNormalized)) toward \(formatNormalized(dragPlan.targetNormalized)) with low-level HID drag"
+            )
 
-        if abs(dragPlan.currentNormalized - targetNormalized) > Self.alreadyAtTargetTolerance {
-            try await performSliderDrag(dragPlan, logger: logger)
+            if abs(dragPlan.currentNormalized - targetNormalized) > Self.alreadyAtTargetTolerance {
+                try await performSliderDrag(dragPlan, logger: logger)
+            }
         }
 
         let observedValue = try await pollObservedSliderValue(
@@ -226,6 +233,49 @@ struct Slider: AsyncParsableCommand {
             )
         }
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
+    }
+
+    private func performDuoSliderValue(
+        context: SelectedHIDContext,
+        targetNormalized: Double,
+        logger: AxeLogger
+    ) async throws {
+        guard let screenUUID = UUID(uuidString: context.screenUUID) else {
+            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+        }
+        let expectedPID = try await frontmostApplicationPID(logger: logger)
+        let ax = SelectedAXRequest(kind: .sliderPercentage, expectedPID: expectedPID,
+            preparation: .automationSession, endpoint: nil,
+            selectorKind: elementID != nil ? .id : .label, selectorValue: elementID ?? elementLabel,
+            preDelay: 0, postDelay: 0, elementType: elementType, percentage: targetNormalized * 100)
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: context.screenID, screenUUID: screenUUID, operation: .complete, token: nil,
+            primitives: [], ax: ax)
+        logger.info().log("Duo slider uses current native value feedback on its measured active display")
+        let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
+              let receipt = response.ax?.sliderValue,
+              receipt.outcome == "reached" || receipt.outcome == "alreadyAtValue" else {
+            throw CLIError(errorDescription: "Duo slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+        }
+    }
+
+    private func frontmostApplicationPID(logger: AxeLogger) async throws -> Int32 {
+        let data = try await AccessibilityFetcher.fetchAccessibilityInfoJSONData(
+            for: simulatorUDID, logger: logger
+        )
+        let decoder = JSONDecoder()
+        let roots: [SliderApplicationIdentity]
+        if let decoded = try? decoder.decode([SliderApplicationIdentity].self, from: data) {
+            roots = decoded
+        } else {
+            roots = [try decoder.decode(SliderApplicationIdentity.self, from: data)]
+        }
+        guard roots.count == 1, let application = roots.first, application.type == "Application",
+              let pid = application.pid, pid > 0 else {
+            throw CLIError(errorDescription: "Duo slider requires one current frontmost application PID before input.")
+        }
+        return pid
     }
 
     private func performSliderDrag(_ dragPlan: SliderDragPlan, logger: AxeLogger) async throws {
@@ -394,4 +444,9 @@ private struct SliderObservedValue {
     let rawValue: String?
     let normalizedValue: Double
     let isWithinTolerance: Bool
+}
+
+private struct SliderApplicationIdentity: Decodable {
+    let type: String?
+    let pid: Int32?
 }

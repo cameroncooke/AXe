@@ -118,6 +118,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed universal builds rejected by the Duo arm64 guard and AX linker stub tags. The build now uses SDK-backed exports and matching simulator helper slices, with slice and platform checks. The local universal Release build, ZIP round trip, seven strict ad-hoc payload signatures and Apple silicon host startup checks passed. Actual Intel simulator execution remains unverified.
 
+- Fixed no-flag Duo interior slider percentages missing the requested value. The command now uses the existing measured native value-feedback route with a fresh frontmost app PID and owned input. Final AX tolerance and stability checks, the native 15-second budget, no-flag 0/100 and other-device drag behavior remain unchanged. The same Debug candidate passed the existing 75-then-40 app-value check on one Duo outer display in portrait and one ordinary iPhone. An earlier Duo deadline refusal remains recorded; other controls, poses and interruptions remain unverified.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

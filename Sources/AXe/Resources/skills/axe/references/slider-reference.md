@@ -1,6 +1,6 @@
 # Selected slider percentages
 
-Use exactly one of `--endpoint minimum|maximum` or `--value <0...100>`. Values must be finite. The no-flag slider command keeps its existing behavior.
+Use exactly one of `--endpoint minimum|maximum` or `--value <0...100>`. Values must be finite. No-flag Duo interior percentages use the measured native value-feedback route with the existing final raw AX verification. No-flag 0/100 and other-device routes keep the existing direct drag.
 
 ## Selected command
 
