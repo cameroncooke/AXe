@@ -293,6 +293,39 @@ struct AgentModeCacheState: Codable, Sendable {
     let requiresRefresh: Bool
 }
 
+/// Scalar evidence from an existing failed AX read. It does not authorize a new owner.
+struct AgentModeObservationEvidence: Codable, Sendable {
+    struct Attempt: Codable, Sendable {
+        let index: Int
+        let startUptime: Double
+        let endUptime: Double
+        let rootPID: Int32
+        let outcome: FBSimulatorAXAcquisitionOutcome
+    }
+    let expectedPID: Int32
+    let observedPID: Int32?
+    let outcome: FBSimulatorAXAcquisitionOutcome
+    let attempts: [Attempt]
+
+    init?(_ response: SelectedHIDResponse?) {
+        guard let ax = response?.ax, let acquisition = ax.acquisition,
+              acquisition.outcome != .ready else { return nil }
+        expectedPID = ax.expectedPID
+        outcome = acquisition.outcome
+        observedPID = acquisition.attempts.last.flatMap { $0.rootPID > 0 ? $0.rootPID : nil }
+        // Native policy permits at most eight attempts. Do not copy AX roots.
+        attempts = acquisition.attempts.suffix(8).map {
+            Attempt(index: $0.index, startUptime: $0.startUptime, endUptime: $0.endUptime,
+                    rootPID: $0.rootPID, outcome: $0.outcome)
+        }
+    }
+
+    func captureInstruction(udid: String) -> String? {
+        guard outcome == .processChanged, let observedPID, observedPID != expectedPID else { return nil }
+        return "The AX read observed PID \(observedPID) instead of expected PID \(expectedPID). Confirm the visible owner, then run describe-ui --agent --udid \(udid) --expected-pid \(observedPID) for a new snapshot. The expected PID was not changed. Do not replay completed input."
+    }
+}
+
 struct AgentModeResult: Codable, Sendable {
     struct Data: Codable, Sendable {
         let capture: AgentModeCapture?
@@ -301,6 +334,7 @@ struct AgentModeResult: Codable, Sendable {
         let cache: AgentModeCacheState
         let context: SelectedHIDContext?
         let quarantine: SelectedHIDQuarantine?
+        let observation: AgentModeObservationEvidence?
     }
     let schema: String
     let schemaVersion: String
@@ -312,13 +346,13 @@ struct AgentModeResult: Codable, Sendable {
     init(error: AgentModeFailure? = nil, capture: AgentModeCapture? = nil,
          action: AgentModeActionReceipt? = nil, batch: AgentBatchReceipt? = nil, cache: AgentModeCacheState,
          context: SelectedHIDContext? = nil, quarantine: SelectedHIDQuarantine? = nil,
-         nextSteps: [String] = []) {
+         observation: AgentModeObservationEvidence? = nil, nextSteps: [String] = []) {
         schema = "axe.output.agent-result"
         schemaVersion = "1"
         didError = error != nil
         self.error = error
         data = Data(capture: capture, action: action, batch: batch, cache: cache,
-                    context: capture?.context ?? context, quarantine: quarantine)
+                    context: capture?.context ?? context, quarantine: quarantine, observation: observation)
         self.nextSteps = nextSteps
     }
 }

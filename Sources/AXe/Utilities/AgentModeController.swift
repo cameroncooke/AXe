@@ -125,14 +125,22 @@ final class AgentModeController {
                 return success(request, native: result, capture: capture, action: action,
                     cache: AgentModeCacheState(status: "refreshed", reason: "inputCompleted", requiresRefresh: false))
             } catch {
-                if let nativeFailure = error as? AgentModeNativeFailure, nativeFailure.response.quarantine != nil {
+                let nativeFailure = error as? AgentModeNativeFailure
+                if let nativeFailure, nativeFailure.response.quarantine != nil {
                     return failure(request,
                         AgentModeFailure("postActionRefreshQuarantined", "The action completed, but input recovery is required after its refresh failed."),
                         native: nativeFailure.response, action: action)
                 }
+                let observation = AgentModeObservationEvidence(nativeFailure?.response)
+                let nextSteps: [String]
+                if let instruction = observation?.captureInstruction(udid: simulatorUDID) {
+                    nextSteps = ["The action completed. Do not replay this action.", instruction]
+                } else {
+                    nextSteps = ["The action completed. Run describe-ui --agent before another reference action. Do not replay this action."]
+                }
                 return success(request, native: result, action: action,
                     cache: AgentModeCacheState(status: "invalidated", reason: "postActionRefreshFailed", requiresRefresh: true),
-                    nextSteps: ["The action completed. Run describe-ui --agent before another reference action. Do not replay this action."])
+                    observation: observation, nextSteps: nextSteps)
             }
         } catch {
             record = nil
@@ -170,7 +178,7 @@ final class AgentModeController {
                 context: last?.context, quarantine: quarantine)
             response.agent = AgentModeResult(error: error, capture: error == nil ? prior?.capture : nil,
                 batch: batch, cache: cache, context: last?.context, quarantine: quarantine,
-                nextSteps: error == nil ? [] : [
+                observation: prior?.observation, nextSteps: error == nil ? [] : [
                     "Inspect each step receipt. Completed steps were not undone; no step was replayed.",
                     quarantine == nil ? "Read a fresh snapshot before deciding the next action. Do not resubmit the batch."
                         : "Complete explicit input recovery before another action. Do not resubmit the batch.",
@@ -457,13 +465,14 @@ final class AgentModeController {
 
     private func success(_ request: SelectedHIDRequest, native: SelectedHIDResponse,
                          capture: AgentModeCapture? = nil, action: AgentModeActionReceipt? = nil,
-                         cache: AgentModeCacheState, nextSteps: [String] = []) -> SelectedHIDResponse {
+                         cache: AgentModeCacheState, observation: AgentModeObservationEvidence? = nil,
+                         nextSteps: [String] = []) -> SelectedHIDResponse {
         var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
             brokerID: owner.brokerID, outcome: native.outcome, token: nil,
             enqueuedEventCount: native.enqueuedEventCount, cleanup: native.cleanup, error: nil, context: native.context)
         response.quarantine = native.quarantine
         response.agent = AgentModeResult(capture: capture, action: action, cache: cache,
-            context: native.context, quarantine: native.quarantine, nextSteps: nextSteps)
+            context: native.context, quarantine: native.quarantine, observation: observation, nextSteps: nextSteps)
         return response
     }
 
@@ -475,14 +484,21 @@ final class AgentModeController {
             enqueuedEventCount: native?.enqueuedEventCount ?? 0, cleanup: native?.cleanup ?? "notNeeded",
             error: error.message, context: native?.context)
         response.quarantine = native?.quarantine
+        let observation = AgentModeObservationEvidence(native)
+        let recoverySteps: [String]
+        if native?.quarantine != nil {
+            recoverySteps = ["Inspect the quarantine receipt and complete explicit input recovery before retrying. Input was not replayed."]
+        } else if let instruction = observation?.captureInstruction(udid: simulatorUDID) {
+            recoverySteps = [instruction]
+        } else {
+            recoverySteps = ["Run describe-ui --agent with the current expected PID. Input was not replayed."]
+        }
         response.agent = AgentModeResult(error: error, action: action,
             batch: request.agentBatch.map { AgentBatchReceipt(totalSteps: $0.steps.count,
                 completedSteps: 0, steps: [], stoppedAt: 1) },
             cache: cache ?? AgentModeCacheState(status: "invalidated", reason: error.code, requiresRefresh: true),
-            context: native?.context, quarantine: native?.quarantine,
-            nextSteps: nextSteps ?? (native?.quarantine != nil
-                ? ["Inspect the quarantine receipt and complete explicit input recovery before retrying. Input was not replayed."]
-                : ["Run describe-ui --agent with the current expected PID. Input was not replayed."]))
+            context: native?.context, quarantine: native?.quarantine, observation: observation,
+            nextSteps: nextSteps ?? recoverySteps)
         return response
     }
 }

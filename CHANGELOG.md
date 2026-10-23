@@ -114,6 +114,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed selected slider reads accepting a matching descendant in place of the owned target. ID and label reads now require the owned root itself to match before each action and final read.
 
+- Fixed optional `--agent` output omitting existing AX owner-mismatch evidence. Optional `data.observation` reports expected/observed PID, acquisition outcome and bounded attempts, with explicit fresh-capture guidance and no automatic owner change or input replay. The isolated Debug build/stage and checked Download Wallet Open/Cancel workflow passed, including read refusal and completed-action refresh failure. Same-PID empty-tree recovery and wider branches remain unverified; existing flags are unchanged.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added
