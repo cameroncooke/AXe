@@ -233,7 +233,11 @@ final class SelectedSliderValueOperation {
             guard deltaX.isFinite, deltaX * direction > 0, slope.isFinite, slope > 0 else {
                 throw SliderValueFailure.rejected("Measured local Slider slope is invalid")
             }
-            let proposed = (iteration == 3 ? 1.0 : 0.85) * (requested - value) / slope
+            let gain: Double
+            if iteration == 1 { gain = 0.5 }
+            else if iteration == 3 { gain = 1.0 }
+            else { gain = 0.85 }
+            let proposed = gain * (requested - value) / slope
             guard proposed.isFinite, proposed * direction > 0 else {
                 throw SliderValueFailure.rejected("Local Slider correction cannot make progress")
             }
@@ -243,7 +247,7 @@ final class SelectedSliderValueOperation {
             if iteration == 3 {
                 let scale = Double(observation.displayContext.scale)
                 guard scale.isFinite, scale > 0 else { throw SliderValueFailure.rejected("Display pixel scale is invalid") }
-                x = CGFloat((Double(x) * scale).rounded(direction > 0 ? .up : .down) / scale)
+                x = CGFloat((Double(x) * scale).rounded(.toNearestOrAwayFromZero) / scale)
                 let roundedDistance = Double(x - currentPoint.x)
                 guard roundedDistance * direction > 0, abs(roundedDistance) <= previousPathLength else {
                     throw SliderValueFailure.rejected("Pixel correction exceeds the preceding path length")
