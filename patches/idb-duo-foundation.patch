@@ -11209,14 +11209,14 @@ index 03c34635df1736e4337907745c5dd3c51aacc78c..c058a1b0ee3eba54cb7277c8287201ea
  + (AXPTranslator_iOS *)sharediOSInstance;
  + (id)sharedInstance;
 diff --git a/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd b/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd
-index ab83514e759040e6d547c13a197fb536f00d1f0e..5950bbabbca0e3c9ca73ff539a27773fa9518d29 100644
+index ab83514e759040e6d547c13a197fb536f00d1f0e..8d3b572eab4731c0a5c6d456b5ba22c82ce3d14f 100644
 --- a/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd
 +++ b/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd
 @@ -10,4 +10,8 @@
        - AXPMacPlatformElement
        - AXPTranslator
        - AXPTranslatorResponse
-+  - targets: [ arm64-macos ]
++  - targets: [ arm64-macos, x86_64-macos ]
 +    objc-classes:
 +      - AXPTranslatorRequest
 +      - AXPTranslationObject

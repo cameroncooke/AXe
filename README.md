@@ -31,7 +31,7 @@ AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hu
 
 Release artifacts are built once with the Xcode version selected by the release environment and run unchanged with either supported Xcode selected. Compatibility was validated with Xcode 26.5 (build `17F42`) and iOS 26.5 (`23F77`), and with Xcode 27 Beta 3 (build `27A5218g`) and iOS 27 (`24A5380g`).
 
-AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build applies the tracked Duo foundation patch and checks its complete source hashes. Unexpected checkout changes stop the build without discarding them. The current Duo integration supports local `AXE_BUILD_ARCHS=arm64` builds; universal release verification is still open.
+AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build applies the tracked Duo foundation patch and checks its complete source hashes. Unexpected checkout changes stop the build without discarding them. The default `AXE_BUILD_ARCHS="arm64 x86_64"` builds a universal CLI, IDB frameworks and simulator helper. Set `AXE_BUILD_ARCHS=arm64` or `AXE_BUILD_ARCHS=x86_64` for one architecture. Build checks require the requested slices and iOS Simulator platform metadata for each helper slice. The local universal Release build, ZIP round trip and Apple silicon host startup checks passed. Actual Intel simulator execution remains unverified.
 
 ## E2E development
 
@@ -39,7 +39,7 @@ AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`
 
 To validate a release payload unchanged under another supported Xcode, first build the test bundle with that Xcode, then run `AXE_BIN_PATH=/path/to/release/axe ./test-runner.sh --tests-only`. The supplied executable must retain its packaged frameworks beside it.
 
-For local Duo work, use `AXE_BUILD_ARCHS=arm64`. After the final SwiftPM clean, run `AXE_BUILD_ARCHS=arm64 scripts/build.sh debug-helper` to build and sign `cadisplay-context` beside the actual debug executable. Selected input requires this simulator helper; AXe does not search other runtime paths.
+For local Duo work on Apple silicon, use `AXE_BUILD_ARCHS=arm64`. After the final SwiftPM clean, run `scripts/build.sh debug-helper` with the same `AXE_BUILD_ARCHS` value as the CLI build, for example `AXE_BUILD_ARCHS=arm64 scripts/build.sh debug-helper`. This builds and signs `cadisplay-context` beside each selected debug executable. Selected input requires this simulator helper; AXe does not search other runtime paths.
 
 For release signing, `scripts/build.sh sign-executable` signs and strictly verifies the copied `AXe_AXe.bundle` before signing `axe`. The bundle uses the configured signing identity and timestamp, without executable entitlements; the CLI signing options and separate simulator-helper signing stay unchanged.
 

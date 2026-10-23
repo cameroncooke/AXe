@@ -75,8 +75,8 @@ source "${SCRIPT_DIR}/release-payload.sh"
 
 FRAMEWORK_SDK="macosx"
 FRAMEWORK_CONFIGURATION="Release"
-# Universal remains the release default. The selected AX private stub is only
-# verified for arm64; local Duo builds must opt in explicitly.
+# Universal remains the release default. The private AX stub exports used by
+# both slices are declared in the installed Apple macOS SDK.
 AXE_BUILD_ARCHS="${AXE_BUILD_ARCHS:-arm64 x86_64}"
 
 # Codesigning configuration.
@@ -213,8 +213,8 @@ function verify_macho_has_arch() {
   fi
 
   local arch_info
-  arch_info=$(lipo -info "$binary_path" 2>/dev/null || true)
-  if [[ "$arch_info" != *"$expected_arch"* ]]; then
+  arch_info=$(lipo -archs "$binary_path" 2>/dev/null || true)
+  if [[ " $arch_info " != *" $expected_arch "* ]]; then
     echo "❌ Error: Missing architecture '${expected_arch}' in $binary_path"
     echo "   lipo output: ${arch_info:-<empty>}"
     exit 1
@@ -515,36 +515,61 @@ function write_idb_build_evidence() {
   print_success "Recorded pinned IDB fork build evidence at ${evidence_path}"
 }
 
-function require_selected_build_architecture() {
-  if [[ "$AXE_BUILD_ARCHS" != "arm64" ]]; then
-    echo "Error: The selected Duo AX stub is verified for arm64 only." >&2
-    echo "   Use AXE_BUILD_ARCHS=arm64 for a local build. Universal release is not admitted." >&2
-    return 1
-  fi
+function require_build_architectures() {
+  case "$AXE_BUILD_ARCHS" in
+    arm64|x86_64|"arm64 x86_64"|"x86_64 arm64") return 0 ;;
+    *)
+      echo "Error: AXE_BUILD_ARCHS must contain arm64, x86_64, or both, once each." >&2
+      return 1
+      ;;
+  esac
+}
+
+function verify_cadisplay_context() {
+  local helper_binary="$1"
+  local target_arch
+  for target_arch in $AXE_BUILD_ARCHS; do
+    verify_macho_has_arch "$helper_binary" "$target_arch"
+    if ! otool -arch "$target_arch" -l "$helper_binary" | awk '
+      $1 == "cmd" { build_command = ($2 == "LC_BUILD_VERSION") }
+      build_command && $1 == "platform" {
+        if ($2 == 7 || $2 == "IOSSIMULATOR") found = 1
+        build_command = 0
+      }
+      END { exit !found }'; then
+      echo "Error: cadisplay-context slice $target_arch is not an iOS Simulator executable." >&2
+      return 1
+    fi
+  done
 }
 
 function build_cadisplay_context() {
   local output_base_dir="$1"
-  local simulator_sdk helper_binary
+  local simulator_sdk helper_binary target_arch slice
+  local helper_slices=()
+  require_build_architectures
   simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
   helper_binary="$output_base_dir/cadisplay-context"
   mkdir -p "$output_base_dir"
-  xcrun clang -target arm64-apple-ios17.0-simulator -isysroot "$simulator_sdk" \
-    -framework Foundation -framework CoreGraphics -framework QuartzCore \
-    -MMD -MF "$output_base_dir/cadisplay-context.d" \
-    "$REPO_ROOT/Sources/CADisplayContext/cadisplay-context.m" -o "$helper_binary"
+  for target_arch in $AXE_BUILD_ARCHS; do
+    slice="$output_base_dir/cadisplay-context-$target_arch"
+    xcrun clang -target "$target_arch-apple-ios17.0-simulator" -isysroot "$simulator_sdk" \
+      -framework Foundation -framework CoreGraphics -framework QuartzCore \
+      -MMD -MF "$output_base_dir/cadisplay-context-$target_arch.d" \
+      "$REPO_ROOT/Sources/CADisplayContext/cadisplay-context.m" -o "$slice"
+    helper_slices+=("$slice")
+  done
+  if [[ "${#helper_slices[@]}" -eq 1 ]]; then
+    cp "${helper_slices[0]}" "$helper_binary"
+  else
+    lipo -create -output "$helper_binary" "${helper_slices[@]}"
+  fi
+  for slice in "${helper_slices[@]}"; do rm -f "$slice"; done
   # This is a simulator guest executable. Preserve the accepted ad-hoc signing
   # contract, with no host CLI entitlements or runtime input during the build.
+  verify_cadisplay_context "$helper_binary"
   codesign --force --sign - --timestamp=none "$helper_binary"
   codesign --verify --strict "$helper_binary"
-  verify_macho_has_arch "$helper_binary" arm64
-  if ! otool -l "$helper_binary" | awk '
-    /cmd LC_BUILD_VERSION/ { build_command = 1; next }
-    build_command && /platform/ { if ($2 == 7 || $2 == "IOSSIMULATOR") found = 1; build_command = 0 }
-    END { exit !found }'; then
-    echo "Error: cadisplay-context is not an iOS Simulator executable." >&2
-    return 1
-  fi
 }
 
 # Function to build a single framework
@@ -827,7 +852,7 @@ function build_axe_executable() {
   local output_base_dir="$1"
   local build_config="release"
   local executable_dest="${output_base_dir}/axe"
-  require_selected_build_architecture
+  require_build_architectures
   build_cadisplay_context "$output_base_dir"
   print_subsection "⚡" "Building AXe Executable"
   swift package clean
@@ -938,6 +963,7 @@ function verify_release_architectures() {
   local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
 
   print_subsection "🧪" "Validating release artifact architectures"
+  verify_cadisplay_context "${output_base_dir}/cadisplay-context"
   local expected_arch
   for expected_arch in $AXE_BUILD_ARCHS; do
     verify_macho_has_arch "${executable_path}" "$expected_arch"
@@ -1293,7 +1319,7 @@ Commands:
     Build AXe and its signed simulator cadisplay-context sibling.
 
   debug-helper
-    Build and sign cadisplay-context in the actual arm64 SwiftPM debug output directory.
+    Build and sign cadisplay-context in each selected SwiftPM debug output directory.
     Run again after swift package clean, before a selected debug CLI or test run.
 
   sign-executable
@@ -1320,7 +1346,7 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
   IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
   IDB_GIT_URL            AXe IDB fork URL (default: https://github.com/cameroncooke/idb.git)
   IDB_GIT_REF            Exact fork revision (must match the tracked foundation base)
-  AXE_BUILD_ARCHS        Architectures (default: arm64 x86_64; Duo local build: arm64)
+  AXE_BUILD_ARCHS        Architectures: arm64, x86_64, or both (default: arm64 x86_64)
   IDB_UPSTREAM_BASE_REF  Verified upstream base (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
@@ -1360,7 +1386,7 @@ function cmd_clean() {
 }
 
 function cmd_frameworks() {
-  require_selected_build_architecture
+  require_build_architectures
   print_section "🔧" "Building Frameworks"
   generate_idb_projects
   framework_build "FBControlCore" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
@@ -1429,15 +1455,17 @@ function cmd_executable() {
 }
 
 function cmd_debug_helper() {
-  require_selected_build_architecture
-  local debug_bin_path
-  debug_bin_path="$(cd "$REPO_ROOT" && swift build --configuration debug --arch arm64 --show-bin-path)"
-  if [[ -z "$debug_bin_path" || "$debug_bin_path" != /* || "$debug_bin_path" == *$'\n'* ]]; then
-    echo "Error: SwiftPM did not return one absolute debug output path." >&2
-    return 1
-  fi
-  build_cadisplay_context "$debug_bin_path"
-  print_success "Signed cadisplay-context staged in $debug_bin_path"
+  require_build_architectures
+  local debug_bin_path target_arch
+  for target_arch in $AXE_BUILD_ARCHS; do
+    debug_bin_path="$(cd "$REPO_ROOT" && swift build --configuration debug --arch "$target_arch" --show-bin-path)"
+    if [[ -z "$debug_bin_path" || "$debug_bin_path" != /* || "$debug_bin_path" == *$'\n'* ]]; then
+      echo "Error: SwiftPM did not return one absolute debug output path." >&2
+      return 1
+    fi
+    build_cadisplay_context "$debug_bin_path"
+    print_success "Signed cadisplay-context staged in $debug_bin_path"
+  done
 }
 
 function cmd_sign_executable() {
@@ -1478,7 +1506,7 @@ function cmd_verify_arches() {
 }
 
 function cmd_build() {
-  require_selected_build_architecture
+  require_build_architectures
   print_section "🚀" "IDB Framework Builder for AXe Project"
 
   print_info "IDB Checkout Directory: ${IDB_CHECKOUT_DIR}"
@@ -1540,7 +1568,7 @@ case $COMMAND in
   sign-xcframeworks)
     cmd_sign_xcframeworks;;
   dev)
-    require_selected_build_architecture
+    require_build_architectures
     cmd_setup
     cmd_clean
     cmd_frameworks

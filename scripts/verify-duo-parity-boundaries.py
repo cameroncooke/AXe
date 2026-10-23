@@ -114,11 +114,11 @@ def main():
             [str(cli), "agent", "Find the button", *selection],
             64, "Unknown option '--input-mode'", environment,
         ))
-        universal_environment = dict(environment, AXE_BUILD_ARCHS="arm64 x86_64")
+        invalid_arch_environment = dict(environment, AXE_BUILD_ARCHS="arm64 ppc64")
         cases.append(run_case(
-            output, "universal-build-rejected",
+            output, "unknown-build-architecture-rejected",
             ["/bin/bash", str(repository / "scripts/build.sh"), "frameworks"],
-            1, "Universal release is not admitted", universal_environment,
+            1, "AXE_BUILD_ARCHS must contain arm64, x86_64, or both, once each", invalid_arch_environment,
         ))
         after = {name: digest(repository / name) for name in sources}
         if before != after or cli_hash != digest(cli):

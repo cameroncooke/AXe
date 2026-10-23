@@ -44,8 +44,26 @@ verify_arch() {
   [[ -f "$binary_path" ]] || fail "Binary not found: $binary_path"
 
   local arch_info
-  arch_info="$(lipo -info "$binary_path" 2>/dev/null || true)"
-  [[ "$arch_info" == *"$expected_arch"* ]] || fail "Missing architecture '$expected_arch' in $binary_path"
+  arch_info="$(lipo -archs "$binary_path" 2>/dev/null || true)"
+  [[ " $arch_info " == *" $expected_arch "* ]] || fail "Missing architecture '$expected_arch' in $binary_path"
+}
+
+verify_cadisplay_context() {
+  local helper_binary="$1"
+  local target_arch
+  for target_arch in arm64 x86_64; do
+    verify_arch "$helper_binary" "$target_arch"
+    if ! otool -arch "$target_arch" -l "$helper_binary" | awk '
+      $1 == "cmd" { build_command = ($2 == "LC_BUILD_VERSION") }
+      build_command && $1 == "platform" {
+        if ($2 == 7 || $2 == "IOSSIMULATOR") found = 1
+        build_command = 0
+      }
+      END { exit !found }'; then
+      echo "Error: cadisplay-context slice $target_arch is not an iOS Simulator executable." >&2
+      return 1
+    fi
+  done
 }
 
 strip_signatures() {
@@ -114,6 +132,7 @@ verify_stage() {
   [[ -d "$stage_dir/Frameworks" ]] || fail "Stage is missing Frameworks directory"
   [[ -d "$stage_dir/AXe_AXe.bundle" ]] || fail "Stage is missing AXe_AXe.bundle"
 
+  verify_cadisplay_context "$stage_dir/cadisplay-context"
   verify_arch "$stage_dir/axe" "arm64"
   verify_arch "$stage_dir/axe" "x86_64"
 

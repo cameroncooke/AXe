@@ -45,7 +45,17 @@ lipo -info "$BIN_PATH" | grep -q "arm64"
 lipo -info "$BIN_PATH" | grep -q "x86_64"
 
 cp "$BIN_PATH" "$PACKAGE_ROOT/axe"
-cp "$BIN_PATH" "$PACKAGE_ROOT/cadisplay-context"
+# The staged helper must carry simulator platform metadata in both slices.
+SIMULATOR_SDK="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+for helper_arch in arm64 x86_64; do
+  xcrun clang -target "$helper_arch-apple-ios17.0-simulator" -isysroot "$SIMULATOR_SDK" \
+    -framework Foundation -framework CoreGraphics -framework QuartzCore \
+    "$ROOT_DIR/Sources/CADisplayContext/cadisplay-context.m" \
+    -o "$WORK_DIR/cadisplay-context-$helper_arch"
+done
+lipo -create -output "$PACKAGE_ROOT/cadisplay-context" \
+  "$WORK_DIR/cadisplay-context-arm64" "$WORK_DIR/cadisplay-context-x86_64"
+codesign --force --sign - --timestamp=none "$PACKAGE_ROOT/cadisplay-context"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBControlCore.framework/FBControlCore"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/XCTestBootstrap.framework/XCTestBootstrap"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBSimulatorControl.framework/FBSimulatorControl"
