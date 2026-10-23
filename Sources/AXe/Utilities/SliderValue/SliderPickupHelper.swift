@@ -114,7 +114,8 @@ final class SliderPickupHelper {
         }
     }
 
-    func prepare(before: FBSimulatorSliderCapabilities) async throws -> (pickup: CGPoint, minimum: CGPoint, maximum: CGPoint) {
+    func prepare(before: FBSimulatorSliderCapabilities) async throws
+        -> (pickup: CGPoint, minimum: CGPoint, maximum: CGPoint, hitFrame: CGRect) {
         let (target, targetFile) = try await readPhase("target", point: .zero)
         guard target.status == "TARGET_PHASE_COMPLETE", target.initialRootClosed,
               let selectedFrame = target.selectedFrame, let token = target.selectedToken,
@@ -196,7 +197,7 @@ final class SliderPickupHelper {
         }
         prepared = Prepared(initial: before, target: target, point: point, window: window, centre: centre)
         pickup = centre
-        return (centre, minimum, maximum)
+        return (centre, minimum, maximum, hitFrame)
     }
 
     func confirm(backend: FBSimulatorSliderBackend) async throws {

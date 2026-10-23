@@ -185,16 +185,49 @@ final class SelectedSliderValueOperation {
         var previous: (x: CGFloat, value: Double) = (pickup.x, initialValue)
         var previousPathLength = abs(initialDistance)
         var reached = false
+        var requiresCleanSlope = false
         for iteration in 1...4 {
             try await movePath(to: next, token: token, frame: frame)
             let sample = try await settledValue(initial: initial, released: false)
             let value = try sample.requireValue()
+            // One measured take-up path is permitted only after an exact first-path plateau.
+            if iteration == 1, value == initialValue {
+                let hitWidth = Double(admitted.hitFrame.width)
+                let distance = direction * min(previousPathLength, hitWidth / 2)
+                let x = currentPoint.x + CGFloat(distance)
+                guard hitWidth.isFinite, hitWidth > 0, distance.isFinite, distance * direction > 0,
+                      x.isFinite, x != currentPoint.x, frame.contains(CGPoint(x: x, y: pickup.y)) else {
+                    throw SliderValueFailure.rejected("Measured take-up path is unavailable or outside the Slider")
+                }
+                previous = (currentPoint.x, value)
+                previousPathLength = abs(distance)
+                next = CGPoint(x: x, y: pickup.y)
+                requiresCleanSlope = true
+                continue
+            }
             guard (value - previous.value) * direction > 0,
                   (value - initialValue) * direction >= -domain.tolerance,
                   (value - requested) * direction <= domain.tolerance else {
                 throw SliderValueFailure.rejected("Slider value stalled, reversed or passed the target; no replay")
             }
             if abs(value - requested) <= domain.tolerance { reached = true; break }
+            if requiresCleanSlope {
+                // The take-up interval can include a flat value. Measure one clean interval before using its slope.
+                let proposed = Double(admitted.maximum.x - admitted.minimum.x)
+                    * (requested - value) / (domain.maximum - domain.minimum)
+                let distance = direction * min(abs(proposed), previousPathLength)
+                let x = currentPoint.x + CGFloat(distance)
+                guard iteration == 2, proposed.isFinite, proposed * direction > 0,
+                      distance.isFinite, distance * direction > 0, x.isFinite,
+                      x != currentPoint.x, frame.contains(CGPoint(x: x, y: pickup.y)) else {
+                    throw SliderValueFailure.rejected("Clean local slope probe is unavailable or outside the Slider")
+                }
+                previous = (currentPoint.x, value)
+                previousPathLength = abs(distance)
+                next = CGPoint(x: x, y: pickup.y)
+                requiresCleanSlope = false
+                continue
+            }
             let deltaX = Double(currentPoint.x - previous.x)
             let slope = (value - previous.value) / deltaX
             guard deltaX.isFinite, deltaX * direction > 0, slope.isFinite, slope > 0 else {
