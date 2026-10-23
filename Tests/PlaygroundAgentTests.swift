@@ -37,6 +37,46 @@ struct PlaygroundAgentTests {
         let roots = try UIStateParser.parseDescribeUIRoots(raw.output)
         let application = try #require(roots.first { $0.type == "Application" && $0.label == "AxePlayground" })
         #expect(UIStateParser.findElement(in: application, withIdentifier: "slider-value-button") != nil)
+        let stateIDs = [
+            "slider-value-state", "slider-exact-value-state", "slider-percent-state", "slider-value-slider",
+        ]
+        let beforeValues = try stateIDs.map { identifier in
+            try #require(UIStateParser.findElement(in: application, withIdentifier: identifier)?.value)
+        }
+
+        let reused = try await app.capture(pid: pid, sinceScreenHash: capture.screenHash)
+        let reusedCapture = try #require(reused.data.capture)
+        try #require(reused.data.action == nil)
+        try #require(reused.data.cache.status == "reused")
+        try #require(!reused.data.cache.requiresRefresh)
+        try #require(reusedCapture.snapshotID == capture.snapshotID)
+        try #require(reusedCapture.screenHash == capture.screenHash)
+        try #require(reusedCapture.applicationPID == pid)
+        try #require(reusedCapture.type == "runtime-snapshot-unchanged")
+        try #require(reusedCapture.rs == capture.rs)
+        try #require(reusedCapture.seq > capture.seq)
+        try #require(reusedCapture.count == capture.count)
+        try #require(reusedCapture.udid == capture.udid)
+        try #require(reusedCapture.rowOffset == capture.rowOffset && reusedCapture.rowLimit == capture.rowLimit)
+        try #require(reusedCapture.targetCount == capture.targetCount)
+        try #require(reusedCapture.scrollCount == capture.scrollCount && reusedCapture.textCount == capture.textCount)
+        try #require(reusedCapture.truncated == capture.truncated)
+        try #require(reusedCapture.targets.isEmpty && reusedCapture.scroll.isEmpty && reusedCapture.text.isEmpty)
+
+        let afterRaw = try await app.run(["describe-ui"])
+        #expect(afterRaw.exitCode == 0)
+        let afterRoots = try UIStateParser.parseDescribeUIRoots(afterRaw.output)
+        let afterApplication = try #require(afterRoots.first { $0.type == "Application" && $0.label == "AxePlayground" })
+        let afterValues = try stateIDs.map { identifier in
+            try #require(UIStateParser.findElement(in: afterApplication, withIdentifier: identifier)?.value)
+        }
+        try #require(afterValues == beforeValues)
+
+        let tapped = try await app.tap(button.ref, snapshot: capture.snapshotID, pid: pid)
+        let action = try #require(tapped.data.action)
+        #expect(action.kind == "tap" && action.outcome == "enqueuedAndDrained")
+        #expect(action.enqueuedEventCount > 0 && action.cleanup != "uncertain" && !action.replayed)
+        try await app.waitForValue("slider-value-state", equals: "Tapped")
     }
 
     @Test("A saved snapshot reference taps the actual button")
@@ -139,8 +179,12 @@ struct AgentPlaygroundSession {
         return pid
     }
 
-    func capture(pid: Int32) async throws -> AgentPlaygroundResult {
-        let output = try await run(["describe-ui", "--agent", "--expected-pid", String(pid)])
+    func capture(pid: Int32, sinceScreenHash: String? = nil) async throws -> AgentPlaygroundResult {
+        var arguments = ["describe-ui", "--agent", "--expected-pid", String(pid)]
+        if let sinceScreenHash {
+            arguments += ["--since-screen-hash", sinceScreenHash]
+        }
+        let output = try await run(arguments)
         let result = try decode(output.output)
         try #require(!result.didError, "Agent capture failed: \(output.output)")
         return result
@@ -233,6 +277,7 @@ struct AgentPlaygroundResult: Decodable {
         let replayed: Bool
     }
     struct Cache: Decodable {
+        let status: String
         let requiresRefresh: Bool
     }
     struct Failure: Decodable {
@@ -258,6 +303,12 @@ struct AgentPlaygroundCapture: Decodable {
     let udid: String
     let applicationPID: Int32
     let expiresInSeconds: Double
+    let rowOffset: Int
+    let rowLimit: Int
+    let targetCount: Int
+    let scrollCount: Int
+    let textCount: Int
+    let truncated: Bool
 
     func target(id: String) throws -> AgentPlaygroundRow {
         let rows = try targets.map(AgentPlaygroundRow.init)
