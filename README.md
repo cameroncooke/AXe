@@ -41,6 +41,8 @@ To validate a release payload unchanged under another supported Xcode, first bui
 
 For local Duo work, use `AXE_BUILD_ARCHS=arm64`. After the final SwiftPM clean, run `AXE_BUILD_ARCHS=arm64 scripts/build.sh debug-helper` to build and sign `cadisplay-context` beside the actual debug executable. Selected input requires this simulator helper; AXe does not search other runtime paths.
 
+For release signing, `scripts/build.sh sign-executable` signs and strictly verifies the copied `AXe_AXe.bundle` before signing `axe`. The bundle uses the configured signing identity and timestamp, without executable entitlements; the CLI signing options and separate simulator-helper signing stay unchanged.
+
 ## Basic usage
 
 ```bash

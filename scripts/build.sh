@@ -972,6 +972,25 @@ function verify_release_architectures() {
   print_success "Artifacts include requested slices: $AXE_BUILD_ARCHS"
 }
 
+# Sign the copied resource bundle before signing the CLI. It contains data only,
+# so it uses the same identity and timestamp without executable entitlements.
+function sign_axe_resource_bundle() {
+  local output_base_dir="$1"
+  local bundle_path="${output_base_dir}/AXe_AXe.bundle"
+
+  if [[ ! -d "$bundle_path" || -L "$bundle_path" ]]; then
+    echo "Error: AXe resource bundle is missing or is not a regular bundle: $bundle_path" >&2
+    return 1
+  fi
+
+  print_info "Signing AXe resource bundle: ${bundle_path}"
+  codesign_with_retry --force \
+    --sign "${CODESIGN_IDENTITY}" \
+    --timestamp \
+    "$bundle_path"
+  codesign --verify --strict "$bundle_path"
+}
+
 # Function to sign the AXe executable with Developer ID
 # $1: Base output directory
 function sign_axe_executable() {
@@ -1278,7 +1297,7 @@ Commands:
     Run again after swift package clean, before a selected debug CLI or test run.
 
   sign-executable
-    Code sign the AXe executable with Developer ID.
+    Code sign the resource bundle, then the AXe executable with Developer ID.
 
   package
     Create a notarization package (zip file).
@@ -1424,6 +1443,7 @@ function cmd_debug_helper() {
 function cmd_sign_executable() {
   print_section "🔒" "Signing AXe Executable"
   require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
+  sign_axe_resource_bundle "${BUILD_OUTPUT_DIR}"
   sign_axe_executable "${BUILD_OUTPUT_DIR}"
 }
 
