@@ -105,6 +105,7 @@ final class SliderValueReadDiagnostics: FBSimulatorSliderAdmissionGuard, @unchec
             record[prefix + "Kind"] = "number"
             record[prefix + "Number"] = String(number)
             record[prefix + "Finite"] = String(number.isFinite)
+        case .some: record[prefix + "Kind"] = "unknown"
         }
     }
 }
