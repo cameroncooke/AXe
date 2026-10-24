@@ -85,7 +85,7 @@ A failed case is not replayed. An input quarantine stops later work on that gues
 
 Use `--only iphone`, `--only ipad` or `--only duo` with a group: `core-controls`, `agent-controls`, `keyboard-hardware`, `media` or `hinge`. A focused run proves only that group and guest. `--suite core` keeps the nine generic core checks for a narrow compatibility check. The full Duo profile uses explicit display/orientation cases instead.
 
-The existing direct runner accepts each exact Playground suite. Its tests-only mode needs the current app and native test target already built, and matching helper paths from a matrix run. For example:
+The existing direct runner accepts each exact Playground suite and the registered `PhotosButtonLeafE2ETests` suite. Its tests-only mode needs the current app and native test target already built, and matching helper paths from a matrix run. For example:
 
 ```sh
 AXE_BIN_PATH=/absolute/path/to/final-runtime/axe \
@@ -94,6 +94,18 @@ AXE_DUO_STATE_CHANGE_PATH=/absolute/path/to/matrix-run/duo-external-state-change
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ./test-runner.sh --tests-only PlaygroundDuoInterruptionTests
 ```
+
+The Photos button suite requires the matching process observer from a matrix run. Its two cases use a fresh agent reference and a selected accessibility ID:
+
+```sh
+AXE_BIN_PATH=/absolute/path/to/final-runtime/axe \
+SIMULATOR_UDID=IPHONE_UUID \
+AXE_MEDIA_PROCESS_OBSERVER_PATH=/absolute/path/to/matrix-run/verification-drivers/observe-media-process.py \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
+./test-runner.sh --tests-only PhotosButtonLeafE2ETests
+```
+
+If that helper is missing, the direct runner exits before simulator work.
 
 The direct Duo-only path validates an explicit available Duo UUID before simulator work. Each suite's helper requirements are in the shared configuration. The direct filter uses the same structured result reader. It does not replace full acceptance.
 

@@ -63,6 +63,7 @@ show_usage() {
     echo "  AXE_DUO_E2E=1         Enable a selected Playground Duo suite"
     echo "  AXE_DUO_STATE_CHANGE_PATH  Built external state tool for Duo interruption checks"
     echo "  AXE_E2E_RESOURCE_PROBE_PATH Public process probe from the matching matrix run"
+    echo "  AXE_MEDIA_PROCESS_OBSERVER_PATH Process observer for Photos and media checks"
     echo "  Other Playground helper paths are listed in scripts/playground-acceptance.json"
     echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
@@ -76,6 +77,7 @@ show_usage() {
     echo "  PlaygroundDuoCoreTests Run core checks on both measured Duo displays"
     echo "  PlaygroundDuoTests  Run Duo hinge, rotation and display-selection checks"
     echo "  PlaygroundDuoInterruptionTests Run held-touch, drag and pinch interruption checks"
+    echo "  PhotosButtonLeafE2ETests Run Photos permission button checks"
     echo "  PresentationFixtureTests Run the app presentation checks"
     echo "  DescribeUITests     Run only describe-ui tests"
     echo "  InitTests           Run only init tests"
@@ -150,7 +152,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PresentationFixtureTests)
+        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PhotosButtonLeafE2ETests|PresentationFixtureTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -172,7 +174,7 @@ if [[ "$UNIT_TESTS" == true ]] &&
     exit 1
 fi
 
-if [[ "$TEST_FILTER" == Playground* ]]; then
+if [[ "$TEST_FILTER" == Playground* || "$TEST_FILTER" == PhotosButtonLeafE2ETests ]]; then
     if ! python3 - "$TEST_FILTER" <<'PY'
 import json
 import os
