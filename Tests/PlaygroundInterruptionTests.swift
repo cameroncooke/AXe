@@ -179,8 +179,7 @@ private struct PlaygroundInterruptionSession {
                 guard rows.contains(where: { $0.phase == "moved" && geometry.starts[index].distance(from: $0) > 2 }) else { return false }
                 if gesture == .pinch {
                     let last = try #require(rows.last)
-                    try #require((last.x - first.x) * (index == 0 ? -1 : 1) > 2,
-                        "The two pinch contacts must move in opposite directions.")
+                    guard (last.x - first.x) * (index == 0 ? -1 : 1) > 2 else { return false }
                 }
             }
         }

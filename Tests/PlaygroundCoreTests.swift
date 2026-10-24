@@ -90,7 +90,7 @@ struct PlaygroundCoreTests {
         let app = try CorePlaygroundSession()
         let initial = try await app.open("touch-control", readyID: "touch-event-count")
         #expect(try app.element("touch-event-count", in: initial).value == "0")
-        let frame = try app.frame(of: initial)
+        let frame = try app.frame(of: app.element("touch-control-screen", in: initial))
         let start = app.point(in: frame, x: 0.4, y: 0.55)
         let end = app.point(in: frame, x: 0.4, y: 0.8)
 

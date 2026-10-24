@@ -121,7 +121,7 @@ final class PlaygroundTestProcess {
             try? stderr.close()
         }
         guard didStart else { return }
-        let deadline = ProcessInfo.processInfo.systemUptime + 10
+        let deadline = ProcessInfo.processInfo.systemUptime + 15
         while process.isRunning, ProcessInfo.processInfo.systemUptime < deadline {
             await Self.cleanupPause()
         }
