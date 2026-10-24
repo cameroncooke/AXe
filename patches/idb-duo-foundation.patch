@@ -1588,10 +1588,18 @@ diff --git a/FBSimulatorControl/Commands/FBAXTranslationRequest.swift b/FBSimula
 +  }
 +}
 diff --git a/FBSimulatorControl/Commands/FBAccessibilityElement.swift b/FBSimulatorControl/Commands/FBAccessibilityElement.swift
-index 0ebd3bb..4fb5522 100644
+index 0ebd3bb257c0c90113674a23cc78f88ce0943c5e..8194b987230dda414c07fb8d09ffd23ca3cd3d76 100644
 --- a/FBSimulatorControl/Commands/FBAccessibilityElement.swift
 +++ b/FBSimulatorControl/Commands/FBAccessibilityElement.swift
-@@ -37,6 +37,110 @@ public final class FBAccessibilityElement {
+@@ -5,6 +5,7 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
++@_implementationOnly import AccessibilityPlatformTranslation
+ import FBControlCore
+ import Foundation
+ 
+@@ -37,6 +38,123 @@ public final class FBAccessibilityElement {
      close()
    }
  
@@ -1699,10 +1707,23 @@ index 0ebd3bb..4fb5522 100644
 +    return field
 +  }
 +
++  /// The worker retains this current root while the physical Button leaf is validated.
++  func buttonLeafAdmission(expected: FBSimulatorAXNode, matchingCount: Int,
++    budget: FBAXAcquisitionBudget) throws -> FBAXButtonLeafAdmission {
++    guard !closed else { throw FBAccessibilityError.closedElement(operation: "select Button leaf") }
++    return try FBAXButtonLeafAdmission(root: element, token: request.token,
++      expected: expected, matchingCount: matchingCount, budget: budget)
++  }
++
++  func validateButtonLeafPoint(_ admission: FBAXButtonLeafAdmission, orientedPoint: CGPoint) throws {
++    guard !closed else { throw FBAccessibilityError.closedElement(operation: "validate Button leaf point") }
++    try admission.validatePoint(element, token: request.token, orientedPoint: orientedPoint)
++  }
++
    // MARK: - Lifecycle
  
    /// Close the element, deregistering the token. Called automatically on dealloc
-@@ -78,6 +182,16 @@ public final class FBAccessibilityElement {
+@@ -78,6 +196,16 @@ public final class FBAccessibilityElement {
  
    // MARK: - Actions
  
@@ -1719,7 +1740,7 @@ index 0ebd3bb..4fb5522 100644
    /// Perform an unconditional accessibility tap (AXPress) without any label verification.
    public func tap() throws {
      if closed {
-@@ -129,6 +243,47 @@ public final class FBAccessibilityElement {
+@@ -129,6 +257,47 @@ public final class FBAccessibilityElement {
      return newHandle
    }
  
@@ -1767,6 +1788,138 @@ index 0ebd3bb..4fb5522 100644
    // MARK: - Private helpers
  
    private static func stringValue(forKey key: FBAXSearchableKey, from element: FBAXPlatformElement) -> String? {
+@@ -171,3 +340,131 @@ public final class FBAccessibilityElement {
+     return nil
+   }
+ }
++
++/// One current native single-child Button chain. It sends no input and owns no session.
++/// The enclosing worker keeps its root request registered until final admission returns.
++final class FBAXButtonLeafAdmission {
++  private struct Match {
++    let element: AXPMacPlatformElement
++    let path: [Int]
++    let children: [AXPMacPlatformElement]
++  }
++  private let leaf: AXPMacPlatformElement
++  private let chain: [AXPMacPlatformElement]
++  private let rootToken: String
++  private let expected: FBSimulatorAXNode
++  private let budget: FBAXAcquisitionBudget
++  private let pid: Int32
++  private let objectID: UInt64
++  private let rawData: Data?
++  private let frame: CGRect
++
++  init(root: FBAXPlatformElement, token: String, expected: FBSimulatorAXNode,
++    matchingCount: Int, budget: FBAXAcquisitionBudget) throws {
++    guard let root = root as? AXPMacPlatformElement, expected.type == "Button",
++          expected.children.isEmpty, let identifier = expected.identifier, !identifier.isEmpty,
++          let pid = expected.pid, pid > 0, let expectedFrame = expected.frame, matchingCount > 1 else {
++      throw FBSimulatorAXTargetError.targetMismatch
++    }
++    var matches: [Match] = []
++    var retained: [AXPMacPlatformElement] = []
++    var edges = 0
++    func walk(_ node: AXPMacPlatformElement, path: [Int], ancestors: Set<ObjectIdentifier>) throws {
++      try budget.check(); try Task.checkCancellation()
++      let identity = ObjectIdentifier(node)
++      guard path.count <= 33, retained.count < 512, !ancestors.contains(identity) else {
++        throw FBSimulatorAXTargetError.targetMismatch
++      }
++      retained.append(node); node.axSetBridgeDelegateToken(token)
++      guard let rawChildren = node.accessibilityChildren(), rawChildren.count <= 1024 else {
++        throw FBSimulatorAXTargetError.targetMismatch
++      }
++      let children = try rawChildren.map { child -> AXPMacPlatformElement in
++        guard let value = child as? AXPMacPlatformElement else { throw FBSimulatorAXTargetError.targetMismatch }
++        return value
++      }
++      if node.axIdentifier() == identifier { matches.append(Match(element: node, path: path, children: children)) }
++      var next = ancestors; next.insert(identity)
++      for (index, child) in children.enumerated() {
++        edges += 1
++        guard edges <= 1024 else { throw FBSimulatorAXTargetError.targetMismatch }
++        try walk(child, path: path + [index], ancestors: next)
++      }
++    }
++    try walk(root, path: [0], ancestors: [])
++    guard matches.count == matchingCount, let last = matches.last, last.children.isEmpty,
++          let translation = last.element.translation, translation.pid == pid, translation.objectID > 0 else {
++      throw FBSimulatorAXTargetError.targetMismatch
++    }
++    let frame = last.element.axFrame()
++    guard [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
++          frame.width > 0, frame.height > 0, frame == expectedFrame else { throw FBSimulatorAXTargetError.invalidPoint }
++    for (index, match) in matches.enumerated() {
++      let node = match.element
++      node.axSetBridgeDelegateToken(token)
++      guard node.axTranslationPid == pid, node.axRole() == "AXButton", node.axIdentifier() == identifier,
++            node.axLabel() == expected.label, node.axSubrole() == expected.subrole,
++            try Self.value(node) == expected.value, node.axFrame() == frame,
++            node.axIsEnabled(), !node.axIsHidden() else { throw FBSimulatorAXTargetError.targetMismatch }
++      if index + 1 < matches.count {
++        guard match.children.count == 1, matches[index + 1].path == match.path + [0] else {
++          throw FBSimulatorAXTargetError.targetMismatch
++        }
++      }
++    }
++    self.leaf = last.element; chain = matches.map(\.element)
++    rootToken = token; self.expected = expected; self.budget = budget
++    self.pid = pid; objectID = translation.objectID; rawData = translation.rawElementData; self.frame = frame
++    try requireCurrentLeaf()
++  }
++
++  private static func value(_ element: AXPMacPlatformElement) throws -> FBSimulatorAXValue? {
++    guard let raw = element.axValue(), !(raw is NSNull) else { return nil }
++    let bytes = try JSONSerialization.data(withJSONObject: [raw])
++    return try JSONDecoder().decode([FBSimulatorAXValue].self, from: bytes).first
++  }
++
++  func requireCurrentLeaf() throws {
++    try budget.check(); try Task.checkCancellation()
++    for (index, node) in chain.enumerated() {
++      node.axSetBridgeDelegateToken(rootToken)
++      guard node.axTranslationPid == pid, node.axRole() == "AXButton",
++            node.axIdentifier() == expected.identifier, node.axLabel() == expected.label,
++            node.axSubrole() == expected.subrole, try Self.value(node) == expected.value,
++            node.axFrame() == frame, node.axIsEnabled(), !node.axIsHidden(),
++            let children = node.accessibilityChildren() else { throw FBSimulatorAXTargetError.targetMismatch }
++      if index + 1 < chain.count {
++        guard children.count == 1, let child = children.first as? AXPMacPlatformElement,
++              let actual = child.translation, let next = chain[index + 1].translation,
++              actual.pid == pid, actual.pid == next.pid, actual.objectID > 0,
++              actual.objectID == next.objectID, child.isEqual(chain[index + 1]) else {
++          throw FBSimulatorAXTargetError.targetMismatch
++        }
++      } else if !children.isEmpty { throw FBSimulatorAXTargetError.targetMismatch }
++      try budget.check(); try Task.checkCancellation()
++    }
++    leaf.axSetBridgeDelegateToken(rootToken)
++    guard let translation = leaf.translation, translation.pid == pid, translation.objectID == objectID,
++          translation.rawElementData == rawData, leaf.axRole() == "AXButton",
++          leaf.axIdentifier() == expected.identifier, leaf.axLabel() == expected.label,
++          leaf.axSubrole() == expected.subrole, try Self.value(leaf) == expected.value,
++          leaf.axFrame() == frame, leaf.axIsEnabled(), !leaf.axIsHidden(),
++          let children = leaf.accessibilityChildren(), children.isEmpty else {
++      throw FBSimulatorAXTargetError.targetMismatch
++    }
++    try budget.check()
++  }
++
++  func validatePoint(_ element: FBAXPlatformElement, token: String, orientedPoint: CGPoint) throws {
++    try requireCurrentLeaf()
++    guard let point = element as? AXPMacPlatformElement else { throw FBSimulatorAXTargetError.targetMismatch }
++    point.axSetBridgeDelegateToken(token)
++    guard let translation = point.translation, translation.pid == pid, translation.objectID == objectID,
++          translation.rawElementData == rawData, point.isEqual(leaf), leaf.isEqual(point),
++          point.axRole() == "AXButton", point.axIdentifier() == expected.identifier,
++          point.axLabel() == expected.label, point.axFrame() == frame, frame.contains(orientedPoint) else {
++      throw FBSimulatorAXTargetError.targetMismatch
++    }
++    try budget.check(); try Task.checkCancellation()
++  }
++}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
 new file mode 100644
 index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d0da70479
@@ -3025,10 +3178,10 @@ index 0000000000000000000000000000000000000000..37aee7132d2fb38693c27e0aca08ee3f
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXSnapshot.swift b/FBSimulatorControl/Commands/FBSimulatorAXSnapshot.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..bea2406b0bb9ee8a9dd439771502215c2f263991
+index 0000000000000000000000000000000000000000..25fdad2127f3a53b7e62d875d66b26940e7e6486
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXSnapshot.swift
-@@ -0,0 +1,388 @@
+@@ -0,0 +1,449 @@
 +import FBControlCore
 +import Foundation
 +
@@ -3217,11 +3370,66 @@ index 0000000000000000000000000000000000000000..bea2406b0bb9ee8a9dd439771502215c
 +  }
 +}
 +
++/// One exact Button chain, selected by structure rather than assumed object aliases.
++/// Raw nodes remain unchanged. The returned index belongs only to this bounded read.
++public struct FBSimulatorAXButtonLeafSelection: Sendable {
++  public let node: FBSimulatorAXNode
++  public let matchingIndices: [Int]
++  public var index: Int { matchingIndices[matchingIndices.count - 1] }
++
++  public static func resolve(in roots: [FBSimulatorAXNode], selector: FBSimulatorAXSelector) -> Self? {
++    switch selector {
++    case .identifier, .label, .identifierWithType, .labelWithType: break
++    case .value, .valueWithType: return nil
++    }
++    var nodes: [FBSimulatorAXNode] = []
++    var paths: [[Int]] = []
++    var complete = true
++    func walk(_ node: FBSimulatorAXNode, path: [Int]) {
++      guard path.count <= 65, nodes.count < 4096 else { complete = false; return }
++      nodes.append(node); paths.append(path)
++      for (index, child) in node.children.enumerated() { walk(child, path: path + [index]) }
++    }
++    for (index, root) in roots.enumerated() { walk(root, path: [index]) }
++    guard complete else { return nil }
++    let matches = nodes.indices.filter { selector.matches(nodes[$0]) }
++    guard matches.count > 1, let first = matches.first, let last = matches.last else { return nil }
++    let original = nodes[first]
++    guard original.type == "Button", original.role == "AXButton", original.enabled == true,
++          original.hidden == false, let pid = original.pid, pid > 0,
++          let identifier = original.identifier, !identifier.isEmpty,
++          identifier == identifier.trimmingCharacters(in: .whitespacesAndNewlines),
++          let label = original.label, !label.isEmpty,
++          label == label.trimmingCharacters(in: .whitespacesAndNewlines),
++          let frame = original.frame,
++          [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
++          frame.width > 0, frame.height > 0,
++          nodes.filter({ $0.identifier == identifier }).count == matches.count else { return nil }
++    for (offset, index) in matches.enumerated() {
++      let node = nodes[index]
++      guard node.type == original.type, node.role == original.role, node.subrole == original.subrole,
++            node.identifier == identifier, node.label == label, node.value == original.value,
++            node.frame == frame, node.pid == pid, node.enabled == true, node.hidden == false else { return nil }
++      if offset + 1 < matches.count {
++        guard node.children.count == 1, paths[matches[offset + 1]] == paths[index] + [0] else { return nil }
++      } else if !node.children.isEmpty { return nil }
++    }
++    return Self(node: nodes[last], matchingIndices: matches)
++  }
++}
++
 +/// A reference is tied to one measured snapshot, not a stable identity across transitions.
 +public struct FBSimulatorAXReference: Sendable {
 +  public let node: FBSimulatorAXNode
 +  public let observation: FBSimulatorHIDSessionObservation
 +  public let snapshotID: UUID
++  let buttonLeafChainCount: Int
++
++  init(node: FBSimulatorAXNode, observation: FBSimulatorHIDSessionObservation, snapshotID: UUID,
++    buttonLeafChainCount: Int = 1) {
++    self.node = node; self.observation = observation; self.snapshotID = snapshotID
++    self.buttonLeafChainCount = buttonLeafChainCount
++  }
 +}
 +
 +/// Immutable result with explicit screen, boot, pose and coordinate identity.
@@ -3251,7 +3459,13 @@ index 0000000000000000000000000000000000000000..bea2406b0bb9ee8a9dd439771502215c
 +    try selector.validate()
 +    let matches = roots.flatMap(\.flattened).filter { selector.matches($0) }
 +    guard !matches.isEmpty else { throw FBSimulatorAXSnapshotError.notFound }
-+    guard matches.count == 1 else { throw FBSimulatorAXSnapshotError.ambiguous(count: matches.count) }
++    if matches.count > 1 {
++      guard let selected = FBSimulatorAXButtonLeafSelection.resolve(in: roots, selector: selector) else {
++        throw FBSimulatorAXSnapshotError.ambiguous(count: matches.count)
++      }
++      return FBSimulatorAXReference(node: selected.node, observation: observation, snapshotID: snapshotID,
++        buttonLeafChainCount: selected.matchingIndices.count)
++    }
 +    return FBSimulatorAXReference(node: matches[0], observation: observation, snapshotID: snapshotID)
 +  }
 +
@@ -3419,10 +3633,10 @@ index 0000000000000000000000000000000000000000..bea2406b0bb9ee8a9dd439771502215c
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift b/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..dc8e38c509bfbb0503532c5ebee24ba90b9fcf4e
+index 0000000000000000000000000000000000000000..a5b85e200f0015dda6d44a1a4ec24bb5f57d2f40
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXTargetOperation.swift
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,737 @@
 +import Foundation
 +import CoreGraphics
 +import Darwin
@@ -3715,6 +3929,11 @@ index 0000000000000000000000000000000000000000..dc8e38c509bfbb0503532c5ebee24ba9
 +    let hitPID = handle.acquisitionPID
 +    let result = try serialize(handle, observation: observation, remoteContentOptions: nil)
 +    try budget.check()
++    if reference.buttonLeafChainCount > 1 {
++      return try await validateButtonLeafTarget(for: simulator, expectedPID: expectedPID, selector: selector,
++        reference: reference, point: point, nativePoint: native, initialHit: handle, initialSnapshot: result,
++        observation: observation, provider: provider, budget: budget, started: started)
++    }
 +    let hit: FBSimulatorAXNode
 +    var target = reference.node
 +    var confirmedHit: FBSimulatorAXNode?
@@ -3811,6 +4030,80 @@ index 0000000000000000000000000000000000000000..dc8e38c509bfbb0503532c5ebee24ba9
 +      expectedPID: expectedPID, hitPID: hitPID, frontmostPID: frontmostPID,
 +      pointX: point.x, pointY: point.y, hit: hit, confirmedHit: confirmedHit, confirmedHitPID: confirmedHitPID,
 +      matchKind: matchKind, verifiedTarget: target, relationshipTree: freshRoots, nativeSwitchProof: nativeSwitchProof)
++  }
++}
++
++
++extension FBSimulatorAXWorker {
++  /// The chain is exceptional selection evidence, not a duplicate-object alias.
++  /// Keep current native root/point requests owned until all identity checks finish.
++  private func validateButtonLeafTarget(for simulator: FBSimulator, expectedPID: Int32,
++    selector: FBSimulatorAXSelector, reference: FBSimulatorAXReference, point: CGPoint, nativePoint: CGPoint,
++    initialHit: FBAccessibilityElement, initialSnapshot: FBSimulatorAXSnapshot,
++    observation: FBSimulatorHIDSessionObservation, provider: any FBSimulatorHIDLiveFreshnessProvider,
++    budget: FBAXAcquisitionBudget, started: Double) async throws -> FBSimulatorAXTargetValidation {
++    var freshRoots: [FBSimulatorAXNode]?
++    var confirmedRoots: [FBSimulatorAXNode]?
++    var confirmedPID: Int32?
++    do {
++      try budget.check(); try Task.checkCancellation()
++      try provider.validateCurrentRevision(expected: observation)
++      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
++      let request = FBAXTranslationRequest(kind: .frontmostApplication,
++        pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
++      request.acquisitionBudget = budget
++      let root = try await commands.accessibilityElementForAcquisition(request: request, worker: self)
++      defer { root.close() }
++      guard root.acquisitionPID == expectedPID else {
++        throw FBSimulatorAXTargetError.wrongPID(expected: expectedPID, actual: root.acquisitionPID)
++      }
++      let tree = try serialize(root, observation: observation, remoteContentOptions: nil)
++      freshRoots = tree.roots
++      guard let chain = FBSimulatorAXButtonLeafSelection.resolve(in: tree.roots, selector: selector),
++            chain.matchingIndices.count == reference.buttonLeafChainCount,
++            FBAXTargetValidationRules.sameSignature(chain.node, reference.node),
++            chain.node.role == reference.node.role, chain.node.subrole == reference.node.subrole,
++            chain.node.value == reference.node.value else { throw FBSimulatorAXTargetError.targetMismatch }
++      let admission = try root.buttonLeafAdmission(expected: chain.node,
++        matchingCount: reference.buttonLeafChainCount, budget: budget)
++      let hit = try FBAXTargetValidationRules.hit(initialSnapshot.roots, expected: chain.node,
++        selector: selector, expectedPID: expectedPID, hitPID: initialHit.acquisitionPID, point: point)
++      try initialHit.validateButtonLeafPoint(admission, orientedPoint: point)
++      try budget.check(); try provider.validateCurrentRevision(expected: observation)
++      let confirmRequest = FBAXTranslationRequest(kind: .point(nativePoint), pointDisplayID: observation.axDisplayID,
++        displayContext: observation.displayContext)
++      confirmRequest.acquisitionBudget = budget
++      let confirmation = try await commands.accessibilityElementForAcquisition(request: confirmRequest, worker: self)
++      defer { confirmation.close() }
++      confirmedPID = confirmation.acquisitionPID
++      let confirmed = try serialize(confirmation, observation: observation, remoteContentOptions: nil)
++      confirmedRoots = confirmed.roots
++      let confirmedHit = try FBAXTargetValidationRules.hit(confirmed.roots, expected: chain.node,
++        selector: selector, expectedPID: expectedPID, hitPID: confirmation.acquisitionPID, point: point)
++      try confirmation.validateButtonLeafPoint(admission, orientedPoint: point)
++      try budget.check(); try provider.validateCurrentRevision(expected: observation)
++      let verifyRequest = FBAXTranslationRequest(kind: .frontmostApplication,
++        pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
++      verifyRequest.acquisitionBudget = budget
++      let verify = try await commands.accessibilityElementForAcquisition(request: verifyRequest, worker: self)
++      let frontmostPID = verify.acquisitionPID
++      verify.close()
++      guard frontmostPID == expectedPID else {
++        throw FBSimulatorAXTargetError.wrongPID(expected: expectedPID, actual: frontmostPID)
++      }
++      try admission.requireCurrentLeaf()
++      try budget.check(); try Task.checkCancellation()
++      try provider.validateCurrentRevision(expected: observation)
++      return .init(startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime,
++        expectedPID: expectedPID, hitPID: initialHit.acquisitionPID, frontmostPID: frontmostPID,
++        pointX: point.x, pointY: point.y, hit: hit, confirmedHit: confirmedHit,
++        confirmedHitPID: confirmation.acquisitionPID, matchKind: "singleChildButtonLeaf",
++        verifiedTarget: chain.node, relationshipTree: tree.roots, nativeSwitchProof: nil)
++    } catch {
++      throw FBSimulatorAXTargetHitFailure(expectedPID: expectedPID, hitPID: initialHit.acquisitionPID,
++        roots: initialSnapshot.roots, freshRoots: freshRoots, confirmedRoots: confirmedRoots,
++        confirmedHitPID: confirmedPID, reason: String(reflecting: error))
++    }
 +  }
 +}
 +

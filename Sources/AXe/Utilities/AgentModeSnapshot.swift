@@ -39,7 +39,7 @@ struct AgentModeSnapshot: Sendable {
         nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.sorted()))
         self.nodes = nodes
         self.keyboardButtons = keyboardButtons
-        let identities = NativeIdentityIndex(nodes: nodes)
+        let identities = NativeIdentityIndex(nodes: nodes, roots: roots)
         identityIndex = identities
         let selectors = nodes.map { identities.selector(for: $0, nodes: nodes) }
         self.selectors = selectors
@@ -174,8 +174,12 @@ struct AgentModeSnapshot: Sendable {
         let rectangle = try selector.frame?.rectangle(in: context)
         var matcher = try AgentModeTapMatcher(selector: selector)
         var matched: FBSimulatorAXNode?
-        for node in nodes {
+        for (index, node) in nodes.enumerated() {
             try matcher.checkBudget()
+            switch selector.kind {
+            case .value: break
+            default: if identityIndex.isButtonChainAncestor(at: index) { continue }
+            }
             if let type, node.type != type { continue }
             if let rectangle {
                 guard let frame = node.frame,
@@ -298,6 +302,7 @@ struct AgentModeSnapshot: Sendable {
         struct Entry: Sendable {
             var count: Int
             let index: Int
+            var buttonLeaf = false
         }
         private struct Key: Hashable, Sendable {
             let kind: String
@@ -305,8 +310,9 @@ struct AgentModeSnapshot: Sendable {
             let type: String?
         }
         private var entries: [Key: Entry] = [:]
+        private var buttonChainAncestors: Set<Int> = []
 
-        init(nodes: [FBSimulatorAXNode]) {
+        init(nodes: [FBSimulatorAXNode], roots: [FBSimulatorAXNode]) {
             for (index, node) in nodes.enumerated() {
                 for (kind, raw) in [(SelectedAXRequest.SelectorKind.id, node.identifier), (.label, node.label), (.value, AgentModeSnapshot.text(node.value))] {
                     guard let raw else { continue }
@@ -320,7 +326,23 @@ struct AgentModeSnapshot: Sendable {
                     }
                 }
             }
+            let duplicateEntries = entries.filter { $0.value.count > 1 }
+            for (key, entry) in duplicateEntries {
+                guard key.type == nil || key.type == "Button" else { continue }
+                let selector: FBSimulatorAXSelector
+                if key.kind == SelectedAXRequest.SelectorKind.id.rawValue {
+                    selector = key.type == nil ? .identifier(key.value) : .identifierWithType(key.value, elementType: "Button")
+                } else if key.kind == SelectedAXRequest.SelectorKind.label.rawValue {
+                    selector = key.type == nil ? .label(key.value) : .labelWithType(key.value, elementType: "Button")
+                } else { continue }
+                guard let leaf = FBSimulatorAXButtonLeafSelection.resolve(in: roots, selector: selector),
+                      leaf.matchingIndices.count == entry.count else { continue }
+                entries[key] = Entry(count: 1, index: leaf.index, buttonLeaf: true)
+                buttonChainAncestors.formUnion(leaf.matchingIndices.dropLast())
+            }
         }
+
+        func isButtonChainAncestor(at index: Int) -> Bool { buttonChainAncestors.contains(index) }
 
         func entry(kind: SelectedAXRequest.SelectorKind, value: String, type: String?) -> Entry? {
             entries[Key(kind: kind.rawValue, value: value.trimmingCharacters(in: .whitespacesAndNewlines), type: type)]
@@ -333,7 +355,8 @@ struct AgentModeSnapshot: Sendable {
                 let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !value.isEmpty, value.utf8.count <= 4096,
                       let entry = entry(kind: kind, value: value, type: node.type), entry.count == 1,
-                      nodes[entry.index].frame == frame else { continue }
+                      nodes[entry.index].frame == frame,
+                      !entry.buttonLeaf || node.children.isEmpty else { continue }
                 return NativeSelector(kind: kind, value: value)
             }
             return nil

@@ -137,6 +137,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed completed raw touches keeping selected and agent input busy. The raw helper now opens input when a request needs it, releases ownership after a completed UP, and keeps one session while a finger remains down.
 
+- Fixed selected and agent taps on Photos permission buttons represented by matching parent and child Buttons. Native identity and hit checks select the current child; separate duplicate controls still reject.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added
