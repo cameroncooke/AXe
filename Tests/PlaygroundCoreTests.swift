@@ -174,7 +174,7 @@ struct PlaygroundCoreTests {
     }
 }
 
-private struct CorePlaygroundSession {
+struct CorePlaygroundSession {
     private let udid: String
     private let axePath: String
 

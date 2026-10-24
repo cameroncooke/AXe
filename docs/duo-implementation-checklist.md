@@ -1,5 +1,141 @@
 # iPhone Duo implementation checklist
 
+## Current completion checklist: 25 October 2026
+
+**No full-suite pass.** Raw-fix checkpoint: `beb7b11e` (unsigned after 1Password signing failed). The public test sources are integrated for **693 cases, 90 suite runs and 66 Swift sources**: iPhone 165, iPad 23 and Duo 505. Current main build and full acceptance are pending. The [second full attempt](../build_products/verification/duo-complete-20261024/final-matrix-v2/result.json) is INTERRUPTED: 142 completed, 101 passed and 41 reported issues; 538 have no completed result. The Photos permission prompt stayed open and caused later failures. These are not 41 separate confirmed bugs. The recorded source and runtime files stayed unchanged, and all owned command groups stopped. The earlier failed and interrupted attempts remain saved.
+
+**Raw, selected and agent touch compatibility is fixed within the checked scope.** Seven cases passed on CLI `1ae6ede8` / native `37814494`: three ordinary-iPhone handover cases, three Duo handover cases and one first-request case while a selected finger was held. The two source files and Fixed changelog entry are integrated. The unchanged 115 host checks passed, and the fix was committed in `beb7b11e`. Public test sources are integrated; current main build and full acceptance are pending. [Integration and exact proofs](../build_products/verification/duo-complete-20261024/raw-input-integration-v1/integration-receipt.json).
+
+**Product work still open:** requested Slider percentages still fail accuracy. Photos reference, selected-ID and owner checks now passed in the focused scope; the Photos source fix is integrated. This is not complete Photos or full-suite acceptance. The expanded repeatable test package compiled all **66 sources** in **35.99 seconds** (37.30 seconds under the resource guard), with zero warnings. The **693-case source set is integrated**. Current main matches 64/66 frozen test sources; two intentional Touch/Pinch test corrections await the normal build. Current main build, a full-suite pass and final local package checks remain pending. A diagnostic-only CLI build is active; no Slider math fix is proved. Diagnostic wrappers remain excluded. [Build receipt](../build_products/verification/duo-complete-20261024/public-suite-integration-proposal-v2/build-receipt.json).
+
+| Current work | Exact result and remaining work |
+| --- | --- |
+| Use selected input after a completed raw touch | [All three ordinary-iPhone and all three Duo handover cases passed](../build_products/verification/duo-complete-20261024/raw-input-integration-v1/integration-receipt.json) on CLI `1ae6ede8` / native `37814494`. Fix committed in `beb7b11e`; all 115 host checks passed. Public test sources are integrated; current main build and full acceptance are pending. |
+| First raw request while a selected finger is held | [Passed one case](../build_products/verification/duo-complete-20261024/cold-raw-native-v3-iphone/parsed-result.json). The raw request refused input in 1.082 seconds, left the held contact unchanged, then matching UP and a fresh tap passed. Earlier folder-guard failure and eight-second baseline timeout remain saved. |
+| Set a Slider to a chosen percentage | [The latest focused iPhone case failed accuracy](../build_products/verification/duo-complete-20261024/slider-phase-budget-proposal-v1/recorder-first-j-v1/runs/focused-iphone/parsed-result.json), CLI `c829788d` / native `255e7eaf`. Held value reads completed. After 48 MOVE events in 13.022 seconds, the final app value was 57.25047 instead of 56.25; cleanup released the touch and zero contacts remained. Slider accuracy is still open. The earlier read-deadline failure and 12-case result (9 passed/3 failed) remain saved. |
+| Find and handle the Photos permission prompt | Duo outer0 [button cases passed 2/2](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v2/runs/public-photos-duo-PhotosButtonLeafE2ETests/parsed-result.json) and [owner case passed 1/1](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v2/runs/public-photos-duo-PlaygroundAgentSystemOwnerTests/parsed-result.json), complete with zero issues or skips on CLI `c829788d` / native `255e7eaf`. Both Photos outcomes were accepted with the prompt closed and no cleanup errors. Ordinary-iPhone Photos checks passed 3/3 on prior CLI `5a6ae9ce` with the same Photos source/native. [Photos-only source integration](../build_products/verification/duo-complete-20261024/photos-main-integration-v1/receipt.json) changes three native files and `AgentModeSnapshot`; both public Slider files remain unchanged. Full-feature and full-suite acceptance remain pending. |
+| Record while opening, closing or rotating Duo | [Both corrected focused checks passed](../build_products/verification/duo-complete-20261024/duo-media-follow-native-v2-result.json), with no issues or skips. The earlier missing-observer failure remains a test prerequisite error. Full-matrix acceptance remains pending. |
+
+The [earlier Duo reference refusal](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v1/runs/public-photos-duo-PhotosButtonLeafE2ETests/parsed-result.json) and its [cleanup-only proof](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v1/duo-failure-cleanup-v1/closure-proof.json) remain saved. The unchanged two-case rerun and owner check passed. The one-off fingerprint investigation is closed; no cache guard or test behavior was changed.
+
+| Focused keyboard check | Exact result on CLI `c829788d` / native `255e7eaf` |
+| --- | --- |
+| Ordinary iPhone raw shortcut | [Failed](../build_products/verification/duo-complete-20261024/keyboard-focused-c829-v1/runs/keyboard-iphone-keyComboRawLowercase/parsed-result.json). Seed `type AbA` succeeded. The actual `key-combo --modifiers 225 --key 6` then timed out at the guest HID barrier. |
+| Ordinary iPhone normal agent key sequence | [Passed 1/1](../build_products/verification/duo-complete-20261024/keyboard-focused-c829-v1/runs/keyboard-iphone-keySequenceNormal/parsed-result.json), zero issues or skips. |
+| Duo raw shortcut | [Setup failed](../build_products/verification/duo-complete-20261024/keyboard-focused-c829-v1/runs/keyboard-duo-keyComboRawLowercase/parsed-result.json): seed `type AbA` returned stale observation/released. The shortcut command never ran. |
+| Duo normal agent key sequence | [Setup failed](../build_products/verification/duo-complete-20261024/keyboard-focused-c829-v1/runs/keyboard-duo-keySequenceNormal/parsed-result.json): Show Text tap sent zero events and the DTX channel disconnected. The key-sequence command never ran. |
+
+These four outcomes have no proved shared cause. Earlier failures remain saved; no keyboard fix or whole-feature pass is claimed.
+
+**D38 is complete within its checked scope: closing a command stops its input.** Eight distinct input/signal combinations passed across controlled runs: held Space, delayed key sequence, held touch and moving pinch, each under SIGINT and SIGTERM. The fix is integrated. The earlier whole eight-case run remains failed because its later fresh accessibility action disconnected. [Seven earlier passes and one failed case](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json), [named pinch pass](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json), [integration receipt](../build_products/verification/duo-complete-20261024/client-exit-integration-plan-v1/integration-result.json). A complete named-suite and full-matrix pass remain pending.
+
+Earlier focused evidence is still valid within its recorded candidate: [four hinge-layout cases passed](../build_products/verification/duo-complete-20261024/hinge-layout-native-v2-result.json) at all four inner rotations; [eight ordinary-iPhone regression cases passed](../build_products/verification/duo-complete-20261024/ordinary-regression-native-v2-result.json); and [115 host cases passed](../build_products/verification/duo-complete-20261024/host-v5-all-result.json) on CLI v5. None is a full-suite pass for the later candidates. The saved keyboard timeout and accessibility disconnect still have no confirmed common cause.
+
+Use [the repeatable test guide](playground-testing.md) and [exact coverage map](audits/2026-10-24-manual-automation-map.md). The original 175 mapped rows and archived evidence remain unchanged. [Vendor review](audits/2026-10-24-vendor-failure-review.md) separates source and binary findings from simulator proof. Final package/install checks remain pending. No upload, push, publication or deployment is authorised. Heavy jobs stay serial, with CPU and memory checks.
+
+The core source audit includes 217 expanded Duo cases, with strict contact, path and recognizer checks, the partly folded swipe and three host-wait cases. The selected Home batch and delayed keyboard cases are also included.
+
+### Duo simulator support
+
+- [ ] **D01: Remove the added Duo AX setup requirement.** Test source ready; final simulator result pending.
+- [ ] **D02: Fix default scroll presets after rotation.** Test source ready; final simulator result pending.
+- [ ] **D03: Set closed, tabletop or open by name.** Test source ready; final simulator result pending.
+- [ ] **D04: Set a numeric hinge angle.** Test source ready; final simulator result pending.
+- [ ] **D05: Fix taps after rotation.** Test source ready; final simulator result pending.
+- [ ] **D06: Fix swipes after rotation.** Test source ready; final simulator result pending.
+- [ ] **D07: Fix drags after rotation.** Test source ready; final simulator result pending.
+- [ ] **D08: Stop old touches when the phone folds or turns.** Test source ready; final simulator result pending.
+- [ ] **D09: Choose the active inner or outer display for supported input.** Test source ready; final simulator result pending.
+- [ ] **D10: Send guarded Siri input.** Test source ready; final simulator result pending.
+- [ ] **D11: Send guarded Lock input.** Test source ready; final simulator result pending.
+- [ ] **D12: Send guarded Apple Pay input.** Test source ready; final simulator result pending.
+- [ ] **D13: Enter text and keyboard shortcuts in a selected TextField.** Test source ready; final simulator result pending.
+- [ ] **D14: Release held no-flag keys and shortcuts when Duo folds or turns.** Test source ready; final simulator result pending.
+- [ ] **D15: Keep ordinary standalone typing reliable on Duo.** Test source ready; final simulator result pending.
+- [ ] **D16: Show the lock screen.** Test source ready; final simulator result pending.
+- [ ] **D17: Wake the phone.** Test source ready; final simulator result pending.
+- [ ] **D18: Open Siri.** Test source ready; final simulator result pending.
+- [ ] **D19: Shut down one simulator.** Test source ready; final simulator result pending.
+- [ ] **D20: Keep a finger pressed between commands.** Test source ready; final simulator result pending.
+- [ ] **D21: Release a finger left idle.** Test source ready; final simulator result pending.
+- [ ] **D22: Release a finger when its command process stops.** Test source ready; final simulator result pending.
+- [ ] **D23: Run a sequence of commands on Duo.** Test source ready; final simulator result pending.
+- [ ] **D24: Show a clear error for invalid Duo batch steps.** Test source ready; final simulator result pending.
+- [ ] **D25: Prevent repeated characters when typing in a batch.** Test source ready; final simulator result pending.
+- [ ] **D26: Record a chosen display at a fixed position.** Test source ready; final simulator result pending.
+- [ ] **D27: Capture again after rotation.** Test source ready; final simulator result pending.
+- [ ] **D28: Capture again after folding.** Test source ready; final simulator result pending.
+- [ ] **D29: Keep recording while the phone folds or turns.** Both corrected focused checks passed; final full-suite result pending.
+- [ ] **D30: Use controls in a smaller app window.** Test source ready; final simulator result pending.
+- [ ] **D31: Keep core iPhone and iPad input working.** Seven raw/selected compatibility cases passed and that fix is integrated under D39; final full-suite result pending.
+- [ ] **D32: Set a Duo slider to the requested percentage reliably.** The focused read phase passed, but Slider accuracy still failed. A diagnostic-only build is active; no math fix or final Duo proof.
+- [ ] **D33: Use app controls after folding during a long press.** Test source ready; final simulator result pending.
+- [ ] **D34: Stress-check app controls after a cold Duo start.** Deferred by the agreed scope.
+- [ ] **D35: Run repeated automated iPhone and Duo Playground checks.** The 693-case/90-run/66-source set is integrated. The prior frozen package compiled; current main build and full acceptance are pending. The second full attempt remains INTERRUPTED at 142/680: 101 passed, 41 issues. Fix the remaining failures, then run the full suite.
+- [ ] **D36: Extract and start the Apple-silicon package locally.** Final local delivery check pending.
+- [ ] **D37: Verify the release package locally.** Final local delivery check pending.
+- [x] **D38: Closing a command stops its input.** Fix integrated after all eight input/signal combinations passed across controlled runs. Full named-suite and full-matrix acceptance remain under D35.
+- [x] **D39: Use raw, selected and agent touch commands together.** Seven focused cases passed on one candidate; the fix is integrated. Held fingers stay protected. The 115 host checks passed and the fix is committed in `beb7b11e`; public sources are integrated; current main build and full acceptance are pending.
+
+### Improvements from the SimUse comparison
+
+- [ ] **A01: Find a control from part of its label.** Test source ready; final simulator result pending.
+- [ ] **A02: Find a control with a text pattern.** Test source ready; final simulator result pending.
+- [ ] **A03: Find a control within a chosen screen area.** Test source ready; final simulator result pending.
+- [ ] **A04: Report whether the keyboard is visible.** Test source ready; final simulator result pending.
+- [ ] **A05: Provide the optional RS1 agent interface.** Test source ready; final simulator result pending.
+- [ ] **A06: Reuse screen snapshots safely.** Test source ready; final simulator result pending.
+- [ ] **A07: Tell agents which app owns a system alert.** Ordinary-iPhone 3/3 and Duo outer0 3/3 focused Photos checks passed on their recorded candidates. The Photos tap fix is integrated; whole-feature and full-suite acceptance remain pending.
+- [ ] **A08: Install the required helper with Homebrew.** Final local delivery check pending.
+- [ ] **A09: Activate a switch through its accessibility action.** Test source ready; final simulator result pending.
+- [ ] **A10: Check switch state before reporting success.** Test source ready; final simulator result pending.
+- [ ] **A11: Drag from an agent element reference.** Test source ready; final simulator result pending.
+- [ ] **A12: Press and hold an element by its agent reference.** Test source ready; final simulator result pending.
+- [ ] **A13: Press a key in an agent-selected text field.** Test source ready; final simulator result pending.
+- [ ] **A14: Press a keyboard shortcut in an agent-selected field.** Test source ready; final simulator result pending.
+- [ ] **A15: Press several keys in an agent-selected field.** Test source ready; final simulator result pending.
+- [ ] **A16: Double tap a control by its agent reference.** Test source ready; final simulator result pending.
+- [ ] **A17: Move a slider to an end by its agent reference.** The focused endpoint checks passed with unchanged 5/10-step limits; final full-suite result pending.
+- [ ] **A18: Pinch an area by its agent reference.** Test source ready; final simulator result pending.
+- [ ] **A19: Run several agent actions in one request.** Test source ready; final simulator result pending.
+- [ ] **A20: Enter Unicode through clipboard and a current Paste button.** Test source ready; final simulator result pending.
+- [ ] **A21: Set a slider to a chosen percentage.** Earlier three interior-value failures remain saved. The latest read phase passed but accuracy failed. Diagnostic-only build active; no math fix proved.
+- [ ] **A22: Move two fingers along separate paths.** Test source ready; final simulator result pending.
+- [ ] **A23: Improve recovery when an app reports no accessible controls.** Deferred by the agreed scope.
+
+### Final result record
+
+| Evidence | Current state |
+| --- | --- |
+| Source checkpoint and candidates | Raw-fix checkpoint `beb7b11e` (unsigned); integrated touch fix proved on CLI `1ae6ede8` / native `37814494`. Photos sources are integrated after 3/3 focused Duo outer0 cases on CLI `c829788d` / native `255e7eaf`. Slider accuracy still failed on that candidate. No combined-candidate or full-suite pass. |
+| Hinge-driven app layout | [4/4 focused cases passed](../build_products/verification/duo-complete-20261024/hinge-layout-native-v2-result.json); all four inner rotations; no skips or failures |
+| Latest full attempt | [INTERRUPTED: 142/680 completed, 101 passed, 41 issues](../build_products/verification/duo-complete-20261024/final-matrix-v2/result.json); Photos prompt caused later failures; 538 without completed results. Source/runtime unchanged. |
+| Earlier full attempt | [INTERRUPTED: 36/672 completed, three failures](../build_products/verification/duo-complete-20261024/final-matrix-v1/result.json); preserved without reclassification. |
+| Closing a command stops its input | Fix integrated; eight distinct combinations passed across [seven earlier passes](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json) and [one named pass](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json). Earlier whole run stays failed; full matrix pending |
+| Ordinary-iPhone regression | [8/8 passed](../build_products/verification/duo-complete-20261024/ordinary-regression-native-v2-result.json) against CLI v5; wider iPhone/iPad checks remain pending |
+| Recording across folding/rotation | [Corrected focused run passed 2/2](../build_products/verification/duo-complete-20261024/duo-media-follow-native-v2-result.json); full-matrix acceptance pending. Earlier prerequisite failure preserved. |
+| Raw, selected and agent touch compatibility | [Seven cases passed on the same candidate](../build_products/verification/duo-complete-20261024/raw-input-integration-v1/integration-receipt.json): ordinary three, Duo three and first-request one. Fix committed and 115 host checks passed; public sources integrated, current main build and full acceptance pending. Cold refusal took 1.082 seconds. |
+| Slider percentage control | [Latest focused case failed accuracy](../build_products/verification/duo-complete-20261024/slider-phase-budget-proposal-v1/recorder-first-j-v1/runs/focused-iphone/parsed-result.json); held value reads completed, 48 MOVE events in 13.022 seconds, final app value 57.25047 instead of 56.25, zero contacts after release. CLI `c829788d` / native `255e7eaf`. Earlier failures and the 12-case 9/3 result remain saved. |
+| Photos prompt control | [Duo outer0 button2](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v2/runs/public-photos-duo-PhotosButtonLeafE2ETests/parsed-result.json) and [owner1](../build_products/verification/duo-complete-20261024/photos-public-ui-execution-v2/runs/public-photos-duo-PlaygroundAgentSystemOwnerTests/parsed-result.json) passed on CLI `c829788d` / native `255e7eaf`, zero issues/skips. Both Photos outcomes accepted; prompts closed, input released and fresh app taps passed. Photos sources integrated; full-feature/full-matrix acceptance pending. Prior ordinary-iPhone 3/3 used CLI `5a6ae9ce` with the same Photos source/native. |
+| Expanded repeatable test package | [66 sources compiled](../build_products/verification/duo-complete-20261024/public-suite-integration-proposal-v2/build-receipt.json), 35.99 seconds compiler time; guarded total 37.30 seconds, zero warnings. 693-case/90-run sources integrated. Current main matches 64/66 frozen sources; intentional Touch/Pinch corrections await the normal build. No main-build or full-suite pass. |
+| Revised Slider phase-budget build | [Universal CLI-only build passed](../build_products/verification/duo-complete-20261024/slider-phase-budget-proposal-v1/build/runtime-ready.json), CLI `c829788d` / unchanged native `255e7eaf`; 79.02 seconds, both architectures, seven strict signature checks and 15.611 GiB recorded peak combined memory, no stop. The focused read phase passed; Slider accuracy failed as recorded above. |
+| CLI v5 build | [Universal Release build passed](../build_products/verification/duo-complete-20261024/keyboard-ax-candidate-v5/runtime-ready.json); 283.86 seconds, 14.915 GiB peak combined memory; no build guard stop or crash |
+| Build-source preparation | [Fresh](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-fresh-v1/result.json) and [repeat](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-repeat-v1/result.json) checks passed all 63 source hashes; this is not a compile or package pass |
+| Local build, signatures, archives and installation | Final candidate check pending; no deployment |
+| Structured result reader | 16 pure tests passed; outside the simulator count |
+| Earlier host guards | [115/115 passed](../build_products/verification/duo-complete-20261024/host-v5-all-result.json) against CLI v5 sources, including 27 AX retirement cases; outside the simulator count |
+| Current raw-fix host guards | [115/115 passed](../build_products/verification/duo-complete-20261024/raw-input-host115-v1/parsed-result.json) against frozen CLI `1ae6ede8` source and native `37814494`; outside the simulator count. |
+| Native release fault checks | [8/8 passed](../build_products/verification/duo-complete-20261024/native-owned-release-tests-v4/parsed-result.json) against native `6ffe56ce1181`; fault checks, not guest input |
+
+The no-flag held-letter and sequence cases use the CLI. Held Shift+A uses a library probe. It does not prove interruption of the no-flag key-combo command. Repeated cold-start stress and conditional empty-tree recovery remain deferred. Apple Pay payment UI and Intel hardware testing are excluded. Apple Pay hardware delivery stays in scope. No upload, push, publication or deployment is authorised.
+
+## Earlier product evidence
+
+<details>
+<summary>Earlier feature proofs and their original scope</summary>
+
+The status counts in this section predate the expanded repeatable suite. They record earlier candidates only.
+
 ## Product checklist
 
 Current status: **56 complete, 2 active open, 2 deferred**. Two items remain active: full-suite acceptance and missing release tracking for no-flag Duo keys/shortcuts. Matrix v5 executed 47 cases: 35 passed and 12 failed, with no skips. All 13 ordinary-iPhone cases passed; Duo core passed 17/18 and optional agent passed 4/4. Outer Backspace timed out, and later layout/interruption cases lost the AX connection. Their cause remains unresolved. Earlier focused passes do not close this result. The unchanged universal Release is `9c383e1b` (CLI `5bd0e336` / native `c3f11c9d`), tested with checkpoint `0e62b532`. Current tests at `b45a60e2` add three separately passed legacy coordinate taps, bringing the default suite to 50; a full 50-case pass is not claimed. The current package passed local unlinked installation, seven strict signatures and a real installed-wrapper app tap, followed by complete removal and restoration. Cold-start stress and conditional empty-control recovery remain deferred. Intel hardware and Apple Pay payment screens are excluded; current-artifact notarization is unverified. No push, publication or deployment occurred. [Latest acceptance record](audits/2026-10-24-playground-acceptance.md), [current handoff](audits/2026-10-22-duo-current-work.md).
@@ -78,6 +214,9 @@ The comparison supplied ideas from source review. Cam chose the XcodeBuildMCP-st
 - [x] **Set a slider to a chosen percentage — Done for checked horizontal sliders.** Selected outer and inner requests, a small agent change, and an endpoint-to-interior request reached their targets and released input. These passes span V6 and V7; V7 adds only passive diagnostics. Earlier read errors remain unexplained. Other values, positions and custom controls are not covered. [Proof](/Volumes/Developer/AXe/build_products/verification/slider-percentage-public-20261023/public-scoped-acceptance-v7.md).
 - [x] **Move two fingers along separate paths — Done for checked cases.** Two different straight paths and one stationary finger reached their endpoints and released. Bounds and simultaneous collisions rejected without input. Folding released both fingers and a fresh outer-screen tap worked. Main source matches the tested candidate; wider poses remain open. [Proof](/Volumes/Developer/AXe/build_products/verification/two-finger-paths-20261022/scoped-acceptance.md).
 - [ ] **Improve recovery when an app reports no accessible controls — Deferred.** Cam requested this work only if a current failure is reproduced. No current failure is established. No recovery enhancement is claimed as implemented, and this item is not an active completion block. [Source plan](/Volumes/Developer/AXe/build_products/verification/agent-empty-ax-recovery-20261022/plan.md).
+
+
+</details>
 
 ## Technical evidence
 

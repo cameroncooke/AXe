@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites>
+  <testsuite name="TestResults" errors="0" tests="4" failures="0" skipped="0" time="0.024329666">
+    <testcase classname="AXeTests.SelectedAXRetirementReadinessTests" name="replacementReceivesTheRequestOnlyOnce()" time="0.002424583" />
+    <testcase classname="AXeTests.SelectedAXRetirementTests" name="failedDescribeRetiresWithoutInput(diagnostic:)" time="0.011531541" />
+    <testcase classname="AXeTests.SelectedAXRetirementTests" name="excludedOutcomesRemainOwned(_:)" time="0.009631167" />
+    <testcase classname="AXeTests.SelectedAXRetirementTests" name="retainedAdmissionBlocksDescribe()" time="0.00014025" />
+  </testsuite>
+</testsuites>

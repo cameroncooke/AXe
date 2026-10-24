@@ -1,112 +1,106 @@
 # Repeatable simulator checks
 
-The Playground is a normal app. These checks drive the built AXe CLI and read the resulting app state through accessibility. They do not inject app state or replace native input with a mock.
+The Playground is a normal app. Swift Testing runs host checks that call the real AXe CLI. The checks read accessibility and app state after real input. They do not use XCUITest to send UI actions, inject app state or replace gestures with mocks.
 
 ## Current acceptance
 
-The full 47-case matrix v5 completed at test checkpoint `0e62b532`: 35 passed and 12 failed, with no skips. Ordinary iPhone and both optional-agent suites passed. Duo Backspace timed out, and failed layout/interruption cases lost the accessibility connection. Full acceptance remains open; earlier focused passes do not close this result. Current test source `b45a60e2` adds three separately passed legacy coordinate taps. The default is now 50 cases; no full 50-case run is claimed. No-flag held-key/shortcut release tracking is a separate open code gap. Its candidate remains isolated and unproved. Two proposed interruption checks compiled, but native execution was zero and they were not integrated. [Current record, exact command and retained failures](audits/2026-10-24-playground-acceptance.md).
+The full plan is **680 case executions across 85 suite runs and 63 Swift sources**: iPhone 159, iPad 23 and Duo 498. These are planned full-run counts; **there is no full-suite pass**.
 
-Duo checks verify device support: active screen selection, hinge/rotation changes and continued use of real controls. The optional agent checks are a separate improvement from the SimUse comparison: compact output, saved references and cached reads with invalidation. Raw accessibility output and coordinate commands remain available.
+**D38 is proved within scope and integrated.** Eight distinct input/signal combinations passed across two controlled runs: held Space, delayed key sequence, held touch and moving pinch, each under SIGINT and SIGTERM. Seven passed in the earlier run; the separately named moving-pinch SIGINT case now passed. The earlier whole eight-case run remains failed because its later fresh AX action disconnected. Both records are retained. The full named eight-case suite and full 680-case matrix remain pending. [Named pinch result](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json), [earlier seven passes/one failure](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json), [source integration](../build_products/verification/duo-complete-20261024/client-exit-integration-plan-v1/integration-result.json). The named run took 95.66 seconds, peak combined memory 14.068 GiB, without a resource stop or crash.
+
+The current runtime is CLI v5 `926233146df9…` / native `6ffe56ce1181…`. [Ordinary-iPhone regression passed 8/8](../build_products/verification/duo-complete-20261024/ordinary-regression-native-v2-result.json), including the corrected sole-display check and raw/selected typing. [115 host cases passed against CLI v5 sources](../build_products/verification/duo-complete-20261024/host-v5-all-result.json). The earlier [eight native release fault checks](../build_products/verification/duo-complete-20261024/native-owned-release-tests-v4/parsed-result.json) use that same unchanged native image. Host/native/parser checks do not add to 680.
+
+The [earlier 672-case attempt](../build_products/verification/duo-complete-20261024/final-matrix-v1/result.json) remains interrupted after 36 completed: 33 passed and three failed, with no skips. The original raw timeout, incorrect test assertion and agent observation failure remain recorded. The ordinary regression passed separately; the agent read failure still has no proved cause. The [four hinge-layout passes](../build_products/verification/duo-complete-20261024/hinge-layout-native-v2-result.json) retain their CLI v4 scope.
+
+The first two recording-follow checks failed because the test command did not supply its existing process-observer path. This is a test prerequisite error, with no video acceptance or confirmed product fault. The corrected two-case run remains pending.
+
+The [coverage map](audits/2026-10-24-manual-automation-map.md) retains all 175 prior rows and adds D38. The [JSON map](audits/2026-10-24-manual-suite-map.json) distinguishes scoped results, failed attempts and the pending full run. The [vendor review](audits/2026-10-24-vendor-failure-review.md) is source/binary evidence, not another simulator pass. Local package/install acceptance remains pending. No upload, push, publication or deployment is authorised.
+
+Duo checks cover device support. SimUse checks cover the optional agent interface. Raw accessibility and coordinate commands remain available.
 
 ## Build inputs
 
-`AxePlaygroundApp/project.yml` is the tracked XcodeGen definition. The generated Xcode project stays in `build_products`. Install XcodeGen before running the checks.
+Use the tracked XcodeGen definition, `AxePlaygroundApp/project.yml`. Generated projects and test packages stay under the new result directory. Install XcodeGen first.
 
-Use a built AXe payload with its matching frameworks and helper. The runner records every payload file hash and symbolic link, selected Xcode, app source hashes, test source hashes, commands, and results. It requires the payload to remain unchanged. It does not rebuild AXe or establish that an arbitrary executable matches the current checkout.
+The current build-source preparation path passed [fresh](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-fresh-v1/result.json) and [repeat](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-repeat-v1/result.json) checks for all 63 pinned source hashes. The original cache stayed unchanged. This is local-file source preparation, not compilation, simulator input or package acceptance.
 
-For the interruption checks, the runner builds `scripts/fixtures/DuoExternalStateChange.swift` against the supplied AXe frameworks. It uses the selected Xcode and `idb_checkout/PrivateHeaders` by default. Set `AXE_TEST_HOST_DEVELOPER_DIR` if those frameworks need a different host compiler. Set `AXE_TEST_IDB_SOURCE` to the matching IDB source checkout if it is elsewhere. The runner records both directories, header hashes, source hash, and built tool hash. Missing inputs cause a clear failure; the runner does not select another compiler or runtime.
+Supply the exact built AXe payload with its matching frameworks, helper and resources. The runner does not rebuild AXe. It records all payload file hashes and links and requires them to stay unchanged. This binds a run to those bytes; it does not prove that an arbitrary executable matches the checkout.
 
-## Run the same checks on iPhone and Duo
+The runner builds the normal Playground once, then copies and builds the exact current test sources once. `checks/source-pins.json` records Package.swift and copied source hashes. `checks/proposal-source-pins.json` records current source origins and the runner/config/count/parser hashes. These files are inputs, not build or test results.
 
-Use two dedicated, available simulators. Prefer devices that are already running. The runner uses them one at a time and leaves both running. If a supplied device is shut down, the runner boots it and waits until it is ready. It does not create, erase, or delete a device. Cancellation stops owned commands; it does not shut down a device that was already running before the check.
+Native state and held-input probes compile against the supplied payload's `Frameworks` directory. The default compiler is the selected Xcode; the default private headers are `idb_checkout/PrivateHeaders`. Set `AXE_TEST_HOST_DEVELOPER_DIR` and `AXE_TEST_IDB_SOURCE` when the matching inputs are elsewhere. The runner records their paths and hashes. Missing inputs fail before the affected case. It does not choose another compiler or runtime.
+
+## Run the full suite
+
+Use three dedicated existing simulators. Prefer warm devices. The runner uses one guest at a time. It can boot a supplied stopped guest once and wait for readiness. It does not create, erase or replace simulators. The last lifecycle case shuts down Duo; iPhone and iPad remain available. Cancellation stops owned work and does not shut down a guest that was already running before the check.
 
 ```sh
 PATH="/opt/homebrew/bin:$PATH" python3 scripts/test-playground-matrix.py \
-  --axe /absolute/path/to/payload/axe \
+  --axe /absolute/path/to/final-runtime/axe \
   --iphone IPHONE_UUID \
+  --ipad IPAD_UUID \
   --duo DUO_UUID \
   --developer-dir /Applications/Xcode.app/Contents/Developer \
+  --suite all \
   --output build_products/playground-results/NEW_RUN
 ```
 
-The default `--suite all` runs 50 checks: 14 on iPhone and 36 on Duo. Use `--suite core` for the nine core checks on each device, `--suite agent` for the optional interface, or `--only duo --suite duo` for the 32 Duo-specific checks.
+The result directory must be new. Earlier failed output is never replaced. The default all run requires the iPad profile. Use the actual installed Xcode and the matching helper compile inputs.
 
-| Suite | Ordinary iPhone | Duo |
-| --- | --- | --- |
-| Core controls | 9 checks in the current orientation | 18 checks: the same eight features on the outer display in portrait and the open inner display in landscape; taps have selector and coordinate cases |
-| Hardware keyboard input | 1 check | 2 checks: one on each measured display and orientation |
-| Optional agent interface | 4 checks | 4 checks |
-| Duo hinge, rotation and display selection | — | 6 checks |
-| Input interrupted by folding or rotation | — | 6 checks |
+| Group | iPhone | iPad | Duo | Main behaviour |
+| --- | ---: | ---: | ---: | --- |
+| Core controls | 17 | 17 | 245 | Find, tap, type, scroll, swipe, drag, switches, sliders, retained contacts and batches |
+| Agent controls | 140 | 4 | 153 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
+| Keyboard and hardware | 1 | 1 | 52 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
+| Capture and recording | 0 | 0 | 28 | Selected PNG, video, streams, follow-active recording and cleanup |
+| Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
+| Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
+| **Total** | **159** | **23** | **498** | **680 case executions** |
 
-The full Duo run uses the 18 checks with explicit display and orientation requirements. It does not repeat the nine generic core checks. `--suite core` runs the generic checks for a narrow compatibility run.
+The 217 expanded Duo core cases supplement the 20 earlier explicit core cases. Eight new selected client-exit cases bring this Duo group to 245; they cover held Space, a delayed key sequence, held touch and moving pinch under both SIGINT and SIGTERM. All eight combinations now have native passes across controlled runs; the full named eight-case suite and full matrix remain pending. The 285 new comparison cases run as 136 on iPhone and 149 on Duo. The earlier four agent capture/reference checks also run on all three guests. The iPad retains its earlier baseline scope.
 
-Use `--only iphone` or `--only duo` while fixing a failure. Such a run proves only that device. The output directory must be new, so an earlier failure cannot be replaced by a later result.
+## What the checks prove
 
-The app and exact tracked test sources build once. A separate Swift Testing package under the result directory uses the existing CLI helpers. It has no third-party dependencies. The normal AXe test target also includes these test sources.
+Core input checks use current raw accessibility frames and real control state. They require exact text, switch/slider values, new visible rows, gesture callbacks and physical contact paths. Duo repeats coordinate and gesture paths in all seven supported display/orientation positions. The outer display does not support upside-down portrait. Selected requests also check the physical display and boot identity and reject inactive or stale targets before input.
 
-## Core checks
+Hinge checks include 18 ordered numeric angles, named closed/tabletop/open positions, measured discovery metadata, controls that move when the hinge changes and controls above and below the fold. Inset-window checks use the same normal app and include raw and agent input. After folding or rotation, the checks find the current element again. They do not reuse an old frame.
 
-| Check | Required app result |
-| --- | --- |
-| Find and tap by selector | Discover the button by its ID; its value changes from Initial to Tapped. |
-| Tap by raw coordinates | Read the current raw accessibility frame, tap the centre with the no-flag coordinate command, and require Initial to change to Tapped. |
-| Type | Discover and focus the field; typed text and character/word counts match. |
-| Scroll | A row outside the initial visible range becomes visible and can be selected. |
-| Swipe | The app records one right swipe and both requested points. |
-| Drag | The app records the start, an intermediate move, and release at the requested end point. |
-| SwiftUI switch | The app records Off, On, then Off. |
-| UIKit switch | The app records Off, On, then Off. |
-| Slider | AX and the app's exact value both reach 75% and 40% within the stated tolerance. |
+Held-input checks wait for actual contacts or text effects before changing the device. They require stopped old-layout input, release evidence, no later input at old coordinates and a fresh real action. They cover raw and selected touch, moving pairs, retained contacts, keys and hardware buttons in their stated cases. The held Shift+A probe checks the public library boundary. It does not prove interruption of the no-flag `key-combo` CLI command.
 
-Keyboard checks focus a real field, send keys, use Backspace, hold Shift for a capital letter, and use Command+A to replace the selected text. Each step checks the resulting app text. Duo runs this check on both measured display configurations.
+Agent checks require valid RS/1 output, real app effects, reference/cache reuse when valid and refusal when the app, focus, layout or selected target changes. They include all prior accepted comparison behaviours and preserve strict negative cases. A successful command or screenshot alone is not an app-effect proof.
 
-The runner requires the exact expected count for each suite, with no failures or skips. A disabled suite or zero executed checks is a failure. The result lists each check and its result, including failures from a nonzero test command. Full logs and Swift Testing XML stay in the result directory. A failed check is not retried automatically.
+The normal app's Documents readback is checked against its real PID and generation. Contact, callback, layout and text data come from normal visible pages. External state tools fold or rotate the guest; AXe sends the input under test. No hidden state route is used.
 
-Both runners read the expected counts from `scripts/playground-suite-counts.json`. Update that file when the tracked suite gains or loses a check.
+## Results and failures
 
-The matrix runner is the full acceptance entry point. The existing `test-runner.sh` also accepts each named suite for a narrow check. Its `--tests-only` mode requires that the native AXe test target and current Playground app are already built and installed. For example:
+Both runners use `scripts/playground-suite-counts.json` and `scripts/playground-acceptance.json`. The matrix requires every named source declaration before it builds. Change the counts only when actual test cases change.
+
+**Completed case instances come from the structured Swift Testing version-0 event stream.** This includes each parameter argument. The reader requires one complete serial run, matching start/end events, the exact expected count and zero issues, skips or cancellation. It also checks XML for failed/skipped declarations. XML alone is not an executed-case count on this toolchain.
+
+Each result has JSON, XML, structured events, full command logs and a per-suite artifact directory. The result stores started and completed cases, errors and cases without completed results. Missing completed XML/event records do not prove that no native action started. The reader has 16 pure tests with a genuine 27-case/4-declaration trace and damaged/failing variants; those tests are separate from the 680 simulator cases.
+
+A failed case is not replayed. An input quarantine stops later work on that guest and stays in place. The runner does not clear it, restart a guest or add a production setup path. Preserve the failed result and inspect it before a new run.
+
+## Focused checks
+
+Use `--only iphone`, `--only ipad` or `--only duo` with a group: `core-controls`, `agent-controls`, `keyboard-hardware`, `media` or `hinge`. A focused run proves only that group and guest. `--suite core` keeps the nine generic core checks for a narrow compatibility check. The full Duo profile uses explicit display/orientation cases instead.
+
+The existing direct runner accepts each exact Playground suite. Its tests-only mode needs the current app and native test target already built, and matching helper paths from a matrix run. For example:
 
 ```sh
-AXE_BIN_PATH=/absolute/path/to/payload/axe \
+AXE_BIN_PATH=/absolute/path/to/final-runtime/axe \
 SIMULATOR_UDID=DUO_UUID AXE_DUO_E2E=1 \
-AXE_DUO_STATE_CHANGE_PATH=/absolute/path/to/previous-matrix-run/duo-external-state-change \
+AXE_DUO_STATE_CHANGE_PATH=/absolute/path/to/matrix-run/duo-external-state-change \
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 ./test-runner.sh --tests-only PlaygroundDuoInterruptionTests
 ```
 
-The direct interruption filter fails before simulator work if the state tool is absent. The state tool must match the supplied AXe runtime. A direct filter does not replace the full matrix result.
+The direct Duo-only path validates an explicit available Duo UUID before simulator work. Each suite's helper requirements are in the shared configuration. The direct filter uses the same structured result reader. It does not replace full acceptance.
 
-## Agent checks
+## Resources, delivery and boundaries
 
-| Check | Required app result |
-| --- | --- |
-| Compact capture and cache reuse | RS/1 output has valid rows; an unchanged capture reuses its snapshot without changing app values; raw output stays raw. |
-| Saved reference | A saved button reference changes the actual button value. |
-| App relaunch | The old reference is rejected without input; a fresh reference changes the relaunched app. |
-| Changed app layout | The old reference is rejected without input; a fresh reference changes the new control. |
+The matrix builds the public process probe and records CPU and memory every 15 seconds in `resources.jsonl`, starting before the Playground build. It records Codex, Device Hub, simulator services and the largest/highest-CPU processes. There is no 8 GB cap. Run heavy work one job at a time and inspect for sustained growth. Stop owned work if it runs away; preserve the evidence.
 
-## Duo checks
+Build, signing, packaging and local installation use a separate exact-payload recipe. The current recipe uses the ordinary iPhone, which the full matrix leaves warm. It verifies archive contents, strict signatures, an unlinked installed wrapper, a real app action and complete removal/restoration. It must use the final runtime and completed build receipts. These checks do not add to 680 and do not authorise uploads, pushes, publication or deployment.
 
-| Check | Required app result |
-| --- | --- |
-| Hinge controls | Closed, partly open, and fully open positions each permit a fresh lookup and a real button tap. |
-| Inner display rotations | A fresh lookup and button tap work in all four supported rotations. |
-| Outer display rotations | A fresh lookup and button tap work in all three supported rotations. Upside-down portrait is not a supported outer-display position. |
-| Fold with a saved reference | The old reference is rejected without input; a fresh reference changes the app on the active display. |
-| Rotate with a saved reference | The old reference is rejected without input; a fresh reference changes the rotated app. |
-| Inactive display | Input to the inactive display is rejected before input; a fresh tap on the active display changes the app. |
-
-The six interruption checks cover a held touch, a moving drag, and a moving pinch. Each gesture runs once with a fold and once with a rotation. The app must observe the contact or contacts before the change, then observe all contacts released or cancelled with no later move at the old coordinates. A fresh lookup and button tap must work after the change. These checks use the Playground's visible touch-monitor screen and an external state-change tool; AXe sends the gestures being checked.
-
-Each suite receives its own artifact directory under the result directory. Interruption receipts, command output, and app observations stay there for review. Do not count a source-only addition as a passed simulator check.
-
-## Scope limits
-
-The core suite alone does not prove every fold angle, rotation, selected-screen path, held-input interruption, or optional agent action. Existing audit receipts remain separate from a new run. The suite covers the cases listed above; no separate manual action is needed to repeat those cases. The full core feature set runs on closed outer portrait and open inner landscape. Other supported rotations use real Button checks. Custom hinge-driven split layouts, every control type, every command option and all gesture forms are not covered. Do not use the test count as a claim that every AXe command has been checked.
-
-The current hosted CI workflow runs non-E2E checks. A local matrix result does not prove hosted CI simulator coverage.
-
-The runner builds the tracked public-process probe and records CPU and memory every 15 seconds in `resources.jsonl`. Sampling starts before the Playground build. The log includes Codex, Device Hub, simulator services, the five largest processes, and the five processes with the highest CPU use. It does not enforce the old 8 GB limit. Inspect the log during native work. Run one heavy build or simulator job at a time. Stop owned test work if a process has a sustained resource increase; do not terminate unrelated apps or devices.
-
-Apple Pay payment-screen testing is excluded. Local package verification does not authorise publishing or deployment.
+The current hosted workflow runs non-E2E checks. Local results do not prove hosted simulator coverage. Repeated cold-start stress, conditional empty-tree recovery without a reproduced fault, Intel hardware and Apple Pay payment UI are outside this run. Apple Pay hardware delivery remains in scope. The suite repeats the documented prior behaviours; it does not claim every possible app, option or new OS state.

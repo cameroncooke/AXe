@@ -62,6 +62,8 @@ show_usage() {
     echo "  AXE_BIN_PATH          Prebuilt AXe executable to test with --tests-only"
     echo "  AXE_DUO_E2E=1         Enable a selected Playground Duo suite"
     echo "  AXE_DUO_STATE_CHANGE_PATH  Built external state tool for Duo interruption checks"
+    echo "  AXE_E2E_RESOURCE_PROBE_PATH Public process probe from the matching matrix run"
+    echo "  Other Playground helper paths are listed in scripts/playground-acceptance.json"
     echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
     echo "Test Filters (optional):"
@@ -152,6 +154,10 @@ while [[ $# -gt 0 ]]; do
             TEST_FILTER="$1"
             shift
             ;;
+        Playground*)
+            TEST_FILTER="$1"
+            shift
+            ;;
         *)
             print_error "Unknown option: $1"
             show_usage
@@ -166,19 +172,53 @@ if [[ "$UNIT_TESTS" == true ]] &&
     exit 1
 fi
 
-if [[ "$TEST_FILTER" == PlaygroundDuo* ]]; then
-    case "$(printf '%s' "${AXE_DUO_E2E:-0}" | tr '[:upper:]' '[:lower:]')" in
-        1|true|yes) ;;
-        *)
-            print_error "$TEST_FILTER requires AXE_DUO_E2E=1. No simulator work started."
-            exit 1
-            ;;
-    esac
-fi
+if [[ "$TEST_FILTER" == Playground* ]]; then
+    if ! python3 - "$TEST_FILTER" <<'PY'
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import uuid
 
-if [[ "$TEST_FILTER" == "PlaygroundDuoInterruptionTests" && ! -x "${AXE_DUO_STATE_CHANGE_PATH:-}" ]]; then
-    print_error "PlaygroundDuoInterruptionTests requires AXE_DUO_STATE_CHANGE_PATH to name the matching executable state tool. Run scripts/test-playground-matrix.py once to build it. No simulator work started."
-    exit 1
+suite = sys.argv[1]
+counts = json.loads(Path('scripts/playground-suite-counts.json').read_text())
+config = json.loads(Path('scripts/playground-acceptance.json').read_text())
+if type(counts.get(suite)) is not int or counts[suite] <= 0:
+    raise SystemExit('Unknown or incomplete Playground suite count: ' + suite + '. No simulator work started.')
+ordinary = set(config['profiles']['iphone'] + config['profiles']['ipad'])
+duo_only = suite in config['profiles']['duo'] + config['runLast'] and suite not in ordinary
+if duo_only and os.environ.get('AXE_DUO_E2E', '0').lower() not in ('1', 'true', 'yes'):
+    raise SystemExit(suite + ' requires AXE_DUO_E2E=1. No simulator work started.')
+if duo_only:
+    identifier = os.environ.get('SIMULATOR_UDID')
+    try:
+        if not identifier:
+            raise ValueError('SIMULATOR_UDID is absent')
+        expected = str(uuid.UUID(identifier)).upper()
+        inventory = subprocess.run(['/usr/bin/xcrun', 'simctl', 'list', 'devices', 'available', '-j'],
+                                   check=True, capture_output=True, text=True, timeout=20)
+        devices = json.loads(inventory.stdout)['devices']
+        matches = [row for rows in devices.values() for row in rows if row.get('udid', '').upper() == expected]
+        if len(matches) != 1 or matches[0].get('isAvailable') is not True:
+            raise ValueError('the explicit device is not available')
+        device = matches[0]
+        if device.get('deviceTypeIdentifier') != 'com.apple.CoreSimulator.SimDeviceType.iPhone-Duo':
+            raise ValueError('the explicit device is not an iPhone Duo')
+        if device.get('state') not in ('Booted', 'Shutdown'):
+            raise ValueError('the explicit Duo is not ready to use or boot')
+    except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        raise SystemExit(suite + ' requires an explicit available Duo SIMULATOR_UDID: ' + str(error)
+                         + '. No simulator work started.')
+scripts = {item['environment'] for item in config['driverFiles']}
+for name in config['suiteRequirements'].get(suite, []):
+    value = os.environ.get(name)
+    if not value or not Path(value).is_file() or (name not in scripts and not os.access(value, os.X_OK)):
+        raise SystemExit(suite + ' requires matching helper ' + name + '. Run the matrix to build it. No simulator work started.')
+PY
+    then
+        exit 1
+    fi
 fi
 
 # Function to check prerequisites
@@ -436,23 +476,7 @@ PY
 }
 
 verify_playground_results() {
-    python3 - "$1" "$2" <<'PY'
-from pathlib import Path
-import sys
-import xml.etree.ElementTree as ET
-
-xml = Path(sys.argv[1])
-expected = int(sys.argv[2])
-try:
-    tests = list(ET.parse(xml).getroot().iter('testcase'))
-except (OSError, ET.ParseError) as error:
-    raise SystemExit('No valid Swift Testing results: ' + str(error))
-skipped = [test for test in tests if test.find('skipped') is not None]
-failed = [test for test in tests if test.find('failure') is not None or test.find('error') is not None]
-if len(tests) != expected or skipped or failed:
-    raise SystemExit(f'Expected {expected} executed Playground checks; got {len(tests)}, skipped {len(skipped)}, failed {len(failed)}. Results: {xml}')
-print(f'Verified {expected} executed Playground checks, zero skips and failures. Results: {xml}')
-PY
+    python3 scripts/playground_results.py --xml "$1" --events "$2" --suite "$3" --expected "$4"
 }
 
 # Function to run tests
@@ -501,11 +525,10 @@ run_tests() {
         if [[ -n "$expected_count" ]]; then
             mkdir -p build_products/test-runner-results || return 1
             report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
-            args+=(--xunit-output "$report_directory/results.xml")
-            if [[ "$filter" == "PlaygroundDuoInterruptionTests" ]]; then
-                export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
-                mkdir "$AXE_E2E_ARTIFACT_DIR" || return 1
-            fi
+            args+=(--xunit-output "$report_directory/results.xml"
+                    --event-stream-output-path "$PWD/$report_directory/events.jsonl" --event-stream-version 0)
+            export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
+            mkdir "$AXE_E2E_ARTIFACT_DIR" || return 1
             print_info "Playground result directory: $report_directory"
         fi
         [[ "$VERBOSE" == true ]] && args+=(--verbose)
@@ -514,7 +537,7 @@ run_tests() {
             return 1
         fi
         if [[ -n "$expected_count" ]]; then
-            verify_playground_results "$report_directory/results-swift-testing.xml" "$expected_count" || return 1
+            verify_playground_results "$report_directory/results-swift-testing.xml" "$report_directory/events.jsonl" "$filter" "$expected_count" || return 1
         fi
         return 0
     }

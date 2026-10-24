@@ -76,6 +76,13 @@ final class PlaygroundTestProcess {
     private(set) var startedUptime: TimeInterval = 0
     var isRunning: Bool { process.isRunning }
     var exitCode: Int32 { process.terminationStatus }
+    var processIdentifier: Int32 { process.processIdentifier }
+
+    func signal(_ number: Int32) throws {
+        guard didStart, process.isRunning, kill(process.processIdentifier, number) == 0 else {
+            throw TestError.unexpectedState("Cannot signal the owned running subprocess.")
+        }
+    }
 
     init(executable: String, arguments: [String], directory: URL, name: String) throws {
         stdoutURL = directory.appendingPathComponent(name + ".stdout")

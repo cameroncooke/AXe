@@ -55,6 +55,26 @@ struct ContentView: View {
             TouchMonitorView()
                 .navigationTitle("Touch Monitor")
                 .navigationBarTitleDisplayMode(.inline)
+        case "agent-examples":
+            AgentExamplesView()
+                .navigationTitle("Agent Examples")
+                .navigationBarTitleDisplayMode(.inline)
+        case "duo-controls":
+            DuoControlsView()
+                .navigationTitle("Duo Controls")
+                .navigationBarTitleDisplayMode(.inline)
+        case "media-pattern":
+            MediaPatternView()
+                .navigationTitle("Capture Markers")
+                .navigationBarTitleDisplayMode(.inline)
+        case "hinge-layout":
+            HingeLayoutView()
+                .navigationTitle("Hinge Layout")
+                .navigationBarTitleDisplayMode(.inline)
+        case "inset-window":
+            InsetWindowView()
+                .navigationTitle("Smaller Window")
+                .navigationBarTitleDisplayMode(.inline)
         case "gesture-presets":
             GesturePresetsView()
         case "landscape-coordinate-test":
@@ -110,6 +130,11 @@ struct MainMenuView: View {
             ("tap-test", "Tap Test", "Displays coordinates of CLI taps"),
             ("touch-control", "Touch Control", "Touch down/up events"),
             ("touch-monitor", "Touch Monitor", "Records one or two real touch contacts"),
+            ("duo-controls", "Duo Controls", "Controls, nested scrolling and real gesture readback"),
+            ("agent-examples", "Agent Examples", "Duplicate targets, nested lists and system permission UI"),
+            ("hinge-layout", "Hinge Layout", "Document and controls follow the real fold region"),
+            ("media-pattern", "Capture Markers", "Upright colour markers for captures and movies"),
+            ("inset-window", "Smaller Window", "Controls in a real window with a screen offset"),
             ("swipe-test", "Swipe Test", "Shows CLI swipe paths"),
             ("gesture-presets", "Gesture Presets", "Multi-touch gesture display"),
             ("landscape-coordinate-test", "Landscape Coordinates", "Verifies orientation-aware taps"),

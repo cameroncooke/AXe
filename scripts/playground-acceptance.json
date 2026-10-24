@@ -1,0 +1,536 @@
+{
+  "schemaVersion": 1,
+  "sourceFiles": [
+    "PhotosButtonLeafE2ETests.swift",
+    "PlaygroundAcceptanceSupport.swift",
+    "PlaygroundAgentBatchTests.swift",
+    "PlaygroundAgentDoubleTapTests.swift",
+    "PlaygroundAgentDragTests.swift",
+    "PlaygroundAgentExamplesSupport.swift",
+    "PlaygroundAgentFeatureSupport.swift",
+    "PlaygroundAgentKeyboardTests.swift",
+    "PlaygroundAgentNativeStateTests.swift",
+    "PlaygroundAgentObservationTests.swift",
+    "PlaygroundAgentPinchTests.swift",
+    "PlaygroundAgentSelectorTests.swift",
+    "PlaygroundAgentSliderTests.swift",
+    "PlaygroundAgentSystemOwnerTests.swift",
+    "PlaygroundAgentTests.swift",
+    "PlaygroundAgentTouchTests.swift",
+    "PlaygroundAgentTypeTests.swift",
+    "PlaygroundClipboardTests.swift",
+    "PlaygroundColdInputHandoverTests.swift",
+    "PlaygroundCoreTests.swift",
+    "PlaygroundDuoAdditionalInterruptionTests.swift",
+    "PlaygroundDuoAgentInterruptionTests.swift",
+    "PlaygroundDuoBatchCoverageTests.swift",
+    "PlaygroundDuoControlsSupport.swift",
+    "PlaygroundDuoCoreTests.swift",
+    "PlaygroundDuoGestureCoverageTests.swift",
+    "PlaygroundDuoHardwareInterruptionTests.swift",
+    "PlaygroundDuoHardwareTests.swift",
+    "PlaygroundDuoHeldModifierTests.swift",
+    "PlaygroundDuoKeyboardDelayTests.swift",
+    "PlaygroundDuoKeyboardInterruptionTests.swift",
+    "PlaygroundDuoKeyboardSourcesTests.swift",
+    "PlaygroundDuoLegacyBatchInterruptionTests.swift",
+    "PlaygroundDuoLifetimeSupport.swift",
+    "PlaygroundDuoManualBoundaryTests.swift",
+    "PlaygroundDuoMediaSafetyTests.swift",
+    "PlaygroundDuoMediaTests.swift",
+    "PlaygroundDuoMotionOptionsTests.swift",
+    "PlaygroundDuoPairCoverageTests.swift",
+    "PlaygroundDuoRetainedInputTests.swift",
+    "PlaygroundDuoRetainedPairTests.swift",
+    "PlaygroundDuoScreenSupport.swift",
+    "PlaygroundDuoScrollCoverageTests.swift",
+    "PlaygroundDuoSelectedControlTests.swift",
+    "PlaygroundDuoSelectedHomeBatchTests.swift",
+    "PlaygroundDuoSelectedTargetTests.swift",
+    "PlaygroundDuoSupport.swift",
+    "PlaygroundDuoTapWaitTests.swift",
+    "PlaygroundDuoTests.swift",
+    "PlaygroundDuoTypingInterruptionTests.swift",
+    "PlaygroundHingeWindowTests.swift",
+    "PlaygroundIndependentPairTests.swift",
+    "PlaygroundInputHandoverTests.swift",
+    "PlaygroundInterruptionTests.swift",
+    "PlaygroundKeyboardTests.swift",
+    "PlaygroundMediaAssertions.swift",
+    "PlaygroundMediaProcessSupport.swift",
+    "PlaygroundNativeReleaseSupport.swift",
+    "PlaygroundOrdinaryRegressionTests.swift",
+    "PlaygroundSelectedClientExitTests.swift",
+    "PlaygroundSemanticSwitchTests.swift",
+    "PlaygroundSimulatorLifecycleTests.swift",
+    "PlaygroundStdinProcess.swift",
+    "PlaygroundTouchMonitorSupport.swift",
+    "TestUIState.swift",
+    "TestUtilities.swift"
+  ],
+  "profiles": {
+    "iphone": [
+      "PlaygroundCoreTests",
+      "PlaygroundOrdinaryRegressionTests",
+      "PlaygroundInputHandoverTests",
+      "PlaygroundColdInputHandoverTests",
+      "PlaygroundAgentTests",
+      "PlaygroundAgentSelectorTests",
+      "PlaygroundAgentObservationTests",
+      "PlaygroundAgentKeyTests",
+      "PlaygroundAgentKeyComboTests",
+      "PlaygroundAgentKeySequenceTests",
+      "PlaygroundAgentTouchTests",
+      "PlaygroundAgentDoubleTapTests",
+      "PlaygroundAgentDragTests",
+      "PlaygroundAgentPinchTests",
+      "PlaygroundAgentSliderTests",
+      "PlaygroundAgentNativeStateTests",
+      "PlaygroundAgentSystemOwnerTests",
+      "PhotosButtonLeafE2ETests",
+      "PlaygroundAgentBatchTests",
+      "PlaygroundClipboardTests",
+      "PlaygroundIndependentPairTests",
+      "PlaygroundSemanticSwitchTests",
+      "PlaygroundAgentTypeTests",
+      "PlaygroundKeyboardTests",
+      "PlaygroundWindowTests"
+    ],
+    "ipad": [
+      "PlaygroundCoreTests",
+      "PlaygroundOrdinaryRegressionTests",
+      "PlaygroundAgentTests",
+      "PlaygroundKeyboardTests",
+      "PlaygroundWindowTests"
+    ],
+    "duo": [
+      "PlaygroundDuoCoreTests",
+      "PlaygroundInputHandoverTests",
+      "PlaygroundDuoGestureCoverageTests",
+      "PlaygroundDuoCoordinateCoverageTests",
+      "PlaygroundDuoScrollCoverageTests",
+      "PlaygroundDuoSelectedSwitchTests",
+      "PlaygroundDuoTapStyleTests",
+      "PlaygroundDuoSelectedTargetTests",
+      "PlaygroundDuoSelectedSliderTests",
+      "PlaygroundDuoPairCoverageTests",
+      "PlaygroundDuoRetainedInputTests",
+      "PlaygroundDuoRetainedPairTests",
+      "PlaygroundDuoAdditionalInterruptionTests",
+      "PlaygroundDuoMotionOptionsTests",
+      "PlaygroundDuoNavigationTests",
+      "PlaygroundDuoTapWaitTests",
+      "PlaygroundDuoBatchCoverageTests",
+      "PlaygroundDuoLegacyBatchInterruptionTests",
+      "PlaygroundDuoSameAppFoldTests",
+      "PlaygroundDuoHorizontalPresetTests",
+      "PlaygroundDuoManualBoundaryTests",
+      "PlaygroundSelectedClientExitTests",
+      "PlaygroundAgentTests",
+      "PlaygroundAgentSelectorTests",
+      "PlaygroundAgentObservationTests",
+      "PlaygroundAgentKeyTests",
+      "PlaygroundAgentKeyComboTests",
+      "PlaygroundAgentKeySequenceTests",
+      "PlaygroundAgentTouchTests",
+      "PlaygroundAgentDoubleTapTests",
+      "PlaygroundAgentDragTests",
+      "PlaygroundAgentPinchTests",
+      "PlaygroundAgentSliderTests",
+      "PlaygroundAgentNativeStateTests",
+      "PlaygroundAgentSystemOwnerTests",
+      "PhotosButtonLeafE2ETests",
+      "PlaygroundAgentBatchTests",
+      "PlaygroundClipboardTests",
+      "PlaygroundIndependentPairTests",
+      "PlaygroundSemanticSwitchTests",
+      "PlaygroundAgentTypeTests",
+      "PlaygroundDuoSemanticSwitchTests",
+      "PlaygroundDuoInteriorSliderTests",
+      "PlaygroundDuoAgentInterruptionTests",
+      "PlaygroundDuoKeyboardInterruptionTests",
+      "PlaygroundDuoKeyboardSourcesTests",
+      "PlaygroundDuoSelectedKeyInterruptionTests",
+      "PlaygroundDuoSelectedBatchKeyboardTests",
+      "PlaygroundDuoHeldModifierTests",
+      "PlaygroundDuoTypingInterruptionTests",
+      "PlaygroundDuoHardwareTests",
+      "PlaygroundDuoHardwareInterruptionTests",
+      "PlaygroundDuoSelectedHomeBatchTests",
+      "PlaygroundDuoKeyboardDelayTests",
+      "PlaygroundDuoMediaTests",
+      "PlaygroundDuoMediaSafetyTests",
+      "PlaygroundDuoTests",
+      "PlaygroundDuoInterruptionTests",
+      "PlaygroundDuoHingeWindowTests"
+    ]
+  },
+  "runLast": [
+    "PlaygroundSimulatorLifecycleTests"
+  ],
+  "pendingManifests": [],
+  "nativeTools": [
+    {
+      "environment": "AXE_DUO_STATE_CHANGE_PATH",
+      "source": "scripts/fixtures/DuoExternalStateChange.swift",
+      "binary": "duo-external-state-change"
+    },
+    {
+      "environment": "AXE_DUO_RETAINED_PAIR_PATH",
+      "source": "scripts/fixtures/DuoRetainedPairProbe.swift",
+      "binary": "duo-retained-pair"
+    },
+    {
+      "environment": "AXE_DUO_HELD_HARDWARE_PROBE_PATH",
+      "source": "scripts/fixtures/DuoHeldHardwareProbe.swift",
+      "binary": "duo-held-hardware"
+    },
+    {
+      "environment": "AXE_DUO_HELD_MODIFIER_PROBE_PATH",
+      "source": "scripts/fixtures/DuoHeldModifierProbe.swift",
+      "binary": "duo-held-modifier"
+    }
+  ],
+  "driverFiles": [
+    {
+      "environment": "AXE_VERIFY_DUO_CONTROLS_PATH",
+      "source": "scripts/verification/verify-duo-controls.py"
+    },
+    {
+      "environment": "AXE_VERIFY_DUO_HELD_KEY_PATH",
+      "source": "scripts/verification/verify-duo-held-key.py"
+    },
+    {
+      "environment": "AXE_VERIFY_DUO_HELD_HARDWARE_PATH",
+      "source": "scripts/verification/verify-duo-held-hardware.py"
+    },
+    {
+      "environment": "AXE_MEDIA_PROCESS_OBSERVER_PATH",
+      "source": "scripts/verification/observe-media-process.py"
+    },
+    {
+      "environment": "AXE_COLD_BROKER_PREFLIGHT_PATH",
+      "source": "scripts/verification/wait-cold-broker.py"
+    }
+  ],
+  "suiteRequirements": {
+    "PlaygroundDuoInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoKeyboardInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoRetainedPairTests": [
+      "AXE_DUO_RETAINED_PAIR_PATH",
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoAdditionalInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoRetainedInputTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoTapWaitTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoLegacyBatchInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoSameAppFoldTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoMediaTests": [
+      "AXE_DUO_STATE_CHANGE_PATH",
+      "AXE_E2E_RESOURCE_PROBE_PATH",
+      "AXE_MEDIA_PROCESS_OBSERVER_PATH"
+    ],
+    "PlaygroundDuoSelectedKeyInterruptionTests": [
+      "AXE_VERIFY_DUO_CONTROLS_PATH",
+      "AXE_VERIFY_DUO_HELD_KEY_PATH",
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoHardwareInterruptionTests": [
+      "AXE_VERIFY_DUO_CONTROLS_PATH",
+      "AXE_VERIFY_DUO_HELD_HARDWARE_PATH",
+      "AXE_DUO_HELD_HARDWARE_PROBE_PATH",
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoHeldModifierTests": [
+      "AXE_DUO_HELD_MODIFIER_PROBE_PATH",
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoTypingInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoManualBoundaryTests": [
+      "AXE_DUO_RETAINED_PAIR_PATH",
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoAgentInterruptionTests": [
+      "AXE_DUO_STATE_CHANGE_PATH"
+    ],
+    "PlaygroundDuoMediaSafetyTests": [
+      "AXE_MEDIA_PROCESS_OBSERVER_PATH",
+      "AXE_E2E_RESOURCE_PROBE_PATH"
+    ],
+    "PlaygroundColdInputHandoverTests": [
+      "AXE_COLD_BROKER_PREFLIGHT_PATH"
+    ],
+    "PlaygroundAgentSystemOwnerTests": [
+      "AXE_MEDIA_PROCESS_OBSERVER_PATH"
+    ],
+    "PhotosButtonLeafE2ETests": [
+      "AXE_MEDIA_PROCESS_OBSERVER_PATH"
+    ]
+  },
+  "agentProfiles": {
+    "iphone": [
+      "PlaygroundAgentTests",
+      "PlaygroundAgentSelectorTests",
+      "PlaygroundAgentObservationTests",
+      "PlaygroundAgentKeyTests",
+      "PlaygroundAgentKeyComboTests",
+      "PlaygroundAgentKeySequenceTests",
+      "PlaygroundAgentTouchTests",
+      "PlaygroundAgentDoubleTapTests",
+      "PlaygroundAgentDragTests",
+      "PlaygroundAgentPinchTests",
+      "PlaygroundAgentSliderTests",
+      "PlaygroundAgentNativeStateTests",
+      "PlaygroundAgentSystemOwnerTests",
+      "PhotosButtonLeafE2ETests",
+      "PlaygroundAgentBatchTests",
+      "PlaygroundClipboardTests",
+      "PlaygroundIndependentPairTests",
+      "PlaygroundSemanticSwitchTests",
+      "PlaygroundAgentTypeTests"
+    ],
+    "ipad": [
+      "PlaygroundAgentTests"
+    ],
+    "duo": [
+      "PlaygroundAgentTests",
+      "PlaygroundAgentSelectorTests",
+      "PlaygroundAgentObservationTests",
+      "PlaygroundAgentKeyTests",
+      "PlaygroundAgentKeyComboTests",
+      "PlaygroundAgentKeySequenceTests",
+      "PlaygroundAgentTouchTests",
+      "PlaygroundAgentDoubleTapTests",
+      "PlaygroundAgentDragTests",
+      "PlaygroundAgentPinchTests",
+      "PlaygroundAgentSliderTests",
+      "PlaygroundAgentNativeStateTests",
+      "PlaygroundAgentSystemOwnerTests",
+      "PhotosButtonLeafE2ETests",
+      "PlaygroundAgentBatchTests",
+      "PlaygroundClipboardTests",
+      "PlaygroundIndependentPairTests",
+      "PlaygroundSemanticSwitchTests",
+      "PlaygroundAgentTypeTests",
+      "PlaygroundDuoSemanticSwitchTests",
+      "PlaygroundDuoInteriorSliderTests",
+      "PlaygroundDuoAgentInterruptionTests"
+    ]
+  },
+  "groups": {
+    "core-controls": {
+      "iphone": [
+        "PlaygroundCoreTests",
+        "PlaygroundOrdinaryRegressionTests",
+        "PlaygroundInputHandoverTests",
+        "PlaygroundColdInputHandoverTests"
+      ],
+      "ipad": [
+        "PlaygroundCoreTests",
+        "PlaygroundOrdinaryRegressionTests"
+      ],
+      "duo": [
+        "PlaygroundDuoCoreTests",
+        "PlaygroundInputHandoverTests",
+        "PlaygroundDuoGestureCoverageTests",
+        "PlaygroundDuoCoordinateCoverageTests",
+        "PlaygroundDuoScrollCoverageTests",
+        "PlaygroundDuoSelectedSwitchTests",
+        "PlaygroundDuoTapStyleTests",
+        "PlaygroundDuoSelectedTargetTests",
+        "PlaygroundDuoSelectedSliderTests",
+        "PlaygroundDuoPairCoverageTests",
+        "PlaygroundDuoRetainedInputTests",
+        "PlaygroundDuoRetainedPairTests",
+        "PlaygroundDuoAdditionalInterruptionTests",
+        "PlaygroundDuoMotionOptionsTests",
+        "PlaygroundDuoNavigationTests",
+        "PlaygroundDuoTapWaitTests",
+        "PlaygroundDuoBatchCoverageTests",
+        "PlaygroundDuoLegacyBatchInterruptionTests",
+        "PlaygroundDuoSameAppFoldTests",
+        "PlaygroundDuoHorizontalPresetTests",
+        "PlaygroundDuoManualBoundaryTests",
+        "PlaygroundSelectedClientExitTests"
+      ]
+    },
+    "agent-controls": {
+      "iphone": [
+        "PlaygroundAgentTests",
+        "PlaygroundAgentSelectorTests",
+        "PlaygroundAgentObservationTests",
+        "PlaygroundAgentKeyTests",
+        "PlaygroundAgentKeyComboTests",
+        "PlaygroundAgentKeySequenceTests",
+        "PlaygroundAgentTouchTests",
+        "PlaygroundAgentDoubleTapTests",
+        "PlaygroundAgentDragTests",
+        "PlaygroundAgentPinchTests",
+        "PlaygroundAgentSliderTests",
+        "PlaygroundAgentNativeStateTests",
+        "PlaygroundAgentSystemOwnerTests",
+        "PhotosButtonLeafE2ETests",
+        "PlaygroundAgentBatchTests",
+        "PlaygroundClipboardTests",
+        "PlaygroundIndependentPairTests",
+        "PlaygroundSemanticSwitchTests",
+        "PlaygroundAgentTypeTests"
+      ],
+      "ipad": [
+        "PlaygroundAgentTests"
+      ],
+      "duo": [
+        "PlaygroundAgentTests",
+        "PlaygroundAgentSelectorTests",
+        "PlaygroundAgentObservationTests",
+        "PlaygroundAgentKeyTests",
+        "PlaygroundAgentKeyComboTests",
+        "PlaygroundAgentKeySequenceTests",
+        "PlaygroundAgentTouchTests",
+        "PlaygroundAgentDoubleTapTests",
+        "PlaygroundAgentDragTests",
+        "PlaygroundAgentPinchTests",
+        "PlaygroundAgentSliderTests",
+        "PlaygroundAgentNativeStateTests",
+        "PlaygroundAgentSystemOwnerTests",
+        "PhotosButtonLeafE2ETests",
+        "PlaygroundAgentBatchTests",
+        "PlaygroundClipboardTests",
+        "PlaygroundIndependentPairTests",
+        "PlaygroundSemanticSwitchTests",
+        "PlaygroundAgentTypeTests",
+        "PlaygroundDuoSemanticSwitchTests",
+        "PlaygroundDuoInteriorSliderTests",
+        "PlaygroundDuoAgentInterruptionTests"
+      ]
+    },
+    "keyboard-hardware": {
+      "iphone": [
+        "PlaygroundKeyboardTests"
+      ],
+      "ipad": [
+        "PlaygroundKeyboardTests"
+      ],
+      "duo": [
+        "PlaygroundDuoKeyboardInterruptionTests",
+        "PlaygroundDuoKeyboardSourcesTests",
+        "PlaygroundDuoSelectedKeyInterruptionTests",
+        "PlaygroundDuoSelectedBatchKeyboardTests",
+        "PlaygroundDuoHeldModifierTests",
+        "PlaygroundDuoTypingInterruptionTests",
+        "PlaygroundDuoHardwareTests",
+        "PlaygroundDuoHardwareInterruptionTests",
+        "PlaygroundDuoSelectedHomeBatchTests",
+        "PlaygroundDuoKeyboardDelayTests"
+      ]
+    },
+    "media": {
+      "iphone": [],
+      "ipad": [],
+      "duo": [
+        "PlaygroundDuoMediaTests",
+        "PlaygroundDuoMediaSafetyTests"
+      ]
+    },
+    "hinge": {
+      "iphone": [
+        "PlaygroundWindowTests"
+      ],
+      "ipad": [
+        "PlaygroundWindowTests"
+      ],
+      "duo": [
+        "PlaygroundDuoTests",
+        "PlaygroundDuoInterruptionTests",
+        "PlaygroundDuoHingeWindowTests"
+      ]
+    }
+  },
+  "profileNotes": {
+    "ipad": "Existing baseline core, keyboard, agent, ordinary regression and real window checks only. The new generic agent cases retain the prior iPhone and Duo scope.",
+    "lifecycle": "Run last, after local package checks. This case leaves Duo shut down."
+  },
+  "suiteSources": {
+    "PlaygroundCoreTests": "PlaygroundCoreTests.swift",
+    "PlaygroundOrdinaryRegressionTests": "PlaygroundOrdinaryRegressionTests.swift",
+    "PlaygroundAgentTests": "PlaygroundAgentTests.swift",
+    "PlaygroundAgentSelectorTests": "PlaygroundAgentSelectorTests.swift",
+    "PlaygroundAgentObservationTests": "PlaygroundAgentObservationTests.swift",
+    "PlaygroundAgentKeyTests": "PlaygroundAgentKeyboardTests.swift",
+    "PlaygroundAgentKeyComboTests": "PlaygroundAgentKeyboardTests.swift",
+    "PlaygroundAgentKeySequenceTests": "PlaygroundAgentKeyboardTests.swift",
+    "PlaygroundAgentTouchTests": "PlaygroundAgentTouchTests.swift",
+    "PlaygroundAgentDoubleTapTests": "PlaygroundAgentDoubleTapTests.swift",
+    "PlaygroundAgentDragTests": "PlaygroundAgentDragTests.swift",
+    "PlaygroundAgentPinchTests": "PlaygroundAgentPinchTests.swift",
+    "PlaygroundAgentSliderTests": "PlaygroundAgentSliderTests.swift",
+    "PlaygroundAgentNativeStateTests": "PlaygroundAgentNativeStateTests.swift",
+    "PlaygroundAgentSystemOwnerTests": "PlaygroundAgentSystemOwnerTests.swift",
+    "PlaygroundAgentBatchTests": "PlaygroundAgentBatchTests.swift",
+    "PlaygroundClipboardTests": "PlaygroundClipboardTests.swift",
+    "PlaygroundIndependentPairTests": "PlaygroundIndependentPairTests.swift",
+    "PlaygroundSemanticSwitchTests": "PlaygroundSemanticSwitchTests.swift",
+    "PlaygroundAgentTypeTests": "PlaygroundAgentTypeTests.swift",
+    "PlaygroundKeyboardTests": "PlaygroundKeyboardTests.swift",
+    "PlaygroundWindowTests": "PlaygroundHingeWindowTests.swift",
+    "PlaygroundDuoCoreTests": "PlaygroundDuoCoreTests.swift",
+    "PlaygroundDuoGestureCoverageTests": "PlaygroundDuoGestureCoverageTests.swift",
+    "PlaygroundDuoCoordinateCoverageTests": "PlaygroundDuoGestureCoverageTests.swift",
+    "PlaygroundDuoScrollCoverageTests": "PlaygroundDuoScrollCoverageTests.swift",
+    "PlaygroundDuoSelectedSwitchTests": "PlaygroundDuoSelectedControlTests.swift",
+    "PlaygroundDuoTapStyleTests": "PlaygroundDuoSelectedControlTests.swift",
+    "PlaygroundDuoSelectedTargetTests": "PlaygroundDuoSelectedTargetTests.swift",
+    "PlaygroundDuoSelectedSliderTests": "PlaygroundDuoSelectedTargetTests.swift",
+    "PlaygroundDuoPairCoverageTests": "PlaygroundDuoPairCoverageTests.swift",
+    "PlaygroundDuoRetainedInputTests": "PlaygroundDuoRetainedInputTests.swift",
+    "PlaygroundDuoRetainedPairTests": "PlaygroundDuoRetainedPairTests.swift",
+    "PlaygroundDuoAdditionalInterruptionTests": "PlaygroundDuoAdditionalInterruptionTests.swift",
+    "PlaygroundDuoMotionOptionsTests": "PlaygroundDuoMotionOptionsTests.swift",
+    "PlaygroundDuoNavigationTests": "PlaygroundDuoMotionOptionsTests.swift",
+    "PlaygroundDuoTapWaitTests": "PlaygroundDuoTapWaitTests.swift",
+    "PlaygroundDuoBatchCoverageTests": "PlaygroundDuoBatchCoverageTests.swift",
+    "PlaygroundDuoLegacyBatchInterruptionTests": "PlaygroundDuoLegacyBatchInterruptionTests.swift",
+    "PlaygroundDuoSameAppFoldTests": "PlaygroundDuoLegacyBatchInterruptionTests.swift",
+    "PlaygroundDuoHorizontalPresetTests": "PlaygroundDuoLegacyBatchInterruptionTests.swift",
+    "PlaygroundDuoManualBoundaryTests": "PlaygroundDuoManualBoundaryTests.swift",
+    "PlaygroundDuoSemanticSwitchTests": "PlaygroundSemanticSwitchTests.swift",
+    "PlaygroundDuoInteriorSliderTests": "PlaygroundSemanticSwitchTests.swift",
+    "PlaygroundDuoAgentInterruptionTests": "PlaygroundDuoAgentInterruptionTests.swift",
+    "PlaygroundDuoKeyboardInterruptionTests": "PlaygroundDuoKeyboardInterruptionTests.swift",
+    "PlaygroundDuoKeyboardSourcesTests": "PlaygroundDuoKeyboardSourcesTests.swift",
+    "PlaygroundDuoSelectedKeyInterruptionTests": "PlaygroundDuoKeyboardSourcesTests.swift",
+    "PlaygroundDuoSelectedBatchKeyboardTests": "PlaygroundDuoKeyboardSourcesTests.swift",
+    "PlaygroundDuoHeldModifierTests": "PlaygroundDuoHeldModifierTests.swift",
+    "PlaygroundDuoTypingInterruptionTests": "PlaygroundDuoTypingInterruptionTests.swift",
+    "PlaygroundDuoHardwareTests": "PlaygroundDuoHardwareTests.swift",
+    "PlaygroundDuoHardwareInterruptionTests": "PlaygroundDuoHardwareInterruptionTests.swift",
+    "PlaygroundDuoMediaTests": "PlaygroundDuoMediaTests.swift",
+    "PlaygroundDuoMediaSafetyTests": "PlaygroundDuoMediaSafetyTests.swift",
+    "PlaygroundDuoTests": "PlaygroundDuoTests.swift",
+    "PlaygroundDuoInterruptionTests": "PlaygroundInterruptionTests.swift",
+    "PlaygroundDuoHingeWindowTests": "PlaygroundHingeWindowTests.swift",
+    "PlaygroundSimulatorLifecycleTests": "PlaygroundSimulatorLifecycleTests.swift",
+    "PlaygroundDuoSelectedHomeBatchTests": "PlaygroundDuoSelectedHomeBatchTests.swift",
+    "PlaygroundDuoKeyboardDelayTests": "PlaygroundDuoKeyboardDelayTests.swift",
+    "PlaygroundSelectedClientExitTests": "PlaygroundSelectedClientExitTests.swift",
+    "PlaygroundInputHandoverTests": "PlaygroundInputHandoverTests.swift",
+    "PlaygroundColdInputHandoverTests": "PlaygroundColdInputHandoverTests.swift",
+    "PhotosButtonLeafE2ETests": "PhotosButtonLeafE2ETests.swift"
+  }
+}
