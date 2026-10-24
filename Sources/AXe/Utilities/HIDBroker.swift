@@ -37,7 +37,7 @@ struct HIDBrokerBootIdentity: Equatable {
 enum HIDBroker {
     static let inputDeliveryFailureDescription = "AXe could not deliver simulator input. The simulator may have restarted or disconnected. Confirm it is booted and try again."
     static let dtuhidMinimumBootUptime: TimeInterval = 10
-    static let protocolVersion = 2
+    static let protocolVersion = 3
     static let maximumMessageBytes = 64 * 1024
     private static let idleTimeoutMilliseconds: Int32 = 60_000
     static let serverIOTimeoutMilliseconds: Int = 2_000
@@ -84,7 +84,8 @@ enum HIDBroker {
         }
 
         let bootIdentity = try currentBootIdentity(simulatorUDID: simulatorUDID)
-        let session = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
+        var session: HIDInteractor.Session? = nil
+        var hasRetainedContact = false
         while true {
             var pollDescriptor = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
             let result = Darwin.poll(&pollDescriptor, 1, idleTimeoutMilliseconds)
@@ -121,7 +122,8 @@ enum HIDBroker {
                 Darwin.close(client)
                 continue
             }
-            let shouldContinue = await handle(client: client, session: session, logger: logger)
+            let shouldContinue = await handle(client: client, simulatorUDID: simulatorUDID,
+                session: &session, hasRetainedContact: &hasRetainedContact, logger: logger)
             Darwin.close(client)
             if !shouldContinue {
                 return
@@ -132,7 +134,9 @@ enum HIDBroker {
     @MainActor
     private static func handle(
         client: Int32,
-        session: HIDInteractor.Session,
+        simulatorUDID: String,
+        session: inout HIDInteractor.Session?,
+        hasRetainedContact: inout Bool,
         logger: AxeLogger
     ) async -> Bool {
         var peerUID: uid_t = 0
@@ -146,36 +150,62 @@ enum HIDBroker {
         do {
             let data = try readMessage(from: client)
             let request = try JSONDecoder().decode(HIDBrokerRequest.self, from: data)
-            for primitive in request.primitives {
-                switch primitive.kind {
-                case .down, .up:
-                    guard let x = primitive.x, let y = primitive.y else {
-                        throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
-                    }
-                    let direction: FBSimulatorHIDDirection = primitive.kind == .down ? .down : .up
-                    do {
-                        try await HIDInteractor.performHIDEvent(
-                            .touch(direction: direction, x: x, y: y),
-                            in: session,
-                            logger: logger
-                        )
-                    } catch {
-                        shouldContinue = false
-                        throw error
-                    }
-                case .delay:
-                    guard let duration = primitive.duration, duration >= 0, duration <= 10 else {
-                        throw CLIError(errorDescription: "HID broker delay is invalid.")
-                    }
-                    try await Task.sleep(for: .seconds(duration))
-                }
-            }
+            try await perform(request.primitives, simulatorUDID: simulatorUDID,
+                session: &session, hasRetainedContact: &hasRetainedContact,
+                shouldContinue: &shouldContinue, logger: logger)
+            // A completed UP releases common input ownership before the client receives success.
+            // A failed request keeps the prior ownership policy; it is never declared clear here.
+            if !hasRetainedContact { session = nil }
             try writeResponse(error: nil, to: client)
         } catch {
             logger.error().log("HID broker request failed: \(error.localizedDescription)")
             try? writeResponse(error: brokerResponseDescription(for: error), to: client)
         }
         return shouldContinue
+    }
+
+    /// Keep one raw session while a contact spans CLI calls. Idle brokers do not own input.
+    @MainActor
+    private static func perform(
+        _ primitives: [HIDBrokerPrimitive],
+        simulatorUDID: String,
+        session: inout HIDInteractor.Session?,
+        hasRetainedContact: inout Bool,
+        shouldContinue: inout Bool,
+        logger: AxeLogger
+    ) async throws {
+        let activeSession: HIDInteractor.Session
+        if let session {
+            activeSession = session
+        } else {
+            activeSession = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
+            session = activeSession
+        }
+        for primitive in primitives {
+            switch primitive.kind {
+            case .down, .up:
+                guard let x = primitive.x, let y = primitive.y else {
+                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
+                }
+                let direction: FBSimulatorHIDDirection = primitive.kind == .down ? .down : .up
+                do {
+                    try await HIDInteractor.performHIDEvent(
+                        .touch(direction: direction, x: x, y: y),
+                        in: activeSession,
+                        logger: logger
+                    )
+                    hasRetainedContact = primitive.kind == .down
+                } catch {
+                    shouldContinue = false
+                    throw error
+                }
+            case .delay:
+                guard let duration = primitive.duration, duration >= 0, duration <= 10 else {
+                    throw CLIError(errorDescription: "HID broker delay is invalid.")
+                }
+                try await Task.sleep(for: .seconds(duration))
+            }
+        }
     }
 
     static func brokerResponseDescription(for error: Error) -> String {
@@ -185,9 +215,9 @@ enum HIDBroker {
         return inputDeliveryFailureDescription
     }
 
-    static func endpointPath(simulatorUDID: String) throws -> String {
+    static func endpointPath(simulatorUDID: String, version: Int = protocolVersion) throws -> String {
         let developerDirectory = try FBXcodeDirectory.resolveDeveloperDirectory()
-        return try endpointPath(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory)
+        return try endpointPath(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory, version: version)
     }
 
     static func endpointPath(simulatorUDID: String, developerDirectory: String, version: Int = protocolVersion) throws -> String {

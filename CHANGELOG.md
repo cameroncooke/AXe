@@ -135,6 +135,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed no-flag Duo scroll presets using legacy geometry after rotation. Presets now use the measured active display and existing owned input. The previously failed scroll check passed twice on the current Debug candidate at measured outer rotation90; wider preset and position combinations remain unverified.
 
+- Fixed completed raw touches keeping selected and agent input busy. The raw helper now opens input when a request needs it, releases ownership after a completed UP, and keeps one session while a finger remains down.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

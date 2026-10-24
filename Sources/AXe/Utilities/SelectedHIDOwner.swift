@@ -267,7 +267,9 @@ final class SelectedHIDOwner {
     }
 
     private func acquireLease() throws {
-        let legacyEndpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID)
+        // Older raw brokers can retain input without the common lease. Keep their process guard.
+        // Protocol 3 brokers release the common lease after a complete contact pair.
+        let legacyEndpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID, version: 2)
         guard try !HIDBroker.isBrokerProcessAlive(endpoint: legacyEndpoint) else { throw SelectedHIDFailure.busy }
         lease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
     }
