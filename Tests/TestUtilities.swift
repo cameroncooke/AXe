@@ -87,7 +87,8 @@ struct CommandRunner {
             throw NSError(
                 domain: "CommandRunner",
                 code: Int(process.terminationStatus),
-                userInfo: [NSLocalizedDescriptionKey: combinedOutput]
+                userInfo: [NSLocalizedDescriptionKey:
+                    "Command failed (\(process.terminationStatus)): \(command)\n\(combinedOutput)"]
             )
         }
 

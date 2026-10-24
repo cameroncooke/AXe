@@ -106,8 +106,21 @@ struct PlaygroundDuoCoreTests {
         try #require(current.activePanel.identity == identity)
         try #require(try current.activePanel.rotationDegrees() == screen.rotation)
         print("Core screen prepared: \(screen.rawValue), boot=\(current.bootIdentity), panel=\(identity.displayID)")
-        try await check()
+        print("Core catalogue before \(screen.rawValue): \(String(reflecting: current))")
+        do {
+            try await check()
+        } catch {
+            let originalFailure = error
+            do {
+                let observed = try await app.catalogue()
+                print("Core catalogue after failed \(screen.rawValue): \(String(reflecting: observed))")
+            } catch {
+                print("Core catalogue read after failed \(screen.rawValue) also failed: \(error)")
+            }
+            throw originalFailure
+        }
         let after = try await app.catalogue(boot: original.bootIdentity)
+        print("Core catalogue after \(screen.rawValue): \(String(reflecting: after))")
         try #require(after.activePanel == current.activePanel, "The core check changed its measured display or geometry.")
     }
 }

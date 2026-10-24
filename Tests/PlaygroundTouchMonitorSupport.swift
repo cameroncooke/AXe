@@ -111,7 +111,7 @@ final class PlaygroundTestProcess {
         guard !process.isRunning else {
             throw TestError.unexpectedState("Owned subprocess exceeded \(timeout) seconds.")
         }
-        process.waitUntilExit()
+        // Foundation has observed termination. A synchronous wait can block the cooperative executor.
     }
 
     /// Let the library finish its release before terminating only this owned CLI client.
@@ -132,8 +132,16 @@ final class PlaygroundTestProcess {
                 await Self.cleanupPause()
             }
         }
-        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
-        process.waitUntilExit()
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            let stop = ProcessInfo.processInfo.systemUptime + 2
+            while process.isRunning, ProcessInfo.processInfo.systemUptime < stop {
+                await Self.cleanupPause()
+            }
+        }
+        if process.isRunning {
+            Issue.record("The owned subprocess did not stop after termination.")
+        }
     }
 
     private static func cleanupPause() async {
