@@ -51,6 +51,10 @@ struct ContentView: View {
             TapTestView()
         case "touch-control":
             TouchControlView()
+        case "touch-monitor":
+            TouchMonitorView()
+                .navigationTitle("Touch Monitor")
+                .navigationBarTitleDisplayMode(.inline)
         case "gesture-presets":
             GesturePresetsView()
         case "landscape-coordinate-test":
@@ -105,6 +109,7 @@ struct MainMenuView: View {
         ("Touch & Gestures", [
             ("tap-test", "Tap Test", "Displays coordinates of CLI taps"),
             ("touch-control", "Touch Control", "Touch down/up events"),
+            ("touch-monitor", "Touch Monitor", "Records one or two real touch contacts"),
             ("swipe-test", "Swipe Test", "Shows CLI swipe paths"),
             ("gesture-presets", "Gesture Presets", "Multi-touch gesture display"),
             ("landscape-coordinate-test", "Landscape Coordinates", "Verifies orientation-aware taps"),

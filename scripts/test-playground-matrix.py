@@ -16,11 +16,90 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCES = ['TestUtilities.swift', 'TestUIState.swift', 'PlaygroundCoreTests.swift',
-           'PlaygroundAgentTests.swift', 'PlaygroundDuoTests.swift']
+           'PlaygroundAgentTests.swift', 'PlaygroundKeyboardTests.swift', 'PlaygroundDuoTests.swift',
+           'PlaygroundDuoSupport.swift', 'PlaygroundDuoCoreTests.swift', 'PlaygroundInterruptionTests.swift',
+           'PlaygroundTouchMonitorSupport.swift']
+HEADER_FOLDERS = ['', 'AccessibilityPlatformTranslation', 'AXRuntime', 'CoreSimDeviceIO',
+                  'CoreSimulator', 'CoreSimulatorUtilities', 'SimulatorKit']
 
 
 def digest(file):
     return hashlib.sha256(file.read_bytes()).hexdigest()
+
+
+def payload_manifest(folder):
+    files, links = {}, {}
+    for file in sorted(folder.rglob('*')):
+        name = str(file.relative_to(folder))
+        if file.is_symlink():
+            links[name] = os.readlink(file)
+        elif file.is_file():
+            files[name] = digest(file)
+    return dict(files=files, links=links)
+
+
+def selected_suites(kind, suite):
+    duo = ['PlaygroundDuoCoreTests', 'PlaygroundDuoTests', 'PlaygroundDuoInterruptionTests']
+    if suite == 'core':
+        return ['PlaygroundCoreTests']
+    if suite == 'agent':
+        return ['PlaygroundAgentTests']
+    if suite == 'duo':
+        return duo
+    if kind == 'iphone':
+        return ['PlaygroundCoreTests', 'PlaygroundKeyboardTests', 'PlaygroundAgentTests']
+    return duo + ['PlaygroundAgentTests']
+
+
+class ResourceSamples:
+    def __init__(self, probe, output):
+        self.probe, self.output = probe, output
+        self.previous, self.measured_at = {}, None
+        self.started = self.next_sample = time.monotonic()
+        self.count, self.last = 0, None
+
+    def sample(self, force=False):
+        if not force and time.monotonic() < self.next_sample:
+            return
+        try:
+            result = subprocess.run([str(self.probe)], capture_output=True, text=True, timeout=5, check=True)
+            payload = json.loads(result.stdout)
+            rows = payload['rows']
+        except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            raise RuntimeError('Resource sampling failed: ' + str(error)) from error
+        measured = time.monotonic()
+        if payload.get('source') != 'publicLibproc' or not rows:
+            raise RuntimeError('The resource probe returned no public process counters')
+        interval = measured - self.measured_at if self.measured_at is not None else 0
+        for row in rows:
+            before = self.previous.get(row['pid'])
+            row['cpuPercent'] = round(max(0, row['cpuTimeNs'] - before['cpuTimeNs']) / 1e9 / interval * 100, 1) \
+                if before and before['start'] == row['start'] and interval > 0 else 0
+        selected = [row for row in rows if row['name'] in ('Codex', 'ChatGPT', 'launchd_sim')
+                    or any(name in row['name'] for name in ('DeviceHub', 'SimulatorTramp', 'CoreSimulator', 'simdiskimaged'))]
+        self.last = dict(elapsedSeconds=round(measured - self.started, 2), source='publicLibproc',
+                         processes=selected, largestProcesses=sorted(rows, key=lambda row: row['footprintBytes'], reverse=True)[:5],
+                         highestCPUProcesses=sorted(rows, key=lambda row: row['cpuPercent'], reverse=True)[:5])
+        with (self.output / 'resources.jsonl').open('a') as stream:
+            stream.write(json.dumps(self.last) + '\n')
+        self.previous, self.measured_at = {row['pid']: row for row in rows}, measured
+        self.next_sample, self.count = measured + 15, self.count + 1
+
+
+def read_suite_result(xml, suite, expected):
+    result = dict(name=suite, status='FAIL', expected=expected, executed=0, skipped=0, failed=0, checks=[])
+    tree = ET.parse(xml.with_name(xml.stem + '-swift-testing.xml')).getroot()
+    tests = list(tree.iter('testcase'))
+    skipped = [item for item in tests if item.find('skipped') is not None]
+    failures = [item for item in tests if item.find('failure') is not None or item.find('error') is not None]
+    result.update(executed=len(tests) - len(skipped), skipped=len(skipped), failed=len(failures),
+                  checks=[dict(name=item.get('name'), status='SKIP' if item in skipped else 'FAIL' if item in failures else 'PASS')
+                          for item in tests])
+    if result['executed'] == expected and not skipped and not failures:
+        result['status'] = 'PASS'
+    else:
+        result['error'] = f'Expected {expected} executed checks; got {result["executed"]}, skipped {len(skipped)}, failed {len(failures)}'
+    return result
 
 
 class RunInterrupted(Exception):
@@ -40,6 +119,7 @@ class OwnedCommands:
         self.output, self.environment, self.report = output, environment, report
         self.children = []
         self.interrupted_by = self.interrupted_at = self.shutdown_child = None
+        self.resources = None
 
     def save(self):
         (self.output / 'result.json').write_text(json.dumps(self.report, indent=2) + '\n')
@@ -104,6 +184,8 @@ class OwnedCommands:
             deadline = time.monotonic() + timeout
             while process.poll() is None:
                 self.check_interruption()
+                if self.resources is not None:
+                    self.resources.sample()
                 if time.monotonic() >= deadline:
                     self.stop_groups([(process, entry)])
                     raise subprocess.TimeoutExpired(entry['argv'], timeout)
@@ -111,10 +193,16 @@ class OwnedCommands:
             self.check_interruption()
             # The leader can exit while its child or grandchild still owns this group.
             self.stop_groups([(process, entry)])
+            if self.resources is not None:
+                self.resources.sample()
             output = (self.output / (name + '.log')).read_text(errors='replace')
             if process.returncode:
                 raise RuntimeError(f'{name} failed ({process.returncode}):\n{output[-6000:]}')
             return output
+        except BaseException:
+            if self.interrupted_by is None:
+                self.stop_groups([(process, entry)])
+            raise
         finally:
             entry.update(exitCode=process.poll(), elapsedSeconds=round(time.monotonic() - entry['startedMonotonic'], 2))
             self.save()
@@ -164,7 +252,7 @@ def main():
     parser.add_argument('--iphone', type=uuid.UUID, required=True, help='Dedicated ordinary iPhone simulator UUID.')
     parser.add_argument('--duo', type=uuid.UUID, required=True, help='Dedicated Duo simulator UUID.')
     parser.add_argument('--only', choices=['iphone', 'duo'], help='Run one device while fixing a failure.')
-    parser.add_argument('--suite', choices=['core', 'agent', 'duo', 'all'], default='core')
+    parser.add_argument('--suite', choices=['core', 'agent', 'duo', 'all'], default='all')
     parser.add_argument('--developer-dir', default=os.environ.get('DEVELOPER_DIR'))
     parser.add_argument('--output', type=Path, required=True, help='New result directory; existing results are never replaced.')
     args = parser.parse_args()
@@ -178,13 +266,16 @@ def main():
     args.output = args.output.resolve()
     args.output.mkdir(parents=True, exist_ok=False)
     env = dict(os.environ)
+    host_override = env.get('AXE_TEST_HOST_DEVELOPER_DIR')
+    idb_override = env.get('AXE_TEST_IDB_SOURCE')
     for key in list(env):
         if key.startswith(('AXE_', 'DYLD_')):
             del env[key]
     env.update(AXE_ENV_FILE='/dev/null', AXE_E2E='1', AXE_LANDSCAPE_E2E='0', AXE_BIN_PATH=str(args.axe))
     if args.developer_dir:
         env['DEVELOPER_DIR'] = args.developer_dir
-    report = dict(status='RUNNING', cli=str(args.axe), cliSHA256=digest(args.axe),
+    report = dict(status='RUNNING', requestedSuite=args.suite, requestedDevices=args.only or 'both',
+                  cli=str(args.axe), cliSHA256=digest(args.axe), payloadBefore=payload_manifest(args.axe.parent),
                   sourceHashes={}, runnerSHA256=digest(Path(__file__)), commands=[], devices=[], startedAt=time.time())
     owned = None
     commands = OwnedCommands(args.output, env, report)
@@ -193,17 +284,31 @@ def main():
     signal.signal(signal.SIGTERM, commands.interrupt)
 
     try:
+        counts_file = ROOT / 'scripts/playground-suite-counts.json'
+        expected_counts = json.loads(counts_file.read_text())
+        if not expected_counts or any(type(value) is not int or value <= 0 for value in expected_counts.values()):
+            raise RuntimeError('Playground suite counts must be positive integers')
+        report['suiteExpectedCounts'] = expected_counts
+        report['sourceHashes']['scripts/playground-suite-counts.json'] = digest(counts_file)
+        requested = [('iphone', str(args.iphone).upper()), ('duo', str(args.duo).upper())]
+        if args.only:
+            requested = [(kind, identifier) for kind, identifier in requested if kind == args.only]
+        report['plannedSuites'] = [dict(kind=kind, name=suite, expected=expected_counts[suite])
+                                   for kind, _ in requested for suite in selected_suites(kind, args.suite)]
         developer = run('selected-xcode', ['xcode-select', '-p']).strip()
         developer = env.get('DEVELOPER_DIR', developer)
         env['DEVELOPER_DIR'] = developer
         report['developerDirectory'] = developer
         report['xcode'] = run('xcode-version', ['xcodebuild', '-version']).strip()
+        probe_source = ROOT / 'scripts/duo-resource-probe.c'
+        probe = args.output / 'resource-probe'
+        report['sourceHashes']['scripts/duo-resource-probe.c'] = digest(probe_source)
+        run('build-resource-probe', ['xcrun', 'clang', '-O2', str(probe_source), '-o', str(probe)])
+        commands.resources = ResourceSamples(probe, args.output)
+        commands.resources.sample(force=True)
         inventory = json.loads(run('device-inventory', ['xcrun', 'simctl', 'list', 'devices', 'available', '-j']))
         devices = {row['udid']: row | {'runtime': runtime}
                    for runtime, rows in inventory['devices'].items() for row in rows}
-        requested = [('iphone', str(args.iphone).upper()), ('duo', str(args.duo).upper())]
-        if args.only:
-            requested = [(kind, identifier) for kind, identifier in requested if kind == args.only]
         for kind, identifier in requested:
             device = devices.get(identifier)
             if not device or not device.get('isAvailable'):
@@ -213,6 +318,41 @@ def main():
                 raise RuntimeError(f'{kind} has wrong device type: {device_type}')
             if device['state'] not in ('Shutdown', 'Booted'):
                 raise RuntimeError(f'{kind} is not ready to boot or use: {device["state"]}')
+        if any(kind == 'duo' for kind, _ in requested) and args.suite in ('all', 'duo'):
+            host = Path(host_override or developer).resolve(strict=True)
+            idb = Path(idb_override or ROOT / 'idb_checkout').resolve(strict=True)
+            headers = idb / 'PrivateHeaders'
+            if not host.is_dir() or not headers.is_dir():
+                raise RuntimeError('The selected host Xcode or IDB PrivateHeaders directory is missing')
+            frameworks = args.axe.parent / 'Frameworks'
+            for name in ['FBSimulatorControl', 'FBControlCore', 'FBDeviceControl', 'XCTestBootstrap']:
+                if not (frameworks / (name + '.framework') / name).is_file():
+                    raise RuntimeError('The supplied payload is missing Frameworks/' + name + '.framework/' + name)
+            operator_source = ROOT / 'scripts/fixtures/DuoExternalStateChange.swift'
+            report['sourceHashes']['scripts/fixtures/DuoExternalStateChange.swift'] = digest(operator_source)
+            report['externalStateTool'] = dict(hostDeveloperDirectory=str(host), idbSource=str(idb), frameworks=str(frameworks),
+                                                hostOverride=host_override, idbOverride=idb_override,
+                                                privateHeaders=payload_manifest(headers))
+            source = args.output / 'DuoExternalStateChange.swift'
+            shutil.copyfile(operator_source, source)
+            host_env = {'DEVELOPER_DIR': str(host)}
+            report['externalStateTool']['xcode'] = run('operator-xcode', ['xcrun', 'xcodebuild', '-version'], extra_env=host_env).strip()
+            sdk = run('operator-sdk', ['xcrun', '--sdk', 'macosx', '--show-sdk-path'], extra_env=host_env).strip()
+            operator = args.output / 'duo-external-state-change'
+            run('build-state-operator', ['xcrun', 'swiftc', '-parse-as-library', '-swift-version', '5', '-j', '1',
+                                        '-sdk', sdk, '-module-cache-path', str(args.output / 'operator-module-cache'),
+                                        '-F', str(frameworks), '-framework', 'FBSimulatorControl', '-framework', 'FBControlCore',
+                                        '-Xlinker', '-rpath', '-Xlinker', str(frameworks),
+                                        *['-I' + str(headers / folder) for folder in HEADER_FOLDERS], str(source), '-o', str(operator)],
+                timeout=180, extra_env=host_env)
+            run('sign-state-operator', ['codesign', '--force', '--sign', '-', str(operator)])
+            run('verify-state-operator', ['codesign', '--verify', '--strict', str(operator)])
+            if digest(source) != report['sourceHashes']['scripts/fixtures/DuoExternalStateChange.swift'] \
+                    or payload_manifest(headers) != report['externalStateTool']['privateHeaders']:
+                raise RuntimeError('The external state tool source or headers changed during its build')
+            report['externalStateTool'].update(binary=str(operator), binarySHA256=digest(operator),
+                                                sourceSHA256=digest(source), macOSSDK=sdk)
+            env['AXE_DUO_STATE_CHANGE_PATH'] = str(operator)
         xcodegen = shutil.which('xcodegen')
         if not xcodegen:
             raise RuntimeError('XcodeGen is required. Install it, then rerun.')
@@ -231,6 +371,7 @@ def main():
         app = derived / 'Build/Products/Debug-iphonesimulator/AxePlayground.app'
         if not app.is_dir():
             raise RuntimeError('Built playground app is missing')
+        report['playgroundPayload'] = payload_manifest(app)
         package = args.output / 'checks'
         sources = package / 'Tests'
         sources.mkdir(parents=True)
@@ -251,37 +392,40 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
             device = devices[identifier]
             case = dict(kind=kind, udid=identifier, runtime=device['runtime'], name=device['name'], initialState=device['state'], status='RUNNING')
             report['devices'].append(case)
-            owned = identifier
+            owned = identifier if device['state'] == 'Shutdown' else None
             try:
                 if device['state'] == 'Shutdown':
                     run(kind + '-boot', ['xcrun', 'simctl', 'boot', identifier])
                 run(kind + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=180)
                 run(kind + '-install', ['xcrun', 'simctl', 'install', identifier, str(app)])
-                suites = [('PlaygroundCoreTests', 8), ('PlaygroundAgentTests', 4)]
-                if kind == 'duo':
-                    suites.append(('PlaygroundDuoTests', 5))
-                if args.suite != 'all':
-                    selected = {'core': 'PlaygroundCoreTests', 'agent': 'PlaygroundAgentTests', 'duo': 'PlaygroundDuoTests'}[args.suite]
-                    suites = [item for item in suites if item[0] == selected]
+                suites = selected_suites(kind, args.suite)
                 case['suites'] = []
-                for suite, expected in suites:
+                for suite in suites:
+                    expected = expected_counts[suite]
+                    xml = args.output / (kind + '-' + suite + '.xml')
+                    failure = None
                     try:
-                        xml = args.output / (kind + '-' + suite + '.xml')
-                        suite_env = {'SIMULATOR_UDID': identifier, 'AXE_DUO_E2E': '1' if suite == 'PlaygroundDuoTests' else '0'}
+                        artifacts = args.output / (kind + '-' + suite + '-artifacts')
+                        artifacts.mkdir()
+                        suite_env = {'SIMULATOR_UDID': identifier, 'AXE_DUO_E2E': '1' if suite.startswith('PlaygroundDuo') else '0',
+                                     'AXE_E2E_ARTIFACT_DIR': str(artifacts)}
                         run(kind + '-' + suite, ['xcrun', 'swift', 'test', '--package-path', str(package), '--skip-build',
                                                 '--no-parallel', '--filter', suite, '--xunit-output', str(xml)],
-                            timeout=900, extra_env=suite_env)
-                        tree = ET.parse(xml.with_name(xml.stem + '-swift-testing.xml')).getroot()
-                        tests = list(tree.iter('testcase'))
-                        skipped = [item for item in tests if item.find('skipped') is not None]
-                        failures = [item for item in tests if item.find('failure') is not None or item.find('error') is not None]
-                        if len(tests) != expected or skipped or failures:
-                            raise RuntimeError(f'{kind}/{suite}: expected {expected} executed checks; got {len(tests)}, skipped {len(skipped)}, failed {len(failures)}')
-                        case['suites'].append(dict(name=suite, status='PASS', executed=len(tests), skipped=0,
-                                                  checks=[item.get('name') for item in tests]))
+                            timeout=max(900, expected * 60), extra_env=suite_env)
                     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, ET.ParseError) as error:
-                        case['suites'].append(dict(name=suite, status='FAIL', error=str(error)))
-                        print(str(error), file=sys.stderr)
+                        failure = str(error)
+                    try:
+                        result = read_suite_result(xml, suite, expected)
+                    except (OSError, ValueError, ET.ParseError) as error:
+                        result = dict(name=suite, status='FAIL', expected=expected, executed=0, skipped=0, failed=0,
+                                      checks=[], error='No complete Swift Testing result: ' + str(error))
+                    if failure:
+                        result.update(status='FAIL', commandError=failure)
+                    result['artifactDirectory'] = str(args.output / (kind + '-' + suite + '-artifacts'))
+                    case['suites'].append(result)
+                    save()
+                    if result['status'] != 'PASS':
+                        print(f'{kind}/{suite}: ' + result.get('error', failure or 'Failed'), file=sys.stderr)
                 case['status'] = 'PASS' if all(item['status'] == 'PASS' for item in case['suites']) else 'FAIL'
             except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, ET.ParseError) as error:
                 case.update(status='FAIL', error=str(error))
@@ -316,6 +460,21 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
         finally:
             if commands.interrupted_by is not None:
                 commands.cancel_cleanup(['xcrun', 'simctl', 'shutdown', owned] if owned else None)
+        try:
+            suites = [suite for device in report['devices'] for suite in device.get('suites', [])]
+            report['checks'] = {key: sum(suite.get(key, 0) for suite in suites)
+                                for key in ('executed', 'skipped', 'failed')}
+            report['checks']['expected'] = sum(suite['expected'] for suite in report.get('plannedSuites', []))
+            report['checks']['notExecuted'] = report['checks']['expected'] - report['checks']['executed']
+            report['payloadUnchanged'] = payload_manifest(args.axe.parent) == report['payloadBefore']
+            if not report['payloadUnchanged']:
+                report.update(status='FAIL', payloadError='The supplied AXe payload changed during the run')
+            if commands.resources is not None:
+                commands.resources.sample(force=True)
+                report['resources'] = dict(sampleCount=commands.resources.count, intervalSeconds=15,
+                                           log='resources.jsonl', last=commands.resources.last)
+        except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
+            report.update(status='FAIL', evidenceError=str(error))
         report['elapsedSeconds'] = round(time.time() - report['startedAt'], 2)
         save()
     return 0 if report['status'] == 'PASS' else 1

@@ -60,6 +60,8 @@ show_usage() {
     echo "Environment:"
     echo "  DEVELOPER_DIR         Xcode used to build and run tests (Xcode 27 uses Device Hub)"
     echo "  AXE_BIN_PATH          Prebuilt AXe executable to test with --tests-only"
+    echo "  AXE_DUO_E2E=1         Enable a selected Playground Duo suite"
+    echo "  AXE_DUO_STATE_CHANGE_PATH  Built external state tool for Duo interruption checks"
     echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
     echo "Test Filters (optional):"
@@ -68,7 +70,10 @@ show_usage() {
     echo "  SliderTests         Run only slider tests"
     echo "  PlaygroundCoreTests Run the portable iPhone/Duo core action checks"
     echo "  PlaygroundAgentTests Run optional agent capture and reference checks"
-    echo "  PlaygroundDuoTests  Run Duo hinge/rotation checks with AXE_DUO_E2E=1"
+    echo "  PlaygroundKeyboardTests Run hardware-key and modifier checks"
+    echo "  PlaygroundDuoCoreTests Run core checks on both measured Duo displays"
+    echo "  PlaygroundDuoTests  Run Duo hinge, rotation and display-selection checks"
+    echo "  PlaygroundDuoInterruptionTests Run held-touch, drag and pinch interruption checks"
     echo "  PresentationFixtureTests Run the app presentation checks"
     echo "  DescribeUITests     Run only describe-ui tests"
     echo "  InitTests           Run only init tests"
@@ -143,7 +148,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundDuoTests|PresentationFixtureTests)
+        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PresentationFixtureTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -161,14 +166,19 @@ if [[ "$UNIT_TESTS" == true ]] &&
     exit 1
 fi
 
-if [[ "$TEST_FILTER" == "PlaygroundDuoTests" ]]; then
+if [[ "$TEST_FILTER" == PlaygroundDuo* ]]; then
     case "$(printf '%s' "${AXE_DUO_E2E:-0}" | tr '[:upper:]' '[:lower:]')" in
         1|true|yes) ;;
         *)
-            print_error "PlaygroundDuoTests requires AXE_DUO_E2E=1. No simulator work started."
+            print_error "$TEST_FILTER requires AXE_DUO_E2E=1. No simulator work started."
             exit 1
             ;;
     esac
+fi
+
+if [[ "$TEST_FILTER" == "PlaygroundDuoInterruptionTests" && ! -x "${AXE_DUO_STATE_CHANGE_PATH:-}" ]]; then
+    print_error "PlaygroundDuoInterruptionTests requires AXE_DUO_STATE_CHANGE_PATH to name the matching executable state tool. Run scripts/test-playground-matrix.py once to build it. No simulator work started."
+    exit 1
 fi
 
 # Function to check prerequisites
@@ -415,11 +425,14 @@ landscape_orientation_menu_available() {
 }
 
 playground_expected_count() {
-    case "$1" in
-        PlaygroundCoreTests) printf '8' ;;
-        PlaygroundAgentTests) printf '4' ;;
-        PlaygroundDuoTests) printf '5' ;;
-    esac
+    python3 - "$1" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+counts = json.loads(Path('scripts/playground-suite-counts.json').read_text())
+print(counts.get(sys.argv[1], ''), end='')
+PY
 }
 
 verify_playground_results() {
@@ -489,6 +502,10 @@ run_tests() {
             mkdir -p build_products/test-runner-results || return 1
             report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
             args+=(--xunit-output "$report_directory/results.xml")
+            if [[ "$filter" == "PlaygroundDuoInterruptionTests" ]]; then
+                export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
+                mkdir "$AXE_E2E_ARTIFACT_DIR" || return 1
+            fi
             print_info "Playground result directory: $report_directory"
         fi
         [[ "$VERBOSE" == true ]] && args+=(--verbose)
