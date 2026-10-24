@@ -17,6 +17,21 @@ struct PlaygroundCoreTests {
         try await app.waitForValue("slider-value-state", equals: "Tapped")
     }
 
+    @Test("Tap a freshly discovered button with legacy coordinates")
+    func coordinateTap() async throws {
+        let app = try CorePlaygroundSession()
+        let initial = try await app.open("slider-value-test", readyID: "slider-value-button")
+        let button = try app.element("slider-value-button", in: initial)
+        try #require(button.type == "Button" && button.enabled == true)
+        let frame = try app.frame(of: button)
+        let point = app.point(in: frame, x: 0.5, y: 0.5)
+        try #require(try app.element("slider-value-state", in: initial).value == "Initial")
+        print("Legacy coordinate tap: raw AX button frame=\(frame), point=(\(point.x), \(point.y))")
+
+        try await app.run(["tap", "-x", String(point.x), "-y", String(point.y)])
+        try await app.waitForValue("slider-value-state", equals: "Tapped")
+    }
+
     @Test("Type text into the discovered field and read the app value")
     func typeText() async throws {
         let app = try CorePlaygroundSession()

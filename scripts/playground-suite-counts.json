@@ -1,8 +1,8 @@
 {
-  "PlaygroundCoreTests": 8,
+  "PlaygroundCoreTests": 9,
   "PlaygroundKeyboardTests": 1,
   "PlaygroundAgentTests": 4,
-  "PlaygroundDuoCoreTests": 18,
+  "PlaygroundDuoCoreTests": 20,
   "PlaygroundDuoTests": 6,
   "PlaygroundDuoInterruptionTests": 6
 }

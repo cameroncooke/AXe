@@ -14,6 +14,16 @@ struct PlaygroundDuoCoreTests {
         try await withScreen(.innerLandscape) { try await PlaygroundCoreTests().findAndTap() }
     }
 
+    @Test("Legacy coordinate tap on outer portrait")
+    func outerPortraitCoordinateTap() async throws {
+        try await withScreen(.outerPortrait) { try await PlaygroundCoreTests().coordinateTap() }
+    }
+
+    @Test("Legacy coordinate tap on inner landscape")
+    func innerLandscapeCoordinateTap() async throws {
+        try await withScreen(.innerLandscape) { try await PlaygroundCoreTests().coordinateTap() }
+    }
+
     @Test("Type text on outer portrait")
     func outerPortraitTypeText() async throws {
         try await withScreen(.outerPortrait) { try await PlaygroundCoreTests().typeText() }
