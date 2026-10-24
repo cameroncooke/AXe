@@ -176,6 +176,11 @@ struct AgentPlaygroundSession {
         _ = try await waitFor("screen \(screen), identifier \(readyID)") {
             UIStateParser.findElement(in: $0, withIdentifier: readyID) != nil
         }
+        if try await DuoPlaygroundLaunchTarget.prepareIfNeeded() {
+            _ = try await waitFor("screen \(screen), identifier \(readyID) after Duo orientation") {
+                UIStateParser.findElement(in: $0, withIdentifier: readyID) != nil
+            }
+        }
         return pid
     }
 

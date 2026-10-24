@@ -107,8 +107,11 @@ struct PlaygroundDuoCoreTests {
         try #require(try current.activePanel.rotationDegrees() == screen.rotation)
         print("Core screen prepared: \(screen.rawValue), boot=\(current.bootIdentity), panel=\(identity.displayID)")
         print("Core catalogue before \(screen.rawValue): \(String(reflecting: current))")
+        let target = DuoPlaygroundLaunchTarget(bootIdentity: current.bootIdentity, panel: current.activePanel)
         do {
-            try await check()
+            try await DuoPlaygroundLaunchTarget.$current.withValue(target) {
+                try await check()
+            }
         } catch {
             let originalFailure = error
             do {

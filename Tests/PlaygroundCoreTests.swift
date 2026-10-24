@@ -184,7 +184,11 @@ private struct CorePlaygroundSession {
             "com.cameroncooke.AxePlayground", "--launch-arg", "screen=\(screen)",
         ]
         _ = try await CommandRunner.run(arguments.map(Self.quote).joined(separator: " "), timeout: 30)
-        return try await waitFor("screen \(screen), identifier \(readyID)") { state in
+        let ready = try await waitFor("screen \(screen), identifier \(readyID)") { state in
+            UIStateParser.findElement(in: state, withIdentifier: readyID) != nil
+        }
+        guard try await DuoPlaygroundLaunchTarget.prepareIfNeeded() else { return ready }
+        return try await waitFor("screen \(screen), identifier \(readyID) after Duo orientation") { state in
             UIStateParser.findElement(in: state, withIdentifier: readyID) != nil
         }
     }

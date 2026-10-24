@@ -13,6 +13,33 @@ enum DuoPlaygroundPose: String, Hashable {
     }
 }
 
+/// A fixed Duo test target, scoped to one check and inherited only by its child tasks.
+struct DuoPlaygroundLaunchTarget: Sendable {
+    let bootIdentity: String
+    let panel: DuoPanel
+
+    @TaskLocal static var current: DuoPlaygroundLaunchTarget? = nil
+
+    /// Called only after the requested app page is visible. No user input is replayed.
+    static func prepareIfNeeded() async throws -> Bool {
+        guard let target = current else { return false }
+        let app = try DuoPlaygroundSession()
+        var observed = try await app.catalogue(boot: target.bootIdentity)
+        try #require(observed.activePanel.identity == target.panel.identity,
+            "App launch changed the requested Duo display.")
+        print("Duo catalogue after app launch: \(String(reflecting: observed))")
+        let rotation = try target.panel.rotationDegrees()
+        for _ in 0..<4 {
+            if try observed.activePanel.rotationDegrees() == rotation { break }
+            observed = try await app.rotateRight(catalogue: observed)
+        }
+        try #require(observed.activePanel == target.panel,
+            "The requested Duo display and orientation were not restored after app launch.")
+        print("Duo catalogue before fresh AX lookup: \(String(reflecting: observed))")
+        return true
+    }
+}
+
 struct DuoPlaygroundSession {
     private let udid: String
     private let axePath: String
@@ -269,12 +296,12 @@ struct DuoPlaygroundSession {
     }
 }
 
-struct DuoPanelIdentity: Decodable, Hashable {
+struct DuoPanelIdentity: Decodable, Hashable, Sendable {
     let displayID: UInt32
     let uniqueID: UUID
 }
 
-struct DuoPanel: Decodable, Equatable {
+struct DuoPanel: Decodable, Equatable, Sendable {
     let identity: DuoPanelIdentity
     let active: Bool?
     let currentOrientation: String
