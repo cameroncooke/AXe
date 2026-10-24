@@ -2,6 +2,12 @@
 
 The Playground is a normal app. These checks drive the built AXe CLI and read the resulting app state through accessibility. They do not inject app state or replace native input with a mock.
 
+## Current acceptance
+
+The full 47-case matrix v5 completed at test checkpoint `0e62b532`: 35 passed and 12 failed, with no skips. Ordinary iPhone and both optional-agent suites passed. Duo Backspace timed out, and failed layout/interruption cases lost the accessibility connection. Full acceptance remains open; earlier focused passes do not close this result. Current test source `b45a60e2` adds three separately passed legacy coordinate taps. The default is now 50 cases; no full 50-case run is claimed. No-flag held-key/shortcut release tracking is a separate open code gap. Its candidate remains isolated and unproved. Two proposed interruption checks compiled, but native execution was zero and they were not integrated. [Current record, exact command and retained failures](audits/2026-10-24-playground-acceptance.md).
+
+Duo checks verify device support: active screen selection, hinge/rotation changes and continued use of real controls. The optional agent checks are a separate improvement from the SimUse comparison: compact output, saved references and cached reads with invalidation. Raw accessibility output and coordinate commands remain available.
+
 ## Build inputs
 
 `AxePlaygroundApp/project.yml` is the tracked XcodeGen definition. The generated Xcode project stays in `build_products`. Install XcodeGen before running the checks.
@@ -23,17 +29,17 @@ PATH="/opt/homebrew/bin:$PATH" python3 scripts/test-playground-matrix.py \
   --output build_products/playground-results/NEW_RUN
 ```
 
-The default `--suite all` runs 47 checks: 13 on iPhone and 34 on Duo. Use `--suite core` for the original eight core checks on each device, `--suite agent` for the optional interface, or `--only duo --suite duo` for the 30 Duo-specific checks.
+The default `--suite all` runs 50 checks: 14 on iPhone and 36 on Duo. Use `--suite core` for the nine core checks on each device, `--suite agent` for the optional interface, or `--only duo --suite duo` for the 32 Duo-specific checks.
 
 | Suite | Ordinary iPhone | Duo |
 | --- | --- | --- |
-| Core controls | 8 checks in the current orientation | 16 checks: the same eight features on the outer display in portrait and the open inner display in landscape |
+| Core controls | 9 checks in the current orientation | 18 checks: the same eight features on the outer display in portrait and the open inner display in landscape; taps have selector and coordinate cases |
 | Hardware keyboard input | 1 check | 2 checks: one on each measured display and orientation |
 | Optional agent interface | 4 checks | 4 checks |
 | Duo hinge, rotation and display selection | — | 6 checks |
 | Input interrupted by folding or rotation | — | 6 checks |
 
-The full Duo run uses the 16 checks with explicit display and orientation requirements. It does not repeat the eight generic core checks. `--suite core` retains the generic checks for a narrow compatibility run.
+The full Duo run uses the 18 checks with explicit display and orientation requirements. It does not repeat the nine generic core checks. `--suite core` runs the generic checks for a narrow compatibility run.
 
 Use `--only iphone` or `--only duo` while fixing a failure. Such a run proves only that device. The output directory must be new, so an earlier failure cannot be replaced by a later result.
 
@@ -43,7 +49,8 @@ The app and exact tracked test sources build once. A separate Swift Testing pack
 
 | Check | Required app result |
 | --- | --- |
-| Find and tap | Discover the button by its ID; its value changes from Initial to Tapped. |
+| Find and tap by selector | Discover the button by its ID; its value changes from Initial to Tapped. |
+| Tap by raw coordinates | Read the current raw accessibility frame, tap the centre with the no-flag coordinate command, and require Initial to change to Tapped. |
 | Type | Discover and focus the field; typed text and character/word counts match. |
 | Scroll | A row outside the initial visible range becomes visible and can be selected. |
 | Swipe | The app records one right swipe and both requested points. |
@@ -96,7 +103,7 @@ Each suite receives its own artifact directory under the result directory. Inter
 
 ## Scope limits
 
-The core suite alone does not prove every fold angle, rotation, selected-screen path, held-input interruption, or optional agent action. Existing audit receipts remain separate from a new run. The suite covers the cases listed above; do not use the test count as a claim that every AXe command has been checked.
+The core suite alone does not prove every fold angle, rotation, selected-screen path, held-input interruption, or optional agent action. Existing audit receipts remain separate from a new run. The suite covers the cases listed above; no separate manual action is needed to repeat those cases. The full core feature set runs on closed outer portrait and open inner landscape. Other supported rotations use real Button checks. Custom hinge-driven split layouts, every control type, every command option and all gesture forms are not covered. Do not use the test count as a claim that every AXe command has been checked.
 
 The current hosted CI workflow runs non-E2E checks. A local matrix result does not prove hosted CI simulator coverage.
 
