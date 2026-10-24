@@ -4082,42 +4082,41 @@ index 0000000000000000000000000000000000000000..dc8e38c509bfbb0503532c5ebee24ba9
 +  deinit { close() }
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45b903cc15 100644
+index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c3703120e98528 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
 +++ b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-@@ -86,7 +86,16 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+@@ -86,13 +86,29 @@
  
    public func accessibilityElement(at point: CGPoint) async throws -> FBAccessibilityElement {
      try validateAccessibility()
 -    let request = FBAXTranslationRequest(kind: .point(point))
 +    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: 0)
-+    return try await accessibilityElement(request: request, remediationPermitted: false)
-+  }
-+
+     return try await accessibilityElement(request: request, remediationPermitted: false)
+   }
+ 
 +  /// Resolves a point in the selected display's unrotated logical coordinate space.
 +  /// Convert app coordinates using the measured display orientation before calling.
 +  /// The AX display ID is explicit; this does not select a frontmost application tree.
 +  public func accessibilityElement(atNativePoint point: CGPoint, displayID: UInt32) async throws -> FBAccessibilityElement {
 +    try validateAccessibility()
 +    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: displayID)
-     return try await accessibilityElement(request: request, remediationPermitted: false)
-   }
- 
-@@ -96,6 +105,13 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
-     return try await accessibilityElement(request: request, remediationPermitted: true)
-   }
- 
-+  /// Selected-display whole tree. Context supplies the remote hit-test transform.
-+  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
-+    try validateAccessibility()
-+    let request = FBAXTranslationRequest(kind: .frontmostApplication, pointDisplayID: displayID, displayContext: displayContext)
++    return try await accessibilityElement(request: request, remediationPermitted: false)
++  }
++
+   public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
+     try validateAccessibility()
+     let request = FBAXTranslationRequest(kind: .frontmostApplication)
 +    return try await accessibilityElement(request: request, remediationPermitted: true)
 +  }
 +
-   public func accessibilityElementMatching(value: String, forKey key: FBAXSearchableKey, depth: UInt) async throws -> FBAccessibilityElement {
-     try validateAccessibility()
-     let request = FBAXTranslationRequest(kind: .frontmostApplication)
-@@ -103,12 +119,45 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
++  /// Selected-display whole tree. Context supplies the remote hit-test transform.
++  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
++    try validateAccessibility(bootstrap: false)
++    let request = FBAXTranslationRequest(kind: .frontmostApplication, pointDisplayID: displayID, displayContext: displayContext)
+     return try await accessibilityElement(request: request, remediationPermitted: true)
+   }
+ 
+@@ -103,12 +119,45 @@
      return try root.findElement(withValue: value, forKey: key, depth: depth)
    }
  
@@ -4164,7 +4163,7 @@ index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45
      guard let simulator else {
        throw FBAccessibilityError.simulatorDeallocated
      }
-@@ -120,7 +169,7 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+@@ -120,7 +169,7 @@
        throw FBAccessibilityError.accessibilityUnavailable
      }
      try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
@@ -4173,7 +4172,7 @@ index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45
        try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
          forSimulatorDevice: simulator.device,
          timeout: 5,
-@@ -136,29 +185,37 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+@@ -136,29 +185,37 @@
    // dead pid), the original request's token is popped manually (it is not wrapped in a handle
    // yet at that point), CoreSimulatorBridge is restarted, and the lookup retries with a fresh
    // request. The retry passes remediationPermitted=false, bounding it to a single attempt.
@@ -4208,15 +4207,17 @@ index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45
 +    try Task.checkCancellation()
      try await Self.remediateSpringBoard(forSimulator: simulator)
 -    return try await accessibilityElement(request: nextRequest, remediationPermitted: false)
-+    return try await accessibilityElement(request: nextRequest, remediationPermitted: false, isolation: isolation)
-   }
- 
+-  }
+-
 -  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement) async throws -> Bool {
++    return try await accessibilityElement(request: nextRequest, remediationPermitted: false, isolation: isolation)
++  }
++
 +  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement, isolation: isolated (any Actor)? = #isolation) async throws -> Bool {
      // A quick check: a non-zero accessibility frame indicates a healthy element.
      if !element.axFrame().equalTo(.zero) {
        return false
-@@ -193,10 +250,19 @@ extension FBSimulator: AsyncAccessibilityCommands {
+@@ -193,8 +250,17 @@
      try await accessibilityCommands().accessibilityElement(at: point)
    }
  
@@ -4227,15 +4228,13 @@ index db911121c11531d60acd1546ea7009c087f60531..9b53f7dd0c210b95d3c0b96e3d633a45
 +
    public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
      try await accessibilityCommands().accessibilityElementForFrontmostApplication()
-   }
- 
-+  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
-+    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
 +  }
 +
++  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
++    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
+   }
+ 
    public func accessibilityElementMatching(
-     value: String,
-     forKey key: FBAXSearchableKey,
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
 index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2c454e053 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
@@ -5817,9 +5816,10 @@ index 0000000..ff1bbd0
 +}
 diff --git a/FBSimulatorControl/HID/ActivePanelReader.swift b/FBSimulatorControl/HID/ActivePanelReader.swift
 new file mode 100644
+index 0000000000000000000000000000000000000000..be6c0dbd8d45358512fca507cefb9d457130fbf1
 --- /dev/null
 +++ b/FBSimulatorControl/HID/ActivePanelReader.swift
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,114 @@
 +import Foundation
 +import FBControlCore
 +
@@ -5889,6 +5889,13 @@ new file mode 100644
 +
 +    private static func readSnapshot(simulatorUDID: UUID, developerDirectory: URL,
 +                                     decode: (Data, [String]) throws -> ActivePanelSnapshot) async throws -> ActivePanelReadback {
++        let receipt = try await captureSnapshot(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory)
++        return try decodeSnapshot(receipt, decode: decode)
++    }
++
++    /// Capture raw read-only bytes while another independent context probe runs.
++    /// Joined host/guest expectations are still required before this data can be accepted.
++    static func captureSnapshot(simulatorUDID: UUID, developerDirectory: URL) async throws -> ActivePanelChildReceipt {
 +        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled) }
 +        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("axe-active-panel-" + UUID().uuidString)
 +        let response = directory.appendingPathComponent("response.json")
@@ -5901,8 +5908,25 @@ new file mode 100644
 +            timeout: 6, maximumBytes: ActivePanelDecoder.maximumJSONBytes)
 +        let receipt = try await OwnedActivePanelChild(command: command).run()
 +        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
++        return receipt
++    }
++
++    static func decodeCapturedSnapshot(_ receipt: ActivePanelChildReceipt, simulatorUDID: UUID,
++                                       expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation,
++                                       schemaPolicy: ActivePanelSchemaPolicy) throws -> ActivePanelReadback {
++        do { try ActivePanelDecoder.validateExpected(expectedPanels, selected: selected) }
++        catch let error as ActivePanelValidationError { throw ActivePanelReadError(validationFailure: error) }
++        return try decodeSnapshot(receipt) { data, arguments in
++            try ActivePanelDecoder.decode(data, simulatorUDID: simulatorUDID,
++                expectedPanels: expectedPanels, selected: selected, exactArguments: arguments, schemaPolicy: schemaPolicy)
++        }
++    }
++
++    private static func decodeSnapshot(_ receipt: ActivePanelChildReceipt,
++                                       decode: (Data, [String]) throws -> ActivePanelSnapshot) throws -> ActivePanelReadback {
++        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
 +        do {
-+            let snapshot = try decode(receipt.json, ["devicectl"] + arguments)
++            let snapshot = try decode(receipt.json, ["devicectl"] + receipt.arguments)
 +            guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
 +            return ActivePanelReadback(snapshot: snapshot, receipt: receipt)
 +        } catch let error as ActivePanelValidationError {
@@ -9466,10 +9490,10 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
 new file mode 100644
-index 0000000..17bf509
+index 0000000000000000000000000000000000000000..6b9955802479e5ebd65862389bfef41316d34ab9
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
-@@ -0,0 +1,327 @@
+@@ -0,0 +1,333 @@
 +@preconcurrency import CoreSimulator
 +@preconcurrency import FBControlCore
 +import Foundation
@@ -9594,6 +9618,14 @@ index 0000000..17bf509
 +      throw FBSimulatorContextError.unavailable("Requested selected pair is absent from the host catalog")
 +    }
 +    let hingeBefore = capability.hinge == .supported ? try await FBSimulatorHingeReader.read(for: simulator) : nil
++    guard let simulatorID = UUID(uuidString: simulator.udid), !FBXcodeConfiguration.developerDirectory.isEmpty else {
++      throw FBSimulatorContextError.unavailable("Active-panel simulator identity or developer directory is unavailable")
++    }
++    let developerDirectory = URL(fileURLWithPath: FBXcodeConfiguration.developerDirectory, isDirectory: true)
++    // Both probes stay within the same before/after context bounds. Only transport overlaps;
++    // the active snapshot is validated after the independent host/guest join and rotation.
++    async let activeReceipt = ActivePanelReader.captureSnapshot(simulatorUDID: simulatorID,
++      developerDirectory: developerDirectory)
 +    let requestID = UUID()
 +    let guestResult = try await FBSimulatorContextGuestRead.read(simulator: simulator, helperURL: helperURL, requestID: requestID)
 +    let guest = try JSONDecoder().decode(GuestEnvelope.self, from: guestResult.data)
@@ -9612,17 +9644,15 @@ index 0000000..17bf509
 +          let rotation = Self.rotation(selected.currentOrientation) else {
 +      throw FBSimulatorContextError.unavailable("Host and guest screen identity, geometry or rotation do not match")
 +    }
-+    guard let simulatorID = UUID(uuidString: simulator.udid),
-+          let activeRotation = ActivePanelRotation(rawValue: selected.currentOrientation),
-+          !FBXcodeConfiguration.developerDirectory.isEmpty else {
-+      throw FBSimulatorContextError.unavailable("Active-panel request identity, rotation or developer directory is unavailable")
++    guard let activeRotation = ActivePanelRotation(rawValue: selected.currentOrientation) else {
++      throw FBSimulatorContextError.unavailable("Active-panel guest rotation is unavailable")
 +    }
-+    let active = try await ActivePanelReader.read(simulatorUDID: simulatorID,
++    let receipt = try await activeReceipt
++    let active = try ActivePanelReader.decodeCapturedSnapshot(receipt, simulatorUDID: simulatorID,
 +      expectedPanels: joinedPanels,
 +      selected: ActivePanelExpectation(identity: ActivePanelIdentity(displayID: screenID, uniqueID: screenUniqueID),
 +        nativePixelWidth: before.nativePixelSize.width, nativePixelHeight: before.nativePixelSize.height,
 +        scale: before.scale, rotation: activeRotation),
-+      developerDirectory: URL(fileURLWithPath: FBXcodeConfiguration.developerDirectory, isDirectory: true),
 +      schemaPolicy: capability.activePanelSchemaPolicy)
 +    let hingeAfter = capability.hinge == .supported ? try await FBSimulatorHingeReader.read(for: simulator) : nil
 +    let afterCatalog = try Self.hostCatalog(

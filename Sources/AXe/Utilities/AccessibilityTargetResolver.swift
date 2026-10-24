@@ -52,6 +52,15 @@ struct AccessibilityMatch {
     let element: AccessibilityElement
     let selectorDescription: String
     let applicationFrame: AccessibilityElement.Frame?
+    let applicationPID: Int32?
+
+    init(element: AccessibilityElement, selectorDescription: String,
+         applicationFrame: AccessibilityElement.Frame?, applicationPID: Int32? = nil) {
+        self.element = element
+        self.selectorDescription = selectorDescription
+        self.applicationFrame = applicationFrame
+        self.applicationPID = applicationPID
+    }
 }
 
 struct AccessibilityTargetResolver {
@@ -103,7 +112,8 @@ struct AccessibilityTargetResolver {
         return AccessibilityMatch(
             element: matchedElement,
             selectorDescription: selectorDescription,
-            applicationFrame: applicationFrame(from: roots)
+            applicationFrame: applicationFrame(from: roots),
+            applicationPID: applicationPID(from: roots)
         )
     }
 
@@ -145,6 +155,12 @@ struct AccessibilityTargetResolver {
         }
 
         return (x: frame.x + (frame.width / 2.0), y: centerY)
+    }
+
+    private static func applicationPID(from roots: [AccessibilityElement]) -> Int32? {
+        guard roots.count == 1, let application = roots.first, application.type == "Application",
+              let pid = application.pid, pid > 0 else { return nil }
+        return pid
     }
 
     private static func applicationFrame(from roots: [AccessibilityElement]) -> AccessibilityElement.Frame? {

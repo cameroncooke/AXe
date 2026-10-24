@@ -102,10 +102,10 @@ final class SelectedSliderValueOperation {
             error: receipt.reason, enqueuedEventCount: finished.count, cleanup: finished.cleanup)
     }
 
-    private func check() throws {
+    private func check(deadline: Double) throws {
         try Task.checkCancellation()
         guard ProcessInfo.processInfo.systemUptime < deadline else {
-            throw SliderValueFailure.rejected("Slider value action exceeded its 15-second budget")
+            throw SliderValueFailure.rejected("Slider value deadline expired")
         }
         try live.validateCurrentRevision(expected: observation)
     }
@@ -115,17 +115,17 @@ final class SelectedSliderValueOperation {
         guard percent.isFinite, percent > 0, percent < 100, expectedPID > 0 else {
             throw SliderValueFailure.rejected("Interior Slider values require a finite percentage above 0 and below 100, and a current app PID")
         }
-        try check()
+        try check(deadline: deadline)
         let bounded = SliderValueDeadlineFeed(base: live, deadline: deadline)
         let reader: FBSimulatorSliderBackend
         switch selectorKind {
         case .id:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
-                freshnessProvider: bounded, identifier: selectorValue, expectedPID: expectedPID,
+                freshnessProvider: live, identifier: selectorValue, expectedPID: expectedPID,
                 elementType: elementType, admissionGuard: readDiagnostics)
         case .label:
             reader = FBSimulatorSliderBackend(simulator: simulator, observation: observation,
-                freshnessProvider: bounded, label: selectorValue, expectedPID: expectedPID,
+                freshnessProvider: live, label: selectorValue, expectedPID: expectedPID,
                 elementType: elementType, admissionGuard: readDiagnostics)
         default: throw SliderValueFailure.rejected("Slider value requires an exact ID or label")
         }
@@ -156,7 +156,7 @@ final class SelectedSliderValueOperation {
         currentPoint = pickup
         let confirmed = try await readNative(reader, phase: "beforePickup", deadline: deadline)
         try confirmed.requireSameTarget(as: initial, includeValue: true)
-        try check()
+        try check(deadline: deadline)
         guard deadline - ProcessInfo.processInfo.systemUptime > 3 else {
             throw SliderValueFailure.rejected("Slider value has no release/readback reserve")
         }
@@ -188,7 +188,7 @@ final class SelectedSliderValueOperation {
         var requiresCleanSlope = false
         for iteration in 1...4 {
             try await movePath(to: next, token: token, frame: frame)
-            let sample = try await settledValue(initial: initial, released: false)
+            let sample = try await settledValue(initial: initial, released: false, deadline: deadline)
             let value = try sample.requireValue()
             // One measured take-up path is permitted only after an exact first-path plateau.
             if iteration == 1, value == initialValue {
@@ -265,15 +265,20 @@ final class SelectedSliderValueOperation {
         guard up.outcome == .endedAndDrained, !(await hid.status().hasRetainedContact) else {
             throw SliderValueFailure.rejected("Slider contact did not end and drain")
         }
-        let stable = try await settledValue(initial: initial, released: true)
-        let final = try await readNative(reader, phase: "final", deadline: deadline, final: true)
+        // Input has ended. One fixed deadline now covers read-only verification.
+        let verificationDeadline = ProcessInfo.processInfo.systemUptime + 2
+        let stable = try await settledValue(initial: initial, released: true, deadline: verificationDeadline)
+        let final = try await readNative(reader, phase: "final", deadline: verificationDeadline, final: true)
         try final.requireSameTarget(as: stable, includeValue: false)
         finalValue = try final.requireValue()
         guard abs(try stable.requireValue() - requested) <= domain.tolerance,
               abs(try final.requireValue() - requested) <= domain.tolerance else {
             throw SliderValueFailure.rejected("Released Slider value differs from the requested value")
         }
-        try check()
+        guard !(await hid.status().hasRetainedContact) else {
+            throw SliderValueFailure.rejected("Slider contact changed during final verification")
+        }
+        try check(deadline: verificationDeadline)
         return "reached"
     }
 
@@ -292,20 +297,21 @@ final class SelectedSliderValueOperation {
         }
     }
 
-    private func settledValue(initial: FBSimulatorSliderCapabilities, released: Bool) async throws -> FBSimulatorSliderCapabilities {
+    private func settledValue(initial: FBSimulatorSliderCapabilities, released: Bool,
+        deadline: Double) async throws -> FBSimulatorSliderCapabilities {
         guard let backend, let session else { throw SliderValueFailure.rejected("Slider feedback ownership is unavailable") }
         let until = min(deadline, ProcessInfo.processInfo.systemUptime + 2)
         var previous: Double?
         var stableSince = 0.0
         for _ in 1...128 {
-            try check()
+            try check(deadline: deadline)
             guard ProcessInfo.processInfo.systemUptime < until else { break }
             guard await session.status().hasRetainedContact == !released else {
                 throw SliderValueFailure.rejected("Slider contact changed before native feedback")
             }
             let sample = try await readNative(backend, phase: released ? "releasedSettle" : "heldSettle", deadline: until)
             let returned = ProcessInfo.processInfo.systemUptime
-            try check()
+            try check(deadline: deadline)
             guard returned < until else { break }
             guard await session.status().hasRetainedContact == !released else {
                 throw SliderValueFailure.rejected("Slider contact changed during native feedback")
@@ -329,7 +335,7 @@ final class SelectedSliderValueOperation {
         }
         let start = currentPoint
         for step in 1...12 {
-            try check()
+            try check(deadline: deadline)
             let fraction = Double(step) / 12
             let point = CGPoint(x: start.x + (destination.x - start.x) * CGFloat(fraction),
                 y: start.y + (destination.y - start.y) * CGFloat(fraction))

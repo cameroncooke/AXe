@@ -27,6 +27,7 @@ struct AccessibilityElement: Decodable {
     }
 
     let type: String?
+    let pid: Int32?
     let frame: Frame?
     let children: [AccessibilityElement]?
     let role: String?
@@ -44,6 +45,7 @@ struct AccessibilityElement: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case type
+        case pid
         case frame
         case children
         case role
@@ -63,6 +65,8 @@ struct AccessibilityElement: Decodable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         type = try Self.decodeOptionalScalarString(from: container, forKey: .type)
+        // Legacy consumers can ignore malformed PID metadata; Duo admission requires a valid PID.
+        pid = try? container.decodeIfPresent(Int32.self, forKey: .pid)
         frame = try container.decodeIfPresent(Frame.self, forKey: .frame)
         children = try container.decodeIfPresent([AccessibilityElement].self, forKey: .children)
         role = try Self.decodeOptionalScalarString(from: container, forKey: .role)
