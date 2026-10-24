@@ -87,12 +87,14 @@ enum SelectedHIDBroker {
                 tasks[id] = Task { @MainActor in
                     defer { Darwin.close(client); tasks.removeValue(forKey: id) }
                     do {
+                        let ready = !owner.shouldStop
                         let request = try await offMain {
                             var uid: uid_t = 0; var gid: gid_t = 0
                             guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { throw SelectedHIDFailure.invalid("Client UID mismatch") }
                             HIDBroker.configureNoSignalPipe(client)
                             try HIDBroker.configureSocketTimeouts(client, readMilliseconds: 2000, writeMilliseconds: 2000)
-                            try HIDBroker.writeHandshake(ready: true, version: SelectedHIDRequest.version, to: client)
+                            try HIDBroker.writeHandshake(ready: ready, version: SelectedHIDRequest.version, to: client)
+                            guard ready else { throw SelectedHIDFailure.busy }
                             let bytes = try HIDBroker.readMessage(from: client)
                             guard bytes.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
                             return try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
@@ -108,14 +110,11 @@ enum SelectedHIDBroker {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await agentController.perform(request)
                             }
-                        } else if request.legacyPath != nil || request.legacyTouch != nil || (request.ax?.kind == .tap && request.ax?.waitPolicy != nil) {
+                        } else {
                             agentController.invalidate()
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
                                 await owner.perform(request)
                             }
-                        } else {
-                            agentController.invalidate()
-                            response = await owner.perform(request)
                         }
                         try await offMain {
                             let maximumBytes = request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes

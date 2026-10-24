@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-/// Agent actions, waiting taps and legacy Duo paths/touches use this scope. The caller must
+/// Selected and agent requests use this scope. The caller must
 /// keep it open until run returns, after both child tasks have finished.
 @MainActor
 enum SelectedHIDClientLifetime {

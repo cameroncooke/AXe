@@ -124,12 +124,9 @@ struct KeySequence: AsyncParsableCommand {
         let sequenceEvent = FBSimulatorHIDEvent.composite(events)
         
         // Perform the key sequence event
-        try await HIDInteractor
-            .performHIDEvent(
-                sequenceEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
+        try await LegacyDuoInput.performKeyboard(
+            sequenceEvent, simulatorUDID: simulatorUDID, logger: logger
+        )
         
         logger.info().log("Key sequence completed successfully")
     }

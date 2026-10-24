@@ -84,6 +84,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
 
 ### Fixed
+
+- Fixed selected keys, held touches and pinch gestures continuing after their CLI command exits. The broker now cancels the request and waits for owned input release without replay.
+
+- Fixed initial IDB source setup checking patch-added files before applying the tracked patch. Git identity and exact source checks remain required.
+
+- Fixed selected focused typing repeatedly serializing the full accessibility tree. Per-key PID, focus, frame and context checks now use the existing exact-field read. Selected and optional `--agent` keyboard input allow eight seconds for input work plus at most 20 seconds of validated requested delays in one deadline (28 seconds at most), with each field read capped at eight seconds.
+
+- Fixed Duo keyboard failures closing the connection before owned key-up cleanup could complete. The connection now remains available only for owned releases after input stops, with no replay. Ordinary Duo `key`, `key-combo` and `key-sequence` use the same owned keyboard path as `type`.
+
 - Keep child control identifiers distinct in grouped Playground screens.
 
 - Fixed `scripts/build.sh sign-executable` leaving the copied resource bundle unsigned. It now signs and strictly verifies `AXe_AXe.bundle` before the existing CLI signing step. The local before/after check passed all seven payload signatures without changing resource assets, native frameworks or the helper.

@@ -48,6 +48,31 @@ enum LegacyDuoInput {
         return SelectedHIDContext(observation)
     }
 
+    @MainActor
+    static func performKeyboard(
+        _ event: FBSimulatorHIDEvent,
+        simulatorUDID: String,
+        logger: AxeLogger
+    ) async throws {
+        guard let context = try await captureContext(
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+        ) else {
+            try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
+            return
+        }
+        guard let executable = Bundle.main.executableURL else {
+            throw SelectedHIDFailure.invalid("Missing executable")
+        }
+        let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger,
+            helperURL: executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context"))
+        // Reuse the batch's owned keyboard lifecycle without changing the ordinary event sequence.
+        try await LegacyDuoBatchLifetime.run {
+            try await owner.withLegacyBatch(context: context) {
+                try await owner.submitLegacyBatchPart(event)
+            }
+        }
+    }
+
     static func perform(
         at point: (x: Double, y: Double),
         style: TapStyle,

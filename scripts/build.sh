@@ -406,6 +406,9 @@ function verify_idb_base_state() {
     exit 1
   fi
 
+}
+
+function verify_idb_source_markers() {
   local source_checks=(
     "FBControlCore/Utility/FBXcodeDirectory.swift|environment[\"DEVELOPER_DIR\"]"
     "FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift|clientType = 2"
@@ -432,6 +435,7 @@ function verify_idb_base_state() {
 
 function verify_idb_source_state() {
   verify_idb_base_state
+  verify_idb_source_markers
   if ! git -C "$IDB_CHECKOUT_DIR" diff --cached --quiet; then
     echo "Error: IDB has staged changes; leave them intact and use a separate checkout." >&2
     return 1

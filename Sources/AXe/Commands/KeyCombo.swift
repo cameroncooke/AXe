@@ -119,12 +119,9 @@ struct KeyCombo: AsyncParsableCommand {
 
         let comboEvent = FBSimulatorHIDEvent.composite(events)
 
-        try await HIDInteractor
-            .performHIDEvent(
-                comboEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
+        try await LegacyDuoInput.performKeyboard(
+            comboEvent, simulatorUDID: simulatorUDID, logger: logger
+        )
 
         logger.info().log("Key combo completed successfully")
     }

@@ -183,33 +183,14 @@ struct Type: AsyncParsableCommand {
         if !hidEvents.isEmpty {
             // Keep typing in one ordered session. Indigo awaits each send, while DTUHID adds its
             // own keyboard pacing; unconditional delays here would double-pace the DTUHID path.
-            try await performOrdinaryInput(.composite(hidEvents), logger: logger)
+            try await LegacyDuoInput.performKeyboard(
+                .composite(hidEvents), simulatorUDID: simulatorUDID, logger: logger
+            )
         }
         
         logger.info().log("Text typing completed successfully")
     }
 
-    @MainActor
-    private func performOrdinaryInput(_ event: FBSimulatorHIDEvent, logger: AxeLogger) async throws {
-        guard let context = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
-        ) else {
-            try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
-            return
-        }
-        guard let executable = Bundle.main.executableURL else {
-            throw SelectedHIDFailure.invalid("Missing executable")
-        }
-        let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger,
-            helperURL: executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context"))
-        // Reuse the batch's owned keyboard lifecycle without changing the ordinary event sequence.
-        try await LegacyDuoBatchLifetime.run {
-            try await owner.withLegacyBatch(context: context) {
-                try await owner.submitLegacyBatchPart(event)
-            }
-        }
-    }
-    
     // MARK: - Input Methods
     
     func readFromStdin() -> String {

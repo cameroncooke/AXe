@@ -72,7 +72,12 @@ final class SelectedHIDOwner {
                 if result.cleanup == "uncertain" || result.ax?.slider?.delivery == "uncertain" || result.ax?.sliderValue?.delivery == "uncertain" || result.hinge?.failure?.delivery == .uncertain || result.rotation?.failure?.delivery == .uncertain {
                     return quarantine(result, request: request)
                 }
+                let retire = requiresRetirement(after: result, request: request)
                 clear()
+                if retire {
+                    shouldStop = true
+                    logger.info().log("Selected broker retiring after terminal AX read failure; request=\(request.requestID), broker=\(brokerID). No input was sent or replayed.")
+                }
                 return result
             } catch {
                 let result = response(request, outcome: "rejectedBeforeInput", error: error)
@@ -419,6 +424,20 @@ final class SelectedHIDOwner {
         quarantineReceipt = result.quarantine
         // Keep the common lease and original context. Recovery is explicit.
         return result
+    }
+
+    /// Retire process-owned AX state only after a complete read failed without input or retained ownership.
+    private func requiresRetirement(after result: SelectedHIDResponse, request: SelectedHIDRequest) -> Bool {
+        guard !quarantined, !maintainingRetainedInput, !batchRunning, admission.inFlight, lease != nil,
+              admission.token == nil, libraryToken == nil, session == nil, feed == nil, observation == nil,
+              let requestedAX = request.ax, requestedAX.kind == .describe,
+              result.version == SelectedHIDRequest.version, result.requestID == request.requestID,
+              result.brokerID == brokerID, result.outcome == "failedBeforeInput", result.error != nil,
+              result.enqueuedEventCount == 0, result.cleanup == "notNeeded", result.token == nil,
+              result.quarantine == nil, result.context != nil, let ax = result.ax,
+              ax.kind == requestedAX.kind, ax.expectedPID == requestedAX.expectedPID,
+              ax.failure == .acquisitionFailed, ax.acquisition?.outcome == .failed else { return false }
+        return true
     }
 
     private func clear() {

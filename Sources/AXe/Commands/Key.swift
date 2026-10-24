@@ -111,12 +111,9 @@ struct Key: AsyncParsableCommand {
         }
         
         // Perform the key event
-        try await HIDInteractor
-            .performHIDEvent(
-                keyEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
+        try await LegacyDuoInput.performKeyboard(
+            keyEvent, simulatorUDID: simulatorUDID, logger: logger
+        )
         
         logger.info().log("Key press completed successfully")
     }

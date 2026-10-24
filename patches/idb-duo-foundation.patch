@@ -6074,22 +6074,24 @@ index 0000000000000000000000000000000000000000..3ba176adb8a3e56ebf39f19a937ee443
 +  }
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
-index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee6244177d1e9d8d 100644
 --- a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
 +++ b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
-@@ -50,159 +50,312 @@
+@@ -50,7 +50,10 @@
   An `actor`: the mutable contact state is actor-isolated, so the type needs no `@unchecked Sendable`.
   The XPC connection handle is thread-safe, so `disconnect()` cancels it from a `nonisolated` context.
   */
 -actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
--
--  static let digitizerServiceName = "com.apple.coredevice.feature.remote.hid.digitizer"
--
--  // Private XPC endpoint functions, resolved at runtime (not in the XPC module headers).
--  private typealias EndpointFromMachPortFn = @convention(c) (mach_port_t, UInt64, UInt64) -> xpc_object_t?
--  private typealias ConnectionFromEndpointFn = @convention(c) (xpc_object_t) -> xpc_connection_t?
--  private typealias EnableSim2HostFn = @convention(c) (xpc_connection_t) -> Void
--
++actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport, FBSimulatorHIDCleanupTransportDiagnostics, FBSimulatorHIDOwnedCleanupTransport {
++
++  private var latestSendEvidence: FBSimulatorHIDSendEvidence?
++  func lastSendEvidence() -> FBSimulatorHIDSendEvidence? { latestSendEvidence }
+ 
+   static let digitizerServiceName = "com.apple.coredevice.feature.remote.hid.digitizer"
+ 
+@@ -59,21 +62,20 @@
+   private typealias ConnectionFromEndpointFn = @convention(c) (xpc_object_t) -> xpc_connection_t?
+   private typealias EnableSim2HostFn = @convention(c) (xpc_connection_t) -> Void
+ 
 -  /// Time `flush()` keeps the connection alive after a gesture's events are sent, so `dtuhidd`
 -  /// consumes them before the connection is torn down. `dtuhidd` resets its virtual services
 -  /// (dropping any in-flight gesture) the instant the host peer disconnects — which, for a one-shot
@@ -6103,149 +6105,6 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 -  /// `nonisolated(unsafe)` to be read from the `nonisolated` `disconnect()` as well as the
 -  /// actor-isolated send path.
 -  nonisolated(unsafe) private let connection: xpc_connection_t
--  private let mainScreenSize: CGSize
--  private let mainScreenScale: Float
--  private var contact = DigitizerContactTracker()
--  private var twoFingerContact = DigitizerContactTracker()
--
--  // MARK: Initializers
--
--  /// Builds a DTUHID transport for the provided Simulator, establishing the host XPC connection to
--  /// `dtuhidd`. All setup is synchronous, so the returned transport is ready to send.
--  static func dtuhid(for simulator: FBSimulator) throws -> FBSimulatorDTUHIDTransport {
--    guard let handle = dlopen(nil, RTLD_NOW) else {
--      throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
--    }
--    guard
--      let endpointFromPort = symbol(handle, "xpc_endpoint_create_mach_port_4sim", as: EndpointFromMachPortFn.self),
--      let connectionFromEndpoint = symbol(handle, "xpc_connection_create_from_endpoint", as: ConnectionFromEndpointFn.self),
--      let enableSim2Host = symbol(handle, "xpc_connection_enable_sim2host_4sim", as: EnableSim2HostFn.self)
--    else {
--      throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
--    }
--
--    var lookupError: NSError?
--    let servicePort = simulator.device.lookup(digitizerServiceName, error: &lookupError)
--    if servicePort == 0 {
--      throw FBSimulatorHIDError.dtuhidDigitizerServiceUnavailable(underlying: lookupError)
--    }
--
--    guard
--      let endpoint = endpointFromPort(servicePort, 0, 0),
--      let connection = connectionFromEndpoint(endpoint)
--    else {
--      throw FBSimulatorHIDError.dtuhidConnectionFailed
--    }
--
--    // The load-bearing step: without this the daemon observes the peer but never the payload.
--    enableSim2Host(connection)
--    xpc_connection_set_event_handler(connection) { _ in }
--    xpc_connection_resume(connection)
--
--    return FBSimulatorDTUHIDTransport(
--      connection: connection,
--      mainScreenSize: simulator.device.deviceType.mainScreenSize,
--      mainScreenScale: simulator.device.deviceType.mainScreenScale)
--  }
--
--  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float) {
--    self.connection = connection
--    self.mainScreenSize = mainScreenSize
--    self.mainScreenScale = mainScreenScale
--  }
--
--  private static func symbol<T>(_ handle: UnsafeMutableRawPointer, _ name: String, as type: T.Type) -> T? {
--    guard let sym = dlsym(handle, name) else {
--      return nil
--    }
--    return unsafeBitCast(sym, to: type)
--  }
--
--  // MARK: FBSimulatorHIDTransport
--
--  nonisolated func disconnect() {
--    xpc_connection_cancel(connection)
--  }
--
--  func sendTouch(direction: FBSimulatorHIDDirection, x: Double, y: Double) async throws {
--    let ratio = FBSimulatorIndigoHID.screenRatio(
--      from: CGPoint(x: x, y: y), screenSize: mainScreenSize, screenScale: mainScreenScale)
--    let event = IndigoDigitizerEvent(
--      pointOne: DigitizerPoint(x: Double(ratio.x), y: Double(ratio.y)),
--      eventType: contact.eventType(for: direction))
--    try await send(messageType: "IndigoDigitizerEvent", payload: event)
--  }
--
--  func sendTwoFingerTouch(direction: FBSimulatorHIDDirection, finger1: CGPoint, finger2: CGPoint) async throws {
--    let r1 = FBSimulatorIndigoHID.screenRatio(from: finger1, screenSize: mainScreenSize, screenScale: mainScreenScale)
--    let r2 = FBSimulatorIndigoHID.screenRatio(from: finger2, screenSize: mainScreenSize, screenScale: mainScreenScale)
--    let event = IndigoDigitizerEvent(
--      pointOne: DigitizerPoint(x: Double(r1.x), y: Double(r1.y)),
--      pointTwo: DigitizerPoint(x: Double(r2.x), y: Double(r2.y)),
--      eventType: twoFingerContact.eventType(for: direction))
--    try await send(messageType: "IndigoDigitizerEvent", payload: event)
--  }
--
--  func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
--    guard let usage = button.dtuhidUsage else {
--      throw FBSimulatorHIDError.notImplementedOnDTUHIDTransport(
--        operation: "sendButton(.applePay) — Apple Pay is a double side-button press, not a single HID usage; send two .sideButton presses instead")
--    }
--    let state: HIDButtonState = direction == .down ? .down : .up
--    try await send(
--      messageType: "IndigoButtonEvent",
--      payload: IndigoButtonEvent(usagePage: UInt64(usage.page), usageCode: UInt64(usage.code), state: state))
--  }
--
--  func sendKeyboard(direction: FBSimulatorHIDDirection, keyCode: UInt32) async throws {
--    let state: HIDButtonState = direction == .down ? .down : .up
--    try await send(
--      messageType: "IndigoKeyboardButtonEvent",
--      payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
--  }
--
--  // MARK: Sending
--
--  /// Wraps `payload` in a `DTUHIDMessage` and serializes it to the `xpc_object_t` `dtuhidd` decodes.
--  /// Pure and stateless, so the envelope shape is unit-testable without a live daemon connection.
--  nonisolated func encode(messageType: String, payload: some Encodable) throws -> xpc_object_t {
--    let message = DTUHIDMessage(
--      messageType: messageType, featureIdentifier: Self.digitizerServiceName, payload: payload)
--    return try XPCEncoder().encode(message)
--  }
--
--  /// Encodes `payload`, sends it over the connection, and resolves when the XPC send barrier fires.
--  /// The actor serializes calls, so per-gesture state stays consistent. Does not wait for the daemon
--  /// to consume the event — that is `flush()`'s job, run once per gesture rather than per primitive.
--  func send(messageType: String, payload: some Encodable) async throws {
--    let object = try encode(messageType: messageType, payload: payload)
--    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
--      xpc_connection_send_message(connection, object)
--      xpc_connection_send_barrier(connection) {
--        continuation.resume()
--      }
--    }
--  }
--
--  /// Drains the connection once a gesture's events have all been sent: waits `drainNanos` so
--  /// `dtuhidd` consumes them before the connection is torn down. Run once per gesture (see
--  /// `drainNanos`), not after every primitive.
--  func flush() async throws {
--    try? await Task.sleep(nanoseconds: Self.drainNanos)
--  }
--
-+actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport, FBSimulatorHIDCleanupTransportDiagnostics {
-+
-+  private var latestSendEvidence: FBSimulatorHIDSendEvidence?
-+  func lastSendEvidence() -> FBSimulatorHIDSendEvidence? { latestSendEvidence }
-+
-+  static let digitizerServiceName = "com.apple.coredevice.feature.remote.hid.digitizer"
-+
-+  // Private XPC endpoint functions, resolved at runtime (not in the XPC module headers).
-+  private typealias EndpointFromMachPortFn = @convention(c) (mach_port_t, UInt64, UInt64) -> xpc_object_t?
-+  private typealias ConnectionFromEndpointFn = @convention(c) (xpc_object_t) -> xpc_connection_t?
-+  private typealias EnableSim2HostFn = @convention(c) (xpc_connection_t) -> Void
-+
 +  /// Bounded connection keepalive after one dispatched gesture, not a guest acknowledgement.
 +  /// The XPC send barrier confirms host enqueue only. In the Duo timing proof, an extra 300 ms
 +  /// after the previous 80 ms drain allowed an unchanged default tap to arrive before disconnect;
@@ -6256,74 +6115,59 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +
 +  private let connection: FBSimulatorDTUHIDConnection
 +  private let enqueueGate: FBSimulatorDTUHIDEnqueueGate
-+  private let mainScreenSize: CGSize
-+  private let mainScreenScale: Float
+   private let mainScreenSize: CGSize
+   private let mainScreenScale: Float
 +  private let displayContext: FBSimulatorHIDDisplayContext?
 +  private let nativeEdge: FBSimulatorHIDNativeEdge
-+  private var contact = DigitizerContactTracker()
-+  private var twoFingerContact = DigitizerContactTracker()
-+
-+  // MARK: Initializers
-+
-+  /// Builds a DTUHID transport for the provided Simulator, establishing the host XPC connection to
-+  /// `dtuhidd`. All setup is synchronous, so the returned transport is ready to send.
-+  static func dtuhid(for simulator: FBSimulator, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none) throws -> FBSimulatorDTUHIDTransport {
-+    guard let handle = dlopen(nil, RTLD_NOW) else {
-+      throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
-+    }
-+    guard
-+      let endpointFromPort = symbol(handle, "xpc_endpoint_create_mach_port_4sim", as: EndpointFromMachPortFn.self),
-+      let connectionFromEndpoint = symbol(handle, "xpc_connection_create_from_endpoint", as: ConnectionFromEndpointFn.self),
-+      let enableSim2Host = symbol(handle, "xpc_connection_enable_sim2host_4sim", as: EnableSim2HostFn.self)
-+    else {
-+      throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
-+    }
-+
-+    var lookupError: NSError?
-+    let servicePort = simulator.device.lookup(digitizerServiceName, error: &lookupError)
-+    if servicePort == 0 {
-+      throw FBSimulatorHIDError.dtuhidDigitizerServiceUnavailable(underlying: lookupError)
-+    }
-+
-+    guard
-+      let endpoint = endpointFromPort(servicePort, 0, 0),
-+      let connection = connectionFromEndpoint(endpoint)
-+    else {
-+      throw FBSimulatorHIDError.dtuhidConnectionFailed
-+    }
-+
-+    // The load-bearing step: without this the daemon observes the peer but never the payload.
-+    enableSim2Host(connection)
-+
-+    return FBSimulatorDTUHIDTransport(
-+      connection: connection,
-+      mainScreenSize: simulator.device.deviceType.mainScreenSize,
+   private var contact = DigitizerContactTracker()
+   private var twoFingerContact = DigitizerContactTracker()
+ 
+@@ -81,7 +83,7 @@
+ 
+   /// Builds a DTUHID transport for the provided Simulator, establishing the host XPC connection to
+   /// `dtuhidd`. All setup is synchronous, so the returned transport is ready to send.
+-  static func dtuhid(for simulator: FBSimulator) throws -> FBSimulatorDTUHIDTransport {
++  static func dtuhid(for simulator: FBSimulator, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none, ownedCleanup: Bool = false) throws -> FBSimulatorDTUHIDTransport {
+     guard let handle = dlopen(nil, RTLD_NOW) else {
+       throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
+     }
+@@ -108,19 +110,24 @@
+ 
+     // The load-bearing step: without this the daemon observes the peer but never the payload.
+     enableSim2Host(connection)
+-    xpc_connection_set_event_handler(connection) { _ in }
+-    xpc_connection_resume(connection)
+ 
+     return FBSimulatorDTUHIDTransport(
+       connection: connection,
+       mainScreenSize: simulator.device.deviceType.mainScreenSize,
+-      mainScreenScale: simulator.device.deviceType.mainScreenScale)
+-  }
+-
+-  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float) {
+-    self.connection = connection
 +      mainScreenScale: simulator.device.deviceType.mainScreenScale,
-+      displayContext: displayContext, nativeEdge: nativeEdge)
++      displayContext: displayContext, nativeEdge: nativeEdge, ownedCleanup: ownedCleanup)
 +  }
 +
-+  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none) {
++  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none, ownedCleanup: Bool = false) {
 +    let handle = FBSimulatorDTUHIDConnection(connection)
 +    self.connection = handle
-+    let gate = FBSimulatorDTUHIDEnqueueGate { handle.disconnect() }
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: ownedCleanup) { handle.disconnect() }
 +    self.enqueueGate = gate
 +    handle.start(gate: gate)
-+    self.mainScreenSize = mainScreenSize
-+    self.mainScreenScale = mainScreenScale
+     self.mainScreenSize = mainScreenSize
+     self.mainScreenScale = mainScreenScale
 +    self.displayContext = displayContext
 +    self.nativeEdge = nativeEdge
-+  }
-+
-+  private static func symbol<T>(_ handle: UnsafeMutableRawPointer, _ name: String, as type: T.Type) -> T? {
-+    guard let sym = dlsym(handle, name) else {
-+      return nil
-+    }
-+    return unsafeBitCast(sym, to: type)
-+  }
-+
-+  // MARK: FBSimulatorHIDTransport
-+
-+  nonisolated func disconnect() {
+   }
+ 
+   private static func symbol<T>(_ handle: UnsafeMutableRawPointer, _ name: String, as type: T.Type) -> T? {
+@@ -133,26 +140,43 @@
+   // MARK: FBSimulatorHIDTransport
+ 
+   nonisolated func disconnect() {
+-    xpc_connection_cancel(connection)
 +    enqueueGate.disconnect()
 +  }
 +
@@ -6333,26 +6177,32 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +    try await enqueueGate.performInitialGuestBarrier {
 +      connection.sendGuestBarrier(completion: $0)
 +    }
-+  }
-+
-+  func sendTouch(direction: FBSimulatorHIDDirection, x: Double, y: Double) async throws {
+   }
+ 
+   func sendTouch(direction: FBSimulatorHIDDirection, x: Double, y: Double) async throws {
+-    let ratio = FBSimulatorIndigoHID.screenRatio(
+-      from: CGPoint(x: x, y: y), screenSize: mainScreenSize, screenScale: mainScreenScale)
 +    let ratio = try normalizedPoint(CGPoint(x: x, y: y))
-+    let event = IndigoDigitizerEvent(
-+      pointOne: DigitizerPoint(x: Double(ratio.x), y: Double(ratio.y)),
+     let event = IndigoDigitizerEvent(
+       pointOne: DigitizerPoint(x: Double(ratio.x), y: Double(ratio.y)),
+-      eventType: contact.eventType(for: direction))
 +      eventType: contact.eventType(for: direction),
 +      edge: nativeEdge.rawValue, target: displayContext?.hidTarget ?? 0)
-+    try await send(messageType: "IndigoDigitizerEvent", payload: event)
-+  }
-+
-+  func sendTwoFingerTouch(direction: FBSimulatorHIDDirection, finger1: CGPoint, finger2: CGPoint) async throws {
+     try await send(messageType: "IndigoDigitizerEvent", payload: event)
+   }
+ 
+   func sendTwoFingerTouch(direction: FBSimulatorHIDDirection, finger1: CGPoint, finger2: CGPoint) async throws {
+-    let r1 = FBSimulatorIndigoHID.screenRatio(from: finger1, screenSize: mainScreenSize, screenScale: mainScreenScale)
+-    let r2 = FBSimulatorIndigoHID.screenRatio(from: finger2, screenSize: mainScreenSize, screenScale: mainScreenScale)
 +    let r1 = try normalizedPoint(finger1)
 +    let r2 = try normalizedPoint(finger2)
-+    let event = IndigoDigitizerEvent(
-+      pointOne: DigitizerPoint(x: Double(r1.x), y: Double(r1.y)),
-+      pointTwo: DigitizerPoint(x: Double(r2.x), y: Double(r2.y)),
+     let event = IndigoDigitizerEvent(
+       pointOne: DigitizerPoint(x: Double(r1.x), y: Double(r1.y)),
+       pointTwo: DigitizerPoint(x: Double(r2.x), y: Double(r2.y)),
+-      eventType: twoFingerContact.eventType(for: direction))
 +      eventType: twoFingerContact.eventType(for: direction),
 +      edge: nativeEdge.rawValue, target: displayContext?.hidTarget ?? 0)
-+    try await send(messageType: "IndigoDigitizerEvent", payload: event)
+     try await send(messageType: "IndigoDigitizerEvent", payload: event)
 +  }
 +
 +  private func normalizedPoint(_ point: CGPoint) throws -> CGPoint {
@@ -6361,53 +6211,86 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +    }
 +    return FBSimulatorIndigoHID.screenRatio(
 +      from: point, screenSize: mainScreenSize, screenScale: mainScreenScale)
+   }
+ 
+   func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
+@@ -171,6 +195,39 @@
+     try await send(
+       messageType: "IndigoKeyboardButtonEvent",
+       payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
 +  }
 +
-+  func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
-+    guard let usage = button.dtuhidUsage else {
-+      throw FBSimulatorHIDError.notImplementedOnDTUHIDTransport(
-+        operation: "sendButton(.applePay) — Apple Pay is a double side-button press, not a single HID usage; send two .sideButton presses instead")
++  /// Release only input recorded by the owning session, using its original connection.
++  /// Normal input remains closed. These requests retain the same host and guest proof.
++  func releaseOwnedInput(_ release: FBSimulatorHIDOwnedRelease) async throws {
++    switch release {
++    case let .touch(point):
++      let ratio = try normalizedPoint(point)
++      let event = IndigoDigitizerEvent(
++        pointOne: DigitizerPoint(x: Double(ratio.x), y: Double(ratio.y)),
++        eventType: contact.eventType(for: .up), edge: nativeEdge.rawValue,
++        target: displayContext?.hidTarget ?? 0)
++      try await send(messageType: "IndigoDigitizerEvent", payload: event, ownedRelease: true)
++    case let .pair(first, second):
++      let r1 = try normalizedPoint(first)
++      let r2 = try normalizedPoint(second)
++      let event = IndigoDigitizerEvent(
++        pointOne: DigitizerPoint(x: Double(r1.x), y: Double(r1.y)),
++        pointTwo: DigitizerPoint(x: Double(r2.x), y: Double(r2.y)),
++        eventType: twoFingerContact.eventType(for: .up), edge: nativeEdge.rawValue,
++        target: displayContext?.hidTarget ?? 0)
++      try await send(messageType: "IndigoDigitizerEvent", payload: event, ownedRelease: true)
++    case let .key(code):
++      try await send(messageType: "IndigoKeyboardButtonEvent",
++        payload: IndigoKeyboardButtonEvent(usageCode: UInt64(code), state: .up), ownedRelease: true)
++    case let .button(button):
++      guard let usage = button.dtuhidUsage else {
++        throw FBSimulatorHIDError.notImplementedOnDTUHIDTransport(operation: "Owned Apple Pay release")
++      }
++      try await send(messageType: "IndigoButtonEvent",
++        payload: IndigoButtonEvent(usagePage: UInt64(usage.page), usageCode: UInt64(usage.code), state: .up),
++        ownedRelease: true)
 +    }
-+    let state: HIDButtonState = direction == .down ? .down : .up
-+    try await send(
-+      messageType: "IndigoButtonEvent",
-+      payload: IndigoButtonEvent(usagePage: UInt64(usage.page), usageCode: UInt64(usage.code), state: state))
-+  }
-+
-+  func sendKeyboard(direction: FBSimulatorHIDDirection, keyCode: UInt32) async throws {
-+    let state: HIDButtonState = direction == .down ? .down : .up
-+    try await send(
-+      messageType: "IndigoKeyboardButtonEvent",
-+      payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
-+  }
-+
-+  // MARK: Sending
-+
-+  /// Wraps `payload` in a `DTUHIDMessage` and serializes it to the `xpc_object_t` `dtuhidd` decodes.
-+  /// Pure and stateless, so the envelope shape is unit-testable without a live daemon connection.
-+  nonisolated func encode(messageType: String, payload: some Encodable) throws -> xpc_object_t {
-+    let message = DTUHIDMessage(
-+      messageType: messageType, featureIdentifier: Self.digitizerServiceName, payload: payload)
-+    return try XPCEncoder().encode(message)
-+  }
-+
-+  /// Bounds both host enqueue and the separate guest service barrier reply. Timeout, cancellation,
-+  /// or connection loss closes the connection. A reply confirms service processing order only;
-+  /// it does not confirm a UIKit event or an application effect.
-+  func send(messageType: String, payload: some Encodable) async throws {
+   }
+ 
+   // MARK: Sending
+@@ -183,26 +240,174 @@
+     return try XPCEncoder().encode(message)
+   }
+ 
+-  /// Encodes `payload`, sends it over the connection, and resolves when the XPC send barrier fires.
+-  /// The actor serializes calls, so per-gesture state stays consistent. Does not wait for the daemon
+-  /// to consume the event — that is `flush()`'s job, run once per gesture rather than per primitive.
+-  func send(messageType: String, payload: some Encodable) async throws {
+-    let object = try encode(messageType: messageType, payload: payload)
+-    try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+-      xpc_connection_send_message(connection, object)
+-      xpc_connection_send_barrier(connection) {
+-        continuation.resume()
++  /// Bounds host enqueue and the separate guest service reply. A failed session send closes
++  /// normal input admission but preserves the connection for owned UP cleanup only. Other
++  /// transports, XPC errors and failed cleanup still cancel the connection. A guest reply
++  /// confirms service order; it does not confirm a UIKit event or an application effect.
++  func send(messageType: String, payload: some Encodable, ownedRelease: Bool = false) async throws {
 +    latestSendEvidence = FBSimulatorHIDSendEvidence(messageType: messageType,
 +      startedUptime: ProcessInfo.processInfo.systemUptime)
 +    var phase = "encode"
 +    do {
 +      let object = try encode(messageType: messageType, payload: payload)
 +      phase = "hostEnqueue"
-+      try await enqueueGate.perform { connection.send(object, completion: $0) }
++      try await enqueueGate.perform(ownedRelease: ownedRelease) { connection.send(object, completion: $0) }
 +      latestSendEvidence?.hostEnqueueCompletedUptime = ProcessInfo.processInfo.systemUptime
 +      phase = "guestBarrier"
 +      latestSendEvidence?.guestBarrierStartedUptime = ProcessInfo.processInfo.systemUptime
-+      try await enqueueGate.performResult(operation: "DTUHID guest barrier") {
++      try await enqueueGate.performResult(operation: "DTUHID guest barrier", ownedRelease: ownedRelease) {
 +        connection.sendGuestBarrier(completion: $0)
-+      }
+       }
+-    }
+-  }
+-
+-  /// Drains the connection once a gesture's events have all been sent: waits `drainNanos` so
+-  /// `dtuhidd` consumes them before the connection is torn down. Run once per gesture (see
+-  /// `drainNanos`), not after every primitive.
 +      latestSendEvidence?.guestBarrierCompletedUptime = ProcessInfo.processInfo.systemUptime
 +    } catch {
 +      latestSendEvidence?.failedUptime = ProcessInfo.processInfo.systemUptime
@@ -6419,16 +6302,17 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +
 +  /// Keeps the connection alive for `drainNanos` after a dispatched gesture. This wait does not
 +  /// acknowledge guest consumption. It runs once per send, not after every primitive.
-+  func flush() async throws {
-+    try? await Task.sleep(nanoseconds: Self.drainNanos)
-+  }
-+
+   func flush() async throws {
+     try? await Task.sleep(nanoseconds: Self.drainNanos)
+   }
+ 
 +}
 +
 +/// XPC permits send and cancellation from different threads. The handle never changes.
 +private final class FBSimulatorDTUHIDConnection: @unchecked Sendable {
 +  private let value: xpc_connection_t
 +  init(_ value: xpc_connection_t) { self.value = value }
++  deinit { xpc_connection_cancel(value) }
 +  func start(gate: FBSimulatorDTUHIDEnqueueGate) {
 +    xpc_connection_set_event_handler(value) { [weak gate] event in
 +      if xpc_get_type(event) == XPC_TYPE_ERROR { gate?.disconnect() }
@@ -6475,10 +6359,15 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +final class FBSimulatorDTUHIDEnqueueGate: @unchecked Sendable {
 +  private let lock = NSLock()
 +  private let cancelConnection: @Sendable () -> Void
-+  private var closed = false
++  private enum Admission { case open, ownedReleaseOnly, closed }
++  private var admission = Admission.open
++  private let retainForOwnedCleanup: Bool
 +  private var pending: [UUID: FBSimulatorBoundedResult<Void>] = [:]
 +
-+  init(disconnect: @escaping @Sendable () -> Void) { cancelConnection = disconnect }
++  init(retainForOwnedCleanup: Bool = false, disconnect: @escaping @Sendable () -> Void) {
++    self.retainForOwnedCleanup = retainForOwnedCleanup
++    cancelConnection = disconnect
++  }
 +
 +  /// The initial service request carries no input. Own cancellation before, during and after
 +  /// the reply so an unsuccessful open cannot leave a live connection behind.
@@ -6494,22 +6383,23 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +    }
 +  }
 +
-+  func perform(timeout: TimeInterval = 2,
++  func perform(timeout: TimeInterval = 2, ownedRelease: Bool = false,
 +               start: (@escaping @Sendable () -> Void) -> Void) async throws {
-+    try await performResult(timeout: timeout, operation: "DTUHID host enqueue") { finish in
++    try await performResult(timeout: timeout, operation: "DTUHID host enqueue", ownedRelease: ownedRelease) { finish in
 +      start { finish(.success(())) }
 +    }
 +  }
 +
-+  func performResult(timeout: TimeInterval = 2, operation: String,
++  func performResult(timeout: TimeInterval = 2, operation: String, ownedRelease: Bool = false,
 +                     start: (@escaping @Sendable (Result<Void, Error>) -> Void) -> Void) async throws {
++    if ownedRelease { stopInput() }
 +    let identifier = UUID()
 +    let result = FBSimulatorBoundedResult<Void>()
 +    defer { remove(identifier) }
 +    do {
 +      try await result.value(timeout: timeout, operation: operation) { finish in
 +        lock.lock()
-+        guard !closed else {
++        guard admission == .open || (ownedRelease && retainForOwnedCleanup && admission == .ownedReleaseOnly) else {
 +          lock.unlock()
 +          finish(.failure(FBSimulatorDTUHIDEnqueueError.connectionClosed))
 +          return
@@ -6519,9 +6409,10 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +        lock.unlock()
 +      }
 +    } catch {
-+      // Close before returning the error. Release attempts on this gate must fail rather than
-+      // claim delivery on a cancelled connection. The session records uncertain cleanup.
-+      disconnect()
++      // Stop the failed operation before returning. Only the owning session may then send
++      // UP cleanup, on this same connection. A failed cleanup cannot reopen the connection.
++      if retainForOwnedCleanup && !ownedRelease { stopInput() }
++      else { disconnect() }
 +      throw error
 +    }
 +  }
@@ -6530,10 +6421,20 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..7fe3c3fe464b984379c36823ee624417
 +    lock.lock(); pending.removeValue(forKey: identifier); lock.unlock()
 +  }
 +
++  private func stopInput() {
++    lock.lock()
++    guard admission == .open else { lock.unlock(); return }
++    admission = .ownedReleaseOnly
++    let waiting = Array(pending.values)
++    pending.removeAll()
++    lock.unlock()
++    for result in waiting { result.finish(.failure(FBSimulatorDTUHIDEnqueueError.connectionClosed)) }
++  }
++
 +  func disconnect() {
 +    lock.lock()
-+    guard !closed else { lock.unlock(); return }
-+    closed = true
++    guard admission != .closed else { lock.unlock(); return }
++    admission = .closed
 +    let waiting = Array(pending.values)
 +    pending.removeAll()
 +    lock.unlock()
@@ -7346,10 +7247,9 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000..c79901b
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,855 @@
+@@ -0,0 +1,873 @@
 +import CoreGraphics
 +import Foundation
 +
@@ -7445,7 +7345,7 @@ index 0000000..c79901b
 +      throw FBSimulatorHIDSessionError.invalidObservation("Context changed before opening the connection")
 +    }
 +    try Task.checkCancellation()
-+    let transport = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator, displayContext: observation.displayContext, nativeEdge: nativeEdge)
++    let transport = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator, displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
 +    do {
 +      try await transport.prepareSelectedConnection()
 +      try Task.checkCancellation()
@@ -7980,7 +7880,7 @@ index 0000000..c79901b
 +          try Task.checkCancellation()
 +          await race.startRelease(index: index, primitive: String(describing: release))
 +          do {
-+            try await Self.send(release, transport: transport)
++            try await Self.sendOwnedRelease(release, transport: transport)
 +            let sendEvidence = await (transport as? any FBSimulatorHIDCleanupTransportDiagnostics)?.lastSendEvidence()
 +            await race.finishRelease(index: index, transport: sendEvidence, error: nil)
 +          } catch {
@@ -8053,6 +7953,24 @@ index 0000000..c79901b
 +    case let .button(.up, button): heldButtons.remove(button)
 +    default: break
 +    }
++  }
++
++  private static func sendOwnedRelease(_ event: FBSimulatorHIDEvent,
++                                       transport: any FBSimulatorHIDTransport) async throws {
++    guard let cleanupTransport = transport as? any FBSimulatorHIDOwnedCleanupTransport else {
++      // Existing legacy transports retain their existing release path.
++      try await send(event, transport: transport)
++      return
++    }
++    let release: FBSimulatorHIDOwnedRelease
++    switch event {
++    case let .touch(.up, x, y): release = .touch(CGPoint(x: x, y: y))
++    case let .twoFingerTouch(.up, first, second): release = .pair(first, second)
++    case let .keyboard(.up, code): release = .key(code)
++    case let .button(.up, button): release = .button(button)
++    default: throw FBSimulatorHIDSessionError.invalidEvent("Cleanup accepts only owned UP events")
++    }
++    try await cleanupTransport.releaseOwnedInput(release)
 +  }
 +
 +  private static func send(_ event: FBSimulatorHIDEvent, transport: any FBSimulatorHIDTransport) async throws {
@@ -13086,4 +13004,251 @@ index 0000000000000000000000000000000000000000..6b758fc1880d62688f3868dbfbdde48c
 +  func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws { try await send("button", direction) }
 +  func sendKeyboard(direction: FBSimulatorHIDDirection, keyCode: UInt32) async throws { try await send("key", direction) }
 +  func flush() async throws {}
++}
+diff --git a/FBSimulatorControl/HID/FBSimulatorHIDTransport.swift b/FBSimulatorControl/HID/FBSimulatorHIDTransport.swift
+--- a/FBSimulatorControl/HID/FBSimulatorHIDTransport.swift
++++ b/FBSimulatorControl/HID/FBSimulatorHIDTransport.swift
+@@ -39,3 +39,16 @@
+   /// per gesture), not once per primitive.
+   func flush() async throws
+ }
++
++/// Only the session's owned state can construct these release requests. No DOWN is representable.
++enum FBSimulatorHIDOwnedRelease: Sendable {
++  case touch(CGPoint)
++  case pair(CGPoint, CGPoint)
++  case key(UInt32)
++  case button(FBSimulatorHIDButton)
++}
++
++/// Keeps normal input closed after failure while allowing release on the original connection.
++protocol FBSimulatorHIDOwnedCleanupTransport: Sendable {
++  func releaseOwnedInput(_ release: FBSimulatorHIDOwnedRelease) async throws
++}
+diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorDTUHIDOwnedReleaseTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorDTUHIDOwnedReleaseTests.swift
+new file mode 100644
+--- /dev/null
++++ b/FBSimulatorHIDEventTransportTests/FBSimulatorDTUHIDOwnedReleaseTests.swift
+@@ -0,0 +1,222 @@
++import CoreGraphics
++import Foundation
++import Testing
++@testable import FBSimulatorControl
++
++struct FBSimulatorDTUHIDOwnedReleaseTests {
++  @Test func timeoutStopsInputButAllowsOnlyOwnedRelease() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    do {
++      try await gate.performResult(timeout: 0.02, operation: "Lost normal guest reply") { witness.capture($0) }
++      Issue.record("The lost reply must fail")
++    } catch { #expect(String(describing: error).contains("timed out")) }
++    #expect(!witness.disconnected)
++    await expectNormalClosed(gate, witness)
++    try await gate.perform(ownedRelease: true) { finish in witness.record("owned-UP-host"); finish() }
++    try await gate.performResult(operation: "Owned UP guest reply", ownedRelease: true) { finish in
++      witness.record("owned-UP-guest"); finish(.success(()))
++    }
++    #expect(witness.events == ["owned-UP-host", "owned-UP-guest"])
++    #expect(!witness.disconnected)
++    gate.disconnect()
++    #expect(witness.disconnected)
++  }
++
++  @Test func cancellationStopsInputAndAllowsOwnedRelease() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    let input = Task {
++      try await gate.performResult(operation: "Cancelled normal send") { witness.capture($0) }
++    }
++    try await witness.waitForStart()
++    input.cancel()
++    do { try await input.value; Issue.record("Cancelled input must fail") }
++    catch { #expect(error is CancellationError) }
++    #expect(!witness.disconnected)
++    await expectNormalClosed(gate, witness)
++    try await gate.perform(ownedRelease: true) { finish in witness.record("owned-UP"); finish() }
++    #expect(witness.events == ["owned-UP"])
++    gate.disconnect()
++  }
++
++  @Test func lateNormalReplyCannotReopenInput() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    do {
++      try await gate.performResult(timeout: 0.02, operation: "Lost normal reply") { witness.capture($0) }
++      Issue.record("Lost reply must fail")
++    } catch {}
++    witness.complete(.success(()))
++    await expectNormalClosed(gate, witness)
++    try await gate.perform(ownedRelease: true) { finish in witness.record("owned-UP"); finish() }
++    witness.complete(.success(()))
++    await expectNormalClosed(gate, witness)
++    #expect(witness.events == ["owned-UP"])
++    gate.disconnect()
++  }
++
++  @Test func failedOwnedReleaseCancelsAndCannotBeRetried() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    do {
++      try await gate.performResult(operation: "Failed owned UP", ownedRelease: true) { finish in
++        witness.record("owned-UP"); finish(.failure(FBSimulatorDTUHIDEnqueueError.invalidBarrierReply))
++      }
++      Issue.record("Failed cleanup must fail")
++    } catch {}
++    #expect(witness.disconnected)
++    do {
++      try await gate.perform(ownedRelease: true) { finish in witness.record("unexpected-retry"); finish() }
++      Issue.record("Closed cleanup must fail")
++    } catch {}
++    #expect(witness.events == ["owned-UP"])
++  }
++
++  @Test func explicitConnectionLossRejectsOwnedRelease() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    gate.disconnect()
++    do {
++      try await gate.perform(ownedRelease: true) { finish in witness.record("unexpected-UP"); finish() }
++      Issue.record("Disconnected cleanup must fail")
++    } catch {}
++    #expect(witness.disconnected)
++    #expect(witness.events.isEmpty)
++  }
++
++  @Test func rawTransportTimeoutStillCancels() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate { witness.disconnect() }
++    do {
++      try await gate.performResult(timeout: 0.02, operation: "Lost raw reply") { witness.capture($0) }
++      Issue.record("Raw timeout must fail")
++    } catch {}
++    #expect(witness.disconnected)
++    do {
++      try await gate.perform(ownedRelease: true) { finish in witness.record("unexpected-UP"); finish() }
++      Issue.record("Raw transport has no owned cleanup admission")
++    } catch {}
++    #expect(witness.events.isEmpty)
++  }
++
++  @Test func initialBarrierFailureStillCancels() async throws {
++    let witness = GateWitness()
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++    do {
++      try await gate.performInitialGuestBarrier(timeout: 0.02) { witness.capture($0) }
++      Issue.record("Initial barrier timeout must fail")
++    } catch {}
++    #expect(witness.disconnected)
++  }
++
++  @Test func sessionUsesOwnedUPAfterNormalSendTimeout() async throws {
++    let transport = TimedOutKeyboardTransport()
++    let context = try FBSimulatorHIDDisplayContext(hidTarget: 3,
++      nativePixelSize: CGSize(width: 600, height: 900), scale: 3, rotation: .rot0)
++    let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: "owned-release-test",
++      bootIdentity: "boot", screenID: 3, screenUniqueID: "769ED878-389B-4346-9C56-CB0703AB3E58",
++      axDisplayID: 3, displayContext: context, poseRevision: "open")
++    let provider = ReleaseIdentityProvider(value: observation)
++    let session = FBSimulatorHIDSession(transport: transport, observation: observation,
++      freshnessProvider: provider, liveProvider: provider)
++    do {
++      _ = try await session.execute(.shortKeyPress(4))
++      Issue.record("The failed DOWN acknowledgement must stop the action")
++    } catch let FBSimulatorHIDSessionError.interrupted(reason, cleanup) {
++      guard case .transportFailure = reason else { Issue.record("Wrong interruption"); return }
++      #expect(cleanup == .releaseEnqueuedAndDrained)
++    }
++    #expect(transport.witness.events == ["normal-DOWN:4", "owned-UP:4", "drain"])
++    #expect(transport.witness.disconnected)
++    let evidence = try #require(await session.cleanupEvidence())
++    #expect(evidence.releases.count == 1)
++    #expect(evidence.releases[0].returnedSuccessfully)
++    #expect(!evidence.timedOut)
++    #expect(await session.status().state == .invalidated)
++    _ = try await session.close()
++  }
++
++  private func expectNormalClosed(_ gate: FBSimulatorDTUHIDEnqueueGate, _ witness: GateWitness) async {
++    do {
++      try await gate.perform { finish in witness.record("unexpected-normal-input"); finish() }
++      Issue.record("Normal input must remain closed")
++    } catch {}
++    #expect(!witness.events.contains("unexpected-normal-input"))
++  }
++}
++
++private final class GateWitness: @unchecked Sendable {
++  private let lock = NSLock()
++  private let started = FBSimulatorBoundedResult<Bool>()
++  private var callback: (@Sendable (Result<Void, Error>) -> Void)?
++  private var storedEvents: [String] = []
++  private var storedDisconnected = false
++  var events: [String] { lock.lock(); defer { lock.unlock() }; return storedEvents }
++  var disconnected: Bool { lock.lock(); defer { lock.unlock() }; return storedDisconnected }
++  func record(_ value: String) { lock.lock(); storedEvents.append(value); lock.unlock() }
++  func disconnect() { lock.lock(); storedDisconnected = true; lock.unlock() }
++  func capture(_ value: @escaping @Sendable (Result<Void, Error>) -> Void) {
++    lock.lock(); callback = value; lock.unlock()
++    started.finish(.success(true))
++  }
++  func complete(_ result: Result<Void, Error>) {
++    lock.lock(); let finish = callback; lock.unlock()
++    finish?(result)
++  }
++  func waitForStart() async throws {
++    _ = try await started.value(timeout: 1, operation: "Local send start") { _ in }
++  }
++}
++
++private final class TimedOutKeyboardTransport: FBSimulatorHIDTransport,
++    FBSimulatorHIDOwnedCleanupTransport, @unchecked Sendable {
++  let witness: GateWitness
++  private let gate: FBSimulatorDTUHIDEnqueueGate
++  init() {
++    let witness = GateWitness()
++    self.witness = witness
++    gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: true) { witness.disconnect() }
++  }
++  func disconnect() { gate.disconnect() }
++  func sendTouch(direction: FBSimulatorHIDDirection, x: Double, y: Double) async throws {
++    throw FBSimulatorHIDSessionError.invalidEvent("Keyboard-only local proof")
++  }
++  func sendTwoFingerTouch(direction: FBSimulatorHIDDirection, finger1: CGPoint, finger2: CGPoint) async throws {
++    throw FBSimulatorHIDSessionError.invalidEvent("Keyboard-only local proof")
++  }
++  func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
++    throw FBSimulatorHIDSessionError.invalidEvent("Keyboard-only local proof")
++  }
++  func sendKeyboard(direction: FBSimulatorHIDDirection, keyCode: UInt32) async throws {
++    witness.record("normal-" + (direction == .down ? "DOWN:" : "UP:") + String(keyCode))
++    try await gate.performResult(timeout: 0.02, operation: "Missing keyboard guest reply") { _ in }
++  }
++  func releaseOwnedInput(_ release: FBSimulatorHIDOwnedRelease) async throws {
++    guard case let .key(code) = release else {
++      throw FBSimulatorHIDSessionError.invalidEvent("Keyboard-only local proof")
++    }
++    try await gate.perform(ownedRelease: true) { finish in
++      witness.record("owned-UP:" + String(code)); finish()
++    }
++    try await gate.performResult(operation: "Owned UP guest reply", ownedRelease: true) { $0(.success(())) }
++  }
++  func flush() async throws { witness.record("drain") }
++}
++
++private struct ReleaseIdentityProvider: FBSimulatorHIDLiveFreshnessProvider, FBSimulatorHIDCleanupIdentityProvider {
++  let value: FBSimulatorHIDSessionObservation
++  func observation() async throws -> FBSimulatorHIDSessionObservation { value }
++  func validateCurrentRevision(expected: FBSimulatorHIDSessionObservation) throws {
++    guard expected == value else { throw FBSimulatorHIDSessionError.invalidObservation("Changed local context") }
++  }
++  func cleanupIdentity() async throws -> FBSimulatorHIDCleanupIdentity {
++    let now = ProcessInfo.processInfo.systemUptime
++    return FBSimulatorHIDCleanupIdentity(simulatorUDID: value.simulatorUDID, bootIdentity: value.bootIdentity,
++      screenID: value.screenID, screenUUID: value.screenUniqueID,
++      nativePixelWidth: value.displayContext.nativePixelSize.width,
++      nativePixelHeight: value.displayContext.nativePixelSize.height, scale: value.displayContext.scale,
++      startedUptime: now, finishedUptime: now)
++  }
++  func close() {}
 +}
