@@ -142,7 +142,9 @@ struct PlaygroundAgentSliderEnvelope: Decodable {
         func requireReached(target: Double, initial: Double, events: Int) throws {
             try #require(phase == "physicalOwnedValue" && outcome == "reached" && reason == nil
                 && delivery == "enqueuedAndDrained" && requestedPercent == target && !replayed)
-            try #require(domainMinimum == 0 && domainMaximum == 100 && nativeTarget == target)
+            try #require(domainMinimum == 0 && domainMaximum == 100)
+            let nativeTarget = try #require(self.nativeTarget)
+            try #require(nativeTarget.isFinite && abs(nativeTarget - target) <= 0.000000001)
             let tolerance = try #require(self.tolerance)
             let initialValue = try #require(self.initialValue)
             let finalValue = try #require(self.finalValue)
