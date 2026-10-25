@@ -48,7 +48,7 @@ struct PlaygroundDuoPairCoverageTests {
             }
             try requirePairTrace(after, before: before, starts: starts, ends: ends,
                 rotationCenter: action == .rotate ? PlaygroundPairPoint(x: x, y: y) : nil)
-            try controlsRecognizer(after, before: before, name: counter, discrete: action == .twoFingerTap)
+            try requirePairRecognizers(after, before: before, action: action)
             if action == .pinch { try #require(after.pinchScale > 1.1 && after.pinchScale < 1.5) }
             if action == .rotate { try #require(abs(after.rotationRadians - Double.pi / 4) <= 0.15) }
             if action == .twoFingerHold {
@@ -86,4 +86,65 @@ func requirePairTrace(_ after: PlaygroundControlsDocument, before: PlaygroundCon
     let firstEnd = try #require(groups[0].last), secondStart = try #require(groups[1].first)
     let secondEnd = try #require(groups[1].last), firstStart = try #require(groups[0].first)
     try #require(firstEnd.timestamp >= secondStart.timestamp && secondEnd.timestamp >= firstStart.timestamp)
+}
+
+// This normal pad permits these exact recognizers to run together.
+private func requirePairRecognizers(_ after: PlaygroundControlsDocument, before: PlaygroundControlsDocument,
+                                    action: PlaygroundPairAction) throws {
+    let expectedNames: [String]
+    switch action {
+    case .pinch: expectedNames = ["pinch", "twoFingerHold", "twoFingerTap"]
+    case .rotate: expectedNames = ["rotation", "twoFingerHold", "twoFingerTap"]
+    case .twoFingerTap: expectedNames = ["twoFingerTap"]
+    case .twoFingerHold: expectedNames = ["twoFingerHold", "twoFingerTap"]
+    }
+    try #require(after.pid == before.pid && after.generation == before.generation)
+    try #require(Array(after.recognizerTrace.prefix(before.recognizerTrace.count)) == before.recognizerTrace)
+    let records = Array(after.recognizerTrace.dropFirst(before.recognizerTrace.count))
+    let contacts = Array(after.windowTouchTrace.dropFirst(before.windowTouchTrace.count))
+    try #require(contacts.allSatisfy { $0.hitView == "feature.pad" })
+    try #require(Set(records.map(\.name)) == Set(expectedNames))
+    var previousTime = before.recognizerTrace.last?.timestamp ?? 0
+    for record in records {
+        let finite = [record.timestamp, record.x, record.y].allSatisfy(\.isFinite)
+        try #require(finite)
+        try #require(record.timestamp >= previousTime && record.touches == 2)
+        try #require([1, 2, 3].contains(record.state))
+        previousTime = record.timestamp
+    }
+    for name in expectedNames {
+        let matching = records.filter { $0.name == name }
+        let first = try #require(matching.first), last = try #require(matching.last)
+        let discrete = name == "twoFingerTap"
+        try #require(first.state == (discrete ? 3 : 1) && last.state == 3)
+        try #require(matching.filter { $0.state == 1 }.count == (discrete ? 0 : 1))
+        try #require(matching.filter { $0.state == 3 }.count == 1)
+        if discrete { try #require(matching.count == 1) }
+        try #require(after.count(name) == before.count(name) + 1)
+    }
+    if action != .twoFingerTap {
+        let holdStart = try #require(records.first { $0.name == "twoFingerHold" })
+        let holdEnd = try #require(records.last { $0.name == "twoFingerHold" })
+        let tap = try #require(records.first { $0.name == "twoFingerTap" })
+        try #require(holdStart.timestamp <= tap.timestamp && tap.timestamp <= holdEnd.timestamp)
+        if action == .pinch || action == .rotate {
+            let primaryName = action == .pinch ? "pinch" : "rotation"
+            let primaryStart = try #require(records.first { $0.name == primaryName })
+            let primaryEnd = try #require(records.last { $0.name == primaryName })
+            try #require(primaryStart.timestamp <= holdStart.timestamp && holdEnd.timestamp <= primaryEnd.timestamp)
+        }
+    }
+    let allowedCounters = Set(expectedNames + ["touchBegan", "touchMoved", "touchEnded",
+        "windowTouchBegan", "windowTouchMoved", "windowTouchEnded"])
+    for name in Set(after.counts.keys).union(before.counts.keys) where !allowedCounters.contains(name) {
+        try #require(after.count(name) == before.count(name))
+    }
+    try #require(after.geometry == before.geometry)
+    try #require(after.textFocused == before.textFocused && after.advancedSliders == before.advancedSliders)
+    try #require(after.canvasOffsetX == before.canvasOffsetX && after.canvasOffsetY == before.canvasOffsetY)
+    try #require(after.panX == before.panX && after.panY == before.panY)
+    if action != .pinch { try #require(after.pinchScale == before.pinchScale) }
+    if action != .rotate { try #require(after.rotationRadians == before.rotationRadians) }
+    try #require(after.waitTargetVisible == before.waitTargetVisible && after.waitDuplicateVisible == before.waitDuplicateVisible)
+    try #require(after.targetAppearedUptime == before.targetAppearedUptime && after.scheduleGeneration == before.scheduleGeneration)
 }
