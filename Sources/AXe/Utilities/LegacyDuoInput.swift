@@ -48,6 +48,45 @@ enum LegacyDuoInput {
         return SelectedHIDContext(observation)
     }
 
+    /// Choose the Slider route before input. Older profiles keep their existing raw path.
+    /// This discovery returns only a display pair; the broker performs full live admission.
+    @MainActor
+    static func captureSliderDisplay(
+        simulatorUDID: String,
+        hasStableIdentifier: Bool,
+        logger: AxeLogger
+    ) async throws -> ActivePanelIdentity? {
+        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
+        let set = try await getSimulatorSet(
+            deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared
+        )
+        guard let simulator = set.allSimulators.first(where: {
+            UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID)
+        }), simulator.state == .booted else {
+            throw CLIError.simulatorNotFound(udid: simulatorUDID)
+        }
+        let isDuo = simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
+        // Missing rigid-profile metadata cannot establish support for the measured route.
+        guard let type = simulator.device.deviceType, let bundle = type.bundle,
+              type.identifier != nil, type.modelIdentifier != nil,
+              bundle.object(forInfoDictionaryKey: "CFBundleVersion") is String,
+              bundle.url(forResource: "capabilities", withExtension: "plist") != nil else {
+            guard !isDuo else { throw SelectedHIDFailure.invalid("Duo device type metadata is unavailable") }
+            return nil
+        }
+        let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
+        if isDuo {
+            // Preserve the existing refusal for an unverified Duo profile.
+            guard capability.hinge == .supported else { throw SelectedHIDFailure.invalid(capability.reason) }
+        } else {
+            // Raw label lookup can select one actionable control beside a matching text label.
+            // Keep that rigid-device path until an exact native ID can bind the resolved control.
+            guard capability.hinge == .unsupported, hasStableIdentifier else { return nil }
+        }
+        let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
+        return discovery.readback.snapshot.activePanel.identity
+    }
+
     @MainActor
     static func performKeyboard(
         _ event: FBSimulatorHIDEvent,

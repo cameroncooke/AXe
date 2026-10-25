@@ -45,6 +45,7 @@ final class SelectedSliderValueOperation {
     private var pickupHelper: SliderPickupHelper?
     private var deadline = 0.0
     private var started = 0.0
+    private let releaseReserveSeconds = 1.5
     private var consumed = false
     private var currentPoint = CGPoint.zero
     private var moveCount = 0
@@ -153,7 +154,11 @@ final class SelectedSliderValueOperation {
         pickupHelper = helper
         let admitted = try await helper.prepare(before: initial)
         let pickup = admitted.pickup
-        currentPoint = pickup
+        // Keep the exact admitted DOWN; feedback starts at its effective native pixel.
+        currentPoint = try canonicalPoint(pickup)
+        guard frame.contains(currentPoint), admitted.hitFrame.contains(currentPoint) else {
+            throw SliderValueFailure.rejected("Effective Slider pickup is outside the admitted hit frame")
+        }
         let confirmed = try await readNative(reader, phase: "beforePickup", deadline: deadline)
         try confirmed.requireSameTarget(as: initial, includeValue: true)
         try check(deadline: deadline)
@@ -181,51 +186,73 @@ final class SelectedSliderValueOperation {
         guard initialDistance.isFinite, initialDistance * direction > 0 else {
             throw SliderValueFailure.rejected("Initial local displacement is invalid")
         }
-        var next = CGPoint(x: pickup.x + CGFloat(initialDistance), y: pickup.y)
-        var previous: (x: CGFloat, value: Double) = (pickup.x, initialValue)
-        var previousPathLength = abs(initialDistance)
+        var next = try canonicalPoint(CGPoint(x: currentPoint.x + CGFloat(initialDistance), y: currentPoint.y))
+        let firstDistance = Double(next.x - currentPoint.x)
+        guard firstDistance.isFinite, firstDistance * direction > 0, frame.contains(next) else {
+            throw SliderValueFailure.rejected("Initial Slider path has no contained pixel progress")
+        }
+        var previous: (x: CGFloat, value: Double) = (currentPoint.x, initialValue)
+        var previousPathLength = abs(firstDistance)
         var reached = false
         var requiresCleanSlope = false
         for iteration in 1...4 {
+            // A full current-screen admission precedes each corrective path.
+            // Strict fast feedback can end owned input, but cannot admit another path.
+            let pathStart = currentPoint
             try await movePath(to: next, token: token, frame: frame)
-            let sample = try await settledValue(initial: initial, released: false, deadline: deadline)
+            let sample = try await settledValue(initial: initial, released: false, deadline: deadline,
+                target: (requested, domain.tolerance))
             let value = try sample.requireValue()
+            readDiagnostics.recordFeedbackPath(iteration: iteration, moves: moveCount, start: pathStart,
+                current: currentPoint, previousX: previous.x, previousValue: previous.value,
+                coherentSampleValue: value, requestedValue: requested, direction: direction,
+                nativeTrackSpan: Double(admitted.maximum.x - admitted.minimum.x),
+                pickupHitWidth: Double(admitted.hitFrame.width), snapshotID: sample.snapshotID)
             // One measured take-up path is permitted only after an exact first-path plateau.
             if iteration == 1, value == initialValue {
                 let hitWidth = Double(admitted.hitFrame.width)
                 let distance = direction * min(previousPathLength, hitWidth / 2)
-                let x = currentPoint.x + CGFloat(distance)
+                let point = try canonicalPoint(CGPoint(x: currentPoint.x + CGFloat(distance), y: currentPoint.y))
+                let effectiveDistance = Double(point.x - currentPoint.x)
                 guard hitWidth.isFinite, hitWidth > 0, distance.isFinite, distance * direction > 0,
-                      x.isFinite, x != currentPoint.x, frame.contains(CGPoint(x: x, y: pickup.y)) else {
+                      effectiveDistance * direction > 0, abs(effectiveDistance) <= previousPathLength,
+                      abs(effectiveDistance) <= hitWidth / 2, frame.contains(point) else {
                     throw SliderValueFailure.rejected("Measured take-up path is unavailable or outside the Slider")
                 }
                 previous = (currentPoint.x, value)
-                previousPathLength = abs(distance)
-                next = CGPoint(x: x, y: pickup.y)
+                previousPathLength = abs(effectiveDistance)
+                next = point
                 requiresCleanSlope = true
+                readDiagnostics.recordFeedbackDecision("takeUp", proposedDistance: distance, proposedNext: next)
                 continue
             }
             guard (value - previous.value) * direction > 0,
                   (value - initialValue) * direction >= -domain.tolerance,
                   (value - requested) * direction <= domain.tolerance else {
+                readDiagnostics.recordFeedbackDecision("rejectedProgressCheck")
                 throw SliderValueFailure.rejected("Slider value stalled, reversed or passed the target; no replay")
             }
-            if abs(value - requested) <= domain.tolerance { reached = true; break }
+            if abs(value - requested) <= domain.tolerance {
+                readDiagnostics.recordFeedbackDecision("reached")
+                reached = true; break
+            }
             if requiresCleanSlope {
                 // The take-up interval can include a flat value. Measure one clean interval before using its slope.
                 let proposed = Double(admitted.maximum.x - admitted.minimum.x)
                     * (requested - value) / (domain.maximum - domain.minimum)
                 let distance = direction * min(abs(proposed), previousPathLength)
-                let x = currentPoint.x + CGFloat(distance)
+                let point = try canonicalPoint(CGPoint(x: currentPoint.x + CGFloat(distance), y: currentPoint.y))
+                let effectiveDistance = Double(point.x - currentPoint.x)
                 guard iteration == 2, proposed.isFinite, proposed * direction > 0,
-                      distance.isFinite, distance * direction > 0, x.isFinite,
-                      x != currentPoint.x, frame.contains(CGPoint(x: x, y: pickup.y)) else {
+                      distance.isFinite, distance * direction > 0, effectiveDistance * direction > 0,
+                      abs(effectiveDistance) <= previousPathLength, frame.contains(point) else {
                     throw SliderValueFailure.rejected("Clean local slope probe is unavailable or outside the Slider")
                 }
                 previous = (currentPoint.x, value)
-                previousPathLength = abs(distance)
-                next = CGPoint(x: x, y: pickup.y)
+                previousPathLength = abs(effectiveDistance)
+                next = point
                 requiresCleanSlope = false
+                readDiagnostics.recordFeedbackDecision("cleanSlopeProbe", proposedDistance: proposed, proposedNext: next)
                 continue
             }
             let deltaX = Double(currentPoint.x - previous.x)
@@ -242,23 +269,16 @@ final class SelectedSliderValueOperation {
                 throw SliderValueFailure.rejected("Local Slider correction cannot make progress")
             }
             let distance = direction * min(abs(proposed), previousPathLength)
-            var x = currentPoint.x + CGFloat(distance)
-            var nextPathLength = abs(distance)
-            if iteration == 3 {
-                let scale = Double(observation.displayContext.scale)
-                guard scale.isFinite, scale > 0 else { throw SliderValueFailure.rejected("Display pixel scale is invalid") }
-                x = CGFloat((Double(x) * scale).rounded(direction > 0 ? .up : .down) / scale)
-                let roundedDistance = Double(x - currentPoint.x)
-                guard roundedDistance * direction > 0, abs(roundedDistance) <= previousPathLength else {
-                    throw SliderValueFailure.rejected("Pixel correction exceeds the preceding path length")
-                }
-                nextPathLength = abs(roundedDistance)
+            let point = try canonicalPoint(CGPoint(x: currentPoint.x + CGFloat(distance), y: currentPoint.y))
+            let effectiveDistance = Double(point.x - currentPoint.x)
+            guard effectiveDistance * direction > 0, abs(effectiveDistance) <= previousPathLength,
+                  frame.contains(point) else {
+                throw SliderValueFailure.rejected("Pixel correction exceeds the preceding path or current frame")
             }
-            guard x.isFinite, x != currentPoint.x, frame.contains(CGPoint(x: x, y: pickup.y)) else {
-                throw SliderValueFailure.rejected("Slider correction is outside the current frame")
-            }
-            previous = (currentPoint.x, value); previousPathLength = nextPathLength
-            next = CGPoint(x: x, y: pickup.y)
+            previous = (currentPoint.x, value); previousPathLength = abs(effectiveDistance)
+            next = point
+            readDiagnostics.recordFeedbackDecision("localSlopeCorrection", slope: slope, gain: gain,
+                proposedDistance: proposed, proposedNext: next)
         }
         guard reached else { throw SliderValueFailure.rejected("Slider target was not reached within four feedback paths") }
         let up = try await hid.end(token)
@@ -283,36 +303,64 @@ final class SelectedSliderValueOperation {
     }
 
     private func readNative(_ backend: FBSimulatorSliderBackend, phase: String, deadline: Double,
-        final: Bool = false) async throws -> FBSimulatorSliderCapabilities {
-        readDiagnostics.beginRead(phase)
+        final: Bool = false, feedback: Bool = false,
+        physicalAdmission: FBSimulatorSliderCapabilities? = nil,
+        recoverValueMismatch: Bool = false) async throws -> FBSimulatorSliderCapabilities {
+        readDiagnostics.beginRead(phase, deadline: deadline)
         do {
             let value: FBSimulatorSliderCapabilities
             if final { value = try await backend.readFinal(deadline: deadline) }
+            else if let physicalAdmission {
+                value = try await backend.readPhysicalAdmission(expected: physicalAdmission, deadline: deadline)
+            }
+            else if feedback { value = try await backend.readFeedback(deadline: deadline) }
             else { value = try await backend.read(deadline: deadline) }
             readDiagnostics.endRead()
             return value
         } catch {
-            readDiagnostics.endRead(error: error)
+            let recoverable: Bool
+            if case FBSimulatorSliderError.inconsistentReadValue = error { recoverable = recoverValueMismatch }
+            else { recoverable = false }
+            readDiagnostics.endRead(error: error, recoverable: recoverable)
             throw error
         }
     }
 
     private func settledValue(initial: FBSimulatorSliderCapabilities, released: Bool,
-        deadline: Double) async throws -> FBSimulatorSliderCapabilities {
+        deadline: Double, target: (value: Double, tolerance: Double)? = nil) async throws -> FBSimulatorSliderCapabilities {
         guard let backend, let session else { throw SliderValueFailure.rejected("Slider feedback ownership is unavailable") }
-        let until = min(deadline, ProcessInfo.processInfo.systemUptime + 2)
+        let readDeadline = released ? deadline : deadline - releaseReserveSeconds
+        var until = min(readDeadline, ProcessInfo.processInfo.systemUptime + 2)
         var previous: Double?
         var stableSince = 0.0
+        var fullAdmissionNext = false
         for _ in 1...128 {
-            try check(deadline: deadline)
-            guard ProcessInfo.processInfo.systemUptime < until else { break }
+            try check(deadline: readDeadline)
+            let fullAdmission = !released && fullAdmissionNext
+            guard fullAdmission || ProcessInfo.processInfo.systemUptime < until else { break }
             guard await session.status().hasRetainedContact == !released else {
                 throw SliderValueFailure.rejected("Slider contact changed before native feedback")
             }
-            let sample = try await readNative(backend, phase: released ? "releasedSettle" : "heldSettle", deadline: until)
+            let sample: FBSimulatorSliderCapabilities
+            do {
+                sample = try await readNative(backend,
+                    phase: released ? "releasedSettle" : (fullAdmission ? "heldAdmission" : "heldSettle"),
+                    deadline: fullAdmission ? readDeadline : until, feedback: !released && !fullAdmission,
+                    physicalAdmission: fullAdmission ? initial : nil, recoverValueMismatch: !released)
+            } catch FBSimulatorSliderError.inconsistentReadValue where !released {
+                // Only a failed full read can have closed its selected handle. A fast read
+                // retains that handle, so retry it read-only inside the same fixed window.
+                previous = nil; stableSince = 0; fullAdmissionNext = fullAdmission
+                try check(deadline: readDeadline)
+                guard await session.status().hasRetainedContact else {
+                    throw SliderValueFailure.rejected("Slider contact changed during native feedback")
+                }
+                try await Task.sleep(nanoseconds: 25_000_000)
+                continue
+            }
             let returned = ProcessInfo.processInfo.systemUptime
-            try check(deadline: deadline)
-            guard returned < until else { break }
+            try check(deadline: readDeadline)
+            guard fullAdmission || returned < until else { break }
             guard await session.status().hasRetainedContact == !released else {
                 throw SliderValueFailure.rejected("Slider contact changed during native feedback")
             }
@@ -322,23 +370,67 @@ final class SelectedSliderValueOperation {
             }
             let value = try sample.requireValue()
             if value != previous { previous = value; stableSince = returned }
-            if returned - stableSince >= 0.200 { return sample }
+            if returned - stableSince >= 0.200 {
+                if released || fullAdmission { return sample }
+                if let target, abs(value - target.value) <= target.tolerance {
+                    // This sample permits only owned UP, followed by full final verification.
+                    return sample
+                }
+                // Stability uses the fixed two-second fast-read phase. A fresh full screen read
+                // then uses only the remaining original action budget, keeping the release reserve.
+                fullAdmissionNext = true
+            } else {
+                if fullAdmission {
+                    // The admitted value changed, or a typed mismatch invalidated the old sample.
+                    // Settle again read-only, then admit the whole screen again before correction.
+                    // The original action deadline, release reserve and 128-read bound do not reset.
+                    until = min(readDeadline, returned + 2)
+                }
+                fullAdmissionNext = false
+            }
             try await Task.sleep(nanoseconds: 25_000_000)
         }
-        throw SliderValueFailure.rejected("Native Slider value did not settle within two seconds")
+        throw SliderValueFailure.rejected(released
+            ? "Native Slider value did not settle within two seconds"
+            : "Slider value settling or fresh screen admission did not finish within its read limits")
+    }
+
+    /// Snap in panel-native pixels so quarter-turn ties follow the actual digitizer axes.
+    private func canonicalPoint(_ point: CGPoint) throws -> CGPoint {
+        let context = observation.displayContext
+        let normalized = try context.normalizedPoint(from: point)
+        let size = context.nativePixelSize
+        let pixels = CGPoint(x: (normalized.x * size.width).rounded(.toNearestOrAwayFromZero),
+            y: (normalized.y * size.height).rounded(.toNearestOrAwayFromZero))
+        let result: CGPoint
+        switch context.rotation {
+        case .rot0:
+            result = CGPoint(x: pixels.x / context.scale, y: pixels.y / context.scale)
+        case .rot90:
+            result = CGPoint(x: (size.height - pixels.y) / context.scale, y: pixels.x / context.scale)
+        case .rot180:
+            result = CGPoint(x: (size.width - pixels.x) / context.scale,
+                y: (size.height - pixels.y) / context.scale)
+        case .rot270:
+            result = CGPoint(x: pixels.y / context.scale, y: (size.width - pixels.x) / context.scale)
+        @unknown default:
+            throw SliderValueFailure.rejected("Display rotation is unsupported")
+        }
+        _ = try context.normalizedPoint(from: result)
+        return result
     }
 
     private func movePath(to destination: CGPoint, token: FBSimulatorHIDContactToken, frame: CGRect) async throws {
         guard let session, moveCount + 12 <= 48, frame.contains(destination),
-              deadline - ProcessInfo.processInfo.systemUptime > 1.5 else {
+              deadline - ProcessInfo.processInfo.systemUptime > releaseReserveSeconds else {
             throw SliderValueFailure.rejected("Slider path limit, frame or release reserve reached")
         }
         let start = currentPoint
         for step in 1...12 {
             try check(deadline: deadline)
             let fraction = Double(step) / 12
-            let point = CGPoint(x: start.x + (destination.x - start.x) * CGFloat(fraction),
-                y: start.y + (destination.y - start.y) * CGFloat(fraction))
+            let point = try canonicalPoint(CGPoint(x: start.x + (destination.x - start.x) * CGFloat(fraction),
+                y: start.y + (destination.y - start.y) * CGFloat(fraction)))
             guard frame.contains(point), moveCount < 48 else { throw SliderValueFailure.rejected("Slider path left the selected frame") }
             let receipt = try await session.move(token, to: point)
             guard receipt.outcome == .moved, receipt.enqueuedEventCount == 1 else {

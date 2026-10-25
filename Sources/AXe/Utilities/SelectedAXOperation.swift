@@ -117,7 +117,7 @@ enum SelectedAXOperation {
                 try SelectedAXBounds.validateContent(result)
                 guard acquisition.outcome == .ready else {
                     result.failure = .acquisitionFailed
-                    throw SelectedHIDFailure.invalid("Selected AX acquisition ended with \(acquisition.outcome.rawValue)")
+                    throw SelectedHIDFailure.invalid("Selected AX acquisition ended with \(acquisition.outcome.rawValue): \(acquisition.failureDescription ?? "No further detail")")
                 }
                 await live.closeAndWait()
                 return response(request, brokerID: brokerID, result: result, observation: observation,

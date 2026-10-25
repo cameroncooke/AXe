@@ -139,6 +139,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed selected and agent taps on Photos permission buttons represented by matching parent and child Buttons. Native identity and hit checks select the current child; separate duplicate controls still reject.
 
+- Fixed selected and agent Slider corrections using positions before native pixel rounding. Feedback now uses the effective display pixel points. No-flag interior percentages on verified profiles reuse the shared owned path, with the existing 0.07 percentage-point acceptance limit. Selector lookup, polling, plain output and numeric endpoints are preserved. Unverified rigid profiles and rigid Sliders without stable IDs keep their previous route.
+
+- Fixed selected and agent accessibility errors omitting the existing native acquisition failure reason. The error message now keeps that detail without a read retry or input replay.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

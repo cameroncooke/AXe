@@ -4905,10 +4905,10 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..2fbf180b7a7606ecc4037e3cbd4bbfc2
  }
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd5edc9b01
+index 0000000000000000000000000000000000000000..3a96b19b469c0aed68b92405e40f7bd3ff2311e5
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
-@@ -0,0 +1,475 @@
+@@ -0,0 +1,637 @@
 +import AppKit
 +import Foundation
 +
@@ -4916,6 +4916,7 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +  case invalidDomain, unsupportedValueDomain, invalidSelection, staleContext, busy
 +  case unsupportedAction, noProgress, wrongDirection, actionLimit, deadline, cancelled
 +  case beforeDispatchFailure(String), deliveryUncertain(String)
++  case inconsistentReadValue
 +}
 +public enum FBSimulatorSliderEndpoint: String, Codable, Sendable { case minimum, maximum }
 +public enum FBSimulatorSliderAction: String, Codable, Sendable {
@@ -4981,6 +4982,22 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +    guard domain.contains(value), node.value == .number(value) else { throw FBSimulatorSliderError.invalidDomain }
 +    return domain
 +  }
++  /// A read-only physical sample can wait for value coherence only after target and domain admission.
++  /// Missing, invalid or changed target data still fails immediately.
++  func requirePhysicalFeedbackTarget(as expected: Self) throws {
++    guard try observation.sessionObservation() == expected.observation.sessionObservation(),
++          node.identifier == expected.node.identifier, node.type == "Slider", node.pid == expected.node.pid,
++          node.frame == expected.node.frame else { throw FBSimulatorSliderError.staleContext }
++    guard node.enabled == true, node.hidden == false else { throw FBSimulatorSliderError.invalidSelection }
++    guard let minimum = raw.number(.minValue), let maximum = raw.number(.maxValue),
++          let value = raw.number(.value) else { throw FBSimulatorSliderError.unsupportedValueDomain }
++    let domain = try FBSimulatorSliderDomain(minimum: minimum, maximum: maximum)
++    guard domain == (try expected.requireDomain()) else { throw FBSimulatorSliderError.staleContext }
++    guard domain.contains(value), case .number(let nodeValue) = node.value,
++          domain.contains(nodeValue) else { throw FBSimulatorSliderError.invalidDomain }
++    guard nodeValue == value else { throw FBSimulatorSliderError.inconsistentReadValue }
++  }
++
 +  public func requireValue() throws -> Double {
 +    _ = try requireDomain()
 +    guard let value = raw.number(.value) else { throw FBSimulatorSliderError.unsupportedValueDomain }
@@ -5017,6 +5034,7 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +  func readFinal(deadline: Double) async throws -> FBSimulatorSliderCapabilities
 +  func diagnosticPhases(operationID: UUID) async -> [FBSimulatorSliderPhaseEvent]
 +  func read(deadline: Double) async throws -> FBSimulatorSliderCapabilities
++  func readFeedback(deadline: Double) async throws -> FBSimulatorSliderCapabilities
 +  func step(_ action: FBSimulatorSliderAction, expected: FBSimulatorSliderCapabilities, deadline: Double) async throws -> FBSimulatorSliderActionReceipt
 +}
 +public extension FBSimulatorSliderEndpointBackend {
@@ -5026,6 +5044,9 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +  func finish(operationID: UUID) async {}
 +  func diagnosticPhases(operationID: UUID) async -> [FBSimulatorSliderPhaseEvent] { [] }
 +  func readFinal(deadline: Double) async throws -> FBSimulatorSliderCapabilities {
++    try await read(deadline: deadline)
++  }
++  func readFeedback(deadline: Double) async throws -> FBSimulatorSliderCapabilities {
 +    try await read(deadline: deadline)
 +  }
 +}
@@ -5204,6 +5225,40 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +    return result
 +  }
 +
++  /// A full current-screen admission inside the physical owner's fixed settle window.
++  /// This does not perform input or accept a partially read value.
++  public func readPhysicalAdmission(expected: FBSimulatorSliderCapabilities,
++    deadline: Double) async throws -> FBSimulatorSliderCapabilities {
++    guard physicalValueFeedback, !adjustmentReturned else { throw FBSimulatorSliderError.invalidSelection }
++    let (token, feed) = try boundFeed(deadline: deadline)
++    phase("backend-physical-admission-start")
++    let value = try await FBSimulatorAXWorker.shared.sliderOperation(for: simulator, observation: observation,
++      feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
++      deadline: deadline, action: nil, expected: nil, admissionGuard: admissionGuard,
++      allowingValueChange: true, physicalAdmission: expected)
++    guard operationID == token else { throw FBSimulatorSliderError.invalidSelection }
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    phase("backend-physical-admission-returned")
++    return value
++  }
++
++  /// Read-only feedback after this operation changed the selected Slider.
++  /// Full screen admission remains required before every further input path.
++  public func readFeedback(deadline: Double) async throws -> FBSimulatorSliderCapabilities {
++    guard adjustmentReturned || physicalValueFeedback else { throw FBSimulatorSliderError.invalidSelection }
++    let (token, feed) = try boundFeed(deadline: deadline)
++    phase("backend-feedback-read-start")
++    let value = try await FBSimulatorAXWorker.shared.sliderFeedback(for: simulator, observation: observation,
++      feed: feed, token: token, selection: selection, expectedPID: pid, elementType: elementType,
++      deadline: deadline, admissionGuard: admissionGuard, physicalValueFeedback: physicalValueFeedback)
++    guard operationID == token else { throw FBSimulatorSliderError.invalidSelection }
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    phase("backend-feedback-read-returned")
++    return value
++  }
++
 +  public func readFinal(deadline: Double) async throws -> FBSimulatorSliderCapabilities {
 +    let (_, feed) = try boundFeed(deadline: deadline)
 +    phase("backend-final-context-start")
@@ -5280,9 +5335,18 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +  }
 +}
 +
++/// Only the AX worker can use or close this request-owning handle.
++struct FBSimulatorSliderOwnedSelection {
++  let id = UUID()
++  let element: FBAccessibilityElement
++  let baseline: FBSimulatorSliderCapabilities
++}
++
 +struct FBSimulatorSliderAcquisitionLease {
 +  let commands: FBSimulatorAccessibilityCommands
 +  var prepared: Bool
++  var readRevision = UUID()
++  var selected: FBSimulatorSliderOwnedSelection?
 +}
 +
 +extension FBSimulatorAXWorker {
@@ -5299,7 +5363,7 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +    try sliderLeases.update(device: simulator.udid, token: token, value: lease)
 +  }
 +  func closeSliderLease(for simulator: FBSimulator, token: UUID) {
-+    _ = sliderLeases.release(device: simulator.udid, token: token)
++    sliderLeases.release(device: simulator.udid, token: token)?.selected?.element.close()
 +  }
 +  func sliderLease(for simulator: FBSimulator, token: UUID) throws -> FBSimulatorSliderAcquisitionLease {
 +    let lease = try sliderLeases.value(device: simulator.udid, token: token)
@@ -5307,21 +5371,103 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +    return lease
 +  }
 +
++  private func retainSliderSelection(_ element: FBAccessibilityElement,
++    baseline: FBSimulatorSliderCapabilities, for simulator: FBSimulator, token: UUID, revision: UUID) throws {
++    var lease = try sliderLease(for: simulator, token: token)
++    guard lease.readRevision == revision, lease.selected == nil else {
++      throw FBSimulatorSliderError.invalidSelection
++    }
++    lease.selected = FBSimulatorSliderOwnedSelection(element: element, baseline: baseline)
++    try sliderLeases.update(device: simulator.udid, token: token, value: lease)
++  }
++
++  private func sliderFeedbackFrontmostPID(for simulator: FBSimulator,
++    observation: FBSimulatorHIDSessionObservation, feed: FBSimulatorHIDNativeFreshnessProvider,
++    token: UUID, selectedID: UUID, expectedPID: Int32, deadline: Double) async throws {
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    let lease = try sliderLease(for: simulator, token: token)
++    guard lease.selected?.id == selectedID else { throw FBSimulatorSliderError.invalidSelection }
++    let budget = FBAXAcquisitionBudget(seconds: deadline - ProcessInfo.processInfo.systemUptime)
++    let request = FBAXTranslationRequest(kind: .frontmostApplication,
++      pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
++    request.acquisitionBudget = budget
++    let handle = try await withTaskCancellationHandler(operation: {
++      try await lease.commands.accessibilityElementForSliderLease(request: request, worker: self)
++    }, onCancel: { budget.stop(.cancelled) })
++    defer { handle.close() }
++    try budget.check()
++    try FBSimulatorSliderEndpointController.check(deadline)
++    guard try sliderLease(for: simulator, token: token).selected?.id == selectedID,
++          handle.acquisitionPID == expectedPID else { throw FBSimulatorSliderError.invalidSelection }
++    try feed.validateCurrentRevision(expected: observation)
++  }
++
++  /// Read fresh attributes from this operation's selected handle. This cannot admit input.
++  /// Full screen and unique-selector admission still precede every later adjustment or path.
++  func sliderFeedback(for simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
++    feed: FBSimulatorHIDNativeFreshnessProvider, token: UUID, selection: FBSimulatorSliderSelection,
++    expectedPID: Int32, elementType: String?, deadline: Double,
++    admissionGuard: (any FBSimulatorSliderAdmissionGuard)?,
++    physicalValueFeedback: Bool) async throws -> FBSimulatorSliderCapabilities {
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    let lease = try sliderLease(for: simulator, token: token)
++    guard let selected = lease.selected, selected.element.acquisitionPID == expectedPID else {
++      throw FBSimulatorSliderError.invalidSelection
++    }
++    try await sliderFeedbackFrontmostPID(for: simulator, observation: observation, feed: feed,
++      token: token, selectedID: selected.id, expectedPID: expectedPID, deadline: deadline)
++    let snapshot = try serialize(selected.element, observation: observation, remoteContentOptions: nil)
++    let node = try FBSimulatorSliderTargetSelection.ownedRoot(roots: snapshot.roots,
++      selection: selection, expectedPID: expectedPID, elementType: elementType)
++    guard node.enabled == true, node.hidden == false else { throw FBSimulatorSliderError.invalidSelection }
++    let raw = try JSONDecoder().decode(FBSimulatorSliderAttributes.self, from: selected.element.sliderCapabilityData())
++    let context = FBSimulatorContextObservation(simulatorUDID: observation.simulatorUDID,
++      bootIdentity: observation.bootIdentity, screenID: observation.screenID, screenUniqueID: observation.screenUniqueID,
++      axDisplayID: observation.axDisplayID, nativePixelWidth: observation.displayContext.nativePixelSize.width,
++      nativePixelHeight: observation.displayContext.nativePixelSize.height, scale: observation.displayContext.scale,
++      rotation: observation.displayContext.rotation.rawValue, poseRevision: observation.poseRevision)
++    let value = FBSimulatorSliderCapabilities(snapshotID: snapshot.snapshotID, observation: context,
++      node: node, raw: raw, geometryStatus: "unknown")
++    if physicalValueFeedback { try value.requirePhysicalFeedbackTarget(as: selected.baseline) }
++    try admissionGuard?.validateTarget(value, allowingValueChange: true)
++    try value.requireSameTarget(as: selected.baseline, includeValue: false)
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    try await sliderFeedbackFrontmostPID(for: simulator, observation: observation, feed: feed,
++      token: token, selectedID: selected.id, expectedPID: expectedPID, deadline: deadline)
++    try FBSimulatorSliderEndpointController.check(deadline)
++    try feed.validateCurrentRevision(expected: observation)
++    return value
++  }
++
 +  func sliderOperation(for simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
 +    feed: FBSimulatorHIDNativeFreshnessProvider, token: UUID, selection: FBSimulatorSliderSelection, expectedPID: Int32,
 +    elementType: String?, deadline: Double, action: FBSimulatorSliderAction?, expected: FBSimulatorSliderCapabilities?,
 +    admissionGuard: (any FBSimulatorSliderAdmissionGuard)? = nil,
-+    allowingValueChange: Bool = false) async throws -> FBSimulatorSliderCapabilities {
++    allowingValueChange: Bool = false,
++    physicalAdmission: FBSimulatorSliderCapabilities? = nil) async throws -> FBSimulatorSliderCapabilities {
 +    try FBSimulatorSliderEndpointController.check(deadline)
-+    guard !selection.text.isEmpty, expectedPID > 0 else { throw FBSimulatorSliderError.invalidSelection }
++    guard !selection.text.isEmpty, expectedPID > 0,
++          physicalAdmission == nil || (action == nil && allowingValueChange) else {
++      throw FBSimulatorSliderError.invalidSelection
++    }
 +    try feed.validateCurrentRevision(expected: observation)
 +    try FBSimulatorSliderEndpointController.check(deadline)
 +    let request = FBAXTranslationRequest(kind: .frontmostApplication, pointDisplayID: observation.axDisplayID,
 +      displayContext: observation.displayContext)
-+    let lease = try sliderLease(for: simulator, token: token)
++    var lease = try sliderLease(for: simulator, token: token)
++    lease.selected?.element.close()
++    lease.selected = nil
++    let revision = UUID()
++    lease.readRevision = revision
++    try sliderLeases.update(device: simulator.udid, token: token, value: lease)
 +    let root = try await lease.commands.accessibilityElementForSliderLease(request: request, worker: self)
 +    defer { root.close() }
-+    _ = try sliderLease(for: simulator, token: token)
++    guard try sliderLease(for: simulator, token: token).readRevision == revision else {
++      throw FBSimulatorSliderError.invalidSelection
++    }
 +    let snapshot = try serialize(root, observation: observation, remoteContentOptions: nil)
 +    guard !snapshot.roots.isEmpty, snapshot.roots.allSatisfy({ $0.pid == expectedPID }) else {
 +      throw FBSimulatorSliderError.invalidSelection
@@ -5331,7 +5477,8 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +    let node = try FBSimulatorSliderTargetSelection.resolve(roots: snapshot.roots,
 +      selection: selection, expectedPID: expectedPID, elementType: elementType)
 +    let selected = try root.findSliderElement(matching: selection, depth: 64, deadline: deadline)
-+    defer { selected.close() }
++    var retained = false
++    defer { if !retained { selected.close() } }
 +    switch selection {
 +    case .identifier(let identifier):
 +      guard try selected.stringValue(forSearchableKey: .uniqueID) == identifier else { throw FBSimulatorSliderError.invalidSelection }
@@ -5351,17 +5498,30 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +        node: node, raw: raw, geometryStatus: "unknown")
 +    }
 +    let treeValue = try capabilities(node)
++    if let physicalAdmission { try treeValue.requirePhysicalFeedbackTarget(as: physicalAdmission) }
 +    try admissionGuard?.validateTarget(treeValue, allowingValueChange: allowingValueChange)
 +    // Both selectors bind every sample to the actual owned root, never a descendant.
 +    let currentSnapshot = try serialize(selected, observation: observation, remoteContentOptions: nil)
 +    let currentNode = try FBSimulatorSliderTargetSelection.ownedRoot(roots: currentSnapshot.roots,
 +      selection: selection, expectedPID: expectedPID, elementType: elementType)
 +    let value = try capabilities(currentNode)
++    if let physicalAdmission { try value.requirePhysicalFeedbackTarget(as: physicalAdmission) }
 +    try admissionGuard?.validateTarget(value, allowingValueChange: allowingValueChange)
-+    try value.requireSameTarget(as: treeValue, includeValue: true)
++    if physicalAdmission != nil {
++      try value.requireSameTarget(as: treeValue, includeValue: false)
++      guard try value.requireValue() == treeValue.requireValue() else {
++        throw FBSimulatorSliderError.inconsistentReadValue
++      }
++    } else {
++      try value.requireSameTarget(as: treeValue, includeValue: true)
++    }
 +    try feed.validateCurrentRevision(expected: observation)
 +    try FBSimulatorSliderEndpointController.check(deadline)
-+    guard let action else { return value }
++    guard let action else {
++      try retainSliderSelection(selected, baseline: value, for: simulator, token: token, revision: revision)
++      retained = true
++      return value
++    }
 +    guard let expected else { throw FBSimulatorSliderError.invalidSelection }
 +    try value.requireSameTarget(as: expected, includeValue: true)
 +    // Re-read the owned selected handle immediately before dispatch.
@@ -5380,13 +5540,15 @@ index 0000000000000000000000000000000000000000..aaa964d4a46bb79a60f260817cf483cd
 +      try FBSimulatorSliderEndpointController.check(deadline)
 +      try feed.validateCurrentRevision(expected: observation)
 +      try FBSimulatorSliderEndpointController.check(deadline)
++      try retainSliderSelection(selected, baseline: final, for: simulator, token: token, revision: revision)
++      retained = true
 +    } catch { throw FBSimulatorSliderError.deliveryUncertain(String(describing: error)) }
 +    return final
 +  }
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift b/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..ae410af67fa7cdcf42ec2a8d6f35848a93f56fe8
+index 0000000000000000000000000000000000000000..9cfcca77e7a029bef7dbf924351803baa89e116a
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift
 @@ -0,0 +1,158 @@
@@ -5496,7 +5658,7 @@ index 0000000000000000000000000000000000000000..ae410af67fa7cdcf42ec2a8d6f35848a
 +        phase("action-\(attempts)-returned")
 +        try Self.check(deadline)
 +        phase("action-\(attempts)-read-start")
-+        let next = try await backend.read(deadline: deadline)
++        let next = try await backend.readFeedback(deadline: deadline)
 +        phase("action-\(attempts)-read-returned")
 +        try next.requireSameTarget(as: initial, includeValue: false)
 +        let nextValue = try next.requireValue()

@@ -202,15 +202,18 @@ struct Slider: AsyncParsableCommand {
         targetNormalized: Double,
         logger: AxeLogger
     ) async throws -> String {
+        let resolvedIdentifier = initialMatch.element.AXUniqueId.flatMap { identifier in
+            identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : identifier
+        }
         if targetNormalized > 0, targetNormalized < 1,
-           let context = try await LegacyDuoInput.captureContext(
-               simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+           let display = try await LegacyDuoInput.captureSliderDisplay(
+               simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger
            ) {
             guard let expectedPID = initialMatch.applicationPID, expectedPID > 0 else {
-                throw CLIError(errorDescription: "Duo slider requires one current frontmost application PID before input.")
+                throw CLIError(errorDescription: "Slider requires one current frontmost application PID before input.")
             }
-            try await performDuoSliderValue(context: context, targetNormalized: targetNormalized,
-                                            expectedPID: expectedPID, logger: logger)
+            try await performOwnedSliderValue(display: display, targetNormalized: targetNormalized,
+                expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
         } else {
             let dragPlan = try makeDragPlan(
                 for: initialMatch.element,
@@ -239,27 +242,28 @@ struct Slider: AsyncParsableCommand {
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
     }
 
-    private func performDuoSliderValue(
-        context: SelectedHIDContext,
+    private func performOwnedSliderValue(
+        display: ActivePanelIdentity,
         targetNormalized: Double,
         expectedPID: Int32,
+        resolvedIdentifier: String?,
         logger: AxeLogger
     ) async throws {
-        guard let screenUUID = UUID(uuidString: context.screenUUID) else {
-            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
-        }
+        // Keep the raw selector for discovery and polling. Bind native input to its resolved ID.
+        let selectorKind: SelectedAXRequest.SelectorKind = resolvedIdentifier != nil || elementID != nil ? .id : .label
+        let selectorValue = resolvedIdentifier ?? elementID ?? elementLabel
         let ax = SelectedAXRequest(kind: .sliderPercentage, expectedPID: expectedPID, endpoint: nil,
-            selectorKind: elementID != nil ? .id : .label, selectorValue: elementID ?? elementLabel,
+            selectorKind: selectorKind, selectorValue: selectorValue,
             preDelay: 0, postDelay: 0, elementType: elementType, percentage: targetNormalized * 100)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: context.screenID, screenUUID: screenUUID, operation: .complete, token: nil,
+            screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
             primitives: [], ax: ax)
-        logger.info().log("Duo slider uses current native value feedback on its measured active display")
+        logger.info().log("Slider uses current native value feedback on its measured active display")
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let receipt = response.ax?.sliderValue,
               receipt.outcome == "reached" || receipt.outcome == "alreadyAtValue" else {
-            throw CLIError(errorDescription: "Duo slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
         }
     }
 
