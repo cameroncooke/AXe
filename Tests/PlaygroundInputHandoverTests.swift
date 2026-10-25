@@ -5,6 +5,7 @@ import Testing
 struct PlaygroundInputHandoverTests {
     @Test("A complete raw touch hands input to selected, raw and agent commands")
     func completeRawSelectedAgentHandover() async throws {
+        let minimumRawHoldSeconds = 0.08
         let session = try await Self.open("complete")
         do {
             let point = try await Self.point("feature.tap", in: session)
@@ -12,6 +13,8 @@ struct PlaygroundInputHandoverTests {
             var before = try session.document.read()
             _ = try await session.rawCommand(touch)
             try await session.requireButtonTap(after: before)
+            let firstRawAfter = try session.document.read()
+            _ = try session.contacts(after: before, in: firstRawAfter, count: 1, minimumHold: minimumRawHoldSeconds)
 
             before = try session.document.read()
             let selected = try await session.command(touch + session.selectedFlags)
@@ -21,6 +24,8 @@ struct PlaygroundInputHandoverTests {
             before = try session.document.read()
             _ = try await session.rawCommand(touch)
             try await session.requireButtonTap(after: before)
+            let secondRawAfter = try session.document.read()
+            _ = try session.contacts(after: before, in: secondRawAfter, count: 1, minimumHold: minimumRawHoldSeconds)
 
             before = try session.document.read()
             let agent = try await session.command(["tap", "--agent", "--expected-pid", String(session.pid),

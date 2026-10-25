@@ -4,17 +4,17 @@ The Playground is a normal app. Swift Testing runs host checks that call the rea
 
 ## Current acceptance
 
-The full plan is **680 case executions across 85 suite runs and 63 Swift sources**: iPhone 159, iPad 23 and Duo 498. These are planned full-run counts; **there is no full-suite pass**.
+The full plan is **693 case executions across 90 suite runs and 66 Swift sources**: iPhone 165, iPad 23 and Duo 505. These are planned full-run counts; **there is no full-suite pass**.
 
-**D38 is proved within scope and integrated.** Eight distinct input/signal combinations passed across two controlled runs: held Space, delayed key sequence, held touch and moving pinch, each under SIGINT and SIGTERM. Seven passed in the earlier run; the separately named moving-pinch SIGINT case now passed. The earlier whole eight-case run remains failed because its later fresh AX action disconnected. Both records are retained. The full named eight-case suite and full 680-case matrix remain pending. [Named pinch result](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json), [earlier seven passes/one failure](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json), [source integration](../build_products/verification/duo-complete-20261024/client-exit-integration-plan-v1/integration-result.json). The named run took 95.66 seconds, peak combined memory 14.068 GiB, without a resource stop or crash.
+**D38 is proved within scope and integrated.** Eight distinct input/signal combinations passed across two controlled runs: held Space, delayed key sequence, held touch and moving pinch, each under SIGINT and SIGTERM. Seven passed in the earlier run; the separately named moving-pinch SIGINT case now passed. The earlier whole eight-case run remains failed because its later fresh AX action disconnected. Both records are retained. The full named eight-case suite and current 693-case matrix remain pending. [Named pinch result](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json), [earlier seven passes/one failure](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json), [source integration](../build_products/verification/duo-complete-20261024/client-exit-integration-plan-v1/integration-result.json). The named run took 95.66 seconds, peak combined memory 14.068 GiB, without a resource stop or crash.
 
-The current runtime is CLI v5 `926233146df9…` / native `6ffe56ce1181…`. [Ordinary-iPhone regression passed 8/8](../build_products/verification/duo-complete-20261024/ordinary-regression-native-v2-result.json), including the corrected sole-display check and raw/selected typing. [115 host cases passed against CLI v5 sources](../build_products/verification/duo-complete-20261024/host-v5-all-result.json). The earlier [eight native release fault checks](../build_products/verification/duo-complete-20261024/native-owned-release-tests-v4/parsed-result.json) use that same unchanged native image. Host/native/parser checks do not add to 680.
+The earlier runtime checks used CLI v5 `926233146df9…` / native `6ffe56ce1181…`. [Ordinary-iPhone regression passed 8/8](../build_products/verification/duo-complete-20261024/ordinary-regression-native-v2-result.json), including the corrected sole-display check and raw/selected typing. [115 host cases passed against CLI v5 sources](../build_products/verification/duo-complete-20261024/host-v5-all-result.json). The earlier [eight native release fault checks](../build_products/verification/duo-complete-20261024/native-owned-release-tests-v4/parsed-result.json) use that same unchanged native image. Host/native/parser checks do not add to 693. Final acceptance must use a runtime that matches the integrated source.
 
 The [earlier 672-case attempt](../build_products/verification/duo-complete-20261024/final-matrix-v1/result.json) remains interrupted after 36 completed: 33 passed and three failed, with no skips. The original raw timeout, incorrect test assertion and agent observation failure remain recorded. The ordinary regression passed separately; the agent read failure still has no proved cause. The [four hinge-layout passes](../build_products/verification/duo-complete-20261024/hinge-layout-native-v2-result.json) retain their CLI v4 scope.
 
-The first two recording-follow checks failed because the test command did not supply its existing process-observer path. This is a test prerequisite error, with no video acceptance or confirmed product fault. The corrected two-case run remains pending.
+The first two recording-follow checks failed because the test command did not supply its existing process-observer path. This was a test prerequisite error, not a confirmed product fault. The [corrected two-case run passed separately](../build_products/verification/duo-complete-20261024/duo-media-follow-native-v2-result.json). It does not replace full acceptance.
 
-The [coverage map](audits/2026-10-24-manual-automation-map.md) retains all 175 prior rows and adds D38. The [JSON map](audits/2026-10-24-manual-suite-map.json) distinguishes scoped results, failed attempts and the pending full run. The [vendor review](audits/2026-10-24-vendor-failure-review.md) is source/binary evidence, not another simulator pass. Local package/install acceptance remains pending. No upload, push, publication or deployment is authorised.
+The [coverage map](audits/2026-10-24-manual-automation-map.md) retains all 175 prior rows and adds D38 and D39. The [JSON map](audits/2026-10-24-manual-suite-map.json) distinguishes scoped results, failed attempts and the pending full run. The [vendor review](audits/2026-10-24-vendor-failure-review.md) is source/binary evidence, not another simulator pass. Local package/install acceptance remains pending. No upload, push, publication or deployment is authorised.
 
 Duo checks cover device support. SimUse checks cover the optional agent interface. Raw accessibility and coordinate commands remain available.
 
@@ -22,7 +22,7 @@ Duo checks cover device support. SimUse checks cover the optional agent interfac
 
 Use the tracked XcodeGen definition, `AxePlaygroundApp/project.yml`. Generated projects and test packages stay under the new result directory. Install XcodeGen first.
 
-The current build-source preparation path passed [fresh](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-fresh-v1/result.json) and [repeat](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-repeat-v1/result.json) checks for all 63 pinned source hashes. The original cache stayed unchanged. This is local-file source preparation, not compilation, simulator input or package acceptance.
+The earlier build-source preparation path passed [fresh](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-fresh-v1/result.json) and [repeat](../build_products/verification/duo-complete-20261024/public-setup-source-proposal-v1/tracked-repeat-v1/result.json) checks for all 63 pinned source hashes. The original cache stayed unchanged. This is local-file source preparation, not compilation, simulator input or package acceptance.
 
 Supply the exact built AXe payload with its matching frameworks, helper and resources. The runner does not rebuild AXe. It records all payload file hashes and links and requires them to stay unchanged. This binds a run to those bytes; it does not prove that an arbitrary executable matches the checkout.
 
@@ -49,15 +49,15 @@ The result directory must be new. Earlier failed output is never replaced. The d
 
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
-| Core controls | 17 | 17 | 245 | Find, tap, type, scroll, swipe, drag, switches, sliders, retained contacts and batches |
-| Agent controls | 140 | 4 | 153 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
+| Core controls | 21 | 17 | 248 | Find, tap, type, scroll, swipe, drag, switches, sliders, retained contacts and batches |
+| Agent controls | 142 | 4 | 157 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
 | Keyboard and hardware | 1 | 1 | 52 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 0 | 0 | 28 | Selected PNG, video, streams, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **159** | **23** | **498** | **680 case executions** |
+| **Total** | **165** | **23** | **505** | **693 case executions** |
 
-The 217 expanded Duo core cases supplement the 20 earlier explicit core cases. Eight new selected client-exit cases bring this Duo group to 245; they cover held Space, a delayed key sequence, held touch and moving pinch under both SIGINT and SIGTERM. All eight combinations now have native passes across controlled runs; the full named eight-case suite and full matrix remain pending. The 285 new comparison cases run as 136 on iPhone and 149 on Duo. The earlier four agent capture/reference checks also run on all three guests. The iPad retains its earlier baseline scope.
+The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases and three raw/selected input handover cases. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation. The iPad retains its earlier baseline scope.
 
 ## What the checks prove
 
@@ -77,7 +77,7 @@ Both runners use `scripts/playground-suite-counts.json` and `scripts/playground-
 
 **Completed case instances come from the structured Swift Testing version-0 event stream.** This includes each parameter argument. The reader requires one complete serial run, matching start/end events, the exact expected count and zero issues, skips or cancellation. It also checks XML for failed/skipped declarations. XML alone is not an executed-case count on this toolchain.
 
-Each result has JSON, XML, structured events, full command logs and a per-suite artifact directory. The result stores started and completed cases, errors and cases without completed results. Missing completed XML/event records do not prove that no native action started. The reader has 16 pure tests with a genuine 27-case/4-declaration trace and damaged/failing variants; those tests are separate from the 680 simulator cases.
+Each result has JSON, XML, structured events, full command logs and a per-suite artifact directory. The result stores started and completed cases, errors and cases without completed results. Missing completed XML/event records do not prove that no native action started. The reader has 16 pure tests with a genuine 27-case/4-declaration trace and damaged/failing variants; those tests are separate from the 693 simulator cases.
 
 A failed case is not replayed. An input quarantine stops later work on that guest and stays in place. The runner does not clear it, restart a guest or add a production setup path. Preserve the failed result and inspect it before a new run.
 
@@ -113,6 +113,6 @@ The direct Duo-only path validates an explicit available Duo UUID before simulat
 
 The matrix builds the public process probe and records CPU and memory every 15 seconds in `resources.jsonl`, starting before the Playground build. It records Codex, Device Hub, simulator services and the largest/highest-CPU processes. There is no 8 GB cap. Run heavy work one job at a time and inspect for sustained growth. Stop owned work if it runs away; preserve the evidence.
 
-Build, signing, packaging and local installation use a separate exact-payload recipe. The current recipe uses the ordinary iPhone, which the full matrix leaves warm. It verifies archive contents, strict signatures, an unlinked installed wrapper, a real app action and complete removal/restoration. It must use the final runtime and completed build receipts. These checks do not add to 680 and do not authorise uploads, pushes, publication or deployment.
+Build, signing, packaging and local installation use a separate exact-payload recipe. The current recipe uses the ordinary iPhone, which the full matrix leaves warm. It verifies archive contents, strict signatures, an unlinked installed wrapper, a real app action and complete removal/restoration. It must use the final runtime and completed build receipts. These checks do not add to 693 and do not authorise uploads, pushes, publication or deployment.
 
 The current hosted workflow runs non-E2E checks. Local results do not prove hosted simulator coverage. Repeated cold-start stress, conditional empty-tree recovery without a reproduced fault, Intel hardware and Apple Pay payment UI are outside this run. Apple Pay hardware delivery remains in scope. The suite repeats the documented prior behaviours; it does not claim every possible app, option or new OS state.
