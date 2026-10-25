@@ -56,11 +56,12 @@ struct PlaygroundDuoRetainedPairTests {
                 try #require(ended.operation?.outcome == "endedAndDrained" && ended.operation?.normalEventDelta == 1 && ended.operation?.tokenReturned == false)
             } else {
                 let idle = try await pairStage(probe, name: "idleAfterChange")
-                try #require(idle.feedValidation?.contains("staleContext") == true)
+                try #require(idle.status.state == "invalidated")
                 try #require(!idle.status.hasRetainedContact && idle.status.lastCleanup == "releaseEnqueuedAndDrained")
                 let automaticRelease = try await app.documents.waitFor("both contacts released before stale commands") { $0.activeWindowTouches == 0 }
                 try requireReleasedContacts(automaticRelease, before: before, count: 2)
                 let cleanup = try #require(idle.cleanupEvidence)
+                try #require(cleanup.trigger == "staleContext")
                 try requirePairCleanupIdentity(cleanup, app: app)
                 try #require(cleanup.outcome == "releaseEnqueuedAndDrained" && cleanup.contextValidation == "releaseIdentityMatchedBeforeAndAfter" && !cleanup.timedOut)
                 try #require(cleanup.releases.count == 1 && cleanup.releases[0].primitive == "TwoFingerTouch <hidden>" && cleanup.releases[0].returnedSuccessfully)
@@ -98,11 +99,12 @@ private struct ControlsRetainedPairConfiguration: Encodable {
     let coordinationDirectory: String; let mode: String; let hingeDegrees: Double
 }
 private struct ControlsPairStage: Decodable {
+    let frameworkPath: String
     let stage: String; let status: Status; let operation: Operation?; let cleanupEvidence: Cleanup?; let feedValidation: String?
-    struct Status: Decodable { let hasRetainedContact: Bool; let normalEnqueuedEventCount: Int; let lastCleanup: String }
+    struct Status: Decodable { let state: String; let hasRetainedContact: Bool; let normalEnqueuedEventCount: Int; let lastCleanup: String }
     struct Operation: Decodable { let outcome: String?; let error: String?; let normalEventDelta: Int; let tokenReturned: Bool?; let sameOriginalToken: Bool? }
     struct Cleanup: Decodable, Equatable {
-        let outcome: String; let contextValidation: String; let timedOut: Bool; let releases: [Release]
+        let trigger: String; let outcome: String; let contextValidation: String; let timedOut: Bool; let releases: [Release]
         let boundSimulatorUDID: String; let boundBootIdentity: String; let boundScreenID: UInt32; let boundScreenUUID: String
         let boundNativeWidth: Double; let boundNativeHeight: Double; let boundScale: Double; let boundRotation: Int; let boundPoseRevision: String
         let drainCompletedUptime: Double?
@@ -121,7 +123,13 @@ private func pairStage(_ process: PlaygroundTestProcess, name: String) async thr
         let rows = try process.output().split(separator: "\n").filter { $0.last == "}" }.map {
             try JSONDecoder().decode(ControlsPairStage.self, from: Data($0.utf8))
         }.filter { $0.stage == name }
-        if let match = rows.first { try #require(rows.count == 1); return match }
+        if let match = rows.first {
+            try #require(rows.count == 1)
+            let runtimeDirectory = URL(fileURLWithPath: try TestHelpers.getAxePath())
+                .deletingLastPathComponent().standardizedFileURL.path + "/"
+            try #require(match.frameworkPath.hasPrefix(runtimeDirectory))
+            return match
+        }
         let diagnostics = try process.diagnostics()
         try #require(process.isRunning, "Native pair probe ended before \(name): \(diagnostics)")
         try await Task.sleep(nanoseconds: 30_000_000)

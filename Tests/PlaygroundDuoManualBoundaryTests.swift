@@ -125,6 +125,9 @@ struct PlaygroundDuoManualBoundaryTests {
                 let diagnostics = try process.diagnostics()
                 try #require(process.exitCode == 0, "Native factory failed: \(diagnostics)")
                 let receipt = try process.receipt(ShortFactoryReceipt.self)
+                let runtimeDirectory = URL(fileURLWithPath: cli)
+                    .deletingLastPathComponent().standardizedFileURL.path + "/"
+                try #require(receipt.frameworkPath.hasPrefix(runtimeDirectory))
                 try #require(receipt.stage == "shortFactoryCompleted" && receipt.operation.outcome == "enqueuedAndDrained" && receipt.operation.normalEventDelta == 4 && !receipt.operation.tokenReturned)
                 let after = try await app.documents.waitFor("one real short-factory Button callback") { $0.count("tap") == before.count("tap") + 1 && $0.activeWindowTouches == 0 }
                 try app.requireContact(after, since: before, start: (point.x, point.y), end: (end.x, end.y))
@@ -141,6 +144,7 @@ private struct ShortFactoryConfiguration: Encodable {
     let coordinationDirectory: String; let mode: String; let hingeDegrees: Double
 }
 private struct ShortFactoryReceipt: Decodable {
+    let frameworkPath: String
     let stage: String; let operation: Operation
     struct Operation: Decodable { let outcome: String; let normalEventDelta: Int; let tokenReturned: Bool }
 }
