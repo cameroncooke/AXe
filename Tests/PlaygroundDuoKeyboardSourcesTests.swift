@@ -146,16 +146,21 @@ struct PlaygroundDuoSelectedBatchKeyboardTests {
             case .stdin: input = "type --stdin"
             }
             let rows = try await check.sendBatch([input + check.keyboardStepOptions,
+                "tap --id feature.dismissKeyboard --element-type Button --expected-pid " + String(check.controls.pid),
+                "tap --id feature.showPad --element-type Button --expected-pid " + String(check.controls.pid),
                 "tap --id feature.tap --element-type Button --expected-pid " + String(check.controls.pid)],
                 standardInput: source == .stdin ? file : nil)
             let statuses = rows.map(\.status)
-            try #require(rows.count == 2 && statuses == ["completed", "completed"])
+            try #require(rows.count == 4 && statuses == Array(repeating: "completed", count: 4))
             let first = try #require(rows[0].response)
             try #require(first.enqueuedEventCount == 8 && first.keyboard?.validatedKeyDownCount == 4)
-            let second = try #require(rows[1].response)
-            try #require(second.enqueuedEventCount == 2 && second.cleanup == "notNeeded")
+            for row in rows.dropFirst() {
+                let tap = try #require(row.response)
+                try #require(tap.enqueuedEventCount == 2 && tap.cleanup == "notNeeded")
+            }
             let after = try await check.controls.documents.waitFor("exact batch text followed by one Button callback") {
-                $0.text == "aQ7" && $0.count("textChanged") == 3 && $0.count("tap") == 1 && $0.activeWindowTouches == 0
+                $0.text == "aQ7" && $0.count("textChanged") == 3 && $0.count("tap") == 1
+                    && !$0.textFocused && $0.activeWindowTouches == 0
             }
             try after.requireClear()
             try check.controls.preserveState("batch-text-source-complete")
