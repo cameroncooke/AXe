@@ -69,8 +69,8 @@ struct DuoPlaygroundSession {
         return pid
     }
 
-    func catalogue(boot: String? = nil) async throws -> DuoCatalogue {
-        let value: DuoCatalogue = try await decode(["list-simulators", "--displays"])
+    func catalogue(boot: String? = nil, timeout: TimeInterval = 35) async throws -> DuoCatalogue {
+        let value: DuoCatalogue = try await decode(["list-simulators", "--displays"], timeout: timeout)
         guard value.requestedSimulatorUDID == UUID(uuidString: udid), !value.bootIdentity.isEmpty,
               value.panels.count == 2, Set(value.panels.map(\.identity)).count == 2,
               value.activePanel.active == true,
@@ -103,7 +103,9 @@ struct DuoPlaygroundSession {
               abs(measured.sample.mechanicalDegrees - pose.degrees) <= 0.1 else {
             throw TestError.unexpectedState("A fresh hinge read did not retain \(pose.rawValue).")
         }
-        return try await stableCatalogue(boot: boot)
+        // This test fixture uses the verified Duo outer1/inner3 display contract.
+        let expectedScreenID: UInt32 = pose == .closed ? 1 : 3
+        return try await stableCatalogue(boot: boot, expectedScreenID: expectedScreenID)
     }
 
     func rotateRight(catalogue before: DuoCatalogue) async throws -> DuoCatalogue {
@@ -259,16 +261,29 @@ struct DuoPlaygroundSession {
             + "uuid=\(panel.identity.uniqueID) orientation=\(panel.currentOrientation) appState=Tapped")
     }
 
-    private func stableCatalogue(boot: String) async throws -> DuoCatalogue {
+    private func stableCatalogue(boot: String, expectedScreenID: UInt32? = nil) async throws -> DuoCatalogue {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
         var previous: DuoPanel?
-        repeat {
-            let current = try await catalogue(boot: boot)
-            if current.activePanel == previous { return current }
-            previous = current.activePanel
-            try await Task.sleep(nanoseconds: 250_000_000)
-        } while ProcessInfo.processInfo.systemUptime < deadline
-        throw TestError.unexpectedState("Two consecutive display reads did not show the same active panel and geometry.")
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { break }
+            let current = try await catalogue(boot: boot, timeout: remaining)
+            guard ProcessInfo.processInfo.systemUptime < deadline else { break }
+            let matchesTarget: Bool
+            if let expectedScreenID {
+                guard Set(current.panels.map({ $0.identity.displayID })) == Set<UInt32>([1, 3]) else {
+                    throw TestError.unexpectedState("Named-pose readiness requires the verified Duo outer1/inner3 fixture.")
+                }
+                matchesTarget = current.activePanel.identity.displayID == expectedScreenID
+            } else {
+                matchesTarget = true
+            }
+            if matchesTarget && current.activePanel == previous { return current }
+            previous = matchesTarget ? current.activePanel : nil
+            let pause = min(0.25, deadline - ProcessInfo.processInfo.systemUptime)
+            if pause > 0 { try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000)) }
+        }
+        throw TestError.unexpectedState("Two consecutive display reads did not show the intended active panel and stable geometry within 10 seconds.")
     }
 
     private func selection(_ catalogue: DuoCatalogue) -> [String] {
@@ -276,11 +291,11 @@ struct DuoPlaygroundSession {
         return ["--input-mode", "selected", "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString]
     }
 
-    private func decode<Value: Decodable>(_ arguments: [String]) async throws -> Value {
+    private func decode<Value: Decodable>(_ arguments: [String], timeout: TimeInterval = 35) async throws -> Value {
         let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
         let output: String
         do {
-            output = try await CommandRunner.run(command, timeout: 35).output
+            output = try await CommandRunner.run(command, timeout: timeout).output
         } catch {
             throw TestError.commandError("\(command)\n\(error)")
         }

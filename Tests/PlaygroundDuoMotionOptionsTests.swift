@@ -89,8 +89,10 @@ struct PlaygroundDuoNavigationTests {
             let panel = app.catalogue.activePanel
             let arguments: [String]
             if explicitPath {
-                arguments = ["swipe", "--start-x", "1", "--start-y", String(panel.boundsHeight / 2),
-                    "--end-x", String(panel.boundsWidth - 20), "--end-y", String(panel.boundsHeight / 2), "--duration", "0.3", "--delta", "50"]
+                let logicalWidth = panel.nativePixelHeight / Double(panel.pointScale)
+                let logicalHeight = panel.nativePixelWidth / Double(panel.pointScale)
+                arguments = ["swipe", "--start-x", "1", "--start-y", String(logicalHeight / 2),
+                    "--end-x", String(logicalWidth - 20), "--end-y", String(logicalHeight / 2), "--duration", "0.3", "--delta", "50"]
             } else {
                 arguments = ["gesture", "swipe-from-left-edge"] + (inset.map { ["--edge-inset", String($0), "--duration", "1"] } ?? [])
             }

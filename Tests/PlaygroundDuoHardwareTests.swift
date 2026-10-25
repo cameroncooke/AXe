@@ -22,8 +22,9 @@ struct PlaygroundDuoHardwareTests {
             let check = try await HardwareAcceptanceSession()
             let before = try check.controls.documents.read()
             let receipt = try await check.selected(["button", "siri", "--expected-boot", "wrong-boot"], allowFailure: true)
-            try #require(receipt.outcome == "failedBeforeInput" && receipt.enqueuedEventCount == 0)
-            try #require(receipt.cleanup == "notNeeded" && receipt.quarantine == nil && receipt.error != nil)
+            try #require(receipt.outcome == "failedNoReplay" && receipt.enqueuedEventCount == 0)
+            try #require(receipt.cleanup == "notNeeded" && receipt.quarantine == nil
+                && receipt.error?.contains("Selected siri boot identity differs; no input") == true)
             let after = try check.controls.documents.read()
             try #require(before.counts == after.counts && before.text == after.text
                 && before.slider == after.slider && before.switchOn == after.switchOn)
@@ -47,7 +48,7 @@ struct PlaygroundDuoHardwareTests {
         }
     }
 
-    @Test("Selected side-button wakes the display and exposes the open control")
+    @Test("Selected side-button wakes the display and keeps the real clock visible")
     func selectedWake() async throws {
         try await hardwareScreen {
             let check = try await HardwareAcceptanceSession()
@@ -55,12 +56,13 @@ struct PlaygroundDuoHardwareTests {
                 "--expected-boot", check.controls.catalogue.bootIdentity])
             try lock.requireComplete(kind: "side-button", events: 2, controls: check.controls)
             _ = try await check.waitForBacklight("inactiveOn")
-            _ = try await check.waitForClock()
+            let dimClock = try await check.waitForClock()
+            let clockOwner = try #require(dimClock.pid)
             let wake = try await check.selected(["button", "side-button", "--duration", "0.2",
                 "--expected-boot", check.controls.catalogue.bootIdentity])
             try wake.requireComplete(kind: "side-button", events: 2, controls: check.controls)
             _ = try await check.waitForBacklight("activeOn")
-            _ = try await check.waitForClock()
+            _ = try await check.waitForClock(expectedOwner: clockOwner, requireOpenPrompt: false)
             try await check.returnToSameApp()
             try await check.controls.freshTap()
         }
@@ -87,18 +89,25 @@ struct PlaygroundDuoHardwareTests {
         }
     }
 
-    @Test("Legacy Siri exposes the Siri window and enabled Listen button")
+    @Test("Legacy Siri exposes its real window and enabled listening control")
     func legacySiriActivation() async throws { try await siriActivation(selected: false) }
 
-    @Test("Selected Siri exposes the Siri window and enabled Listen button")
+    @Test("Selected Siri exposes its real window and enabled listening control")
     func selectedSiriActivation() async throws { try await siriActivation(selected: true) }
 
     private func siriActivation(selected: Bool) async throws {
         try await hardwareScreen {
             let check = try await HardwareAcceptanceSession()
-            let before = try await check.globalTree()
-            try #require(UIStateParser.findElement(in: before, matching: check.isSiriControl) == nil)
-            try #require(UIStateParser.findElement(in: before, withIdentifier: "siri-interface-window") == nil)
+            let before = try await check.systemTree()
+            let isExistingSiri: (HardwareSystemNode) -> Bool = { node in
+                node.identifier == "siri-interface-window" || check.isSiriState(node)
+            }
+            var existingSiri: HardwareSystemNode?
+            for root in before {
+                existingSiri = root.find(where: isExistingSiri)
+                if existingSiri != nil { break }
+            }
+            try #require(existingSiri == nil)
             if selected {
                 let response = try await check.selected(["button", "siri", "--duration", "0.2",
                     "--expected-boot", check.controls.catalogue.bootIdentity])
@@ -108,14 +117,23 @@ struct PlaygroundDuoHardwareTests {
             }
             let deadline = ProcessInfo.processInfo.systemUptime + 10
             var found = false
-            repeat {
-                let roots = try await check.globalTree()
-                let listen = UIStateParser.findElement(in: roots, matching: check.isSiriControl)
-                let window = UIStateParser.findElement(in: roots, withIdentifier: "siri-interface-window")
-                if listen != nil && window?.enabled == true { found = true; break }
-                try await Task.sleep(nanoseconds: 100_000_000)
-            } while ProcessInfo.processInfo.systemUptime < deadline
-            try #require(found, "The accepted Siri input did not expose its real window and enabled Listen button.")
+            while ProcessInfo.processInfo.systemUptime < deadline {
+                let roots = try await check.systemTree(timeout: deadline - ProcessInfo.processInfo.systemUptime)
+                if ProcessInfo.processInfo.systemUptime < deadline,
+                   let window = try check.systemWindow("siri-interface-window", in: roots),
+                   let owner = window.pid, owner != check.controls.pid {
+                    let isCurrentSiriState: (HardwareSystemNode) -> Bool = { node in
+                        check.isSiriState(node) && node.pid == owner
+                    }
+                    let listening = window.find(where: isCurrentSiriState)
+                    if listening != nil {
+                        found = true
+                        break
+                    }
+                }
+                try await check.pause(until: deadline)
+            }
+            try #require(found, "The accepted Siri input did not expose its real window and enabled listening control.")
             try await check.returnToSameApp()
             try await check.controls.freshTap()
         }
@@ -131,12 +149,19 @@ struct HardwareAcceptanceSession {
     init() async throws { controls = try await PlaygroundControlsSession() }
     init(controls: PlaygroundControlsSession) { self.controls = controls }
 
-    func command(_ arguments: [String], allowFailure: Bool = false) async throws -> CommandOutput {
-        let result = try await controls.app.run(arguments, allowFailure: true)
-        let name = UUID().uuidString
+    func command(_ arguments: [String], allowFailure: Bool = false,
+                 timeout: TimeInterval = 30, allowChangedDisplayRead: Bool = false) async throws -> CommandOutput {
         let invocation = [try TestHelpers.getAxePath()] + arguments + ["--udid", controls.app.udid]
+        let output = try await CommandRunner.run(invocation.map(playgroundShellQuote).joined(separator: " "),
+                                                 allowFailure: true, timeout: timeout)
+        let result = CommandOutput(output: output.output, exitCode: output.exitCode)
+        let name = UUID().uuidString
         try JSONEncoder().encode(invocation).write(to: controls.artifacts.appendingPathComponent(name + "-argv.json"))
         try Data(result.output.utf8).write(to: controls.artifacts.appendingPathComponent(name + "-output.txt"))
+        let changedDisplay = allowChangedDisplayRead && arguments == ["list-simulators", "--displays"]
+            && result.exitCode == 1
+            && result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "Error: changedDuringRead"
+        if changedDisplay { return result }
         if !allowFailure { try #require(result.exitCode == 0, "Hardware command failed: \(result.output)") }
         else { try #require(result.exitCode == 1) }
         return result
@@ -157,32 +182,84 @@ struct HardwareAcceptanceSession {
         node.enabled == true && node.type == "Button" && node.identifier == "Listen" && node.label == "Listen"
     }
 
+    fileprivate func systemTree(timeout: TimeInterval = 30) async throws -> [HardwareSystemNode] {
+        let output = try await command(["describe-ui"], timeout: timeout)
+        return try JSONDecoder().decode([HardwareSystemNode].self, from: Data(output.output.utf8))
+    }
+
+    fileprivate func systemWindow(_ identifier: String, in roots: [HardwareSystemNode]) throws -> HardwareSystemNode? {
+        let panel = controls.catalogue.activePanel
+        let rotation = try panel.rotationDegrees()
+        let swapped = rotation == 90 || rotation == 270
+        let width = (swapped ? panel.nativePixelHeight : panel.nativePixelWidth) / Double(panel.pointScale)
+        let height = (swapped ? panel.nativePixelWidth : panel.nativePixelHeight) / Double(panel.pointScale)
+        for root in roots where root.type == "Application" {
+            guard let owner = root.pid, owner > 0 else { continue }
+            if let window = root.find(where: {
+                $0.identifier == identifier && $0.type == "Group" && $0.enabled == true
+                    && $0.pid == owner && $0.frame?.x == 0 && $0.frame?.y == 0
+                    && $0.frame?.width == width && $0.frame?.height == height
+            }) { return window }
+        }
+        return nil
+    }
+
+    fileprivate func isSiriState(_ node: HardwareSystemNode) -> Bool {
+        guard node.enabled == true else { return false }
+        return (node.type == "GenericElement" && node.identifier == "Listening")
+            || (node.type == "Button" && node.identifier == "Listen" && node.AXLabel == "Listen")
+    }
+
+    fileprivate func pause(until deadline: Double) async throws {
+        let remaining = deadline - ProcessInfo.processInfo.systemUptime
+        if remaining > 0 {
+            try await Task.sleep(nanoseconds: UInt64(min(0.1, remaining) * 1_000_000_000))
+        }
+    }
+
     func waitForBacklight(_ expected: String) async throws -> HardwarePowerCatalogue {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
-        repeat {
-            let result = try await command(["list-simulators", "--displays"])
-            let value = try JSONDecoder().decode(HardwarePowerCatalogue.self, from: Data(result.output.utf8))
-            try #require(value.bootIdentity == controls.catalogue.bootIdentity)
-            try #require(value.activePanel.identity == controls.catalogue.activePanel.identity)
-            if value.activePanel.backlightState == expected { return value }
-            try await Task.sleep(nanoseconds: 100_000_000)
-        } while ProcessInfo.processInfo.systemUptime < deadline
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let result = try await command(["list-simulators", "--displays"],
+                timeout: deadline - ProcessInfo.processInfo.systemUptime, allowChangedDisplayRead: true)
+            if result.exitCode == 0 {
+                let value = try JSONDecoder().decode(HardwarePowerCatalogue.self, from: Data(result.output.utf8))
+                try #require(value.bootIdentity == controls.catalogue.bootIdentity)
+                try #require(value.activePanel.identity == controls.catalogue.activePanel.identity)
+                if ProcessInfo.processInfo.systemUptime < deadline,
+                   value.activePanel.backlightState == expected { return value }
+            }
+            try await pause(until: deadline)
+        }
         throw TestError.unexpectedState("The display backlight did not become " + expected + ".")
     }
 
-    func waitForClock() async throws -> [UIElement] {
+    fileprivate func waitForClock(expectedOwner: Int32? = nil,
+                                  requireOpenPrompt: Bool = true) async throws -> HardwareSystemNode {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
-        repeat {
-            let roots = try await globalTree()
-            let cover = UIStateParser.findElement(in: roots, withIdentifier: "SBCoverSheetWindow")
-            let date = UIStateParser.findElement(in: roots, withIdentifier: "lockscreen-date-view")
-            let prompt = UIStateParser.findElement(in: roots) {
-                ["Swipe up to open", "Swipe up to unlock"].contains($0.label ?? "")
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let roots = try await systemTree(timeout: deadline - ProcessInfo.processInfo.systemUptime)
+            if ProcessInfo.processInfo.systemUptime < deadline,
+               let cover = try systemWindow("SBCoverSheetWindow", in: roots),
+               let owner = cover.pid, owner != controls.pid,
+               expectedOwner == nil || owner == expectedOwner {
+                let date = cover.find { $0.identifier == "lockscreen-date-view" && $0.enabled == true && $0.pid == owner }
+                let application = roots.first { root in root.type == "Application" && root.pid == owner }
+                let prompt = application?.find { node in
+                    guard node.enabled == true && node.pid == owner,
+                          ["Swipe up to open", "Swipe up to unlock"].contains(node.AXLabel ?? ""),
+                          let frame = node.frame, let coverFrame = cover.frame else { return false }
+                    let finite = [frame.x, frame.y, frame.width, frame.height].allSatisfy(\.isFinite)
+                    return finite && frame.width > 0 && frame.height > 0
+                        && frame.x >= coverFrame.x && frame.y >= coverFrame.y
+                        && frame.x + frame.width <= coverFrame.x + coverFrame.width
+                        && frame.y + frame.height <= coverFrame.y + coverFrame.height
+                }
+                if date != nil && (!requireOpenPrompt || prompt != nil) { return cover }
             }
-            if cover != nil && date != nil && prompt != nil { return roots }
-            try await Task.sleep(nanoseconds: 100_000_000)
-        } while ProcessInfo.processInfo.systemUptime < deadline
-        throw TestError.unexpectedState("No real Swipe up to open control was observed.")
+            try await pause(until: deadline)
+        }
+        throw TestError.unexpectedState("No matching real cover window and date were observed.")
     }
 
     func returnToSameApp() async throws {
@@ -206,7 +283,9 @@ struct HardwareAcceptanceSession {
             let x = frame.x + frame.width / 2
             _ = try await command(["swipe", "--start-x", String(x), "--start-y", String(frame.y + frame.height - 2),
                 "--end-x", String(x), "--end-y", String(frame.y + frame.height * 0.25), "--duration", "0.5"])
-        } else if UIStateParser.findElement(in: roots, matching: isSiriControl) != nil {
+        } else if UIStateParser.findElement(in: roots, matching: {
+            isSiriControl($0) || ($0.identifier == "siri-interface-window" && $0.enabled == true)
+        }) != nil {
             _ = try await command(["button", "home", "--duration", "0.2"])
         }
         let launch = ["xcrun", "simctl", "launch", controls.app.udid, "com.cameroncooke.AxePlayground"]
@@ -216,6 +295,27 @@ struct HardwareAcceptanceSession {
             "Hardware return changed the app process: \(resumed.output)")
         _ = try await controls.frame("feature.tap")
         try controls.documents.read().requireClear()
+    }
+}
+
+fileprivate struct HardwareSystemNode: Decodable {
+    let type: String
+    let pid: Int32?
+    let enabled: Bool?
+    let frame: UIElement.Frame?
+    let children: [HardwareSystemNode]?
+    let AXUniqueId: String?
+    let AXIdentifier: String?
+    let AXLabel: String?
+
+    var identifier: String? { AXUniqueId ?? AXIdentifier }
+
+    func find(where matches: (HardwareSystemNode) -> Bool) -> HardwareSystemNode? {
+        if matches(self) { return self }
+        for child in children ?? [] {
+            if let match = child.find(where: matches) { return match }
+        }
+        return nil
     }
 }
 

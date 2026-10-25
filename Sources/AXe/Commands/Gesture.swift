@@ -467,9 +467,13 @@ struct Gesture: AsyncParsableCommand {
         
         try await performGlobalSetup(logger: logger)
 
-        // Use provided dimensions or defaults
-        let width = screenWidth ?? 390.0
-        let height = screenHeight ?? 844.0
+        let context = try await LegacyDuoInput.captureContext(
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+        )
+
+        // Keep explicit overrides and rigid-device defaults; measure omitted Duo dimensions.
+        let width = screenWidth ?? context?.logicalWidth ?? 390.0
+        let height = screenHeight ?? context?.logicalHeight ?? 844.0
         
         // Get gesture coordinates
         let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
@@ -483,9 +487,7 @@ struct Gesture: AsyncParsableCommand {
         logger.info().log("Coordinates: (\(coords.startX), \(coords.startY)) to (\(coords.endX), \(coords.endY))")
         logger.info().log("Duration: \(gestureDuration)s, Delta: \(gestureDelta)px")
         
-        if let context = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
-        ) {
+        if let context {
             let path = LegacyDuoPath(kind: .swipe, startX: coords.startX, startY: coords.startY,
                 endX: coords.endX, endY: coords.endY, duration: gestureDuration, delta: gestureDelta)
             try await LegacyDuoInput.perform(path: path, context: context,

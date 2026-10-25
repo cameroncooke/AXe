@@ -143,6 +143,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed selected and agent accessibility errors omitting the existing native acquisition failure reason. The error message now keeps that detail without a read retry or input replay.
 
+- Fixed no-flag Duo gesture presets with omitted screen dimensions using fixed portrait geometry. Default paths now use the measured active-display dimensions after rotation or folding; explicit dimensions are unchanged.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added
