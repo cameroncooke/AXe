@@ -267,34 +267,61 @@ private struct PlaygroundInterruptionSession {
     private func snapshot(catalogue: DuoCatalogue, pid: Int32) async throws -> DuoSnapshot {
         let deadline = ProcessInfo.processInfo.systemUptime + 12
         var attempt = 0
-        repeat {
-            let response: DuoCLIResponse = try await command(["describe-ui", "--expected-pid", String(pid)] + selection(catalogue),
-                name: "description-\(attempt)")
-            try response.requireSuccess("ready")
+        var expectedContext: DuoContext?
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let remaining = deadline - ProcessInfo.processInfo.systemUptime
+            guard remaining > 0 else { break }
+            let response = try await command(["describe-ui", "--expected-pid", String(pid)] + selection(catalogue),
+                name: "description-\(attempt)", timeout: remaining, notReadyPID: pid)
+            try #require(ProcessInfo.processInfo.systemUptime < deadline, "The read exceeded the existing readiness deadline.")
             let context = try #require(response.context)
             try context.requireMatch(catalogue)
+            if let expectedContext {
+                try #require(context == expectedContext, "Readiness changed the measured context.")
+            } else {
+                expectedContext = context
+            }
             let ax = try #require(response.ax)
-            try #require(ax.expectedPID == pid && ax.failure == nil && ax.acquisition?.outcome == .ready)
-            let roots = try #require(ax.roots)
-            if UIStateParser.findElement(in: roots, withIdentifier: "touch-monitor-pad") != nil,
-               UIStateParser.findElement(in: roots, withIdentifier: "touch-monitor-button") != nil {
-                return DuoSnapshot(context: context, roots: roots)
+            try #require(ax.schemaVersion == 1 && ax.kind == "describe" && ax.expectedPID == pid)
+            if ax.acquisition?.outcome != .notReady {
+                try response.requireSuccess("ready")
+                try #require(ax.failure == nil && ax.acquisition?.outcome == .ready)
+                let roots = try #require(ax.roots)
+                if UIStateParser.findElement(in: roots, withIdentifier: "touch-monitor-pad") != nil,
+                   UIStateParser.findElement(in: roots, withIdentifier: "touch-monitor-button") != nil {
+                    return DuoSnapshot(context: context, roots: roots)
+                }
             }
             attempt += 1
-            try await Task.sleep(nanoseconds: 100_000_000)
-        } while ProcessInfo.processInfo.systemUptime < deadline
+            let pause = min(0.1, deadline - ProcessInfo.processInfo.systemUptime)
+            if pause > 0 { try await Task.sleep(nanoseconds: UInt64(pause * 1_000_000_000)) }
+        }
         throw TestError.unexpectedState("The visible touch-monitor page did not appear.")
     }
 
-    private func command<Value: Decodable>(_ arguments: [String], name: String) async throws -> Value {
+    private func command(_ arguments: [String], name: String, timeout: TimeInterval = 35,
+                         notReadyPID: Int32? = nil) async throws -> DuoCLIResponse {
         let operation = try PlaygroundTestProcess(executable: cli, arguments: arguments + ["--udid", udid],
             directory: directory, name: name + "-" + UUID().uuidString)
         do {
             try operation.start()
-            try await operation.wait(timeout: 35)
+            try await operation.wait(timeout: timeout)
             let commandDiagnostics = try operation.diagnostics()
-            try #require(operation.exitCode == 0, "AXe command failed: \(commandDiagnostics)")
-            let response = try operation.receipt(Value.self)
+            let response = try operation.receipt(DuoCLIResponse.self)
+            if let notReadyPID, response.ax?.acquisition?.outcome == .notReady {
+                let ax = try #require(response.ax)
+                let acquisition = try #require(ax.acquisition)
+                try #require(arguments.first == "describe-ui" && operation.exitCode == 1)
+                try #require(response.outcome == "failedBeforeInput" && response.enqueuedEventCount == 0
+                    && response.cleanup == "notNeeded" && response.quarantine == nil && response.error?.isEmpty == false)
+                try #require(ax.schemaVersion == 1 && ax.kind == "describe" && ax.expectedPID == notReadyPID
+                    && ax.failure == .acquisitionFailed && acquisition.failureDescription == nil)
+                try #require(!acquisition.attempts.isEmpty && acquisition.attempts.allSatisfy {
+                    $0.rootPID == notReadyPID && $0.outcome == .notReady
+                })
+            } else {
+                try #require(operation.exitCode == 0, "AXe command failed: \(commandDiagnostics)")
+            }
             await operation.finish()
             return response
         } catch {

@@ -23,7 +23,7 @@ struct PlaygroundIndependentPairTests {
         var endB = (x: cx + 65, y: cy - 15)
         switch variant {
         case .stationaryFirst: endA = a
-        case .bounds: endA.x = 10000
+        case .bounds: endA.x = session.initialContext.logicalWidth + 1
         case .coincidentStart: b = a
         case .crossing: endA = b; endB = a
         default: break

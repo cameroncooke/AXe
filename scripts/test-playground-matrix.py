@@ -504,7 +504,7 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                         suite_env = {'SIMULATOR_UDID': identifier, 'AXE_DUO_E2E': '1' if kind == 'duo' else '0',
                                      'AXE_E2E_ARTIFACT_DIR': str(artifacts)}
                         run(kind + '-' + suite, ['xcrun', 'swift', 'test', '--package-path', str(package), '--skip-build',
-                                                '--no-parallel', '--filter', suite, '--xunit-output', str(xml),
+                                                '--no-parallel', '--filter', r'^PlaygroundChecks\.' + re.escape(suite) + '/', '--xunit-output', str(xml),
                                                 '--event-stream-output-path', str(events), '--event-stream-version', '0'],
                             timeout=max(900, expected * 60), extra_env=suite_env)
                     except (OSError, ValueError, RuntimeError, subprocess.TimeoutExpired, ET.ParseError) as error:

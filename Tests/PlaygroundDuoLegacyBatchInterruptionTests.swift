@@ -94,8 +94,8 @@ struct PlaygroundDuoHorizontalPresetTests {
         try await withDuoPlaygroundScreen(pose: .open, rotation: 90) {
             let app = try await PlaygroundControlsSession()
             let frame = try await app.frame("feature.pad")
-            let x = app.catalogue.activePanel.boundsWidth / 2
-            let y = app.catalogue.activePanel.boundsHeight / 2
+            let x = app.catalogue.activePanel.nativePixelHeight / Double(app.catalogue.activePanel.pointScale) / 2
+            let y = app.catalogue.activePanel.nativePixelWidth / Double(app.catalogue.activePanel.pointScale) / 2
             try #require(x - 100 > frame.x && x + 100 < frame.x + frame.width && y > frame.y && y < frame.y + frame.height,
                 "The normal visible pad does not contain the default preset path.")
             for (name, direction) in [("scroll-left", -1.0), ("scroll-right", 1.0)] {
