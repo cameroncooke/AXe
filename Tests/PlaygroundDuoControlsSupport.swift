@@ -254,7 +254,8 @@ func controlsOnLine(_ event: PlaygroundControlsContact, start: (Double, Double),
 }
 
 func controlsRecognizer(_ after: PlaygroundControlsDocument, before: PlaygroundControlsDocument,
-                        name: String, discrete: Bool = false) throws {
+                        name: String, discrete: Bool = false, padTapAfterHold: Bool = false) throws {
+    try #require(!padTapAfterHold || name == "longPress")
     try #require(Array(after.recognizerTrace.prefix(before.recognizerTrace.count)) == before.recognizerTrace)
     let records = Array(after.recognizerTrace.dropFirst(before.recognizerTrace.count))
     let contacts = Array(after.windowTouchTrace.dropFirst(before.windowTouchTrace.count))
@@ -262,16 +263,26 @@ func controlsRecognizer(_ after: PlaygroundControlsDocument, before: PlaygroundC
     let relevant = records.filter { $0.name == name }
     try #require(!relevant.isEmpty && relevant.first?.state == (discrete ? 3 : 1))
     try #require(relevant.last?.state == 3 && relevant.filter { $0.state == 3 }.count == 1)
+    let expectedNames: Set<String> = padTapAfterHold ? [name, "padTap"] : [name]
+    if padTapAfterHold {
+        // This normal pad permits the tap and hold recognizers to run together.
+        let taps = records.filter { $0.name == "padTap" }
+        try #require(taps.count == 1)
+        let tap = try #require(taps.first)
+        let holdEnd = try #require(relevant.last)
+        try #require(tap.state == 3 && tap.timestamp >= holdEnd.timestamp)
+        try #require(after.count("padTap") == before.count("padTap") + 1)
+    }
     var last = before.recognizerTrace.last?.timestamp ?? 0
     for record in records {
         let finite = [record.timestamp, record.x, record.y].allSatisfy(\.isFinite)
         try #require(finite)
         try #require(record.timestamp >= last && record.touches >= 0 && [1, 2, 3].contains(record.state))
-        try #require(record.name == name)
+        try #require(expectedNames.contains(record.name))
         last = record.timestamp
     }
     let callbackNames = ["tap", "padTap", "doubleTap", "longPress", "pan", "pinch", "rotation", "twoFingerTap", "twoFingerHold", "sliderChanged", "switchChanged", "textChanged", "returnKey"]
-    for key in callbackNames where key != name { try #require(after.count(key) == before.count(key)) }
+    for key in callbackNames where !expectedNames.contains(key) { try #require(after.count(key) == before.count(key)) }
     try #require(after.geometry == before.geometry)
 }
 

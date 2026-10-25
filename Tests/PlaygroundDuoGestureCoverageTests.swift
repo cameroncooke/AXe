@@ -68,10 +68,11 @@ struct PlaygroundDuoCoordinateCoverageTests {
             let frame = try await app.frame("feature.pad")
             let point = (frame.x + frame.width / 2, frame.y + frame.height / 2)
             let before = try app.documents.read()
+            let requestedHoldDuration: TimeInterval = 0.7
             let arguments: [String]
             switch action {
             case .tap: arguments = ["tap", "-x", String(point.0), "-y", String(point.1)]
-            case .hold: arguments = ["touch", "-x", String(point.0), "-y", String(point.1), "--down", "--up", "--delay", "0.7"]
+            case .hold: arguments = ["touch", "-x", String(point.0), "-y", String(point.1), "--down", "--up", "--delay", String(requestedHoldDuration)]
             case .doubleTap: arguments = ["gesture", "double-tap", "-x", String(point.0), "-y", String(point.1)]
             }
             let result = try await app.selected(arguments)
@@ -79,13 +80,16 @@ struct PlaygroundDuoCoordinateCoverageTests {
             let after = try await app.documents.waitFor("one real \(action.rawValue) callback and release") {
                 $0.count(action.rawValue) == before.count(action.rawValue) + 1 && $0.activeWindowTouches == 0
                     && $0.recognizerTrace.last(where: { $0.name == action.rawValue })?.state == 3
+                    && (action != .hold || $0.count("padTap") == before.count("padTap") + 1)
             }
             try app.requireContact(after, since: before, start: point, end: point, contacts: action == .doubleTap ? 2 : 1)
-            try controlsRecognizer(after, before: before, name: action.rawValue, discrete: action != .hold)
+            try controlsRecognizer(after, before: before, name: action.rawValue, discrete: action != .hold,
+                padTapAfterHold: action == .hold)
             if action == .hold {
                 let trace = Array(after.windowTouchTrace.dropFirst(before.windowTouchTrace.count))
                 let first = try #require(trace.first), last = try #require(trace.last)
-                try #require(last.timestamp - first.timestamp >= 0.5)
+                let timestampTolerance: TimeInterval = 0.02
+                try #require(last.timestamp - first.timestamp >= requestedHoldDuration - timestampTolerance)
             }
             try #require(after.text == before.text && after.slider == before.slider && after.switchOn == before.switchOn)
         }
