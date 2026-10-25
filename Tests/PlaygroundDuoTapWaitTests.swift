@@ -120,14 +120,23 @@ struct PlaygroundDuoTapWaitTests {
 }
 
 private func witnessWaitOwner(_ app: PlaygroundControlsSession, while process: PlaygroundTestProcess) async throws {
+    // This token was never returned by a retained DOWN. Idle admission must reject it
+    // before opening a native session or taking the common input lease.
+    let token = UUID().uuidString
+    let witness = ["touch", "--up", "--contact-token", token, "-x", "0", "-y", "0"] + app.selection()
     let deadline = ProcessInfo.processInfo.systemUptime + 2
     repeat {
         try #require(process.isRunning)
-        let output = try await app.app.run(["describe-ui", "--expected-pid", String(app.pid)] + app.selection(), allowFailure: true)
+        let output = try await app.app.run(witness, allowFailure: true)
         let response = try controlsReceipt(output.output)
-        try #require(response.enqueuedEventCount == 0)
-        if output.exitCode != 0 && response.outcome == "rejectedBeforeInput" && response.error?.lowercased().contains("busy") == true { return }
-        try #require(output.exitCode == 0 && response.outcome == "ready" && response.error == nil)
+        try #require(output.exitCode != 0 && response.outcome == "rejectedBeforeInput"
+            && response.enqueuedEventCount == 0 && response.cleanup == "notNeeded"
+            && response.token == nil && response.quarantine == nil)
+        if response.error == "busy" {
+            try #require(process.isRunning, "The selected wait ended before its busy witness returned.")
+            return
+        }
+        try #require(response.error == "invalidToken")
         try await Task.sleep(nanoseconds: 50_000_000)
     } while ProcessInfo.processInfo.systemUptime < deadline
     throw TestError.unexpectedState("No actual selected wait owner was observed.")

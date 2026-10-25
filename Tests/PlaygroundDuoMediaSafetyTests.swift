@@ -44,12 +44,18 @@ struct PlaygroundDuoMediaSafetyTests {
         try #require(down.outcome == "retained" && down.enqueuedEventCount == 1 && down.cleanup == "notNeeded")
         var releaseAttempted = false
         do {
-            let held = try await controls.documents.waitFor("one actual retained UIKit contact") {
-                $0.activeWindowTouches == 1 && $0.windowTouchTrace.count > initial.windowTouchTrace.count
+            let held = try await controls.documents.waitFor("one retained contact and its normal long-press callback") {
+                $0.activeWindowTouches == 1
+                    && $0.windowTouchTrace.count == initial.windowTouchTrace.count + 1
+                    && $0.count("longPress") == initial.count("longPress") + 1
+                    && $0.count("touchBegan") == initial.count("touchBegan") + 1
             }
             let begins = Array(held.windowTouchTrace.dropFirst(initial.windowTouchTrace.count))
             try #require(begins.count == 1 && begins[0].phase == "windowTouchBegan")
             try #require(hypot(begins[0].x - point.0, begins[0].y - point.1) <= 2)
+            let recognizers = Array(held.recognizerTrace.dropFirst(initial.recognizerTrace.count))
+            try #require(recognizers.count == 1 && recognizers[0].name == "longPress"
+                && recognizers[0].state == 1 && recognizers[0].touches == 1)
             try #require(held.windowTraceDropped == 0 && held.recognizerTraceDropped == 0)
             try controls.preserveState("retained-before-png")
             let refused = session.directory.appendingPathComponent("busy.png")
@@ -61,15 +67,17 @@ struct PlaygroundDuoMediaSafetyTests {
             let stillHeld = try controls.documents.read()
             try #require(stillHeld.activeWindowTouches == 1)
             try #require(stillHeld.windowTouchTrace.count == held.windowTouchTrace.count)
-            try #require(stillHeld.counts == held.counts && stillHeld.text == held.text)
+            try #require(stillHeld.pid == held.pid && stillHeld.generation == held.generation)
+            try #require(stillHeld.inputState == held.inputState)
             try controls.preserveState("retained-after-png-refusal")
             releaseAttempted = true
             let up = try await controls.selected(["touch"] + position + ["--up", "--contact-token", token.uuidString])
-            try #require(up.outcome == "endedAndDrained" && up.enqueuedEventCount == 1 && up.cleanup == "notNeeded")
+            try #require(up.outcome == "endedAndDrained" && up.enqueuedEventCount == 2 && up.cleanup == "notNeeded")
             let released = try await controls.documents.waitFor("matching retained contact release") { $0.activeWindowTouches == 0 }
             try controls.requireContact(released, since: initial, start: point, end: point)
             let contacts = Array(released.windowTouchTrace.dropFirst(initial.windowTouchTrace.count))
-            try #require(contacts.count == 2 && contacts.last?.contactID == begins[0].contactID)
+            // Token UP validates the same point with one MOVE, which UIKit can coalesce.
+            try #require((contacts.count == 2 || contacts.count == 3) && contacts.last?.contactID == begins[0].contactID)
             try controls.preserveState("retained-released")
         } catch {
             if !releaseAttempted {

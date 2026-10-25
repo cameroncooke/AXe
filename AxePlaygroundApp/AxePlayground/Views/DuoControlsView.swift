@@ -313,7 +313,13 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
         mainScroll.scrollRectToVisible(top.union(bottom), animated: false)
         publish("showText")
     }
-    @objc private func showWaits() { mainScroll.scrollRectToVisible(targets.waitHeading.convert(CGRect(x: 0, y: 0, width: targets.bounds.width, height: 220), to: mainScroll), animated: false); publish("showWaits") }
+    @objc private func showWaits() {
+        view.layoutIfNeeded()
+        let heading = targets.waitHeading.convert(targets.waitHeading.bounds, to: mainScroll)
+        let lastTarget = targets.duplicate.convert(targets.duplicate.bounds, to: mainScroll)
+        mainScroll.scrollRectToVisible(heading.union(lastTarget), animated: false)
+        publish("showWaits")
+    }
     @objc private func showTargets() { mainScroll.scrollRectToVisible(targets.convert(CGRect(x: 0, y: 0, width: targets.bounds.width, height: 180), to: mainScroll), animated: false); publish("showTargets") }
     @objc private func showCanvas() { mainScroll.scrollRectToVisible(canvas.convert(canvas.bounds, to: mainScroll), animated: false); publish("showCanvas") }
 

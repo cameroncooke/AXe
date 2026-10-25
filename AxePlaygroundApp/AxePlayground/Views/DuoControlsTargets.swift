@@ -48,8 +48,8 @@ final class DuoControlsTargets: UIStackView {
                 makeButton("Sentinel", id: "wait.sentinel", action: #selector(sentinel))])
         configureTarget(target, action: #selector(targetTapped))
         configureTarget(duplicate, action: #selector(duplicateTapped))
-        addArrangedSubview(target)
-        addArrangedSubview(duplicate)
+        addTargetSlot(target)
+        addTargetSlot(duplicate)
     }
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
@@ -83,7 +83,7 @@ final class DuoControlsTargets: UIStackView {
         slider.heightAnchor.constraint(equalToConstant: 34).isActive = true
         slider.addTarget(self, action: #selector(sliderChanged(_:)), for: .valueChanged)
         sliders[name] = slider
-        addArrangedSubview(text(label))
+        addArrangedSubview(text("Example: " + label))
         addArrangedSubview(slider)
     }
 
@@ -101,6 +101,20 @@ final class DuoControlsTargets: UIStackView {
         row.distribution = .fillEqually
         row.spacing = 8
         addArrangedSubview(row)
+    }
+
+    // Keep the normal delayed-button rows in layout while each button is hidden.
+    private func addTargetSlot(_ button: UIButton) {
+        let slot = UIView()
+        button.translatesAutoresizingMaskIntoConstraints = false
+        slot.addSubview(button)
+        NSLayoutConstraint.activate([
+            button.leadingAnchor.constraint(equalTo: slot.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: slot.trailingAnchor),
+            button.topAnchor.constraint(equalTo: slot.topAnchor),
+            button.bottomAnchor.constraint(equalTo: slot.bottomAnchor),
+        ])
+        addArrangedSubview(slot)
     }
 
     private func configureTarget(_ button: UIButton, action: Selector) {
