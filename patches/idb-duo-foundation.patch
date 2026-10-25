@@ -5548,7 +5548,7 @@ index 0000000000000000000000000000000000000000..3a96b19b469c0aed68b92405e40f7bd3
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift b/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..9cfcca77e7a029bef7dbf924351803baa89e116a
+index 0000000000000000000000000000000000000000..6f0ff5d71691b44e4968c886f254fd9e018f74fb
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSliderEndpoint.swift
 @@ -0,0 +1,158 @@
@@ -5678,7 +5678,7 @@ index 0000000000000000000000000000000000000000..9cfcca77e7a029bef7dbf924351803ba
 +        phase("settled-\(delay)-wait-start")
 +        try await Task.sleep(nanoseconds: UInt64(wait * 1_000_000_000))
 +        phase("settled-\(delay)-read-start")
-+        awaitingReadback = returned > 0
++        // Input already has a coherent readback. Final checks do not dispatch input.
 +        let settled = try await backend.readFinal(deadline: deadline)
 +        phase("settled-\(delay)-read-returned")
 +        try settled.requireSameTarget(as: initial, includeValue: false)
