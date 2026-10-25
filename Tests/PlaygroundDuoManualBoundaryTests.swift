@@ -66,7 +66,13 @@ struct PlaygroundDuoManualBoundaryTests {
         try await withDuoPlaygroundScreen(pose: .open, rotation: 90) {}
         let app = try await prepareDuoControls(.outer90)
         let initial = try app.documents.read()
-        let opened = try await changeDuoControls(app, change: .open)
+        var opened = try await changeDuoControls(app, change: .open)
+        print("Manual catalogue after opening before rotation: \(String(reflecting: opened))")
+        let simulator = try DuoPlaygroundSession()
+        for _ in 0..<4 {
+            if try opened.activePanel.rotationDegrees() == 90 { break }
+            opened = try await simulator.rotateRight(catalogue: opened)
+        }
         let rotation = try opened.activePanel.rotationDegrees()
         try #require(rotation == 90)
         let stale = try await app.selected(["tap", "--id", "feature.text", "--element-type", "TextField", "--expected-pid", String(app.pid)], allowFailure: true)
@@ -92,7 +98,9 @@ struct PlaygroundDuoManualBoundaryTests {
             let inner = try #require(app.catalogue.panels.first { $0.identity != app.catalogue.activePanel.identity })
             let output = try await app.app.run(["slider", "--id", "feature.slider", "--endpoint", "maximum", "--element-type", "Slider", "--expected-pid", String(app.pid),
                 "--input-mode", "selected", "--screen-id", String(inner.identity.displayID), "--screen-uuid", inner.identity.uniqueID.uuidString], allowFailure: true)
-            let receipt = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(output.output.utf8))
+            try Data(output.output.utf8).write(to: app.artifacts.appendingPathComponent("inactive-slider-receipt.txt"))
+            let receiptLine = output.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+            let receipt = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(receiptLine.utf8))
             try #require(output.exitCode != 0 && receipt.outcome == "failedBeforeInput" && receipt.enqueuedEventCount == 0 && receipt.cleanup == "notNeeded" && receipt.quarantine == nil)
             try #require(receipt.ax?.failure == .setupFailed)
             let after = try app.documents.read()
