@@ -77,7 +77,8 @@ struct PlaygroundClipboardTests {
                         Array($0.text.utf8) == Array(payload) && $0.activeWindowTouches == 0
                     }
                     try #require(after.count("textChanged") == beforePaste.count("textChanged") + 1)
-                    _ = try session.contacts(after: beforePaste, in: after, count: 1)
+                    // The page observer does not provide an edit-menu contact count.
+                    try after.requireClear()
                     let fresh = try await session.capture()
                     try requireAgentCaptureValue(fresh.capture, identifier: "feature.text", expected: unicode,
                         action: "typeText", pid: session.pid, udid: session.agent.udid)

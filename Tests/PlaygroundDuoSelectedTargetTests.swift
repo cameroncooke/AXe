@@ -7,14 +7,62 @@ struct PlaygroundDuoSelectedTargetTests {
     func targets(position: DuoControlsPosition) async throws {
         try await withDuoPlaygroundScreen(pose: position.pose, rotation: position.rotation) {
             let app = try await PlaygroundControlsSession()
-            let frame = try await app.frame("feature.tap")
-            let point = "\(frame.x + frame.width / 2),\(frame.y + frame.height / 2)"
-            let output = try await app.app.run(["describe-ui", "--point", point, "--expected-pid", String(app.pid)] + app.selection())
+            let treeOutput = try await app.app.run(["describe-ui", "--expected-pid", String(app.pid)] + app.selection(), allowFailure: true)
+            try Data(treeOutput.output.utf8).write(to: app.artifacts.appendingPathComponent("point-full-tree.txt"))
+            try #require(treeOutput.exitCode == 0, "Selected full-tree read failed: \(treeOutput.output)")
+            let tree = try JSONDecoder().decode(ControlsPointReceipt.self, from: Data(treeOutput.output.utf8))
+            let treeIsReady = tree.outcome == "ready" && tree.error == nil && tree.enqueuedEventCount == 0 && tree.cleanup == "notNeeded"
+            try #require(treeIsReady)
+            try #require(tree.ax.expectedPID == app.pid && tree.ax.kind == "describe")
+            let treeContext = try #require(tree.context)
+            try treeContext.requireMatch(app.catalogue)
+            let treeAcquisition = try #require(tree.ax.acquisition)
+            try #require(treeAcquisition.outcome == .ready && treeAcquisition.attempts.last?.rootPID == app.pid)
+            let treeRoots = try #require(tree.ax.roots)
+            let foundButton = UIStateParser.findElement(in: treeRoots, withIdentifier: "feature.tap")
+            let button = try #require(foundButton)
+            try #require(button.type == "Button" && button.enabled == true)
+            let frame = try #require(button.frame)
+            let frameIsFinite = [frame.x, frame.y, frame.width, frame.height].allSatisfy(\.isFinite)
+            try #require(frameIsFinite)
+            try #require(frame.width > 0 && frame.height > 0)
+            let foundLabel = UIStateParser.findElement(in: button) { node in
+                node.type == "StaticText" && node.label == "Tap counter"
+            }
+            let label = try #require(foundLabel)
+            try #require(label.enabled == true)
+            let labelFrame = try #require(label.frame)
+            let pointX = frame.x + frame.width / 2
+            let pointY = frame.y + frame.height / 2
+            let point = "\(pointX),\(pointY)"
+            let output = try await app.app.run(["describe-ui", "--point", point, "--expected-pid", String(app.pid)] + app.selection(), allowFailure: true)
+            try Data(output.output.utf8).write(to: app.artifacts.appendingPathComponent("point-receipt.txt"))
+            try #require(output.exitCode == 0, "Selected point read failed: \(output.output)")
             let response = try JSONDecoder().decode(ControlsPointReceipt.self, from: Data(output.output.utf8))
-            try #require(response.outcome == "ready" && response.error == nil && response.enqueuedEventCount == 0 && response.cleanup == "notNeeded")
+            let pointIsReady = response.outcome == "ready" && response.error == nil && response.enqueuedEventCount == 0 && response.cleanup == "notNeeded"
+            try #require(pointIsReady)
             let context = try #require(response.context)
             try context.requireMatch(app.catalogue)
-            try #require(response.ax.expectedPID == app.pid && response.ax.kind == "describePoint" && response.ax.target?.identifier == "feature.tap")
+            try #require(response.ax.expectedPID == app.pid && response.ax.kind == "describePoint")
+            let acquisition = try #require(response.ax.acquisition)
+            try #require(acquisition.outcome == .ready && acquisition.attempts.last?.rootPID == app.pid)
+            let roots = try #require(response.ax.roots)
+            try #require(roots.count == 1)
+            let hit = try #require(roots.first)
+            try #require(hit.type == label.type && hit.label == label.label && hit.enabled == true)
+            try #require(hit.children?.isEmpty == true)
+            let hitFrame = try #require(hit.frame)
+            let hitFrameIsFinite = [hitFrame.x, hitFrame.y, hitFrame.width, hitFrame.height].allSatisfy(\.isFinite)
+            try #require(hitFrameIsFinite)
+            try #require(hitFrame.width > 0 && hitFrame.height > 0)
+            let containsPoint = pointX >= hitFrame.x && pointX < hitFrame.x + hitFrame.width
+                && pointY >= hitFrame.y && pointY < hitFrame.y + hitFrame.height
+            let insideButton = hitFrame.x >= frame.x && hitFrame.y >= frame.y
+                && hitFrame.x + hitFrame.width <= frame.x + frame.width
+                && hitFrame.y + hitFrame.height <= frame.y + frame.height
+            let matchesLabelFrame = hitFrame.x == labelFrame.x && hitFrame.y == labelFrame.y
+                && hitFrame.width == labelFrame.width && hitFrame.height == labelFrame.height
+            try #require(containsPoint && insideButton && matchesLabelFrame)
             _ = try await app.selected(["tap", "--label", "Text entry", "--element-type", "TextField", "--expected-pid", String(app.pid)])
             _ = try await app.documents.waitFor("label selector focused the real field") { $0.textFocused }
             _ = try await app.app.run(["type", "AXe selected value"])
@@ -51,7 +99,12 @@ private struct ControlsPointReceipt: Decodable {
     let cleanup: String
     let context: DuoContext?
     let ax: AX
-    struct AX: Decodable { let kind: String; let expectedPID: Int32; let target: UIElement? }
+    struct AX: Decodable {
+        let kind: String
+        let expectedPID: Int32
+        let roots: [UIElement]?
+        let acquisition: DuoCLIResponse.Acquisition?
+    }
 }
 
 enum PlaygroundSliderPosition: String, CaseIterable {
