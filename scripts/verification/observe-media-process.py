@@ -69,9 +69,23 @@ def describe(row):
     data = ctypes.create_string_buffer(262144)
     size = ctypes.c_size_t(len(data))
     if libc.sysctl(mib, 3, data, ctypes.byref(size), None, 0) != 0:
-        if ctypes.get_errno() in (errno.ESRCH, errno.ENOENT):
+        read_errno = ctypes.get_errno()
+        failure = (f"Cannot read argv for an owned process (PID {row['pid']}, "
+                   f"start {row['startSeconds']}:{row['startMicroseconds']}, errno {read_errno})")
+        try:
+            after = info(row["pid"])
+        except RuntimeError as identity_error:
+            raise RuntimeError(failure + "; identity recheck failed: " + str(identity_error)) from identity_error
+        if after is not None and identity(after) != identity(row):
             return None
-        raise RuntimeError("Cannot read argv for an owned process")
+        if after is None:
+            # A missing info row alone is insufficient; require confirmed PID absence.
+            try:
+                os.kill(row["pid"], 0)
+            except OSError as absence_error:
+                if absence_error.errno == errno.ESRCH:
+                    return None
+        raise RuntimeError(failure)
     raw = data.raw[:size.value]
     argc = int.from_bytes(raw[:4], sys.byteorder, signed=True)
     if argc < 1 or argc > 8192:
@@ -320,11 +334,10 @@ def main():
                     current = info(row["pid"])
                     if current is None or identity(current) != identity(row):
                         continue
-                    if "executable" not in row:
-                        detailed = describe(current)
-                        if detailed is None:
-                            continue
-                        row.update(detailed)
+                    detailed = describe(current)
+                    if detailed is None:
+                        continue
+                    row.update(detailed)
                     argv = row.get("arguments", [])
                     capture = Path(row.get("executable", "")).name == "simctl" and (
                         len(argv) >= 6 and argv[1] == "io" and argv[2] == udid and argv[3] == "screenshot"
