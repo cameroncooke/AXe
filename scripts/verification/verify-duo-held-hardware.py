@@ -27,6 +27,9 @@ parser.add_argument('--out', required=True)
 parser.add_argument('--public', action='store_true', help='Use the real public CLI; no independent live down marker')
 args = parser.parse_args()
 assert args.pid > 0 and 0 <= args.fold_angle <= 180
+if args.public:
+    # The initial description can start the broker before the hold command.
+    os.environ['FBSIMULATORCONTROL_LOG_HID_DETAILS'] = '1'
 args.case = ('public-held-' if args.public else 'library-held-') + args.button + '-' + args.mode
 spec = importlib.util.spec_from_file_location('duo_controls', Path(__file__).with_name('verify-duo-controls.py'))
 controls = importlib.util.module_from_spec(spec)

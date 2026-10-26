@@ -20,7 +20,11 @@ struct PlaygroundDuoLegacyBatchInterruptionTests {
             try await process.wait(timeout: 15)
             try #require(process.exitCode != 0)
             let output = try process.diagnostics()
-            try #require(output.contains("Duo input stopped:") && output.contains("staleContext") && output.contains("Input was not replayed."))
+            // Legacy localizedDescription drops the interruption payload. Native709 code2
+            // identifies interrupted; it does not preserve the staleContext reason text.
+            try #require(output.contains("Duo input stopped: Step 1 failed: [touch]")
+                && output.contains("(FBSimulatorControl.FBSimulatorHIDSessionError error 2.)")
+                && output.contains("Duo batch stopped;") && output.contains("Input was not replayed."))
             // The operation can release first; the enclosing session then has no input left to release.
             try #require(output.contains("cleanup=notNeeded") || output.contains("cleanup=releaseEnqueuedAndDrained"))
             try #require(!output.contains("cleanup=uncertain"))

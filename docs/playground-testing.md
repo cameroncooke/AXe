@@ -67,6 +67,8 @@ Hinge checks include 18 ordered numeric angles, named closed/tabletop/open posit
 
 Held-input checks wait for actual contacts or text effects before changing the device. They require stopped old-layout input, release evidence, no later input at old coordinates and a fresh real action. They cover raw and selected touch, moving pairs, retained contacts, keys and hardware buttons in their stated cases. The held Shift+A probe checks the public library boundary. It does not prove interruption of the no-flag `key-combo` CLI command.
 
+The matrix sets `FBSIMULATORCONTROL_LOG_HID_DETAILS=1` before its first owned command. Exact held-button release checks need the real button name and UP direction in the receipt. Set the same variable before the test process starts for direct or copied-suite runs. Reuse warm audit devices, but confirm that an earlier owned broker has exited on its normal idle path before this proof. An existing broker keeps its initial environment; the flag does not change it. This is a test diagnostic, not a product logging default.
+
 Agent checks require valid RS/1 output, real app effects, reference/cache reuse when valid and refusal when the app, focus, layout or selected target changes. They include all prior accepted comparison behaviours and preserve strict negative cases. A successful command or screenshot alone is not an app-effect proof.
 
 The normal app's Documents readback is checked against its real PID and generation. Contact, callback, layout and text data come from normal visible pages. External state tools fold or rotate the guest; AXe sends the input under test. No hidden state route is used.

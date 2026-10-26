@@ -283,7 +283,8 @@ def main():
     for key in list(env):
         if key.startswith(('AXE_', 'DYLD_')):
             del env[key]
-    env.update(AXE_ENV_FILE='/dev/null', AXE_E2E='1', AXE_LANDSCAPE_E2E='0', AXE_BIN_PATH=str(args.axe))
+    env.update(AXE_ENV_FILE='/dev/null', AXE_E2E='1', AXE_LANDSCAPE_E2E='0', AXE_BIN_PATH=str(args.axe),
+               FBSIMULATORCONTROL_LOG_HID_DETAILS='1')
     if args.developer_dir:
         env['DEVELOPER_DIR'] = args.developer_dir
     report = dict(status='RUNNING', requestedSuite=args.suite, requestedDevices=args.only or 'iphone,duo,ipad',
