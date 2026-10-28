@@ -85,6 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Fixed Duo display discovery rejecting an inactive virtual display. Built-in screen identity, geometry and active-screen checks remain.
+
 - Fixed selected keys, held touches and pinch gestures continuing after their CLI command exits. The broker now cancels the request and waits for owned input release without replay.
 
 - Fixed initial IDB source setup checking patch-added files before applying the tracked patch. Git identity and exact source checks remain required.
@@ -145,6 +147,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed no-flag Duo gesture presets with omitted screen dimensions using fixed portrait geometry. Default paths now use the measured active-display dimensions after rotation or folding; explicit dimensions are unchanged.
 - Fixed slider endpoint checks marking completed input as uncertain when a later read fails. Input without confirmed readback remains uncertain; the 15-second limit and final checks are unchanged.
+
+- Fixed Duo hinge confirmation timing out after a fold. Confirmation still requires two fresh matching readings within the existing time limit.
+
+- Fixed stale `--agent` references returning unrelated accessibility errors. Saved snapshot and current screen checks now run before the app read, so old targets are refused without input and require a fresh snapshot.
 
 
 ## [v1.8.0] - 2026-07-20

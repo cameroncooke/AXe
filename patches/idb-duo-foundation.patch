@@ -5883,10 +5883,10 @@ index 0000000000000000000000000000000000000000..804e9daf86614a03a2c0dd95fad420c3
 +}
 diff --git a/FBSimulatorControl/HID/ActivePanelDecoder.swift b/FBSimulatorControl/HID/ActivePanelDecoder.swift
 new file mode 100644
-index 0000000..6a3c035
+index 0000000..bd4d525
 --- /dev/null
 +++ b/FBSimulatorControl/HID/ActivePanelDecoder.swift
-@@ -0,0 +1,218 @@
+@@ -0,0 +1,238 @@
 +import Foundation
 +
 +public enum ActivePanelDecoder {
@@ -5987,10 +5987,7 @@ index 0000000..6a3c035
 +              Set(identities.map(\.uniqueID)).count == rows.count else {
 +            throw ActivePanelValidationError.duplicateIdentity
 +        }
-+        guard Set(identities) == Set(expectedPanels), identities.count == expectedPanels.count else {
-+            throw ActivePanelValidationError.catalogMismatch
-+        }
-+        let panels = try rows.map { row -> ActivePanel in
++        let panels = try rows.compactMap { row -> ActivePanel? in
 +            guard row.nativeSize.count == 2, row.bounds.count == 2,
 +                  row.bounds.allSatisfy({ $0.count == 2 }), row.pointScale > 0, row.pointScale <= 16,
 +                  row.nativeSize.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 65536 }),
@@ -5998,12 +5995,26 @@ index 0000000..6a3c035
 +                  row.bounds[1].allSatisfy({ $0 > 0 && $0 <= 65536 }) else {
 +                throw ActivePanelValidationError.invalidGeometry(row.displayId)
 +            }
++            if row.type == .virtual {
++                guard row.active == false, !row.primary,
++                      !expectedPanels.contains(where: {
++                          $0.displayID == row.displayId || $0.uniqueID == row.uniqueId
++                      }) else {
++                    throw ActivePanelValidationError.catalogMismatch
++                }
++                return nil
++            }
 +            return ActivePanel(identity: ActivePanelIdentity(displayID: row.displayId, uniqueID: row.uniqueId),
 +                active: row.active, primary: row.primary, currentOrientation: row.currentOrientation,
 +                nativeOrientation: row.nativeOrientation, nativePixelWidth: row.nativeSize[0],
 +                nativePixelHeight: row.nativeSize[1], boundsOriginX: row.bounds[0][0],
 +                boundsOriginY: row.bounds[0][1], boundsWidth: row.bounds[1][0], boundsHeight: row.bounds[1][1],
 +                pointScale: row.pointScale, backlightState: row.backlightState)
++        }
++        let integratedIdentities = panels.map(\.identity)
++        guard Set(integratedIdentities) == Set(expectedPanels),
++              integratedIdentities.count == expectedPanels.count else {
++            throw ActivePanelValidationError.catalogMismatch
 +        }
 +        if schemaPolicy == .verifiedIPadMiniA17ProProfile405 {
 +            guard info.version == "651.28", panels.count == 1, expectedPanels.count == 1,
@@ -6040,7 +6051,10 @@ index 0000000..6a3c035
 +    }
 +}
 +
-+private struct DisplayKind: Decodable {
++private enum DisplayKind: Decodable, Equatable {
++    case integrated
++    case virtual
++
 +    private struct Key: CodingKey {
 +        let stringValue: String
 +        var intValue: Int? { nil }
@@ -6049,12 +6063,18 @@ index 0000000..6a3c035
 +    }
 +    init(from decoder: Decoder) throws {
 +        let object = try decoder.container(keyedBy: Key.self)
-+        guard object.allKeys.count == 1, let key = object.allKeys.first, key.stringValue == "integrated" else {
++        guard object.allKeys.count == 1, let key = object.allKeys.first else {
++            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unsupported display kind"))
++        }
++        switch key.stringValue {
++        case "integrated": self = .integrated
++        case "virtual": self = .virtual
++        default:
 +            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unsupported display kind"))
 +        }
 +        let payload = try object.nestedContainer(keyedBy: Key.self, forKey: key)
 +        guard payload.allKeys.isEmpty else {
-+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unexpected integrated payload"))
++            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unexpected \(key.stringValue) payload"))
 +        }
 +    }
 +}
@@ -7480,10 +7500,10 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift b/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c492d25ed
+index 0000000000000000000000000000000000000000..5c84904300671940884eb113e631c7da37f5ef36
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift
-@@ -0,0 +1,216 @@
+@@ -0,0 +1,221 @@
 +@preconcurrency import CoreSimulator
 +import Darwin
 +import Foundation
@@ -7591,6 +7611,11 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +  }
 +
 +  static func request(deviceID: String, channel: UUID) throws -> xpc_object_t {
++    return try request(deviceID: deviceID, channel: channel, changeThreshold: 0.1)
++  }
++
++  /// One-shot reads use zero change threshold; live subscriptions keep 0.1 degrees.
++  static func request(deviceID: String, channel: UUID, changeThreshold: Double) throws -> xpc_object_t {
 +    guard let version = Bundle(path: "/Library/Developer/PrivateFrameworks/CoreDevice.framework")?
 +      .object(forInfoDictionaryKey: "CFBundleVersion") as? String else {
 +      throw failure("CoreDevice version metadata unavailable")
@@ -7606,7 +7631,7 @@ index 0000000000000000000000000000000000000000..23d50d48a67976ce4442207b6430109c
 +    xpc_array_append_value(interval, xpc_uint64_create(100_000_000_000_000_000))
 +    let input = dictionary([
 +      "actualInput": dictionary([
-+        "changeThreshold": dictionary(["value": xpc_double_create(0.1), "unit": unit]),
++        "changeThreshold": dictionary(["value": xpc_double_create(changeThreshold), "unit": unit]),
 +        "updateInterval": interval]),
 +      "streamProxy": dictionary(["sideChannel": sideChannel])])
 +    let components = xpc_array_create(nil, 0)
@@ -9575,7 +9600,7 @@ index 0000000000000000000000000000000000000000..8f9ed662b5f5e37ca314e2aacb4d358b
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeReader.swift b/FBSimulatorControl/HID/FBSimulatorHingeReader.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..66cbfb81eb0528a713b3bacbe7f2fef3e81c8eb0
+index 0000000000000000000000000000000000000000..65412ba6bbc7999e345ac7030dfc39eb85613774
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHingeReader.swift
 @@ -0,0 +1,35 @@
@@ -9586,7 +9611,7 @@ index 0000000000000000000000000000000000000000..66cbfb81eb0528a713b3bacbe7f2fef3
 +public enum FBSimulatorHingeReader {
 +  public static func read(for simulator: FBSimulator) async throws -> FBSimulatorHingeObservation {
 +    let channel = UUID()
-+    let request = try FBSimulatorHIDHingeWire.request(deviceID: simulator.udid, channel: channel)
++    let request = try FBSimulatorHIDHingeWire.request(deviceID: simulator.udid, channel: channel, changeThreshold: 0)
 +    let connection = try FBSimulatorHIDHingeWire.connect(simulator)
 +    defer { xpc_connection_cancel(connection) }
 +    let queue = DispatchQueue(label: "com.facebook.FBSimulatorControl.context-hinge")

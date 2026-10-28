@@ -54,7 +54,18 @@ final class AgentModeController {
             guard let mode = request.agent, let pid = mode.expectedPID else {
                 throw AgentModeFailure("missingRequest", "The agent request is missing.")
             }
+            let referenceRecord: Record?
+            if mode.snapshotID != nil || mode.ref != nil {
+                referenceRecord = try requireRecordIdentity(mode)
+            } else { referenceRecord = nil }
             let display = try await discover(request)
+            // A stale display can be refused before a disconnected AX channel hides it.
+            if let referenceRecord {
+                guard referenceRecord.context.screenID == display.displayID,
+                      UUID(uuidString: referenceRecord.context.screenUUID) == display.uniqueID else {
+                    throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
+                }
+            }
             let fresh = try await observe(display: display, pid: pid)
             guard let context = fresh.context, let roots = fresh.ax?.roots else {
                 throw AgentModeFailure("missingObservation", "The native observation has no selected context or hierarchy.")
@@ -257,15 +268,23 @@ final class AgentModeController {
         return value
     }
 
-    private func requireRecord(_ mode: AgentModeRequest, context: SelectedHIDContext,
-                               fresh: AgentModeSnapshot) throws -> Record {
+    private func requireRecordIdentity(_ mode: AgentModeRequest) throws -> Record {
         guard let record, mode.snapshotID == record.id else {
             throw AgentModeFailure("snapshotMissing", "The snapshot ID is absent, replaced, or belongs to another broker. Refresh the snapshot.")
         }
         guard now - record.capturedAt < Self.timeToLive else {
             throw AgentModeFailure("snapshotExpired", "The snapshot expired. Refresh the snapshot.")
         }
-        guard record.expectedPID == mode.expectedPID, record.context == context else {
+        guard record.expectedPID == mode.expectedPID else {
+            throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
+        }
+        return record
+    }
+
+    private func requireRecord(_ mode: AgentModeRequest, context: SelectedHIDContext,
+                               fresh: AgentModeSnapshot) throws -> Record {
+        let record = try requireRecordIdentity(mode)
+        guard record.context == context else {
             throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
         }
         guard record.snapshot.nativeFingerprint == fresh.nativeFingerprint else {

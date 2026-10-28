@@ -261,7 +261,7 @@ struct DuoPlaygroundSession {
             + "uuid=\(panel.identity.uniqueID) orientation=\(panel.currentOrientation) appState=Tapped")
     }
 
-    private func stableCatalogue(boot: String, expectedScreenID: UInt32? = nil) async throws -> DuoCatalogue {
+    func stableCatalogue(boot: String, expectedScreenID: UInt32? = nil) async throws -> DuoCatalogue {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
         var previous: DuoPanel?
         while ProcessInfo.processInfo.systemUptime < deadline {

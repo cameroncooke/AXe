@@ -140,7 +140,14 @@ private struct AgentLayoutInterruption {
             try await Task.sleep(nanoseconds: 500_000_000)
             let settled = try session.document.read()
             try #require(settled.inputState == released.inputState, "Old input continued after release.")
-            let afterLayout = try await DuoPlaygroundSession().catalogue(boot: catalogue.bootIdentity)
+            let afterLayout: DuoCatalogue
+            if action.rotating {
+                afterLayout = try await DuoPlaygroundSession().catalogue(boot: catalogue.bootIdentity)
+            } else {
+                let expectedScreenID: UInt32 = action == .typeOpening ? 3 : 1
+                afterLayout = try await DuoPlaygroundSession().stableCatalogue(
+                    boot: catalogue.bootIdentity, expectedScreenID: expectedScreenID)
+            }
             if action.rotating {
                 let rotation = try #require(changed.rotation)
                 try #require(rotation.vendorEventCount == 1 && rotation.matchingObservationCount == 2

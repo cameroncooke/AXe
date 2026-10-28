@@ -155,7 +155,52 @@ struct PlaygroundControlsSession {
         return frame
     }
 
+    private func dismissAccentPopupIfPresent() async throws {
+        let name = "accent-popup-" + UUID().uuidString
+        let beforeTree = try await app.run(["describe-ui"], allowFailure: true)
+        try Data(beforeTree.output.utf8).write(to: artifacts.appendingPathComponent(name + "-before-tree.txt"))
+        try #require(beforeTree.exitCode == 0, "Could not read the current accent popup state.")
+        let roots = try UIStateParser.parseDescribeUIRoots(beforeTree.output)
+        guard let popup = UIStateParser.findElement(in: roots, withIdentifier: "PopoverDismissRegion") else { return }
+        try #require(popup.type == "Group" && popup.label == "dismiss popup", "Unexpected popup identity.")
+        let before = try documents.read()
+        try before.requireClear()
+        try #require(before.textFocused)
+        try preserveState(name + "-before-escape")
+        let arguments = ["key", "41"]
+        let executable = try TestHelpers.getAxePath()
+        try JSONEncoder().encode([executable] + arguments + ["--udid", app.udid])
+            .write(to: artifacts.appendingPathComponent(name + "-escape-argv.json"))
+        let escape = try await app.run(arguments, allowFailure: true)
+        try Data(escape.output.utf8).write(to: artifacts.appendingPathComponent(name + "-escape-output.txt"))
+        try JSONEncoder().encode(escape.exitCode).write(to: artifacts.appendingPathComponent(name + "-escape-exit-code.json"))
+        try preserveState(name + "-after-escape")
+        try #require(escape.exitCode == 0, "Accent popup Escape command failed; input is not replayed.")
+        let afterTree = try await app.run(["describe-ui"], allowFailure: true)
+        try Data(afterTree.output.utf8).write(to: artifacts.appendingPathComponent(name + "-after-tree.txt"))
+        try #require(afterTree.exitCode == 0, "Could not verify accent popup dismissal.")
+        let afterRoots = try UIStateParser.parseDescribeUIRoots(afterTree.output)
+        try #require(UIStateParser.findElement(in: afterRoots, withIdentifier: "PopoverDismissRegion") == nil,
+            "Escape did not dismiss the accent popup; input is not replayed.")
+        let dismiss = try #require(UIStateParser.findElement(in: afterRoots, withIdentifier: "feature.dismissKeyboard"))
+        let field = try #require(UIStateParser.findElement(in: afterRoots, withIdentifier: "feature.text"))
+        try #require(dismiss.type == "Button" && field.type == "TextField", "The normal app controls are not exposed.")
+        let after = try documents.read()
+        try after.requireClear()
+        try #require(after.pid == before.pid && after.generation == before.generation)
+        try #require(after.text == before.text && after.textFocused == before.textFocused && after.counts == before.counts)
+        try #require(after.windowTouchTrace == before.windowTouchTrace && after.recognizerTrace == before.recognizerTrace)
+        try preserveState(name + "-verified-after-escape")
+    }
+
     func freshTap() async throws {
+        if try documents.read().textFocused {
+            try await dismissAccentPopupIfPresent()
+            try await show("feature.dismissKeyboard")
+            _ = try await documents.waitFor("keyboard dismissal before fresh physical tap") {
+                !$0.textFocused && $0.activeWindowTouches == 0
+            }
+        }
         try await show("feature.showPad")
         let current = try await DuoPlaygroundSession().catalogue(boot: catalogue.bootIdentity)
         let before = try documents.read()
