@@ -4,7 +4,7 @@
 
 V3 simulator checks passed. Its complete ordinary iPhone 133 and Duo 133 each executed all 133 cases with zero issues, failures or skips. Their guards exited cleanly and reaped the owned jobs; elapsed times were 1966.75 and 2620.14 seconds. Current unit 24, the original precision-slider case, layout 12 and raw keyboard 4 passed with zero issues or skips. Native transport/feed 18 and legacy keyboard 9 passed separately. The real public popup/Escape/Button proof passed and adds no suite cases.
 
-The isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`, helper `5688d749` from unchanged source `7eb55735`. None of these results proves a main-source apply, commit, installation or installed-image check.
+The isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`, helper `5688d749` from unchanged source `7eb55735`. The reviewed source is committed as `9eb7cbee`; its 57 code, test, helper and patch paths match the tested candidate exactly. The six document changes record the actual results. The source checkpoint is unsigned because 1Password signing failed; Cam approved this fallback.
 
 ### What caused our faults
 
@@ -27,8 +27,8 @@ The fixture records each failed read-only attempt before input or after confirme
 | Complete ordinary iPhone 133 | [PASS: 133/133](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-iphone/acceptance.json), zero issues/skips |
 | Complete Duo 133 | [PASS: 133/133](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-duo-agent/acceptance.json), zero issues/skips |
 | Local arm64 ZIP roundtrip | [PASS: exact payload and seven strict signatures](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/zip-roundtrip-v1/inventory.json) |
-| Reviewed source/docs, scoped commit and local install | PENDING separate receipts |
-| Installed CLI/native image and public-input smoke | PENDING separate receipts |
+| Reviewed source/docs, scoped commit and local install | PASS: `9eb7cbee`; [local update](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/local-install/run/result.json) installed the exact signed payload and preserved the previous prefix. |
+| Installed CLI/native image and public-input smoke | [PASS](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/installed-prefix-smoke/run-v1/result.json): separate capture and validation calls, one physical Button callback, one balanced touch, zero active touches; actual installed CLI/native images verified. |
 
 Shared AXe and RocketSim request delays are measured. Their initiating cause and relation to DTX remain unknown. No Apple defect, vendor equivalence or unfixable service condition is established. The V1 and V2 failures below remain failed with their original candidates. A later pass never changes their outcome.
 

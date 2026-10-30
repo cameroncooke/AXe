@@ -26,9 +26,9 @@
 - [x] Current complete Duo 133: [133/133 passed](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-duo-agent/acceptance.json), zero issues or skips; 2620.14 seconds.
 - [x] Current layout 12 and raw keyboard 4: separate complete passes.
 - [x] Local arm64 ZIP roundtrip: exact payload and seven strict signatures passed.
-- [ ] Apply the reviewed source and six documents, make the scoped commit, install the exact payload and prove the installed image.
+- [x] Reviewed source and documents committed as `9eb7cbee`; the exact signed payload is installed locally and the [installed CLI check](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/installed-prefix-smoke/run-v1/result.json) passed.
 
-The current isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`. Separate native legacy keyboard 9 also passed. Both complete 133-case runs and the separate layout 12 and raw 4 passed on this same candidate. Focused runs remain separate. V1 and V2 failures remain in the [audit](audits/2026-10-29-keyboard-reliability.md). Source promotion, commit and local installation remain pending.
+The current isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`. Separate native legacy keyboard 9 also passed. Both complete 133-case runs and the separate layout 12 and raw 4 passed on this same candidate. Focused runs remain separate. V1 and V2 failures remain in the [audit](audits/2026-10-29-keyboard-reliability.md). Source promotion, commit and local installation are complete. The installed CLI retained and validated a reference across separate calls, then made one physical Button tap with one callback and full release. Apple Pay payment screens and Intel execution remain excluded. No push, publication or deployment occurred.
 
 ## Previous status record — superseded
 

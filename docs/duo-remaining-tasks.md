@@ -14,9 +14,9 @@
 - [x] Current keyboard/slider unit 24 and the separate real popup/Escape/Button proof passed. A fresh focus read does not replay input.
 - [x] The current complete [ordinary iPhone 133-case run](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-iphone/acceptance.json) passed with zero issues or skips.
 - [x] The local arm64 ZIP roundtrip preserved the exact signed payload.
-- [ ] Apply reviewed source and documents, commit the exact scope, then install that payload and prove the installed image.
+- [x] Reviewed source and documents committed as `9eb7cbee`. The [local update](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/local-install/run/result.json) and [installed CLI check](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-local-install-v3-plan/installed-prefix-smoke/run-v1/result.json) passed.
 
-The current isolated CLI/native pair is `ddca4cc6/a42360f5`. The [master checklist](duo-implementation-checklist.md) gives current results; the [audit](audits/2026-10-29-keyboard-reliability.md) retains V1/V2 failures and exact candidate maps. Both complete 133-case results are accepted for this isolated candidate. Source promotion and delivery remain pending. The cause of shared service delays and the Apple-provider disconnect remains unproved.
+The current isolated CLI/native pair is `ddca4cc6/a42360f5`. The [master checklist](duo-implementation-checklist.md) gives current results; the [audit](audits/2026-10-29-keyboard-reliability.md) retains V1/V2 failures and exact candidate maps. Both complete 133-case results are accepted for this isolated candidate. The reviewed source is committed and the exact tested CLI is installed locally. All four approved work items are complete; no push, publication or deployment occurred. The cause of shared service delays and the Apple-provider disconnect remains unproved.
 
 ## Previous task record — superseded
 
