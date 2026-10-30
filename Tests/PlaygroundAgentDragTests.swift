@@ -32,7 +32,6 @@ struct PlaygroundAgentDragTests {
             "--duration", "0.7", "--steps", "30"]
             + (try session.contextArguments(capture, identifier: "feature.list"))
         var code: String?
-        var message: String?
         switch variant {
         case .normal, .endOutsideTarget: break
         case .stale:
@@ -42,8 +41,7 @@ struct PlaygroundAgentDragTests {
         case .wrongPID:
             let index = try #require(arguments.firstIndex(of: "--expected-pid"))
             arguments[index + 1] = String(session.pid + 1)
-            code = "observationFailed"
-            message = "processChanged"
+            code = "contextChanged"
         case .outsideDisplay:
             let index = try #require(arguments.firstIndex(of: "--end-y"))
             arguments[index + 1] = "10000"
@@ -59,7 +57,7 @@ struct PlaygroundAgentDragTests {
         let refused = code != nil
         let result = try await session.command(arguments, allowFailure: refused)
         if refused {
-            try session.requireRefusal(result, before: before, code: code, message: message)
+            try session.requireRefusal(result, before: before, code: code)
         } else {
             if variant != .rawCompatibility {
                 try session.requireHIDSuccess(result, kind: variant == .referenceSwipe ? "swipe" : "drag")

@@ -49,6 +49,57 @@ struct PlaygroundAgentNativeStateTests {
         try old.requireUnexpired("after whitespace invalidation and fresh input")
     }
 
+    @Test("A native change replaces the cache even when the compact hash is equal")
+    func nativeChangeWithEqualHashRefreshesReferences() async throws {
+        let session = try await PlaygroundAgentExamplesSession.open()
+        try await session.tap("agent-examples.text")
+        _ = try await session.run(["type", "q7", "--agent", "--expected-pid", String(session.pid),
+            "--focus-id", "agent-examples.text"])
+        _ = try await session.document.waitFor("seeded focused field") { $0.text == "q7" && $0.focused }
+        let current = try await session.core.state()
+        let space = try session.core.frame(of: session.core.element("agent-examples.space", in: current))
+        _ = try await session.run(["tap", "-x", String(space.x + space.width / 2),
+            "-y", String(space.y + space.height / 2), "--tap-style", "simulator"])
+        let old = try await session.capture()
+        try #require(try session.document.read().status == "a")
+        let changed = try await session.document.waitFor("normal delayed native trailing space", timeout: 12) { $0.status == "a " }
+        try #require(changed.text == "q7" && changed.focused && changed.activeWindowTouches == 0)
+
+        let started = ProcessInfo.processInfo.systemUptime
+        let output = try await session.run(["describe-ui", "--agent", "--expected-pid", String(session.pid),
+            "--since-screen-hash", old.capture.screenHash])
+        let result = try session.decode(output.output)
+        let capture = try #require(result.data.capture)
+        try #require(output.exitCode == 0 && !result.didError && result.data.action == nil)
+        try #require(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        try #require(capture.type == "runtime-snapshot" && capture.rs == old.capture.rs)
+        try #require(capture.applicationPID == session.pid && capture.screenHash == old.capture.screenHash)
+        try #require(capture.snapshotID != old.capture.snapshotID && capture.seq > old.capture.seq)
+        try #require(!capture.targets.isEmpty && capture.count == old.capture.count)
+        let fresh = try AgentPlaygroundTimedCapture(capture: capture, requestStartedUptime: started)
+        try #require(try session.document.read() == changed, "A cache read changed the app or sent input.")
+
+        let stale = try await session.run(["type", "z"] + (try session.arguments(old, id: "agent-examples.text")), allowFailure: true)
+        let refusal = try session.decode(stale.output)
+        try #require(stale.exitCode != 0 && refusal.didError && refusal.error?.code == "snapshotMissing")
+        try #require(refusal.data.action == nil && refusal.data.capture == nil && refusal.data.cache.requiresRefresh)
+        try #require(try session.document.read() == changed)
+        // Use the hash-miss capture itself after the old caller's refusal; do not recapture.
+        let typed = try await session.run(["type", "z"] + (try session.arguments(fresh, id: "agent-examples.text")))
+        let typedResult = try session.decode(typed.output)
+        let action = try #require(typedResult.data.action)
+        try #require(typed.exitCode == 0 && !typedResult.didError && action.kind == "typeText"
+            && action.outcome == "enqueuedAndDrained" && action.enqueuedEventCount == 2
+            && action.cleanup == "notNeeded" && !action.replayed)
+        let after = try await session.document.waitFor("the refreshed reference typed once") { $0.text == "q7z" }
+        try #require(after.pid == changed.pid && after.generation == changed.generation)
+        try #require(after.textChanges == changed.textChanges + 1 && after.focused && after.activeWindowTouches == 0)
+        try #require(after.windowTouchTrace == changed.windowTouchTrace && after.taps == changed.taps)
+        try #require(after.status == changed.status && after.listOffset == changed.listOffset && after.outerOffset == changed.outerOffset)
+        try old.requireUnexpired("after equal-hash native change and fresh input")
+        try fresh.requireUnexpired("after using the equal-hash replacement capture")
+    }
+
     @Test("The parent scroll target cannot move its nested list; the child target can")
     func nestedScrollOwnership() async throws {
         let session = try await PlaygroundAgentExamplesSession.open()

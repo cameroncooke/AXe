@@ -47,14 +47,15 @@ private struct KeyboardInterruptionSession {
     func run() async throws {
         let device = try DuoPlaygroundSession()
         let app = try AgentPlaygroundSession()
-        let initial = try await device.catalogue()
-        _ = try await device.setPose(.open, boot: initial.bootIdentity)
+        let preparation = DuoStateReadWait.Preparation(phase: "before-input", artifacts: directory)
+        let initial = try await DuoStateReadWait.$preparation.withValue(preparation) { try await device.catalogue() }
+        _ = try await DuoStateReadWait.$preparation.withValue(preparation) { try await device.setPose(.open, boot: initial.bootIdentity) }
         // Make the normal page visible before asking its scene to change orientation.
         let pid = try await app.open("text-input", readyID: "text-input-field")
-        var before = try await device.catalogue(boot: initial.bootIdentity)
+        var before = try await DuoStateReadWait.$preparation.withValue(preparation) { try await device.catalogue(boot: initial.bootIdentity) }
         for _ in 0..<4 {
             if try before.activePanel.rotationDegrees() == 90 { break }
-            before = try await device.rotateRight(catalogue: before)
+            before = try await DuoStateReadWait.$preparation.withValue(preparation) { try await device.rotateRight(catalogue: before) }
         }
         try #require(try before.activePanel.rotationDegrees() == 90)
         _ = try await app.run(["tap", "--id", "text-input-field", "--element-type", "TextField"])
@@ -70,9 +71,20 @@ private struct KeyboardInterruptionSession {
         try save(arguments, name: "held-key-argv")
         let input = try PlaygroundTestProcess(executable: cli, arguments: arguments, directory: directory, name: "held-key")
         let panel = before.activePanel.identity
-        let operatorArguments = [change.rawValue, before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString,
-            "0", directory.appendingPathComponent("state-change-marker.json").path, udid,
+        let rotationPlan: DuoRotationPlan?
+        if change == .rotate {
+            let context = try await DuoStateReadWait.$preparation.withValue(preparation) {
+                try await device.nativeContext(catalogue: before, pid: pid, artifacts: directory, name: "rotation-before-input")
+            }
+            rotationPlan = try DuoRotationPlan(catalogue: before, context: context)
+        } else { rotationPlan = nil }
+        let requestedDegrees = rotationPlan.map { Double($0.target) } ?? 0
+        let foldControl: DuoHeldLayoutControl? = try DuoHeldLayoutControl(boot: before.bootIdentity,
+            udid: udid, degrees: requestedDegrees, artifacts: directory, rotation: rotationPlan)
+        let operatorArguments = [change == .fold ? "fold-write-held" : "rotate-write-held", before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString,
+            String(requestedDegrees), directory.appendingPathComponent("state-change-marker.json").path, udid,
             URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path]
+            + (foldControl?.arguments ?? [])
         try save(operatorArguments, name: "external-change-argv")
         let external = try PlaygroundTestProcess(executable: stateOperator, arguments: operatorArguments,
             directory: directory, name: "external-change")
@@ -82,11 +94,18 @@ private struct KeyboardInterruptionSession {
             try save(observed, name: "text-before-change")
             try #require(input.isRunning, "The held key ended before the layout change.")
             try external.start()
-            try await external.wait(timeout: 20)
-            let operatorDiagnostics = try external.diagnostics()
-            try #require(external.exitCode == 0, "The layout change failed: \(operatorDiagnostics)")
-            let changed = try JSONDecoder().decode(KeyboardExternalStateReceipt.self, from: Data(try external.output().utf8))
-            try await input.wait(timeout: 15)
+            var changeReceipt: KeyboardExternalStateReceipt?
+            var rotationConfirmation: DuoRotationConfirmation?
+            if let foldControl {
+                try await foldControl.waitForReady(external)
+                try await input.wait(timeout: foldControl.remaining())
+            } else {
+                try await external.wait(timeout: 20)
+                let operatorDiagnostics = try external.diagnostics()
+                try #require(external.exitCode == 0, "The layout change failed: \(operatorDiagnostics)")
+                changeReceipt = try JSONDecoder().decode(KeyboardExternalStateReceipt.self, from: Data(try external.output().utf8))
+                try await input.wait(timeout: 15)
+            }
             let diagnostics = try input.diagnostics()
             try #require(input.exitCode == 1, "The held key did not stop: \(diagnostics)")
             // The native interruption must confirm release. Outer close can need no further release.
@@ -107,6 +126,17 @@ private struct KeyboardInterruptionSession {
             try #require(errors.count == 1 && allowedErrors.contains(errors[0]),
                 "Raw key input lacks confirmed native release and no-replay evidence: \(diagnostics)")
             try save(errors, name: "confirmed-native-release-error")
+            if let foldControl {
+                rotationConfirmation = try await foldControl.confirmTargetAndRelease(external, device: device, pid: pid)
+                let operatorDiagnostics = try external.diagnostics()
+                try #require(external.exitCode == 0, "The layout change failed: \(operatorDiagnostics)")
+                changeReceipt = try JSONDecoder().decode(KeyboardExternalStateReceipt.self, from: Data(try external.output().utf8))
+            }
+            let changed = try #require(changeReceipt)
+            if let foldControl {
+                try foldControl.requireCompleted(changed.connectionHold,
+                    started: changed.startedUptime, finished: changed.finishedUptime)
+            }
             let released = try await text(app: app, name: "after-owned-release")
             try requireOnlyLettersAdded(released, prefix: prefix)
             for index in 0..<4 {
@@ -114,8 +144,22 @@ private struct KeyboardInterruptionSession {
                 let settled = try await text(app: app, name: "settled-release-\(index)")
                 try #require(settled == released, "Text changed after the confirmed key release.")
             }
-            let after = try await device.catalogue(boot: before.bootIdentity)
-            try requireLayoutChange(changed, before: before, after: after)
+            let recovery = try DuoStateReadWait(phase: "after-writer-close", artifacts: directory)
+            let after = try await DuoStateReadWait.$current.withValue(recovery) { () async throws -> DuoCatalogue in
+            if change == .fold {
+                let write = try #require(changed.write)
+                try await device.requireExternalFold(write, boot: before.bootIdentity, degrees: 0,
+                    after: changed.finishedUptime, artifacts: directory)
+            }
+            if let rotationPlan {
+                let write = try #require(changed.write)
+                rotationConfirmation = try await device.requireExternalRotation(write, plan: rotationPlan, pid: pid,
+                    after: changed.finishedUptime, artifacts: directory, artifactPrefix: "post-close-rotation")
+                return try #require(rotationConfirmation).catalogue
+            }
+            return try await device.stableCatalogue(boot: before.bootIdentity, expectedScreenID: 1)
+            }
+            try requireLayoutChange(changed, before: before, after: after, rotation: rotationConfirmation)
             // Read the new tree before a new tap. No old coordinates or action replay are used.
             let fresh = try await text(app: app, name: "fresh-field-before-tap")
             try #require(fresh == released)
@@ -138,6 +182,8 @@ private struct KeyboardInterruptionSession {
                 "freshText": finalText, "osPressedKeyInventory": "UNVERIFIED", "inputReplayed": "false"], name: "result")
             print("Duo raw key interruption passed: \(change.rawValue), owned release confirmed, fresh text=\(finalText). OS key inventory is unverified.")
         } catch {
+            do { try foldControl?.abort() }
+            catch { Issue.record("Cannot publish held fold abort: \(error)") }
             await external.finish()
             await input.finish()
             throw error
@@ -181,21 +227,21 @@ private struct KeyboardInterruptionSession {
         try #require(!suffix.isEmpty && suffix.allSatisfy { $0 == "a" }, "The held key did not add only letter a characters.")
     }
 
-    private func requireLayoutChange(_ value: KeyboardExternalStateReceipt, before: DuoCatalogue, after: DuoCatalogue) throws {
-        try #require(value.mode == change.rawValue && value.finishedUptime >= value.startedUptime)
+    private func requireLayoutChange(_ value: KeyboardExternalStateReceipt, before: DuoCatalogue, after: DuoCatalogue,
+                                     rotation: DuoRotationConfirmation?) throws {
+        try #require(value.mode == (change == .fold ? "fold-write-held" : "rotate-write-held")
+            && value.finishedUptime >= value.startedUptime)
         if change == .fold {
-            let hinge = try #require(value.hinge)
-            try #require(hinge.outcome == "observedMechanicalTarget" && !hinge.wasAlreadyWithinTolerance
-                && hinge.requestedDegrees == 0 && hinge.matchingSamples.count == 2
-                && hinge.matchingSamples.allSatisfy { abs($0.mechanicalDegrees) <= 0.5 })
+            try #require(value.write != nil && value.hinge == nil && value.rotation == nil)
             try #require(after.activePanel.identity != before.activePanel.identity, "Folding did not change the active screen.")
         } else {
-            let rotation = try #require(value.rotation)
-            try #require(rotation.vendorEventCount == 1 && rotation.matchingObservationCount == 2
-                && rotation.before.rotation != rotation.after.rotation)
+            let rotation = try #require(rotation)
+            try #require(value.rotation == nil && value.write?.source == "orientation-picker-control")
+            try #require(value.write?.vendorEventCount == 1 && rotation.matchingObservationCount == 2
+                && rotation.before.rotationDegrees != rotation.after.rotationDegrees)
             let finalRotation = try after.activePanel.rotationDegrees()
             try #require(after.activePanel.identity == before.activePanel.identity
-                && finalRotation == rotation.after.rotation)
+                && finalRotation == rotation.after.rotationDegrees)
         }
     }
 
@@ -210,6 +256,8 @@ private struct KeyboardExternalStateReceipt: Decodable {
     let mode: String
     let startedUptime: TimeInterval
     let finishedUptime: TimeInterval
+    let write: DuoExternalLayoutWrite?
+    let connectionHold: DuoExternalConnectionHold?
     let hinge: Hinge?
     let rotation: DuoCLIResponse.RotationReceipt?
 

@@ -287,7 +287,8 @@ extension PlaygroundAgentFeatureSession {
         let name = "raw-" + UUID().uuidString
         let argv = arguments + ["--udid", agent.udid]
         try JSONEncoder().encode(argv).write(to: artifacts.appendingPathComponent(name + "-argv.json"))
-        try Data(contentsOf: document.url).write(to: artifacts.appendingPathComponent(name + "-before.json"))
+        let before = try Data(contentsOf: document.url)
+        try before.write(to: artifacts.appendingPathComponent(name + "-before.json"))
         let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: argv,
             directory: artifacts, name: name)
         do {
@@ -295,6 +296,20 @@ extension PlaygroundAgentFeatureSession {
             try await process.wait(timeout: 30)
             let stdout = try process.output()
             let diagnostics = try process.diagnostics()
+            if process.exitCode != 0 {
+                do {
+                    let initial = try JSONDecoder().decode(PlaygroundControlsDocument.self, from: before)
+                    let after = try Data(contentsOf: document.url)
+                    let observed = try JSONDecoder().decode(PlaygroundControlsDocument.self, from: after)
+                    guard initial.pid == pid, observed.pid == pid, observed.generation == initial.generation else {
+                        throw TestError.unexpectedState("Raw failure document changed process or page generation.")
+                    }
+                    try after.write(to: artifacts.appendingPathComponent(name + "-after-failure.json"), options: .withoutOverwriting)
+                } catch {
+                    try? Data(String(describing: error).utf8).write(
+                        to: artifacts.appendingPathComponent(name + "-after-failure-error.txt"), options: .withoutOverwriting)
+                }
+            }
             try #require(process.exitCode == 0, "Raw command failed: \(diagnostics)")
             try #require(stdout.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                 "The raw command changed its empty stdout contract: \(stdout)")

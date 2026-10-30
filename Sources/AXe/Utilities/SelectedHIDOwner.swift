@@ -11,6 +11,7 @@ final class SelectedHIDOwner {
     private let logger: AxeLogger
     private let helperURL: URL
     private let dependencies: SelectedAXDependencies
+    private let transportOwner: FBSimulatorHIDTransportOwner
     private let sliderValueOwner = SelectedSliderValueOwner()
     private var admission = SelectedHIDAdmission()
     private var lease: HIDInputLease?
@@ -26,14 +27,14 @@ final class SelectedHIDOwner {
     private var lastActivity: TimeInterval
     private(set) var shouldStop = false
     var isBusy: Bool { admission.inFlight || maintainingRetainedInput || batchRunning || shouldStop || quarantined }
+    var currentTime: TimeInterval { dependencies.now() }
 
-    convenience init(simulatorUDID: String, logger: AxeLogger, helperURL: URL) {
-        self.init(simulatorUDID: simulatorUDID, logger: logger, helperURL: helperURL, dependencies: .live)
-    }
-
-    init(simulatorUDID: String, logger: AxeLogger, helperURL: URL, dependencies: SelectedAXDependencies) {
+    init(simulatorUDID: String, logger: AxeLogger, helperURL: URL, dependencies: SelectedAXDependencies? = nil) {
         self.simulatorUDID = simulatorUDID; self.logger = logger; self.helperURL = helperURL
-        self.dependencies = dependencies; lastActivity = dependencies.now()
+        let transportOwner = FBSimulatorHIDTransportOwner()
+        self.transportOwner = transportOwner
+        self.dependencies = dependencies ?? .live(transportOwner: transportOwner)
+        lastActivity = self.dependencies.now()
     }
 
     func perform(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
@@ -49,12 +50,17 @@ final class SelectedHIDOwner {
             do {
                 try acquireLease()
                 let result = await AgentModeNativeOperation.perform(request, simulatorUDID: simulatorUDID,
-                    brokerID: brokerID, logger: logger, helperURL: helperURL)
-                if result.cleanup == "uncertain" { return quarantine(result, request: request) }
+                    brokerID: brokerID, logger: logger, helperURL: helperURL, transportOwner: transportOwner)
+                if result.cleanup == "uncertain" {
+                    await transportOwner.close()
+                    return quarantine(result, request: request)
+                }
+                if result.error != nil { await transportOwner.invalidate() }
                 clear()
                 return result
             } catch {
                 let result = response(request, outcome: "rejectedBeforeInput", error: error)
+                if lease != nil { await transportOwner.invalidate() }
                 clear()
                 return result
             }
@@ -62,16 +68,21 @@ final class SelectedHIDOwner {
         if request.ax != nil || request.hinge != nil || request.keyboard != nil || request.rotation != nil {
             do {
                 try acquireLease()
+                if request.hinge != nil || request.rotation != nil { await transportOwner.invalidate() }
                 let result: SelectedHIDResponse
                 if request.ax?.kind == .sliderPercentage {
                     result = await SelectedAXOperation.perform(request, simulatorUDID: simulatorUDID,
-                        brokerID: brokerID, logger: logger, helperURL: helperURL, valueOwner: sliderValueOwner)
+                        brokerID: brokerID, logger: logger, helperURL: helperURL, valueOwner: sliderValueOwner, transportOwner: transportOwner)
                 } else {
                     result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL)
                 }
-                if result.cleanup == "uncertain" || result.ax?.slider?.delivery == "uncertain" || result.ax?.sliderValue?.delivery == "uncertain" || result.hinge?.failure?.delivery == .uncertain || result.rotation?.failure?.delivery == .uncertain {
+                let rotationNeedsInputQuarantine = result.rotation?.failure?.delivery == .uncertain
+                    && !isStateOnlyRotationFailure(result, request: request)
+                if result.cleanup == "uncertain" || result.ax?.slider?.delivery == "uncertain" || result.ax?.sliderValue?.delivery == "uncertain" || result.hinge?.failure?.delivery == .uncertain || rotationNeedsInputQuarantine {
+                    await transportOwner.close()
                     return quarantine(result, request: request)
                 }
+                if result.error != nil { await transportOwner.invalidate() }
                 let retire = requiresRetirement(after: result, request: request)
                 clear()
                 if retire {
@@ -81,6 +92,7 @@ final class SelectedHIDOwner {
                 return result
             } catch {
                 let result = response(request, outcome: "rejectedBeforeInput", error: error)
+                if lease != nil { await transportOwner.invalidate() }
                 clear()
                 return result
             }
@@ -91,12 +103,22 @@ final class SelectedHIDOwner {
             if request.expectedContext != nil, session != nil {
                 throw SelectedHIDFailure.invalid("Context-bound input requires a fresh complete session")
             }
+            let legacyKeyboardEvents = try await request.legacyKeyboard?.consume(
+                endpoint: SelectedHIDBroker.endpoint(simulatorUDID: simulatorUDID))
+            try Task.checkCancellation()
             if session == nil { try await open(request) }
             guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned session") }
             beforeCount = await session.status().enqueuedEventCount
             let receipt: FBSimulatorHIDSessionReceipt
             switch request.operation {
             case .complete:
+                if let legacyKeyboardEvents {
+                    // Keep the raw keyboard lifecycle, including repeated modifier credits and boundary checks.
+                    receipt = try await session.executeLegacyKeyboard(.composite(legacyKeyboardEvents.map(\.event)))
+                    try await HIDInteractor.waitForStabilization(logger: logger)
+                    try await session.validateLegacyBatchBoundary()
+                    break
+                }
                 let event: FBSimulatorHIDEvent
                 if let path = request.legacyPath {
                     event = try path.event(logicalSize: observation.displayContext.logicalSize)
@@ -147,7 +169,11 @@ final class SelectedHIDOwner {
             }
             let result = response(request, outcome: "failedNoReplay", count: count, cleanup: cleanup, error: error, includeToken: false, buttonExecution: buttonExecution)
             await feed?.closeAndWait()
-            if cleanup == "uncertain" { return quarantine(result, request: request) }
+            if cleanup == "uncertain" {
+                await transportOwner.close()
+                return quarantine(result, request: request)
+            }
+            if lease != nil { await transportOwner.invalidate() }
             clear()
             // A retained token cannot be retried through a replacement session.
             return result
@@ -198,13 +224,17 @@ final class SelectedHIDOwner {
             }
             let result = response(request, outcome: "failedNoReplay", count: count, cleanup: cleanup, error: error)
             await feed?.closeAndWait()
-            if cleanup == "uncertain" { return quarantine(result, request: request) }
+            if cleanup == "uncertain" {
+                await transportOwner.close()
+                return quarantine(result, request: request)
+            }
+            if lease != nil { await transportOwner.invalidate() }
             clear()
             return result
         }
     }
 
-    func maintain() async {
+    func maintain(retainingAgentSnapshot: Bool = false) async {
         guard !quarantined, !admission.inFlight, !maintainingRetainedInput, !batchRunning else { return }
         if admission.token != nil, let feed, let observation {
             do { try feed.validateCurrentRevision(expected: observation) }
@@ -216,6 +246,8 @@ final class SelectedHIDOwner {
         }
         let idleTimeout: TimeInterval = admission.origin == .legacyTouch ? 60 : 30
         guard dependencies.now() - lastActivity >= idleTimeout else { return }
+        // A live reference table retains the process, never an idle touch.
+        if retainingAgentSnapshot, admission.token == nil { return }
         await shutdown()
     }
 
@@ -229,6 +261,7 @@ final class SelectedHIDOwner {
             let result = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: UUID(), brokerID: brokerID,
                 outcome: "retainedContextCleanupUncertain", token: nil, enqueuedEventCount: 0,
                 cleanup: cleanup, error: String(describing: error), context: observation.map(SelectedHIDContext.init))
+            await transportOwner.close()
             _ = quarantine(result, request: lastRequest)
             return
         }
@@ -248,6 +281,7 @@ final class SelectedHIDOwner {
             } catch { cleanup = "uncertain"; logger.error().log("Selected lease close failed: \(error)") }
         }
         await feed?.closeAndWait()
+        await transportOwner.close()
         if cleanup == "uncertain" {
             let result = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: UUID(), brokerID: brokerID,
                 outcome: "expiryCleanupUncertain", token: nil, enqueuedEventCount: 0, cleanup: cleanup,
@@ -278,14 +312,15 @@ final class SelectedHIDOwner {
         let display = try request.selectedDisplay()
         try await open(displayID: display.id, displayUUID: display.uuid,
             expectedContext: request.expectedContext,
-            requiresDuo: request.legacyPath != nil || request.legacyTouch != nil) { observation in
+            requiresDuo: request.legacyPath != nil || request.legacyTouch != nil,
+            requiresSharedKeyboard: request.legacyKeyboard != nil) { observation in
                 try request.home?.validate(observation: observation)
                 try request.button?.validate(observation: observation)
             }
     }
 
     private func open(displayID: UInt32, displayUUID: UUID, expectedContext: SelectedHIDContext?,
-                      requiresDuo: Bool,
+                      requiresDuo: Bool, requiresSharedKeyboard: Bool = false,
                       validate: (FBSimulatorHIDSessionObservation) throws -> Void = { _ in }) async throws {
         try acquireLease()
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
@@ -302,6 +337,9 @@ final class SelectedHIDOwner {
                 throw SelectedHIDFailure.invalid(capability.reason)
             }
         }
+        if requiresSharedKeyboard, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
+            throw SelectedHIDFailure.invalid("Raw keyboard transport or verified profile changed before input")
+        }
         let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
             screenID: displayID, screenUniqueID: displayUUID)
         self.feed = feed
@@ -310,7 +348,8 @@ final class SelectedHIDOwner {
             throw SelectedHIDFailure.invalid("Measured Duo input context changed before input")
         }
         try validate(feed.initialObservation)
-        session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation, liveFreshnessProvider: feed)
+        session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation,
+            liveFreshnessProvider: feed, transportOwner: transportOwner)
     }
 
     /// One in-process owner for the complete ordinary batch. It never rebinds after failure.
@@ -344,12 +383,14 @@ final class SelectedHIDOwner {
                 brokerID: brokerID, outcome: "batchCleanupUncertain", token: nil,
                 enqueuedEventCount: 0, cleanup: cleanup, error: diagnostic,
                 context: observation.map(SelectedHIDContext.init))
+            await transportOwner.close()
             let blocked = quarantine(result, request: nil)
             let persistence = blocked.quarantine?.persisted == true
                 ? "Input quarantine saved; explicit recovery is required."
                 : "Input quarantine could not be saved; manual recovery is required. \(blocked.quarantine?.error ?? "")"
             throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(diagnostic). \(persistence)")
         }
+        if actionError != nil { await transportOwner.invalidate() }
         clear()
         if let actionError {
             throw CLIError(errorDescription: "Duo input stopped: \(String(describing: actionError)); cleanup=\(cleanup). Input was not replayed.")
@@ -409,6 +450,21 @@ final class SelectedHIDOwner {
             guard elapsed < seconds else { return }
             try await Task.sleep(for: .seconds(min(0.05, seconds - elapsed)))
         }
+    }
+
+    /// A failed orientation write can change layout later, but cannot retain a key or contact.
+    /// Keep its error and require fresh context instead of persisting input-cleanup quarantine.
+    private func isStateOnlyRotationFailure(_ result: SelectedHIDResponse, request: SelectedHIDRequest) -> Bool {
+        guard request.rotation != nil, (try? request.validate()) != nil,
+              request.operation == .complete, request.token == nil, request.primitives.isEmpty,
+              admission.inFlight, admission.token == nil, lease != nil,
+              session == nil, feed == nil, libraryToken == nil, observation == nil,
+              result.version == SelectedHIDRequest.version, result.requestID == request.requestID,
+              result.brokerID == brokerID, result.outcome == "failedNoReplay", result.error != nil,
+              result.enqueuedEventCount == 0, result.cleanup == "notNeeded", result.token == nil,
+              result.quarantine == nil, result.rotation?.receipt == nil,
+              result.rotation?.failure?.delivery == .uncertain else { return false }
+        return true
     }
 
     private func quarantine(_ response: SelectedHIDResponse, request: SelectedHIDRequest?) -> SelectedHIDResponse {

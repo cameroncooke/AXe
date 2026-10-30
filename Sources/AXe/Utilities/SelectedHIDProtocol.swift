@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 35
+    static let version = 36
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -26,6 +26,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var expectedContext: SelectedHIDContext? = nil
     var legacyPath: LegacyDuoPath? = nil
     var legacyTouch: LegacyDuoTouch? = nil
+    var legacyKeyboard: LegacyDuoKeyboard? = nil
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
@@ -35,23 +36,23 @@ struct SelectedHIDRequest: Codable, Sendable {
                   primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
                   hinge == nil, keyboard == nil, home == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil, expectedContext == nil,
-                  legacyPath == nil, legacyTouch == nil else {
+                  legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else {
                 throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
             }
             return
         }
-        if legacyPath != nil || legacyTouch != nil, expectedContext == nil {
+        if legacyPath != nil || legacyTouch != nil || legacyKeyboard != nil, expectedContext == nil {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }
         if let expectedContext {
             guard operation == .complete, token == nil,
-                  [!primitives.isEmpty, legacyPath != nil, legacyTouch != nil].filter({ $0 }).count == 1,
+                  [!primitives.isEmpty, legacyPath != nil, legacyTouch != nil, legacyKeyboard != nil].filter({ $0 }).count == 1,
                   path == nil, pinch == nil, gesture == nil, ax == nil, hinge == nil,
                   keyboard == nil, home == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil,
                   expectedContext.screenID == screenID,
                   UUID(uuidString: expectedContext.screenUUID) == screenUUID else {
-                throw SelectedHIDFailure.invalid("Expected context requires one primitive, legacy path or legacy touch request on its measured display")
+                throw SelectedHIDFailure.invalid("Expected context requires one primitive, legacy path, legacy touch or legacy keyboard request on its measured display")
             }
             try expectedContext.validate()
         }
@@ -96,7 +97,7 @@ struct SelectedHIDRequest: Codable, Sendable {
                 throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
             }
         }
-        guard [path != nil, legacyPath != nil, legacyTouch != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
+        guard [path != nil, legacyPath != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
             throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
         }
         if let hinge {
@@ -116,6 +117,10 @@ struct SelectedHIDRequest: Codable, Sendable {
         }
         if let legacyTouch {
             try legacyTouch.validate()
+            return
+        }
+        if let legacyKeyboard {
+            try legacyKeyboard.validate(requestID: requestID)
             return
         }
         if let rotation {
@@ -209,7 +214,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var event: FBSimulatorHIDEvent { .composite(primitives.map(\.event)) }
     func completeEvent(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
         try validate()
-        guard keyboard == nil, rotation == nil, legacyPath == nil, legacyTouch == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
+        guard keyboard == nil, rotation == nil, legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
         if let home { return try home.event(observation: observation) }
         if let button { return try button.event(observation: observation) }
         if let pinch { return try pinch.event(observation: observation) }
@@ -218,7 +223,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     }
 
     func completeEvent(logicalSize: CGSize) throws -> FBSimulatorHIDEvent {
-        guard pinch == nil, gesture == nil, keyboard == nil, home == nil, button == nil, rotation == nil, legacyPath == nil, legacyTouch == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
+        guard pinch == nil, gesture == nil, keyboard == nil, home == nil, button == nil, rotation == nil, legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
         guard let path else { return event }
         return .composite(try path.primitives(logicalSize: logicalSize).map(\.event))
     }

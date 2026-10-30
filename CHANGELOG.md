@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Add one repeatable 300-byte mixed-case Duo raw typing check to the canonical full Duo and keyboard/hardware plans. It verifies exact callback counts, unchanged touch/control state and lowercase input after modifiers. It stays separate from the 133-case agent group. Document the normal visible-software-keyboard prerequisite; no detector, hidden app route or mandatory vendor dependency is added.
 - Added a tracked XcodeGen Playground project and one serial 50-case local iPhone/Duo check through the public CLI. It reads real app results for core controls and keyboard edits, Duo screen/hinge/rotation changes, held-input release and fresh taps, plus the separate optional agent interface and cache/reference checks. A visible Touch Monitor records real contacts. The runner reuses existing devices, records exact case results and CPU/memory samples, and rejects missing or skipped cases. Three legacy coordinate-tap cases passed separately. Full acceptance remains open after the latest 35/47 full-run result; no full 50-case pass is claimed and each failed native result is retained. See [Playground testing](docs/playground-testing.md).
 - Add standalone selected and optional agent slider percentages with current target checks, guarded retained input and bounded native value feedback. Interior values use the current measured display context and require horizontal native scrubber geometry that increases from left to right; numeric 0/100 use the existing endpoint route before input. Raw sliders and endpoint batches stay unchanged. CLI wire 34 and matching native frameworks are required. Isolated controllers checked outer portrait and inner rotation 90 only; the incremental CLI build and public simulator verification remain pending. RTL, custom and vertical Sliders remain unproved.
 - Added optional `batch --agent --file` for 1...8 exact-ID tap/type steps on one app, with fresh target resolution, existing per-action input guards, ordered completion receipts and stop-on-failure without rollback or replay. Legacy and selected batches are unchanged. CLI wire 33 carries the batch request; native frameworks and RS/1 rows are unchanged. The isolated build, four guide checks and 132 existing checks in 13 suites passed across separate runs. Six outer-portrait checks proved an ordered field tap/type/Button workflow, refusals and raw/selected compatibility. One fold after a released first tap stopped the remaining steps and allowed a fresh outer reference tap. Earlier failures remain recorded; mid-action interruption and other workflows remain unverified.
@@ -76,6 +77,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added selected `button side-button` and matching batch steps with active-context and optional boot guards, preserved duration, and typed transport execution/cleanup evidence. Wire 20 rejects old wire 19 requests. This does not prove lock, wake, power or security state; Home and legacy routes are unchanged.
 
+- Added full-package Playground groups for reference lifetime, broker restarts, cache invalidation after raw edits, equal-hash native changes, retained keyboard ownership and concurrent raw input. Direct groups remain separate from the standalone matrix.
+
 ### Changed
 
 - Removed the new Duo `--ax-preparation` option and retained AX-preparation layer. Selected reads and physical target checks keep the normal IDB accessibility-readiness check, including the original short-lived bootstrap where required by the existing runtime policy. Original v1.8.0 IDB bootstrap behavior, native slider/switch identity sessions and HID input remain unchanged. CLI wire 35 rejects older requests; matched rebuilt native frameworks are required. Earlier transition and core failures remain recorded. Current Debug core checks passed seven of eight; Slider75 refused before input. Four of five Duo transition checks passed. The outer repeat made three real callbacks, then failed its final orientation assertion; all twelve ordinary-iPhone core/agent checks passed. The corrected Duo test run passed four of five cases; its final rotation-agent read failed with a disconnected channel before input. The exact rotation case passed separately after explicit guest-service restart on the same boot/data; automatic recovery is not claimed. All four Duo agent checks also passed. Those Debug failures remain recorded. Clean 25e Release later passed all four Duo agent checks and all five layout checks. The current universal Release passed eight core checks on each device and the separate inner Slider case, plus an exact ZIP/tar round trip with seven strict signatures. The current artifact later passed a unique local unlinked Homebrew installation, seven strict signatures and a real Playground Button tap through the installed wrapper, followed by removal and restoration of original paths and inputs. No push, publication or deployment occurred; earlier failed receipts remain separate.
@@ -84,6 +87,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
 
 ### Fixed
+
+- Fixed one exact accessibility focus-read disconnect by allowing one fresh guarded read within the existing deadline. No key or action is replayed; PID, focus, context and target checks remain.
+
+- Fixed stale Duo input observations by renewing hinge samples and display observations separately from the change listener. Existing freshness and read limits remain.
+
+- Fixed precision-slider planning admitting a path without its minimum pacing and confirmation time. Later corrections use the measured slope directly; action, release, tolerance and motion bounds remain.
+
+- Fixed a full selected-broker request queue closing the next client without a terminal refusal. It now sends busy before reading the request body, so readiness recovery cannot send delayed first input after another action ends. The isolated physical check passed; release acceptance remains open. Capacity, protocol version and I/O limits are unchanged.
+
+- Fixed repeated raw keyboard commands creating a new simulator input connection after selected input. Complete legacy keyboard commands can now retain one healthy connection on verified DTUHID profiles, with a new session for each call. Reuse requires confirmed key release, drained input and current context; errors, cancellation and layout changes discard it. Input order, guest-reply limits, existing profile routes and no-replay rules remain. This requires the matching rebuilt native framework. See the [keyboard reliability audit](docs/audits/2026-10-29-keyboard-reliability.md).
+
+- Route no-flag keyboard input on Duo and verified ordinary DTUHID profiles through the same broker input owner as selected and agent controls. Selected wire 36 carries the exact legacy event stream by private file identity, without a selected-text limit or new whole-command deadline. Parsing and plain output remain. Private payload lifetime and abrupt-exit limits are in [agent persistence](docs/agent-mode-persistence.md#private-raw-input-payload-lifetime).
+
+
+- Keep the Playground screen awake while active so idle-reference checks can run without Auto-Lock. Normal idle behavior returns when the app is inactive.
+
+- Fixed optional `--agent` references being lost when the background broker stopped after 30 idle seconds. The broker now stays available while its current 60-second snapshot is valid. Existing retained-input release deadlines remain unchanged.
+
+- Fixed a rejected old `--agent` snapshot ID clearing another caller's newer reference table. The old request still sends no input; the newer references remain subject to fresh app, display and hierarchy checks.
 
 - Fixed Duo display discovery rejecting an inactive virtual display. Built-in screen identity, geometry and active-screen checks remain.
 
@@ -152,6 +174,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed stale `--agent` references returning unrelated accessibility errors. Saved snapshot and current screen checks now run before the app read, so old targets are refused without input and require a fresh snapshot.
 
+
+- Fixed short raw key and key-combo calls losing HID readiness between CLI processes by reusing the raw input broker. Explicit key holds keep their existing path. Concurrent raw requests are refused before they can wait and run late; retained touch release remains available.
+
+- Fixed whole-tree accessibility reads spending their limit on repeated readiness preparation. Reads now try direct acquisition first and permit one existing bounded preparation only after the same app and screen return an empty tree. Point, focus and single-attempt paths keep their earlier behavior.
+
+- Fixed broker-owned selected gestures opening a second native input connection after typed input. Default-edge HID actions can use one healthy native connection, with a fresh session, context checks and input state for each action. Retained input keeps its same session until close; only proved complete, drained and released input can return a connection for reuse. Failed or uncertain input and layout changes discard it. The complete raw keyboard route uses the same ownership policy where its measured profile is supported; other profiles keep their existing route.
+
+- Fixed display discovery rejecting the measured iPhone18Pro405/DeviceKit651.28 report when an unused virtual display omits its active flag. Built-in identity, geometry, primary-screen and strict schema checks remain. Duo rules are unchanged.
+
+- Fixed the Photos permission test leaving a prompt after an exact zero-input screen-change refusal. It permits one fresh observation and request only when the receipt proves no input and the same app state remains, within the original deadline. Cleanup cannot change a failed test to a pass.
+
+- Fixed one-shot Duo hinge reads closing the guest connection before the motion request completed. A read now waits for a fresh sample, the cancellation reply to drain and the original request to finish within the existing three-second limit. The two-sample fold confirmation rule is unchanged.
+
+- Fixed uncertain state-only rotation keeping the common input lease after its sender closed. Only operations that cannot retain keys or contacts release that lease; unknown input cleanup remains quarantined.
+
+- Fixed selected UI description depending on continuous motion-feed startup. Read-only description now uses the existing fresh one-shot native context; input retains its live freshness checks.
 
 ## [v1.8.0] - 2026-07-20
 

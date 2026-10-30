@@ -26,6 +26,25 @@ private final class SliderValueDeadlineFeed: FBSimulatorHIDLiveFreshnessProvider
     func close() { base.close() }
 }
 
+/// Fixed path pacing and correction planning. Native calls still use the original action deadline.
+enum SliderValuePathPlan {
+    static let steps = 12
+    static let pauseNanoseconds: UInt64 = 25_000_000
+    static let minimumSettleSeconds = 0.200
+
+    static func canBegin(remainingSeconds: Double, releaseReserveSeconds: Double) -> Bool {
+        let pacingSeconds = Double(steps - 1) * Double(pauseNanoseconds) / 1_000_000_000
+        let requiredSeconds = pacingSeconds + minimumSettleSeconds + releaseReserveSeconds
+        return remainingSeconds.isFinite && releaseReserveSeconds.isFinite
+            && releaseReserveSeconds >= 0 && remainingSeconds > requiredSeconds
+    }
+
+    static func correctionGain(iteration: Int) -> Double {
+        // The first interval can include thumb take-up. Later intervals measure actual movement.
+        iteration == 1 ? 0.5 : 1.0
+    }
+}
+
 /// One retained contact and a bounded native-value feedback loop. The enclosing broker owns
 /// the common input lease and retains this object if either child or input cleanup is uncertain.
 @MainActor
@@ -34,6 +53,7 @@ final class SelectedSliderValueOperation {
     private let observation: FBSimulatorHIDSessionObservation
     private let live: FBSimulatorHIDNativeFreshnessProvider
     private let helperURL: URL
+    private let transportOwner: FBSimulatorHIDTransportOwner?
     private let selectorKind: SelectedAXRequest.SelectorKind
     private let selectorValue: String
     private let expectedPID: Int32
@@ -59,10 +79,11 @@ final class SelectedSliderValueOperation {
          live: FBSimulatorHIDNativeFreshnessProvider, helperURL: URL,
          selectorKind: SelectedAXRequest.SelectorKind, selectorValue: String, expectedPID: Int32,
          elementType: String?,
-         admissionGuard: (any FBSimulatorSliderAdmissionGuard)?) {
+         admissionGuard: (any FBSimulatorSliderAdmissionGuard)?,
+         transportOwner: FBSimulatorHIDTransportOwner? = nil) {
         self.simulator = simulator; self.observation = observation; self.live = live
         self.helperURL = helperURL; self.selectorKind = selectorKind; self.selectorValue = selectorValue
-        self.expectedPID = expectedPID; self.elementType = elementType
+        self.expectedPID = expectedPID; self.elementType = elementType; self.transportOwner = transportOwner
         readDiagnostics = SliderValueReadDiagnostics(admissionGuard: admissionGuard)
     }
 
@@ -165,8 +186,14 @@ final class SelectedSliderValueOperation {
         guard deadline - ProcessInfo.processInfo.systemUptime > 3 else {
             throw SliderValueFailure.rejected("Slider value has no release/readback reserve")
         }
-        let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: observation,
-            liveFreshnessProvider: bounded)
+        let hid: FBSimulatorHIDSession
+        if let transportOwner {
+            hid = try await FBSimulatorHIDSession.open(for: simulator, observation: observation,
+                liveFreshnessProvider: bounded, transportOwner: transportOwner)
+        } else {
+            hid = try await FBSimulatorHIDSession.open(for: simulator, observation: observation,
+                liveFreshnessProvider: bounded)
+        }
         session = hid
         let guardOwner = SliderPickupAdmissionGuard(observation: observation, pickup: pickup) {
             try await helper.confirm(backend: reader)
@@ -260,10 +287,7 @@ final class SelectedSliderValueOperation {
             guard deltaX.isFinite, deltaX * direction > 0, slope.isFinite, slope > 0 else {
                 throw SliderValueFailure.rejected("Measured local Slider slope is invalid")
             }
-            let gain: Double
-            if iteration == 1 { gain = 0.5 }
-            else if iteration == 3 { gain = 1.0 }
-            else { gain = 0.85 }
+            let gain = SliderValuePathPlan.correctionGain(iteration: iteration)
             let proposed = gain * (requested - value) / slope
             guard proposed.isFinite, proposed * direction > 0 else {
                 throw SliderValueFailure.rejected("Local Slider correction cannot make progress")
@@ -370,7 +394,7 @@ final class SelectedSliderValueOperation {
             }
             let value = try sample.requireValue()
             if value != previous { previous = value; stableSince = returned }
-            if returned - stableSince >= 0.200 {
+            if returned - stableSince >= SliderValuePathPlan.minimumSettleSeconds {
                 if released || fullAdmission { return sample }
                 if let target, abs(value - target.value) <= target.tolerance {
                     // This sample permits only owned UP, followed by full final verification.
@@ -421,14 +445,15 @@ final class SelectedSliderValueOperation {
     }
 
     private func movePath(to destination: CGPoint, token: FBSimulatorHIDContactToken, frame: CGRect) async throws {
-        guard let session, moveCount + 12 <= 48, frame.contains(destination),
-              deadline - ProcessInfo.processInfo.systemUptime > releaseReserveSeconds else {
+        guard let session, moveCount + SliderValuePathPlan.steps <= 48, frame.contains(destination),
+              SliderValuePathPlan.canBegin(remainingSeconds: deadline - ProcessInfo.processInfo.systemUptime,
+                  releaseReserveSeconds: releaseReserveSeconds) else {
             throw SliderValueFailure.rejected("Slider path limit, frame or release reserve reached")
         }
         let start = currentPoint
-        for step in 1...12 {
+        for step in 1...SliderValuePathPlan.steps {
             try check(deadline: deadline)
-            let fraction = Double(step) / 12
+            let fraction = Double(step) / Double(SliderValuePathPlan.steps)
             let point = try canonicalPoint(CGPoint(x: start.x + (destination.x - start.x) * CGFloat(fraction),
                 y: start.y + (destination.y - start.y) * CGFloat(fraction)))
             guard frame.contains(point), moveCount < 48 else { throw SliderValueFailure.rejected("Slider path left the selected frame") }
@@ -437,7 +462,7 @@ final class SelectedSliderValueOperation {
                 throw SliderValueFailure.rejected("Slider MOVE failed; no second gesture or replay")
             }
             currentPoint = point; moveCount += 1
-            if step < 12 { try await Task.sleep(nanoseconds: 25_000_000) }
+            if step < SliderValuePathPlan.steps { try await Task.sleep(nanoseconds: SliderValuePathPlan.pauseNanoseconds) }
         }
     }
 

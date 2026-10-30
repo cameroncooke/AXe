@@ -9,11 +9,11 @@ enum PlaygroundAgentTouchVariant: String, Sendable {
 
 @Suite("Playground Agent Complete Touch E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentTouchTests {
-    @Test("Complete reference touches release contacts and enforce target rules", arguments: [
+    @Test("Complete reference touches release contacts and enforce target rules", arguments: agentTouchVariants([
         PlaygroundAgentTouchVariant.normal, .stale, .wrongPID, .mixedCoordinates, .downOnly, .upOnly,
         .retainedToken, .zeroDelay, .negativeDelay, .excessiveDelay, .nonFiniteDelay, .selectedBatch,
         .rawCompatibility, .selectedCompatibility, .freshReference, .legacyBatch, .fieldLongHold,
-    ])
+    ]))
     func completeTouch(_ variant: PlaygroundAgentTouchVariant) async throws {
         let position: DuoControlsPosition = isDuoPlaygroundE2EEnabled ? .inner270 : .outer0
         let session = try await PlaygroundAgentFeatureSession.open(caseName: "touch-" + variant.rawValue, position: position)
@@ -41,8 +41,7 @@ struct PlaygroundAgentTouchTests {
         case .wrongPID:
             let index = try #require(arguments.firstIndex(of: "--expected-pid"))
             arguments[index + 1] = String(session.pid + 1)
-            code = "observationFailed"
-            message = "processChanged"
+            code = "contextChanged"
         case .mixedCoordinates:
             arguments += ["-x", "20", "-y", "20"]
             message = touchAdmissionDiagnostic
@@ -111,3 +110,14 @@ struct PlaygroundAgentTouchTests {
 }
 
 private let touchAdmissionDiagnostic = "Agent touch requires --ref, --down and --up, without coordinates or a contact token."
+
+/// Select an original parameterized case without changing its app setup or assertions.
+private func agentTouchVariants(_ original: [PlaygroundAgentTouchVariant]) -> [PlaygroundAgentTouchVariant] {
+    let environmentKey = "AXE_E2E_AGENT_TOUCH_VARIANT"
+    guard let requested = ProcessInfo.processInfo.environment[environmentKey] else { return original }
+    guard let variant = PlaygroundAgentTouchVariant(rawValue: requested), original.contains(variant) else {
+        let allowed = original.map(\.rawValue).joined(separator: ", ")
+        fatalError("Invalid \(environmentKey)=\(requested). Expected exactly one of: \(allowed).")
+    }
+    return [variant]
+}

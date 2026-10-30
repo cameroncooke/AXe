@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import AXe
 
 @Suite("Playground Agent System Owner E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentSystemOwnerTests: Sendable {
@@ -13,7 +14,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let before = try session.document.read()
         try #require(before.photosStatus == 0)
         var requestAttempted = false
-        var primaryDenyAttempted = false
+        var primaryDenyDelivery = DenyDelivery.notAttempted
         var primary: Error?
         do {
             requestAttempted = true
@@ -48,12 +49,37 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
             let currentReply = try await waitForPrompt(session: session, owner: owner)
             let current = try #require(try session.decode(currentReply.output).data.capture)
             try #require(current.applicationPID == owner)
-            primaryDenyAttempted = true
-            let denied = try await command(["tap", "--agent", "--expected-pid", String(owner),
-                "--label-regex", "^Don.t Allow$", "--element-type", "Button"], session: session, name: "deny")
-            let deniedEnvelope = try session.decode(denied.output)
-            try #require(denied.exitCode == 0 && deniedEnvelope.data.action?.outcome == "enqueuedAndDrained"
-                && deniedEnvelope.data.action?.enqueuedEventCount == 2)
+            let denyContext = CleanupContext(cli: cli, udid: session.app.udid, appPID: session.pid,
+                documentURL: session.document.url, artifacts: session.artifacts)
+            let denyDeadline = ProcessInfo.processInfo.systemUptime + 30
+            primaryDenyDelivery = .inputPossible
+            var denied = try await denyCommand(["tap", "--agent", "--expected-pid", String(owner),
+                "--label-regex", "^Don.t Allow$", "--element-type", "Button"],
+                context: denyContext, name: "deny", deadline: denyDeadline)
+            if isZeroInputScreenChange(denied, appPID: session.pid, generation: before.generation) {
+                primaryDenyDelivery = .provedNoInput
+                // A proved zero-input refusal permits one new observation and a new request.
+                let refreshedReply = try await command(["describe-ui", "--agent", "--expected-pid", String(owner)],
+                    context: denyContext, name: "deny-refresh", deadline: denyDeadline)
+                let refreshedEnvelope = try session.decode(refreshedReply.output)
+                let refreshed = try #require(refreshedEnvelope.data.capture)
+                try #require(refreshedReply.exitCode == 0 && !refreshedEnvelope.didError
+                    && refreshed.applicationPID == owner
+                    && refreshed.targets.contains { $0.contains("|tap|") && $0.hasSuffix("|kTCCServicePhotos-deny-button") })
+                primaryDenyDelivery = .inputPossible
+                denied = try await denyCommand(["tap", "--agent", "--expected-pid", String(owner),
+                    "--id", "kTCCServicePhotos-deny-button", "--element-type", "Button"],
+                    context: denyContext, name: "deny-after-refresh", deadline: denyDeadline)
+            }
+            if isZeroInputScreenChange(denied, appPID: session.pid, generation: before.generation) {
+                primaryDenyDelivery = .provedNoInput
+            }
+            let deniedEnvelope = try session.decode(denied.output.output)
+            let deniedAction = try #require(deniedEnvelope.data.action)
+            try #require(denied.output.exitCode == 0 && !deniedEnvelope.didError
+                && deniedAction.kind == "tap" && deniedAction.outcome == "enqueuedAndDrained"
+                && deniedAction.enqueuedEventCount == 2 && deniedAction.cleanup == "notNeeded" && !deniedAction.replayed)
+            primaryDenyDelivery = .completed
             _ = try await session.document.waitFor("normal denied Photos permission") { $0.photosStatus == 2 }
             let fresh = try await session.capture()
             try #require(fresh.capture.applicationPID == session.pid)
@@ -63,10 +89,10 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let cleanupContext = CleanupContext(cli: cli, udid: session.app.udid, appPID: session.pid,
             documentURL: session.document.url, artifacts: session.artifacts)
         let cleanupRequestAttempted = requestAttempted
-        let cleanupPrimaryDenyAttempted = primaryDenyAttempted
+        let cleanupPrimaryDenyDelivery = primaryDenyDelivery
         var cleanup = await Task {
             await cleanupPrompt(context: cleanupContext, requestAttempted: cleanupRequestAttempted,
-                primaryDenyAttempted: cleanupPrimaryDenyAttempted)
+                primaryDenyDelivery: cleanupPrimaryDenyDelivery)
         }.value
         if cleanup.closed {
             let finalProcessErrors = await Task { await verifyProcesses(context: cleanupContext) }.value
@@ -108,6 +134,54 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         throw TestError.unexpectedState("The asynchronous Photos request did not expose a measured system owner")
     }
 
+    private enum DenyDelivery: Sendable {
+        case notAttempted, provedNoInput, inputPossible, completed
+    }
+
+    private struct DenyAttempt {
+        let output: CommandOutput
+        let before: PlaygroundAgentExamplesDocument
+        let after: PlaygroundAgentExamplesDocument
+    }
+
+    private struct DenyFailureEnvelope: Decodable {
+        struct Failure: Decodable { let code: String; let message: String }
+        let error: Failure?
+    }
+
+    private func isZeroInputScreenChange(_ attempt: DenyAttempt, appPID: Int32, generation: UUID) -> Bool {
+        guard attempt.before.pid == appPID, attempt.before.generation == generation,
+              attempt.before.photosStatus == 0, attempt.before == attempt.after,
+              let envelope = try? decode(AgentPlaygroundResult.self, attempt.output.output),
+              let failure = try? decode(DenyFailureEnvelope.self, attempt.output.output),
+              attempt.output.exitCode != 0, envelope.schema == "axe.output.agent-result", envelope.schemaVersion == "1",
+              envelope.didError, envelope.error?.code == "nativeActionFailed",
+              failure.error?.code == "nativeActionFailed",
+              failure.error?.message == #"AXe.AgentModeFailure(code: "screenChanged", message: "The screen changed before input. Refresh the snapshot.")"#,
+              envelope.data.capture == nil, envelope.data.cache.status == "invalidated", envelope.data.cache.requiresRefresh,
+              let action = envelope.data.action, action.kind == "tap", action.outcome == "failedBeforeInput",
+              action.enqueuedEventCount == 0, action.cleanup == "notNeeded", !action.replayed else { return false }
+        return true
+    }
+
+    private func denyCommand(_ arguments: [String], context: CleanupContext, name: String,
+        deadline: Double) async throws -> DenyAttempt {
+        let beforeBytes = try Data(contentsOf: context.documentURL)
+        let before = try JSONDecoder().decode(PlaygroundAgentExamplesDocument.self, from: beforeBytes)
+        try beforeBytes.write(to: context.artifacts.appendingPathComponent(name + "-before.json"), options: .withoutOverwriting)
+        do {
+            let output = try await command(arguments, context: context, name: name, deadline: deadline)
+            let afterBytes = try Data(contentsOf: context.documentURL)
+            try afterBytes.write(to: context.artifacts.appendingPathComponent(name + "-after.json"), options: .withoutOverwriting)
+            let after = try JSONDecoder().decode(PlaygroundAgentExamplesDocument.self, from: afterBytes)
+            return DenyAttempt(output: output, before: before, after: after)
+        } catch {
+            try? Data(contentsOf: context.documentURL).write(
+                to: context.artifacts.appendingPathComponent(name + "-after-failure.json"), options: .withoutOverwriting)
+            throw error
+        }
+    }
+
     private struct CleanupContext: Sendable {
         let cli: String
         let udid: String
@@ -128,12 +202,13 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let accepted: Bool
     }
 
-    /// No second request, coordinate input, guessed PID or acceptance fallback.
-    /// A primary or cleanup Deny attempt is never repeated; only read-only closure checks can follow.
+    /// Cleanup never changes the primary result and never repeats possible or uncertain input.
+    /// One fresh normal Deny is allowed only when no Deny was attempted or zero input was proved.
     private func cleanupPrompt(context: CleanupContext, requestAttempted: Bool,
-        primaryDenyAttempted: Bool) async -> Cleanup {
+        primaryDenyDelivery: DenyDelivery) async -> Cleanup {
         var result = Cleanup()
-        result.denyAttempted = primaryDenyAttempted
+        result.denyAttempted = primaryDenyDelivery != .notAttempted
+        var maySendDeny = primaryDenyDelivery == .notAttempted || primaryDenyDelivery == .provedNoInput
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         do {
             repeat {
@@ -145,7 +220,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
                     result.closed = true
                     return result
                 }
-                if !result.denyAttempted, ProcessInfo.processInfo.systemUptime < deadline,
+                if maySendDeny, ProcessInfo.processInfo.systemUptime < deadline,
                    let owner = observedOwner(in: reply.output, expectedPID: context.appPID) {
                     let promptReply = try await command(["describe-ui", "--agent", "--expected-pid", String(owner)],
                         context: context, name: "cleanup-prompt-" + UUID().uuidString, deadline: deadline)
@@ -155,6 +230,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
                         // An observation can overrun the soft cleanup deadline. Do not start late input.
                         guard ProcessInfo.processInfo.systemUptime < deadline else { break }
                         result.denyAttempted = true
+                        maySendDeny = false
                         do {
                             let denied = try await command(["tap", "--agent", "--expected-pid", String(owner),
                                 "--id", "kTCCServicePhotos-deny-button", "--element-type", "Button"],
@@ -240,13 +316,15 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         do {
             let observer = try #require(ProcessInfo.processInfo.environment["AXE_MEDIA_PROCESS_OBSERVER_PATH"])
             let name = "final-processes"
+            // The final capture retains its broker for the 60-second reference lifetime.
+            let limit = await MainActor.run { AgentModeController.timeToLive + 5 }
             let receipt = context.artifacts.appendingPathComponent(name + "-ownership.json")
             let process = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: ["python3", observer,
-                "--receipt", receipt.path, "--timeout", "35", "--verify-deferred-directory", context.artifacts.path,
+                "--receipt", receipt.path, "--timeout", String(limit), "--verify-deferred-directory", context.artifacts.path,
                 "--", context.cli, "--udid", context.udid], directory: context.artifacts, name: name)
             do {
                 try process.start()
-                try await process.wait(timeout: 40)
+                try await process.wait(timeout: limit + 5)
                 let diagnostics = try process.diagnostics()
                 try #require(process.exitCode == 0, "Final owned-process verification failed: \(diagnostics)")
                 _ = try PlaygroundMediaProcess.requireClean(directory: context.artifacts, name: name)

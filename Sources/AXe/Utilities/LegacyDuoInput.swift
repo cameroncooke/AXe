@@ -8,7 +8,8 @@ enum LegacyDuoInput {
     static func captureContext(
         simulatorUDID: String,
         preDelay: Double?,
-        logger: AxeLogger
+        logger: AxeLogger,
+        forKeyboard: Bool = false
     ) async throws -> SelectedHIDContext? {
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
         let set = try await getSimulatorSet(
@@ -19,13 +20,17 @@ enum LegacyDuoInput {
         }), simulator.state == .booted else {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
-        // Do not make older rigid-device profiles depend on the Duo metadata contract.
-        guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
-            return nil
-        }
-        let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
-        guard capability.hinge == .supported else {
-            throw SelectedHIDFailure.invalid(capability.reason)
+        if forKeyboard {
+            guard try usesSharedKeyboardOwner(for: simulator) else { return nil }
+        } else {
+            // Older rigid-device input keeps its existing route.
+            guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
+                return nil
+            }
+            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
+            guard capability.hinge == .supported else {
+                throw SelectedHIDFailure.invalid(capability.reason)
+            }
         }
         guard let executable = Bundle.main.executableURL else {
             throw SelectedHIDFailure.invalid("Missing executable")
@@ -46,6 +51,25 @@ enum LegacyDuoInput {
             throw SelectedHIDFailure.invalid("Simulator boot changed during Duo input preparation")
         }
         return SelectedHIDContext(observation)
+    }
+
+    /// One policy shared by caller capture and broker admission. Rigid Indigo and unknown
+    /// profiles keep their existing route; a measured read failure never changes routes.
+    @MainActor
+    static func usesSharedKeyboardOwner(for simulator: FBSimulator) throws -> Bool {
+        if simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" {
+            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
+            guard capability.hinge == .supported else { throw SelectedHIDFailure.invalid(capability.reason) }
+            return true
+        }
+        let boot = try HIDBroker.currentBootIdentity(simulatorUDID: simulator.udid)
+        let dtuhidPID = FBProcessFetcher().subprocess(of: boot.processIdentifier, withName: "dtuhidd")
+        guard HIDBroker.isDTUHIDSelected(processIdentifier: dtuhidPID) else { return false }
+        guard let type = simulator.device.deviceType, let bundle = type.bundle,
+              type.identifier != nil, type.modelIdentifier != nil,
+              bundle.object(forInfoDictionaryKey: "CFBundleVersion") is String,
+              bundle.url(forResource: "capabilities", withExtension: "plist") != nil else { return false }
+        return try FBSimulatorNativeContextReader.capability(for: simulator).hinge == .unsupported
     }
 
     /// Choose the Slider route before input. Older profiles keep their existing raw path.
@@ -91,24 +115,31 @@ enum LegacyDuoInput {
     static func performKeyboard(
         _ event: FBSimulatorHIDEvent,
         simulatorUDID: String,
-        logger: AxeLogger
+        logger: AxeLogger,
+        persistentOrdinaryKeyboard: Bool = false
     ) async throws {
         guard let context = try await captureContext(
-            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger, forKeyboard: true
         ) else {
-            try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
+            if persistentOrdinaryKeyboard {
+                try HIDBroker.sendKeyboardEvent(event, simulatorUDID: simulatorUDID)
+            } else {
+                try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
+            }
             return
         }
-        guard let executable = Bundle.main.executableURL else {
-            throw SelectedHIDFailure.invalid("Missing executable")
+        guard let uuid = UUID(uuidString: context.screenUUID) else {
+            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
         }
-        let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger,
-            helperURL: executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context"))
-        // Reuse the batch's owned keyboard lifecycle without changing the ordinary event sequence.
+        let endpoint = try SelectedHIDBroker.endpoint(simulatorUDID: simulatorUDID)
+        let requestID = UUID()
+        let keyboard = try LegacyDuoKeyboard.prepare(event, requestID: requestID, endpoint: endpoint)
+        defer { try? keyboard.removeIfOwned(endpoint: endpoint) }
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
+            screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
+            primitives: [], expectedContext: context, legacyKeyboard: keyboard)
         try await LegacyDuoBatchLifetime.run {
-            try await owner.withLegacyBatch(context: context) {
-                try await owner.submitLegacyBatchPart(event)
-            }
+            try await send(request, simulatorUDID: simulatorUDID, postDelay: nil)
         }
     }
 
@@ -187,7 +218,23 @@ enum LegacyDuoInput {
         simulatorUDID: String,
         postDelay: Double?
     ) async throws {
-        let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        let response: SelectedHIDResponse
+        if request.legacyKeyboard != nil {
+            response = try await SelectedHIDBroker.sendLegacyKeyboard(request, simulatorUDID: simulatorUDID)
+        } else {
+            response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        }
+        if request.legacyKeyboard != nil {
+            if response.cleanup == "uncertain" || response.quarantine != nil {
+                let persistence = response.quarantine?.persisted == true
+                    ? "Input quarantine saved; explicit recovery is required."
+                    : "Input quarantine could not be saved; manual recovery is required. \(response.quarantine?.error ?? "")"
+                throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(response.error ?? "Batch completion"). \(persistence)")
+            }
+            if let error = response.error {
+                throw CLIError(errorDescription: "Duo input stopped: \(error); cleanup=\(response.cleanup). Input was not replayed.")
+            }
+        }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
             throw CLIError(errorDescription: "Duo input failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
         }

@@ -173,4 +173,106 @@ struct SelectedKeyboardTests {
             #expect(error.description == "Selected input is not supported in batch steps. Run the selected command separately.")
         }
     }
+    private enum FocusReadFailure: Error { case deadlineExpired }
+
+    @Test @MainActor func disconnectedFocusReadReacquiresOnceWithRemainingBudget() async throws {
+        let deadline = 8.0
+        var now = 0.0
+        var timeouts: [Double] = []
+        let expected = try Field().node()
+        let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: { deadline - now }) { timeout in
+            timeouts.append(timeout)
+            if timeouts.count == 1 {
+                now = 1.5
+                throw NSError(domain: "DTXProxyChannel", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"])
+            }
+            return expected
+        }
+        #expect(timeouts == [8, 6.5])
+        #expect(field.pid == 123 && field.identifier == "field")
+    }
+
+    @Test @MainActor func aSecondDisconnectedFocusReadFailsWithoutAnotherAttempt() async {
+        var attempts = 0
+        do {
+            _ = try await SelectedKeyboardFocusRead.perform(remainingSeconds: { 8 }) { _ in
+                attempts += 1
+                throw NSError(domain: "DTXProxyChannel", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"])
+            }
+            Issue.record("A second disconnected read must fail")
+        } catch {
+            let nativeError = error as NSError
+            #expect(nativeError.domain == "DTXProxyChannel" && nativeError.code == 1)
+            #expect(nativeError.localizedDescription == "Channel disconnected")
+        }
+        #expect(attempts == 2)
+    }
+
+    @Test @MainActor func otherFocusReadErrorsDoNotReacquire() async {
+        let disconnected = NSError(domain: "DTXProxyChannel", code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"])
+        let failures = [
+            NSError(domain: "OtherChannel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"]),
+            NSError(domain: "DTXProxyChannel", code: 2, userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"]),
+            NSError(domain: "DTXProxyChannel", code: 1, userInfo: [NSLocalizedDescriptionKey: "Other failure"]),
+            NSError(domain: "OuterError", code: 1, userInfo: [NSUnderlyingErrorKey: disconnected]),
+        ]
+        for failure in failures {
+            var attempts = 0
+            do {
+                _ = try await SelectedKeyboardFocusRead.perform(remainingSeconds: { 8 }) { _ in
+                    attempts += 1
+                    throw failure
+                }
+                Issue.record("A different read error must fail")
+            } catch {
+                let nativeError = error as NSError
+                #expect(nativeError.domain == failure.domain && nativeError.code == failure.code)
+                #expect(nativeError.localizedDescription == failure.localizedDescription)
+            }
+            #expect(attempts == 1)
+        }
+    }
+
+    @Test @MainActor func expiredOriginalFocusBudgetPreventsTheSecondRead() async {
+        let deadline = 8.0
+        var now = 0.0
+        var attempts = 0
+        do {
+            _ = try await SelectedKeyboardFocusRead.perform(remainingSeconds: {
+                guard now < deadline else { throw FocusReadFailure.deadlineExpired }
+                return deadline - now
+            }) { _ in
+                attempts += 1
+                now = deadline
+                throw NSError(domain: "DTXProxyChannel", code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "Channel disconnected"])
+            }
+            Issue.record("An expired original deadline must fail")
+        } catch FocusReadFailure.deadlineExpired {
+            #expect(now == deadline)
+        } catch {
+            Issue.record("The original budget error must propagate")
+        }
+        #expect(attempts == 1)
+    }
+
+    @Test @MainActor func cancelledFocusReadDoesNotReacquire() async {
+        var attempts = 0
+        do {
+            _ = try await SelectedKeyboardFocusRead.perform(remainingSeconds: { 8 }) { _ in
+                attempts += 1
+                throw CancellationError()
+            }
+            Issue.record("A cancelled read must fail")
+        } catch is CancellationError {
+            #expect(attempts == 1)
+        } catch {
+            Issue.record("Cancellation must propagate unchanged")
+        }
+        #expect(attempts == 1)
+    }
+
 }

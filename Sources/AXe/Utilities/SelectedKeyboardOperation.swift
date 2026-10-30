@@ -6,7 +6,8 @@ import FBSimulatorControl
 @MainActor
 enum SelectedKeyboardOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL) async -> SelectedHIDResponse {
+                        brokerID: UUID, logger: AxeLogger, helperURL: URL,
+                        transportOwner: FBSimulatorHIDTransportOwner? = nil) async -> SelectedHIDResponse {
         var observation: FBSimulatorHIDSessionObservation?
         var feed: FBSimulatorHIDNativeFreshnessProvider?
         var session: FBSimulatorHIDSession?
@@ -32,8 +33,14 @@ enum SelectedKeyboardOperation {
             let focus = SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard, agentAdmission: request.agentAdmission)
             guardOwner = focus
             try await focus.prepare()
-            let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
-                liveFreshnessProvider: live)
+            let hid: FBSimulatorHIDSession
+            if let transportOwner {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live, transportOwner: transportOwner)
+            } else {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live)
+            }
             session = hid
             let receipt = try await hid.execute(keyboard.event, keyboardAdmissionGuard: focus)
             result = focus.result
@@ -109,10 +116,11 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
 
     private func readFocusedField() async throws -> FBSimulatorAXNode {
         // Read a new root and exact field before every down; do not serialize the whole tree.
-        let remaining = min(8, try remainingSeconds())
-        let field = try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
-            expectedPID: request.expectedPID, identifier: request.focusID,
-            observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
+        let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: remainingSeconds) { remaining in
+            try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
+                expectedPID: request.expectedPID, identifier: request.focusID,
+                observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
+        }
         _ = try remainingSeconds()
         try SelectedKeyboardFocusPolicy.validate(field, expectedPID: request.expectedPID, focusID: request.focusID)
         try agentAdmission?.target?.validate(field, allowingValueChange: result.validatedKeyDownCount > 0)
@@ -127,5 +135,26 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
             throw SelectedHIDFailure.invalid("Selected keyboard exceeded its eight-second input allowance and requested delays")
         }
         return Double(deadline.uptimeNanoseconds - now) / 1_000_000_000
+    }
+}
+
+/// Reacquire only the native AX read. The input transaction and its deadline stay with the caller.
+@MainActor
+enum SelectedKeyboardFocusRead {
+    static func perform(remainingSeconds: () throws -> Double,
+                        read: (Double) async throws -> FBSimulatorAXNode) async throws -> FBSimulatorAXNode {
+        let timeout = min(8, try remainingSeconds())
+        do {
+            return try await read(timeout)
+        } catch {
+            let nativeError = error as NSError
+            guard nativeError.domain == "DTXProxyChannel", nativeError.code == 1,
+                  nativeError.userInfo[NSLocalizedDescriptionKey] as? String == "Channel disconnected" else {
+                throw error
+            }
+            try Task.checkCancellation()
+            // The first read already closed its AX handle/session. Do not reuse its result or budget.
+            return try await read(min(8, try remainingSeconds()))
+        }
     }
 }

@@ -5,6 +5,16 @@ enum PlaygroundAgentInterruptedAction: String, CaseIterable, Sendable {
     case referenceHoldFold, referenceDragFold, referencePinchFold, referencePinchRotate
     case referenceSwipeFold, coordinateSwipeRotate, typeOpening, typeRotate, batchFold, independentPairFold
     case referenceSliderFold, referenceSliderRotate
+    static var selectedNonSliderCases: [Self] {
+        let baseline = allCases.filter { !$0.slider }
+        guard let raw = ProcessInfo.processInfo.environment["AXE_E2E_DUO_INTERRUPTED_ACTIONS"] else { return baseline }
+        let names = raw.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+        guard !names.isEmpty, Set(names).count == names.count,
+              names.allSatisfy({ name in baseline.contains { $0.rawValue == name } }) else {
+            fatalError("AXE_E2E_DUO_INTERRUPTED_ACTIONS must select unique existing non-slider cases.")
+        }
+        return baseline.filter { names.contains($0.rawValue) }
+    }
     var rotating: Bool { [.referencePinchRotate, .coordinateSwipeRotate, .typeRotate, .referenceSliderRotate].contains(self) }
     var typing: Bool { self == .typeOpening || self == .typeRotate }
     var slider: Bool { self == .referenceSliderFold || self == .referenceSliderRotate }
@@ -33,7 +43,7 @@ enum PlaygroundAgentInterruptedAction: String, CaseIterable, Sendable {
 
 @Suite("Playground Duo Agent Layout Changes E2E", .serialized, .enabled(if: isDuoPlaygroundE2EEnabled))
 struct PlaygroundDuoAgentInterruptionTests {
-    @Test("Changed layout stops old input, releases contacts and permits fresh input", arguments: PlaygroundAgentInterruptedAction.allCases.filter { !$0.slider })
+    @Test("Changed layout stops old input, releases contacts and permits fresh input", arguments: PlaygroundAgentInterruptedAction.selectedNonSliderCases)
     func inputDuringLayoutChange(_ action: PlaygroundAgentInterruptedAction) async throws {
         try await AgentLayoutInterruption(action: action).run()
     }
@@ -55,10 +65,15 @@ private struct AgentLayoutInterruption {
     private let sliderTarget = 63.25
 
     func run() async throws {
-        let session = try await PlaygroundAgentFeatureSession.open(caseName: "agent-layout-" + action.rawValue, position: action.position)
+        let preparation = DuoStateReadWait.Preparation(phase: "before-input-" + action.rawValue)
+        let session = try await DuoStateReadWait.$preparation.withValue(preparation) {
+            try await PlaygroundAgentFeatureSession.open(caseName: "agent-layout-" + action.rawValue, position: action.position)
+        }
         if action.typing { try await session.focusField() }
         else { try await session.show(action == .referenceSwipeFold || action == .referenceDragFold ? "feature.showList" : "feature.showPad") }
-        let catalogue = try await DuoPlaygroundSession().catalogue()
+        let catalogue = try await DuoStateReadWait.$preparation.withValue(preparation) {
+            try await DuoPlaygroundSession().catalogue()
+        }
         let capture = try await session.capture()
         let state = try await session.core.state()
         let target = action.typing ? "feature.text" : action.slider ? "feature.slider" : action == .referenceSwipeFold || action == .referenceDragFold ? "feature.list" : action == .referenceHoldFold || action == .batchFold ? "feature.tap" : "feature.pad"
@@ -70,10 +85,15 @@ private struct AgentLayoutInterruption {
         let externalPath = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
         let identity = catalogue.activePanel.identity
         let cli = try TestHelpers.getAxePath()
+        let rotationPlan = try action.rotating ? DuoRotationPlan(catalogue: catalogue, context: session.initialContext) : nil
+        let requestedDegrees = rotationPlan.map { Double($0.target) } ?? (action == .typeOpening ? 180 : 0)
+        let foldControl: DuoHeldLayoutControl? = try DuoHeldLayoutControl(boot: catalogue.bootIdentity,
+            udid: session.agent.udid, degrees: requestedDegrees, artifacts: session.artifacts, rotation: rotationPlan)
         let external = try PlaygroundTestProcess(executable: externalPath,
-            arguments: [action.rotating ? "rotate" : "fold", catalogue.bootIdentity, String(identity.displayID), identity.uniqueID.uuidString,
-                action == .typeOpening ? "180" : "0", session.artifacts.appendingPathComponent("layout-change-marker.json").path,
-                session.agent.udid, URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path],
+            arguments: [action.rotating ? "rotate-write-held" : "fold-write-held", catalogue.bootIdentity, String(identity.displayID), identity.uniqueID.uuidString,
+                String(requestedDegrees), session.artifacts.appendingPathComponent("layout-change-marker.json").path,
+                session.agent.udid, URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path]
+                + (foldControl?.arguments ?? []),
             directory: session.artifacts, name: "external-layout-change")
         do {
             try input.start()
@@ -104,12 +124,18 @@ private struct AgentLayoutInterruption {
             try Data(contentsOf: session.document.url).write(to: session.artifacts.appendingPathComponent("input-before-layout-change.json"))
             try #require(input.isRunning)
             try external.start()
-            try await external.wait(timeout: 20)
-            let changeDiagnostics = try external.diagnostics()
-            try #require(external.exitCode == 0, "External change failed: \(changeDiagnostics)")
-            let changed = try JSONDecoder().decode(AgentExternalLayoutReceipt.self, from: Data(try external.output().utf8))
-            try #require(changed.finishedUptime >= changed.startedUptime)
-            try await input.wait(timeout: 20)
+            var changeReceipt: AgentExternalLayoutReceipt?
+            var rotationConfirmation: DuoRotationConfirmation?
+            if let foldControl {
+                try await foldControl.waitForReady(external)
+                try await input.wait(timeout: foldControl.remaining())
+            } else {
+                try await external.wait(timeout: 20)
+                let changeDiagnostics = try external.diagnostics()
+                try #require(external.exitCode == 0, "External change failed: \(changeDiagnostics)")
+                changeReceipt = try JSONDecoder().decode(AgentExternalLayoutReceipt.self, from: Data(try external.output().utf8))
+                try await input.wait(timeout: 20)
+            }
             try #require(input.exitCode != 0, "Input ran to normal completion across the layout change.")
             let output = try input.output()
             if action == .independentPairFold {
@@ -131,41 +157,103 @@ private struct AgentLayoutInterruption {
                         && slider.delivery == "sent" && slider.requestedPercent == sliderTarget && !slider.replayed)
                 }
             }
-            let released = try await session.document.waitFor("all original contacts released") { $0.activeWindowTouches == 0 }
+            let released: PlaygroundControlsDocument
+            if let foldControl {
+                released = try await session.document.waitFor("all original contacts released",
+                    timeout: foldControl.remaining()) { $0.activeWindowTouches == 0 }
+            } else {
+                released = try await session.document.waitFor("all original contacts released") { $0.activeWindowTouches == 0 }
+            }
             try released.requireClear()
             if action.contacts > 0 { try requireOriginalContactsReleased(before: before, held: held, released: released, frame: frame) }
             if action.typing {
                 try #require(!released.text.isEmpty && released.text.count < payload.count && payload.hasPrefix(released.text))
             }
+            if let foldControl {
+                rotationConfirmation = try await foldControl.confirmTargetAndRelease(external, device: DuoPlaygroundSession(), pid: session.pid)
+                let changeDiagnostics = try external.diagnostics()
+                try #require(external.exitCode == 0, "External change failed: \(changeDiagnostics)")
+                changeReceipt = try JSONDecoder().decode(AgentExternalLayoutReceipt.self, from: Data(try external.output().utf8))
+            }
+            let changed = try #require(changeReceipt)
+            try #require(changed.mode == (action.rotating ? "rotate-write-held" : "fold-write-held")
+                && changed.finishedUptime >= changed.startedUptime)
+            if let foldControl {
+                try foldControl.requireCompleted(changed.connectionHold,
+                    started: changed.startedUptime, finished: changed.finishedUptime)
+            }
             try await Task.sleep(nanoseconds: 500_000_000)
             let settled = try session.document.read()
             try #require(settled.inputState == released.inputState, "Old input continued after release.")
-            let afterLayout: DuoCatalogue
-            if action.rotating {
-                afterLayout = try await DuoPlaygroundSession().catalogue(boot: catalogue.bootIdentity)
+            let recovery = try DuoStateReadWait(phase: "after-writer-close", artifacts: session.artifacts)
+            let afterLayout = try await DuoStateReadWait.$current.withValue(recovery) { () async throws -> DuoCatalogue in
+            if let rotationPlan {
+                let write = try #require(changed.write)
+                rotationConfirmation = try await DuoPlaygroundSession().requireExternalRotation(write,
+                    plan: rotationPlan, pid: session.pid, after: changed.finishedUptime,
+                    artifacts: session.artifacts, artifactPrefix: "post-close-rotation")
+                return try #require(rotationConfirmation).catalogue
             } else {
+                let expectedDegrees = action == .typeOpening ? 180.0 : 0.0
+                let write = try #require(changed.write)
+                try #require(changed.hinge == nil && changed.rotation == nil)
+                try await DuoPlaygroundSession().requireExternalFold(write, boot: catalogue.bootIdentity,
+                    degrees: expectedDegrees, after: changed.finishedUptime, artifacts: session.artifacts)
                 let expectedScreenID: UInt32 = action == .typeOpening ? 3 : 1
-                afterLayout = try await DuoPlaygroundSession().stableCatalogue(
+                return try await DuoPlaygroundSession().stableCatalogue(
                     boot: catalogue.bootIdentity, expectedScreenID: expectedScreenID)
             }
+            }
             if action.rotating {
-                let rotation = try #require(changed.rotation)
-                try #require(rotation.vendorEventCount == 1 && rotation.matchingObservationCount == 2
-                    && rotation.before.rotation != rotation.after.rotation)
+                let rotation = try #require(rotationConfirmation)
+                try #require(changed.rotation == nil && changed.write?.source == "orientation-picker-control"
+                    && changed.write?.vendorEventCount == 1 && rotation.matchingObservationCount == 2
+                    && rotation.before.rotationDegrees != rotation.after.rotationDegrees)
                 try #require(afterLayout.activePanel.identity == catalogue.activePanel.identity
-                    && (try afterLayout.activePanel.rotationDegrees()) == rotation.after.rotation)
+                    && (try afterLayout.activePanel.rotationDegrees()) == rotation.after.rotationDegrees)
             } else {
-                let hinge = try #require(changed.hinge)
-                try #require(hinge.outcome == "observedMechanicalTarget" && !hinge.wasAlreadyWithinTolerance
-                    && hinge.requestedDegrees == (action == .typeOpening ? 180 : 0))
                 try #require(afterLayout.activePanel.identity != catalogue.activePanel.identity)
             }
+            try capture.requireUnexpired("before stale-reference refusal")
             let old = try await session.command(["tap"] + (try session.contextArguments(capture, identifier: target)), allowFailure: true)
             let oldResult = try session.decodeAgent(old.output)
             try #require(old.exitCode != 0 && oldResult.didError && oldResult.data.action == nil)
             try #require(["snapshotMissing", "contextChanged", "screenChanged"].contains(oldResult.error?.code ?? ""))
             let afterOld = try session.document.read()
             try #require(afterOld.inputState == settled.inputState)
+            if action.typing {
+                let panel = afterLayout.activePanel.identity
+                let selection = ["--input-mode", "selected", "--screen-id", String(panel.displayID),
+                    "--screen-uuid", panel.uniqueID.uuidString]
+                let beforePopup = try await typingPopupTree(session, selection: selection, catalogue: afterLayout)
+                if let popup = UIStateParser.findElement(in: beforePopup.roots, withIdentifier: "PopoverDismissRegion") {
+                    try #require(popup.type == "Group" && popup.label == "dismiss popup")
+                    let beforeEscape = try session.document.read()
+                    try requireTypingCleanupState(beforeEscape, unchangedFrom: afterOld)
+                    try #require(beforeEscape.textFocused)
+                    let escape = try await session.command(["key", "41", "--expected-pid", String(session.pid),
+                        "--focus-id", "feature.text"] + selection)
+                    let escapeReceipt = try session.rawReceipt(escape.output)
+                    try #require(escape.exitCode == 0 && escapeReceipt.outcome == "enqueuedAndDrained"
+                        && escapeReceipt.enqueuedEventCount == 2 && escapeReceipt.cleanup == "notNeeded"
+                        && escapeReceipt.error == nil && escapeReceipt.quarantine == nil
+                        && escapeReceipt.context == beforePopup.context)
+                    let line = try #require(escape.output.split(separator: "\n").first { $0.first == "{" })
+                    let focused = try JSONDecoder().decode(AgentTypingEscapeReceipt.self, from: Data(line.utf8)).keyboard
+                    try #require(focused.expectedPID == session.pid && focused.focusID == "feature.text"
+                        && focused.validatedKeyDownCount == 1)
+                    for field in [focused.initialTarget, focused.lastValidatedTarget] {
+                        try #require(field.type == "TextField" && field.pid == session.pid && field.AXUniqueId == "feature.text"
+                            && field.focused == true && field.enabled == true && field.hidden == false)
+                    }
+                    try requireTypingCleanupState(session.document.read(), unchangedFrom: afterOld)
+                    let afterPopup = try await typingPopupTree(session, selection: selection, catalogue: afterLayout)
+                    try #require(afterPopup.context == beforePopup.context)
+                    try #require(UIStateParser.findElement(in: afterPopup.roots, withIdentifier: "PopoverDismissRegion") == nil,
+                        "Escape did not dismiss the typing popup; input is not replayed.")
+                }
+                try requireTypingCleanupState(session.document.read(), unchangedFrom: afterOld)
+            }
             try await session.show("feature.showPad")
             let fresh = try await session.capture()
             try #require(fresh.capture.snapshotID != capture.capture.snapshotID)
@@ -185,7 +273,34 @@ private struct AgentLayoutInterruption {
             try capture.requireUnexpired("after layout interruption and fresh recovery")
             await external.finish()
             await input.finish()
-        } catch { await external.finish(); await input.finish(); throw error }
+        } catch {
+            do { try foldControl?.abort() }
+            catch { Issue.record("Cannot publish held fold abort: \(error)") }
+            await external.finish(); await input.finish(); throw error
+        }
+    }
+
+    private func typingPopupTree(_ session: PlaygroundAgentFeatureSession, selection: [String],
+                                 catalogue: DuoCatalogue) async throws -> (roots: [UIElement], context: DuoContext) {
+        let tree = try await session.command(["describe-ui", "--expected-pid", String(session.pid)] + selection)
+        let line = try #require(tree.output.split(separator: "\n").first { $0.first == "{" })
+        let receipt = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(line.utf8))
+        try receipt.requireSuccess("ready")
+        try #require(tree.exitCode == 0 && receipt.enqueuedEventCount == 0 && receipt.cleanup == "notNeeded"
+            && receipt.ax?.kind == "describe" && receipt.ax?.expectedPID == session.pid)
+        let context = try #require(receipt.context)
+        try context.requireMatch(catalogue)
+        return (try #require(receipt.ax?.roots), context)
+    }
+
+    private func requireTypingCleanupState(_ value: PlaygroundControlsDocument,
+                                           unchangedFrom before: PlaygroundControlsDocument) throws {
+        try value.requireClear()
+        try #require(value.pid == before.pid && value.generation == before.generation
+            && value.text == before.text && value.count("textChanged") == before.count("textChanged"))
+        try #require(value.windowTouchTrace == before.windowTouchTrace && value.recognizerTrace == before.recognizerTrace
+            && value.windowTraceDropped == before.windowTraceDropped
+            && value.recognizerTraceDropped == before.recognizerTraceDropped)
     }
 
     private func inputArguments(_ session: PlaygroundAgentFeatureSession, capture: AgentPlaygroundTimedCapture,
@@ -272,8 +387,11 @@ private struct AgentLayoutInterruption {
 
 private struct AgentExternalLayoutReceipt: Decodable {
     struct Hinge: Decodable { let outcome: String; let requestedDegrees: Double; let wasAlreadyWithinTolerance: Bool }
+    let mode: String
     let startedUptime: Double
     let finishedUptime: Double
+    let write: DuoExternalLayoutWrite?
+    let connectionHold: DuoExternalConnectionHold?
     let hinge: Hinge?
     let rotation: DuoCLIResponse.RotationReceipt?
 }
@@ -293,4 +411,23 @@ private struct AgentInterruptedBatchEnvelope: Decodable {
         }
         throw TestError.invalidJSON("No interrupted batch receipt: \(output)")
     }
+}
+
+private struct AgentTypingEscapeReceipt: Decodable {
+    struct Keyboard: Decodable {
+        let expectedPID: Int32
+        let focusID: String
+        let validatedKeyDownCount: Int
+        let initialTarget: Field
+        let lastValidatedTarget: Field
+    }
+    struct Field: Decodable {
+        let type: String?
+        let pid: Int32?
+        let AXUniqueId: String?
+        let focused: Bool?
+        let enabled: Bool?
+        let hidden: Bool?
+    }
+    let keyboard: Keyboard
 }

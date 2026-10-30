@@ -6,7 +6,8 @@ import FBSimulatorControl
 @MainActor
 enum AgentModeNativeOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL) async -> SelectedHIDResponse {
+                        brokerID: UUID, logger: AxeLogger, helperURL: URL,
+                        transportOwner: FBSimulatorHIDTransportOwner? = nil) async -> SelectedHIDResponse {
         var observation: FBSimulatorHIDSessionObservation?
         var feed: FBSimulatorHIDNativeFreshnessProvider?
         var session: FBSimulatorHIDSession?
@@ -45,8 +46,14 @@ enum AgentModeNativeOperation {
             } else {
                 guardOwner = AgentModeFreshScreenGuard(simulator: simulator, feed: live, admission: admission)
             }
-            let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
-                liveFreshnessProvider: live)
+            let hid: FBSimulatorHIDSession
+            if let transportOwner {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live, transportOwner: transportOwner)
+            } else {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live)
+            }
             session = hid
             let receipt = try await hid.execute(event, admissionGuard: guardOwner)
             count = await hid.status().enqueuedEventCount

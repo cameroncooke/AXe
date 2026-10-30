@@ -8,6 +8,7 @@ import OSLog
 private struct HIDBrokerHandshake: Codable {
     let ready: Bool
     let version: Int?
+    let rejection: String?
 }
 
 private struct HIDBrokerResponse: Codable {
@@ -33,6 +34,12 @@ struct HIDBrokerNotReadyError: LocalizedError, UserFacingError {
     var errorDescription: String? {
         userFacingDescription
     }
+}
+
+enum HIDBrokerAdmissionFailure: Error, LocalizedError, UserFacingError {
+    case busy
+    var userFacingDescription: String { "Simulator input is owned by another action or retained contact" }
+    var errorDescription: String? { userFacingDescription }
 }
 
 struct HIDBrokerSocketIdentity: Equatable {
@@ -81,6 +88,7 @@ extension HIDBroker {
             try configureReceiveTimeout(descriptor, milliseconds: timeoutMilliseconds)
             let data = try readMessage(from: descriptor)
             let handshake = try JSONDecoder().decode(HIDBrokerHandshake.self, from: data)
+            if handshake.rejection == "busy" { throw HIDBrokerAdmissionFailure.busy }
             guard handshake.ready else { throw HIDBrokerNotReadyError() }
             if let expectedVersion, handshake.version != expectedVersion {
                 throw CLIError(errorDescription: "HID broker protocol version mismatch")
@@ -89,6 +97,7 @@ extension HIDBroker {
             return descriptor
         } catch {
             Darwin.close(descriptor)
+            if error is HIDBrokerAdmissionFailure { throw error }
             if let notReady = error as? HIDBrokerNotReadyError {
                 throw notReady
             }
@@ -305,8 +314,8 @@ extension HIDBroker {
         try writeAll(data, to: descriptor)
     }
 
-    static func writeHandshake(ready: Bool, version: Int? = nil, to descriptor: Int32) throws {
-        var data = try JSONEncoder().encode(HIDBrokerHandshake(ready: ready, version: version))
+    static func writeHandshake(ready: Bool, version: Int? = nil, rejection: String? = nil, to descriptor: Int32) throws {
+        var data = try JSONEncoder().encode(HIDBrokerHandshake(ready: ready, version: version, rejection: rejection))
         data.append(0x0A)
         try writeAll(data, to: descriptor)
     }

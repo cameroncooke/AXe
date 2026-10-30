@@ -8,11 +8,11 @@ enum PlaygroundAgentSliderVariant: String, Sendable {
 
 @Suite("Playground Agent Slider E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentSliderTests {
-    @Test("Native endpoints and interior values reach the actual UISlider", arguments: [
+    @Test("Native endpoints and interior values reach the actual UISlider", arguments: agentSliderVariants([
         PlaygroundAgentSliderVariant.minimum, .alreadyMinimum, .maximum, .stale, .wrongPID,
         .buttonReference, .mixedSelector, .legacyBatch, .selectedBatch,
         .agentInterior, .selectedInterior, .selectedFromMaximum,
-    ])
+    ]))
     func slider(_ variant: PlaygroundAgentSliderVariant) async throws {
         let session = try await PlaygroundAgentFeatureSession.open(caseName: "slider-" + variant.rawValue)
         if [.alreadyMinimum, .maximum, .selectedFromMaximum].contains(variant) {
@@ -38,8 +38,7 @@ struct PlaygroundAgentSliderTests {
         case .wrongPID:
             let index = try #require(arguments.firstIndex(of: "--expected-pid"))
             arguments[index + 1] = String(session.pid + 1)
-            code = "observationFailed"
-            message = "processChanged"
+            code = "contextChanged"
         case .mixedSelector:
             arguments += ["--id", "feature.slider"]
             message = "Agent slider requires --snapshot-id, --ref and exactly one --endpoint or --value"
@@ -163,4 +162,15 @@ struct PlaygroundAgentSliderEnvelope: Decodable {
         }
         throw TestError.invalidJSON("No slider result: \(output)")
     }
+}
+
+/// Select an original parameterized case without changing its app setup or assertions.
+private func agentSliderVariants(_ original: [PlaygroundAgentSliderVariant]) -> [PlaygroundAgentSliderVariant] {
+    let environmentKey = "AXE_E2E_AGENT_SLIDER_VARIANT"
+    guard let requested = ProcessInfo.processInfo.environment[environmentKey] else { return original }
+    guard let variant = PlaygroundAgentSliderVariant(rawValue: requested), original.contains(variant) else {
+        let allowed = original.map(\.rawValue).joined(separator: ", ")
+        fatalError("Invalid \(environmentKey)=\(requested). Expected exactly one of: \(allowed).")
+    }
+    return [variant]
 }

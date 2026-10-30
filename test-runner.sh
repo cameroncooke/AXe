@@ -73,6 +73,11 @@ show_usage() {
     echo "  SliderTests         Run only slider tests"
     echo "  PlaygroundCoreTests Run the portable iPhone/Duo core action checks"
     echo "  PlaygroundAgentTests Run optional agent capture and reference checks"
+    echo "  PlaygroundAgentLifecycleTests Run six reference lifetime and invalidation checks"
+    echo "  PlaygroundAgentBrokerRestartTests Run one owned-broker restart check"
+    echo "  PlaygroundRawKeyboardBrokerTests Run one ordinary-iPhone keyboard ownership check"
+    echo "  PlaygroundRawInputAdmissionTests Run six ordinary-iPhone concurrent-input checks"
+    echo "  PlaygroundAgentNativeStateTests Run five native-state and cache checks"
     echo "  PlaygroundKeyboardTests Run hardware-key and modifier checks"
     echo "  PlaygroundDuoCoreTests Run core checks on both measured Duo displays"
     echo "  PlaygroundDuoTests  Run Duo hinge, rotation and display-selection checks"
@@ -179,6 +184,7 @@ if [[ "$TEST_FILTER" == Playground* || "$TEST_FILTER" == PhotosButtonLeafE2ETest
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import uuid
@@ -188,9 +194,25 @@ counts = json.loads(Path('scripts/playground-suite-counts.json').read_text())
 config = json.loads(Path('scripts/playground-acceptance.json').read_text())
 if type(counts.get(suite)) is not int or counts[suite] <= 0:
     raise SystemExit('Unknown or incomplete Playground suite count: ' + suite + '. No simulator work started.')
+duo_enabled = os.environ.get('AXE_DUO_E2E', '0').lower() in ('1', 'true', 'yes')
+direct_source = config.get('directSuiteSources', {}).get(suite)
+if direct_source is not None:
+    source = Path('Tests') / direct_source
+    if Path(direct_source).name != direct_source or not source.is_file() or not re.search(
+            r'\bstruct\s+' + re.escape(suite) + r'\b', source.read_text()):
+        raise SystemExit('Missing full-package test source for ' + suite + '. No simulator work started.')
+    try:
+        uuid.UUID(os.environ.get('SIMULATOR_UDID', ''))
+    except ValueError:
+        raise SystemExit(suite + ' requires an explicit SIMULATOR_UDID. No simulator work started.')
+    binary = os.environ.get('AXE_BIN_PATH')
+    if not binary or not Path(binary).is_file() or not os.access(binary, os.X_OK):
+        raise SystemExit(suite + ' requires the matched executable AXE_BIN_PATH. No simulator work started.')
+    if suite in config.get('ordinaryOnlyDirectSuites', []) and duo_enabled:
+        raise SystemExit(suite + ' requires an ordinary iPhone with AXE_DUO_E2E=0. No simulator work started.')
 ordinary = set(config['profiles']['iphone'] + config['profiles']['ipad'])
 duo_only = suite in config['profiles']['duo'] + config['runLast'] and suite not in ordinary
-if duo_only and os.environ.get('AXE_DUO_E2E', '0').lower() not in ('1', 'true', 'yes'):
+if duo_only and not duo_enabled:
     raise SystemExit(suite + ' requires AXE_DUO_E2E=1. No simulator work started.')
 if duo_only:
     identifier = os.environ.get('SIMULATOR_UDID')

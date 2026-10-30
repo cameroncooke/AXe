@@ -1,4 +1,5 @@
 import Darwin
+import Dispatch
 import Foundation
 import FBControlCore
 import FBSimulatorControl
@@ -26,6 +27,12 @@ struct HIDBrokerPrimitive: Codable, Equatable {
 
 private struct HIDBrokerRequest: Codable {
     let primitives: [HIDBrokerPrimitive]
+    let keyboard: HIDBrokerKeyboardRequest?
+
+    init(primitives: [HIDBrokerPrimitive], keyboard: HIDBrokerKeyboardRequest? = nil) {
+        self.primitives = primitives
+        self.keyboard = keyboard
+    }
 }
 
 struct HIDBrokerBootIdentity: Equatable {
@@ -37,7 +44,7 @@ struct HIDBrokerBootIdentity: Equatable {
 enum HIDBroker {
     static let inputDeliveryFailureDescription = "AXe could not deliver simulator input. The simulator may have restarted or disconnected. Confirm it is booted and try again."
     static let dtuhidMinimumBootUptime: TimeInterval = 10
-    static let protocolVersion = 3
+    static let protocolVersion = 5
     static let maximumMessageBytes = 64 * 1024
     private static let idleTimeoutMilliseconds: Int32 = 60_000
     static let serverIOTimeoutMilliseconds: Int = 2_000
@@ -59,7 +66,18 @@ enum HIDBroker {
         _ primitives: [HIDBrokerPrimitive],
         descriptorProvider: () throws -> Int32
     ) throws {
-        let request = HIDBrokerRequest(primitives: primitives)
+        try send(HIDBrokerRequest(primitives: primitives), descriptorProvider: descriptorProvider)
+    }
+
+    static func sendKeyboardEvent(_ event: FBSimulatorHIDEvent, simulatorUDID: String) throws {
+        let keyboard = try HIDBrokerKeyboardRequest(event: event)
+        let endpoint = try endpointPath(simulatorUDID: simulatorUDID)
+        try send(HIDBrokerRequest(primitives: [], keyboard: keyboard)) {
+            try connectToReadyBroker(simulatorUDID: simulatorUDID, endpoint: endpoint)
+        }
+    }
+
+    private static func send(_ request: HIDBrokerRequest, descriptorProvider: () throws -> Int32) throws {
         var requestData = try JSONEncoder().encode(request)
         requestData.append(0x0A)
         guard requestData.count <= maximumMessageBytes else {
@@ -71,6 +89,14 @@ enum HIDBroker {
         let descriptor = try descriptorProvider()
         defer { Darwin.close(descriptor) }
         try exchange(requestData, on: descriptor)
+    }
+
+    private static let socketIO = DispatchQueue(label: "axe.raw-hid.socket", attributes: .concurrent)
+
+    private static func offMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            socketIO.async { continuation.resume(with: Result { try work() }) }
+        }
     }
 
     @MainActor
@@ -86,49 +112,84 @@ enum HIDBroker {
         let bootIdentity = try currentBootIdentity(simulatorUDID: simulatorUDID)
         var session: HIDInteractor.Session? = nil
         var hasRetainedContact = false
-        while true {
-            var pollDescriptor = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
-            let result = Darwin.poll(&pollDescriptor, 1, idleTimeoutMilliseconds)
-            if result == 0 {
-                return
-            }
-            guard result > 0 else {
-                if errno == EINTR { continue }
-                throw posixError("poll")
-            }
+        // One admitted task runs at a time. Retained touch state is separate so MOVE/UP remains valid.
+        var active: Task<Void, Never>?
+        let admission = HIDBrokerRequestAdmission()
+        var shouldStop = false
+        var lastActivity = ProcessInfo.processInfo.systemUptime
+        do {
+            while !shouldStop {
+                if active == nil && ProcessInfo.processInfo.systemUptime - lastActivity >= Double(idleTimeoutMilliseconds) / 1000 {
+                    break
+                }
+                let accepted = try await offMain {
+                    var descriptor = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
+                    let count = Darwin.poll(&descriptor, 1, 250)
+                    if count == 0 || (count < 0 && errno == EINTR) { return (Int32(-1), Optional<UUID>.none) }
+                    guard count > 0 else { throw posixError("poll") }
+                    let accepted = Darwin.accept(listener, nil, nil)
+                    guard accepted >= 0 else { throw posixError("accept") }
+                    return (accepted, admission.reserve())
+                }
+                let client = accepted.0
+                guard client >= 0 else { continue }
+                configureNoSignalPipe(client)
+                do {
+                    try configureSocketTimeouts(client, readMilliseconds: serverIOTimeoutMilliseconds,
+                        writeMilliseconds: serverIOTimeoutMilliseconds)
+                } catch {
+                    Darwin.close(client)
+                    if let token = accepted.1 { admission.release(token) }
+                    throw error
+                }
 
-            let client = Darwin.accept(listener, nil, nil)
-            guard client >= 0 else {
-                if errno == EINTR { continue }
-                throw posixError("accept")
+                guard let reservation = accepted.1 else {
+                    // Terminal handshake: the client must not send its body or enter startup recovery.
+                    try? await offMain { try writeHandshake(ready: false, version: protocolVersion,
+                        rejection: "busy", to: client) }
+                    Darwin.close(client)
+                    continue
+                }
+                // A failed active send can retire the broker while accept is off the actor.
+                // This request has not sent a body and must not use the failed native session.
+                guard !shouldStop else {
+                    try? await offMain { try writeHandshake(ready: false, version: protocolVersion, to: client) }
+                    Darwin.close(client)
+                    admission.release(reservation)
+                    break
+                }
+                let currentBoot: HIDBrokerBootIdentity
+                do { currentBoot = try currentBootIdentity(simulatorUDID: simulatorUDID) }
+                catch {
+                    Darwin.close(client); admission.release(reservation); throw error
+                }
+                guard shouldReuseSession(sessionBootIdentity: bootIdentity, currentBootIdentity: currentBoot) else {
+                    try? await offMain { try writeHandshake(ready: false, version: protocolVersion, to: client) }
+                    Darwin.close(client)
+                    admission.release(reservation)
+                    break
+                }
+                // Assign before the task can suspend on handshake, body read, native input or response.
+                active = Task { @MainActor in
+                    defer {
+                        Darwin.close(client)
+                        active = nil
+                        lastActivity = ProcessInfo.processInfo.systemUptime
+                        admission.release(reservation)
+                    }
+                    do {
+                        try await offMain { try writeHandshake(ready: true, version: protocolVersion, to: client) }
+                        let keepServing = await handle(client: client, simulatorUDID: simulatorUDID,
+                            session: &session, hasRetainedContact: &hasRetainedContact, logger: logger)
+                        if !keepServing { shouldStop = true }
+                    } catch { logger.error().log("Raw broker handshake failed before input: \(error.localizedDescription)") }
+                }
             }
-            configureNoSignalPipe(client)
-            try configureSocketTimeouts(
-                client,
-                readMilliseconds: serverIOTimeoutMilliseconds,
-                writeMilliseconds: serverIOTimeoutMilliseconds
-            )
-            guard shouldReuseSession(
-                sessionBootIdentity: bootIdentity,
-                currentBootIdentity: try currentBootIdentity(simulatorUDID: simulatorUDID)
-            ) else {
-                try? writeHandshake(ready: false, to: client)
-                Darwin.close(client)
-                return
-            }
-            do {
-                try writeHandshake(ready: true, to: client)
-            } catch {
-                Darwin.close(client)
-                continue
-            }
-            let shouldContinue = await handle(client: client, simulatorUDID: simulatorUDID,
-                session: &session, hasRetainedContact: &hasRetainedContact, logger: logger)
-            Darwin.close(client)
-            if !shouldContinue {
-                return
-            }
+        } catch {
+            if let active { await active.value }
+            throw error
         }
+        if let active { await active.value }
     }
 
     @MainActor
@@ -142,24 +203,41 @@ enum HIDBroker {
         var peerUID: uid_t = 0
         var peerGID: gid_t = 0
         guard getpeereid(client, &peerUID, &peerGID) == 0, peerUID == getuid() else {
-            try? writeResponse(error: "HID broker rejected a client owned by another user.", to: client)
+            try? await offMain { try writeResponse(error: "HID broker rejected a client owned by another user.", to: client) }
             return true
         }
 
         var shouldContinue = true
         do {
-            let data = try readMessage(from: client)
+            let data = try await offMain { try readMessage(from: client) }
             let request = try JSONDecoder().decode(HIDBrokerRequest.self, from: data)
-            try await perform(request.primitives, simulatorUDID: simulatorUDID,
-                session: &session, hasRetainedContact: &hasRetainedContact,
-                shouldContinue: &shouldContinue, logger: logger)
+            if let keyboard = request.keyboard {
+                guard request.primitives.isEmpty else {
+                    throw CLIError(errorDescription: "HID broker keyboard request cannot include touch primitives.")
+                }
+                try keyboard.validate()
+                let activeSession = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
+                session = activeSession
+                do {
+                    try await HIDInteractor.performHIDEvent(keyboard.event, in: activeSession, logger: logger)
+                } catch {
+                    // A failed send may have entered the guest. Retire this connection without replay.
+                    shouldContinue = false
+                    throw error
+                }
+            } else {
+                try await perform(request.primitives, simulatorUDID: simulatorUDID,
+                    session: &session, hasRetainedContact: &hasRetainedContact,
+                    shouldContinue: &shouldContinue, logger: logger)
+            }
             // A completed UP releases common input ownership before the client receives success.
             // A failed request keeps the prior ownership policy; it is never declared clear here.
             if !hasRetainedContact { session = nil }
-            try writeResponse(error: nil, to: client)
+            try await offMain { try writeResponse(error: nil, to: client) }
         } catch {
             logger.error().log("HID broker request failed: \(error.localizedDescription)")
-            try? writeResponse(error: brokerResponseDescription(for: error), to: client)
+            let description = brokerResponseDescription(for: error)
+            try? await offMain { try writeResponse(error: description, to: client) }
         }
         return shouldContinue
     }
@@ -287,7 +365,8 @@ enum HIDBroker {
                 endpoint: endpoint,
                 connector: connect(to:),
                 spawner: spawnBroker(simulatorUDID:),
-                sleeper: { _ = usleep($0) }
+                sleeper: { _ = usleep($0) },
+                expectedVersion: protocolVersion
             )
         } catch {
             logDiagnostic(error)

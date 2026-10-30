@@ -28,6 +28,12 @@ final class AgentModeController {
 
     func invalidate() { record = nil }
 
+    func maintain() async {
+        guard !isBusy, !owner.isBusy else { return }
+        if let record, now - record.capturedAt >= Self.timeToLive { invalidate() }
+        await owner.maintain(retainingAgentSnapshot: record != nil)
+    }
+
     func reject(_ request: SelectedHIDRequest, code: String = "busy") -> SelectedHIDResponse {
         let native = owner.rejectBusy(request)
         let quarantined = native.quarantine != nil
@@ -153,6 +159,11 @@ final class AgentModeController {
                     cache: AgentModeCacheState(status: "invalidated", reason: "postActionRefreshFailed", requiresRefresh: true),
                     observation: observation, nextSteps: nextSteps)
             }
+        } catch let error as AgentModeFailure where error.code == "snapshotMissing"
+            && request.agent?.snapshotID != nil && record != nil
+            && request.agent?.snapshotID != record?.id {
+            // A stale caller cannot erase another caller's newer reference table.
+            return failure(request, error, action: action)
         } catch {
             record = nil
             let nativeFailure = error as? AgentModeNativeFailure
@@ -258,7 +269,7 @@ final class AgentModeController {
         }
     }
 
-    private var now: Double { ProcessInfo.processInfo.systemUptime }
+    private var now: Double { owner.currentTime }
 
     private func store(_ snapshot: AgentModeSnapshot, context: SelectedHIDContext, pid: Int32) -> Record {
         sequence += 1

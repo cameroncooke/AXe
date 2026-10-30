@@ -20,21 +20,21 @@ struct PlaygroundAgentKeyTests {
 
 @Suite("Playground Agent Shortcut E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentKeyComboTests {
-    @Test("Shortcut effects, modifier release and guarded refusals", arguments: [
+    @Test("Shortcut effects, modifier release and guarded refusals", arguments: agentKeyboardVariants([
         PlaygroundAgentKeyVariant.normal, .stale, .lowercaseAfterModifier, .wrongPID,
         .oldReferenceAfterFocusLoss, .currentUnfocused, .freshReference, .duration,
         .focusOverride, .duplicateModifiers, .targetIsModifier, .legacyBatch,
         .selectedBatch, .rawShift, .rawLowercase, .selectedCompatibility,
-    ])
+    ], environmentKey: "AXE_E2E_AGENT_SHORTCUT_VARIANT"))
     func shortcut(_ variant: PlaygroundAgentKeyVariant) async throws { try await verifyAgentKeyboard(.combo, variant: variant) }
 }
 
 @Suite("Playground Agent Key Sequence E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentKeySequenceTests {
-    @Test("Ordered key effects and current focused references", arguments: [
+    @Test("Ordered key effects and current focused references", arguments: agentKeyboardVariants([
         PlaygroundAgentKeyVariant.normal, .stale, .wrongPID, .currentUnfocused,
         .rawSequence, .selectedCompatibility, .rawSingleKey,
-    ])
+    ], environmentKey: "AXE_E2E_AGENT_SEQUENCE_VARIANT"))
     func sequence(_ variant: PlaygroundAgentKeyVariant) async throws { try await verifyAgentKeyboard(.sequence, variant: variant) }
 }
 
@@ -89,8 +89,7 @@ private func verifyAgentKeyboard(_ action: PlaygroundAgentKeyboardAction,
     case .wrongPID:
         let index = try #require(arguments.firstIndex(of: "--expected-pid"))
         arguments[index + 1] = String(session.pid + 1)
-        code = "observationFailed"
-        message = "processChanged"
+        code = "contextChanged"
     case .oldReferenceAfterFocusLoss:
         try await session.dismissKeyboard()
         code = "snapshotMissing"
@@ -195,4 +194,14 @@ private func verifyAgentKeyboard(_ action: PlaygroundAgentKeyboardAction,
         }
     }
     try capture.requireUnexpired("after keyboard action/refusal")
+}
+
+/// Select an original parameterized case without changing its app setup or assertions.
+private func agentKeyboardVariants(_ original: [PlaygroundAgentKeyVariant], environmentKey: String) -> [PlaygroundAgentKeyVariant] {
+    guard let requested = ProcessInfo.processInfo.environment[environmentKey] else { return original }
+    guard let variant = PlaygroundAgentKeyVariant(rawValue: requested), original.contains(variant) else {
+        let allowed = original.map(\.rawValue).joined(separator: ", ")
+        fatalError("Invalid \(environmentKey)=\(requested). Expected exactly one of: \(allowed).")
+    }
+    return [variant]
 }

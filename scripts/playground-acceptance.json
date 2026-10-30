@@ -6,6 +6,7 @@
     "PlaygroundAgentBatchTests.swift",
     "PlaygroundAgentDoubleTapTests.swift",
     "PlaygroundAgentDragTests.swift",
+    "PlaygroundAgentTransportTests.swift",
     "PlaygroundAgentExamplesSupport.swift",
     "PlaygroundAgentFeatureSupport.swift",
     "PlaygroundAgentKeyboardTests.swift",
@@ -33,6 +34,7 @@
     "PlaygroundDuoKeyboardDelayTests.swift",
     "PlaygroundDuoKeyboardInterruptionTests.swift",
     "PlaygroundDuoKeyboardSourcesTests.swift",
+    "PlaygroundDuoRawLongTextTests.swift",
     "PlaygroundDuoLegacyBatchInterruptionTests.swift",
     "PlaygroundDuoLifetimeSupport.swift",
     "PlaygroundDuoManualBoundaryTests.swift",
@@ -83,6 +85,7 @@
       "PlaygroundAgentTouchTests",
       "PlaygroundAgentDoubleTapTests",
       "PlaygroundAgentDragTests",
+      "PlaygroundAgentTransportTests",
       "PlaygroundAgentPinchTests",
       "PlaygroundAgentSliderTests",
       "PlaygroundAgentNativeStateTests",
@@ -135,6 +138,7 @@
       "PlaygroundAgentTouchTests",
       "PlaygroundAgentDoubleTapTests",
       "PlaygroundAgentDragTests",
+      "PlaygroundAgentTransportTests",
       "PlaygroundAgentPinchTests",
       "PlaygroundAgentSliderTests",
       "PlaygroundAgentNativeStateTests",
@@ -150,6 +154,7 @@
       "PlaygroundDuoAgentInterruptionTests",
       "PlaygroundDuoKeyboardInterruptionTests",
       "PlaygroundDuoKeyboardSourcesTests",
+      "PlaygroundDuoRawLongTextTests",
       "PlaygroundDuoSelectedKeyInterruptionTests",
       "PlaygroundDuoSelectedBatchKeyboardTests",
       "PlaygroundDuoHeldModifierTests",
@@ -294,6 +299,7 @@
       "PlaygroundAgentTouchTests",
       "PlaygroundAgentDoubleTapTests",
       "PlaygroundAgentDragTests",
+      "PlaygroundAgentTransportTests",
       "PlaygroundAgentPinchTests",
       "PlaygroundAgentSliderTests",
       "PlaygroundAgentNativeStateTests",
@@ -318,6 +324,7 @@
       "PlaygroundAgentTouchTests",
       "PlaygroundAgentDoubleTapTests",
       "PlaygroundAgentDragTests",
+      "PlaygroundAgentTransportTests",
       "PlaygroundAgentPinchTests",
       "PlaygroundAgentSliderTests",
       "PlaygroundAgentNativeStateTests",
@@ -381,6 +388,7 @@
         "PlaygroundAgentTouchTests",
         "PlaygroundAgentDoubleTapTests",
         "PlaygroundAgentDragTests",
+        "PlaygroundAgentTransportTests",
         "PlaygroundAgentPinchTests",
         "PlaygroundAgentSliderTests",
         "PlaygroundAgentNativeStateTests",
@@ -405,6 +413,7 @@
         "PlaygroundAgentTouchTests",
         "PlaygroundAgentDoubleTapTests",
         "PlaygroundAgentDragTests",
+        "PlaygroundAgentTransportTests",
         "PlaygroundAgentPinchTests",
         "PlaygroundAgentSliderTests",
         "PlaygroundAgentNativeStateTests",
@@ -430,6 +439,7 @@
       "duo": [
         "PlaygroundDuoKeyboardInterruptionTests",
         "PlaygroundDuoKeyboardSourcesTests",
+        "PlaygroundDuoRawLongTextTests",
         "PlaygroundDuoSelectedKeyInterruptionTests",
         "PlaygroundDuoSelectedBatchKeyboardTests",
         "PlaygroundDuoHeldModifierTests",
@@ -531,6 +541,18 @@
     "PlaygroundSelectedClientExitTests": "PlaygroundSelectedClientExitTests.swift",
     "PlaygroundInputHandoverTests": "PlaygroundInputHandoverTests.swift",
     "PlaygroundColdInputHandoverTests": "PlaygroundColdInputHandoverTests.swift",
-    "PhotosButtonLeafE2ETests": "PhotosButtonLeafE2ETests.swift"
-  }
+    "PhotosButtonLeafE2ETests": "PhotosButtonLeafE2ETests.swift",
+    "PlaygroundAgentTransportTests": "PlaygroundAgentTransportTests.swift",
+    "PlaygroundDuoRawLongTextTests": "PlaygroundDuoRawLongTextTests.swift"
+  },
+  "directSuiteSources": {
+    "PlaygroundAgentLifecycleTests": "PlaygroundAgentLifecycleTests.swift",
+    "PlaygroundAgentBrokerRestartTests": "PlaygroundAgentBrokerRestartTests.swift",
+    "PlaygroundRawKeyboardBrokerTests": "PlaygroundRawKeyboardBrokerTests.swift",
+    "PlaygroundRawInputAdmissionTests": "PlaygroundRawInputAdmissionTests.swift"
+  },
+  "ordinaryOnlyDirectSuites": [
+    "PlaygroundRawKeyboardBrokerTests",
+    "PlaygroundRawInputAdmissionTests"
+  ]
 }

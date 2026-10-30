@@ -10,10 +10,50 @@ enum SelectedHIDBroker {
             developerDirectory: FBXcodeDirectory.resolveDeveloperDirectory(), version: SelectedHIDRequest.version)
     }
     static func send(_ request: SelectedHIDRequest, simulatorUDID: String) throws -> SelectedHIDResponse {
+        guard request.legacyKeyboard == nil else {
+            throw SelectedHIDFailure.invalid("Legacy keyboard requires the cancellable owned exchange")
+        }
+        let data = try encoded(request)
+        let descriptor = try readyDescriptor(simulatorUDID: simulatorUDID)
+        defer { Darwin.close(descriptor) }
+        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
+        return try exchange(data, requestID: request.requestID, descriptor: descriptor,
+            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
+    }
+
+    /// Raw keyboard has no whole-command deadline. Cancellation closes this owned exchange, never replays it.
+    static func sendLegacyKeyboard(_ request: SelectedHIDRequest, simulatorUDID: String) async throws -> SelectedHIDResponse {
+        guard request.legacyKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
+        let data = try encoded(request)
+        try Task.checkCancellation()
+        let descriptor = try readyDescriptor(simulatorUDID: simulatorUDID)
+        let socket = LegacyKeyboardSocket(descriptor: descriptor)
+        defer { socket.close() }
+        // A zero receive timeout preserves raw Type's existing unbounded whole-command duration.
+        var timeout = timeval()
+        guard setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size)) == 0 else {
+            throw HIDBroker.posixError("configure legacy keyboard response")
+        }
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await offMain {
+                try exchange(data, requestID: request.requestID, descriptor: descriptor)
+            }
+        } onCancel: {
+            // EOF cancels the broker action. Keep the read side open for its joined cleanup receipt.
+            socket.shutdownWrite()
+        }
+    }
+
+    private static func encoded(_ request: SelectedHIDRequest) throws -> Data {
         try request.validate()
         var data = try JSONEncoder().encode(request); data.append(10)
         guard data.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
-        let descriptor = try HIDBroker.connectToReadyBroker(simulatorUDID: simulatorUDID,
+        return data
+    }
+
+    private static func readyDescriptor(simulatorUDID: String) throws -> Int32 {
+        try HIDBroker.connectToReadyBroker(simulatorUDID: simulatorUDID,
             endpoint: endpoint(simulatorUDID: simulatorUDID), connector: HIDBroker.connect(to:),
             spawner: { udid in
                 guard let executable = Bundle.main.executableURL else { throw SelectedHIDFailure.invalid("Missing executable") }
@@ -22,10 +62,6 @@ enum SelectedHIDBroker {
                 child.standardInput = FileHandle.nullDevice; child.standardOutput = FileHandle.nullDevice
                 child.standardError = FileHandle.nullDevice; try child.run()
             }, sleeper: { _ = usleep($0) }, expectedVersion: SelectedHIDRequest.version)
-        defer { Darwin.close(descriptor) }
-        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
-        return try exchange(data, requestID: request.requestID, descriptor: descriptor,
-            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
     }
     static func exchange(_ data: Data, requestID: UUID, descriptor: Int32,
                          maximumResponseBytes: Int = HIDBroker.maximumMessageBytes) throws -> SelectedHIDResponse {
@@ -52,6 +88,14 @@ enum SelectedHIDBroker {
             io.async { continuation.resume(with: Result { try work() }) }
         }
     }
+    private static func configureClient(_ descriptor: Int32) throws {
+        var uid: uid_t = 0; var gid: gid_t = 0
+        guard getpeereid(descriptor, &uid, &gid) == 0, uid == getuid() else {
+            throw SelectedHIDFailure.invalid("Client UID mismatch")
+        }
+        HIDBroker.configureNoSignalPipe(descriptor)
+        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: 2000, writeMilliseconds: 2000)
+    }
     @MainActor
     static func serve(simulatorUDID: String, logger: AxeLogger) async throws {
         let endpoint = try endpoint(simulatorUDID: simulatorUDID)
@@ -68,7 +112,7 @@ enum SelectedHIDBroker {
         var tasks: [UUID: Task<Void, Never>] = [:]
         do {
             while !owner.shouldStop {
-                if !agentController.isBusy { await owner.maintain() }
+                await agentController.maintain()
                 if owner.shouldStop { break }
                 let client = try await offMain {
                     var descriptor = pollfd(fd: listener, events: Int16(POLLIN), revents: 0)
@@ -80,8 +124,16 @@ enum SelectedHIDBroker {
                     return accepted
                 }
                 guard client >= 0 else { continue }
-                // Bounded outstanding socket work. Rejection happens before the ready handshake.
-                guard tasks.count < 8 else { Darwin.close(client); continue }
+                // Capacity is terminal busy. EOF would let clients retry readiness and send later.
+                guard tasks.count < 8 else {
+                    try? await offMain {
+                        try configureClient(client)
+                        try HIDBroker.writeHandshake(ready: false, version: SelectedHIDRequest.version,
+                            rejection: "busy", to: client)
+                    }
+                    Darwin.close(client)
+                    continue
+                }
                 let rejectedWhileBusy = owner.isBusy || agentController.isBusy
                 let id = UUID()
                 tasks[id] = Task { @MainActor in
@@ -89,10 +141,7 @@ enum SelectedHIDBroker {
                     do {
                         let ready = !owner.shouldStop
                         let request = try await offMain {
-                            var uid: uid_t = 0; var gid: gid_t = 0
-                            guard getpeereid(client, &uid, &gid) == 0, uid == getuid() else { throw SelectedHIDFailure.invalid("Client UID mismatch") }
-                            HIDBroker.configureNoSignalPipe(client)
-                            try HIDBroker.configureSocketTimeouts(client, readMilliseconds: 2000, writeMilliseconds: 2000)
+                            try configureClient(client)
                             try HIDBroker.writeHandshake(ready: ready, version: SelectedHIDRequest.version, to: client)
                             guard ready else { throw SelectedHIDFailure.busy }
                             let bytes = try HIDBroker.readMessage(from: client)
@@ -131,5 +180,25 @@ enum SelectedHIDBroker {
         }
         for task in Array(tasks.values) { await task.value }
         await owner.shutdown()
+    }
+}
+
+/// Cancellation can arrive on another thread while the send scope exits. Never act on a reused FD.
+private final class LegacyKeyboardSocket: @unchecked Sendable {
+    private let lock = NSLock()
+    private var descriptor: Int32?
+
+    init(descriptor: Int32) { self.descriptor = descriptor }
+
+    func shutdownWrite() {
+        lock.lock()
+        defer { lock.unlock() }
+        if let descriptor { _ = Darwin.shutdown(descriptor, SHUT_WR) }
+    }
+
+    func close() {
+        lock.lock()
+        defer { lock.unlock() }
+        if let descriptor { Darwin.close(descriptor); self.descriptor = nil }
     }
 }

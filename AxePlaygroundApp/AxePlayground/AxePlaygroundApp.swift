@@ -6,9 +6,12 @@
 //
 
 import SwiftUI
+import UIKit
 
 @main
 struct AxePlaygroundApp: App {
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -16,6 +19,10 @@ struct AxePlaygroundApp: App {
                     // Handle launch arguments for direct screen navigation
                     handleLaunchArguments()
                 }
+        }
+        .onChange(of: scenePhase, initial: true) { _, phase in
+            // Keep manual checks and idle input checks visible while the playground is active.
+            UIApplication.shared.isIdleTimerDisabled = phase == .active
         }
     }
     

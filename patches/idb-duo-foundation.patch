@@ -1922,10 +1922,10 @@ index 0ebd3bb257c0c90113674a23cc78f88ce0943c5e..8194b987230dda414c07fb8d09ffd23c
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d0da70479
+index 0000000000000000000000000000000000000000..ad4da84edc62970ea38a648152fd26f936c5dc44
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
-@@ -0,0 +1,412 @@
+@@ -0,0 +1,462 @@
 +import FBControlCore
 +import Foundation
 +
@@ -1989,6 +1989,16 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +    lock.unlock()
 +    if let value { throw FBAXAcquisitionStop(outcome: value) }
 +  }
++  func remainingSeconds() throws -> Double {
++    lock.lock()
++    let now = DispatchTime.now()
++    if terminal == nil && now >= deadline { terminal = .deadlineExceeded }
++    let value = terminal
++    let remaining = now < deadline ? Double(deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000 : 0
++    lock.unlock()
++    if let value { throw FBAXAcquisitionStop(outcome: value) }
++    return remaining
++  }
 +  func wait(_ signal: DispatchSemaphore, requestTimeout: Double, send: () -> Void) throws {
 +    try check()
 +    let token = UUID()
@@ -2011,7 +2021,7 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +extension FBSimulatorAXSnapshot {
 +  /// Explicit bounded acquisition. Each empty response is retained in the result.
 +  /// A changed PID fails immediately; this operation never waits for another app.
-+  /// Reads use standard IDB accessibility validation.
++  /// A verified empty first response can use the existing preparation within the same budget.
 +  public static func acquire(
 +    for simulator: FBSimulator, expectedPID: Int32,
 +    observation: FBSimulatorHIDSessionObservation,
@@ -2053,9 +2063,16 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
 +      phase("standard-read")
 +      try budget.check(); try Task.checkCancellation()
-+      try commands.validateAccessibility()
++      try commands.validateAccessibility(bootstrap: false)
 +      try budget.check()
 +      try Task.checkCancellation()
++      if policy.maximumAttempts == 1 {
++        phase("single-attempt-preparation-start")
++        try prepareAccessibility(for: simulator, budget: budget)
++        phase("single-attempt-preparation-finished")
++      } else {
++        phase("direct-first-read")
++      }
 +      for index in 1...policy.maximumAttempts {
 +        try budget.check()
 +        try Task.checkCancellation()
@@ -2105,6 +2122,16 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +        phase("attempt-\(index)-\(ready ? "ready" : "notReady")")
 +        handle.close()
 +        if ready { snapshot = candidate; outcome = .ready; break }
++        if index == 1, policy.maximumAttempts > 1,
++           candidate.roots.count == 1, let root = candidate.roots.first,
++           root.pid == expectedPID, root.type == "Application",
++           root.frame == .zero, root.children.isEmpty {
++          // Both root reads and the current display context matched before preparation.
++          // The next read is an existing policy attempt, not a hidden extra request.
++          phase("empty-root-preparation-start")
++          try prepareAccessibility(for: simulator, budget: budget)
++          phase("empty-root-preparation-finished")
++        }
 +        // No readiness sleep, relaunch, bridge restart, or passive status promotion.
 +        // The next bounded attempt obtains a new handle and a fresh context read.
 +      }
@@ -2214,8 +2241,11 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +      let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
 +      phase("standard-read")
 +      try budget.check(); try Task.checkCancellation()
-+      try commands.validateAccessibility()
++      try commands.validateAccessibility(bootstrap: false)
 +      try budget.check()
++      phase("point-preparation-start")
++      try prepareAccessibility(for: simulator, budget: budget)
++      phase("point-preparation-finished")
 +      rootPID = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
 +      try FBAXPointReadRules.frontmost(rootPID, expectedPID: expectedPID)
 +      phase("frontmost-before-matched")
@@ -2268,6 +2298,25 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +      phases: phases, failureDescription: failure)
 +  }
 +
++  /// Keep the existing runtime preparation and its five-second ceiling, but all
++  /// session phases must also fit within the acquisition's remaining deadline.
++  private func prepareAccessibility(for simulator: FBSimulator, budget: FBAXAcquisitionBudget) throws {
++    try budget.check()
++    try Task.checkCancellation()
++    guard FBSimulatorAccessibilityCommands.requiresAccessibilityBootstrap(for: simulator.osVersion.version) else { return }
++    let remaining = min(5, try budget.remainingSeconds())
++    do {
++      try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
++        forSimulatorDevice: simulator.device, timeout: remaining, logger: simulator.logger)
++    } catch {
++      try budget.check()
++      try Task.checkCancellation()
++      throw error
++    }
++    try budget.check()
++    try Task.checkCancellation()
++  }
++
 +  private func pointReadFrontmostPID(_ commands: FBSimulatorAccessibilityCommands,
 +                                    observation: FBSimulatorHIDSessionObservation,
 +                                    budget: FBAXAcquisitionBudget) async throws -> Int32 {
@@ -2318,8 +2367,9 @@ index 0000000000000000000000000000000000000000..4faf2543e82383f78274d966ca19272d
 +    try provider.validateCurrentRevision(expected: observation)
 +    let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
 +    try budget.check(); try Task.checkCancellation()
-+    try commands.validateAccessibility()
++    try commands.validateAccessibility(bootstrap: false)
 +    try budget.check()
++    try prepareAccessibility(for: simulator, budget: budget)
 +    let request = FBAXTranslationRequest(kind: .frontmostApplication,
 +      pointDisplayID: observation.axDisplayID, displayContext: observation.displayContext)
 +    request.acquisitionBudget = budget
@@ -5883,10 +5933,10 @@ index 0000000000000000000000000000000000000000..804e9daf86614a03a2c0dd95fad420c3
 +}
 diff --git a/FBSimulatorControl/HID/ActivePanelDecoder.swift b/FBSimulatorControl/HID/ActivePanelDecoder.swift
 new file mode 100644
-index 0000000..bd4d525
+index 0000000000000000000000000000000000000000..03788637c98df411cb0c4a7eeac1d226eb3e3a90
 --- /dev/null
 +++ b/FBSimulatorControl/HID/ActivePanelDecoder.swift
-@@ -0,0 +1,238 @@
+@@ -0,0 +1,250 @@
 +import Foundation
 +
 +public enum ActivePanelDecoder {
@@ -5987,6 +6037,16 @@ index 0000000..bd4d525
 +              Set(identities.map(\.uniqueID)).count == rows.count else {
 +            throw ActivePanelValidationError.duplicateIdentity
 +        }
++        // DeviceKit651.28 omits active on every row of the measured iPhone18Pro405
++        // schema. This permits exclusion of an off, non-primary virtual row only;
++        // the independent integrated identity remains the selection authority.
++        let integratedRows = rows.filter { $0.type == .integrated }
++        let measuredRigidOmittedActive = schemaPolicy == .verifiedIPhone18ProProfile405
++            && info.version == "651.28" && expectedPanels.count == 1
++            && expectedPanels.first?.displayID == 1 && integratedRows.count == 1
++            && integratedRows.first?.primary == true && rows.allSatisfy({ $0.active == nil })
++            && integratedRows.first?.displayId == expectedPanels.first?.displayID
++            && integratedRows.first?.uniqueId == expectedPanels.first?.uniqueID
 +        let panels = try rows.compactMap { row -> ActivePanel? in
 +            guard row.nativeSize.count == 2, row.bounds.count == 2,
 +                  row.bounds.allSatisfy({ $0.count == 2 }), row.pointScale > 0, row.pointScale <= 16,
@@ -5996,7 +6056,9 @@ index 0000000..bd4d525
 +                throw ActivePanelValidationError.invalidGeometry(row.displayId)
 +            }
 +            if row.type == .virtual {
-+                guard row.active == false, !row.primary,
++                let measuredOmittedVirtual = measuredRigidOmittedActive && row.active == nil
++                    && row.backlightState == "off"
++                guard row.active == false || measuredOmittedVirtual, !row.primary,
 +                      !expectedPanels.contains(where: {
 +                          $0.displayID == row.displayId || $0.uniqueID == row.uniqueId
 +                      }) else {
@@ -6549,9 +6611,10 @@ index 0000000000000000000000000000000000000000..3ba176adb8a3e56ebf39f19a937ee443
 +  }
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
+index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb1e80431d 100644
 --- a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
 +++ b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
-@@ -50,7 +50,10 @@
+@@ -50,7 +50,10 @@ struct DigitizerContactTracker {
   An `actor`: the mutable contact state is actor-isolated, so the type needs no `@unchecked Sendable`.
   The XPC connection handle is thread-safe, so `disconnect()` cancels it from a `nonisolated` context.
   */
@@ -6563,7 +6626,7 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
  
    static let digitizerServiceName = "com.apple.coredevice.feature.remote.hid.digitizer"
  
-@@ -59,21 +62,20 @@
+@@ -59,21 +62,20 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
    private typealias ConnectionFromEndpointFn = @convention(c) (xpc_object_t) -> xpc_connection_t?
    private typealias EnableSim2HostFn = @convention(c) (xpc_connection_t) -> Void
  
@@ -6597,7 +6660,7 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
    private var contact = DigitizerContactTracker()
    private var twoFingerContact = DigitizerContactTracker()
  
-@@ -81,7 +83,7 @@
+@@ -81,7 +83,7 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
  
    /// Builds a DTUHID transport for the provided Simulator, establishing the host XPC connection to
    /// `dtuhidd`. All setup is synchronous, so the returned transport is ready to send.
@@ -6606,7 +6669,7 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
      guard let handle = dlopen(nil, RTLD_NOW) else {
        throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
      }
-@@ -108,19 +110,24 @@
+@@ -108,19 +110,24 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
  
      // The load-bearing step: without this the daemon observes the peer but never the payload.
      enableSim2Host(connection)
@@ -6617,14 +6680,12 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
        connection: connection,
        mainScreenSize: simulator.device.deviceType.mainScreenSize,
 -      mainScreenScale: simulator.device.deviceType.mainScreenScale)
--  }
--
--  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float) {
--    self.connection = connection
 +      mainScreenScale: simulator.device.deviceType.mainScreenScale,
 +      displayContext: displayContext, nativeEdge: nativeEdge, ownedCleanup: ownedCleanup)
-+  }
-+
+   }
+ 
+-  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float) {
+-    self.connection = connection
 +  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none, ownedCleanup: Bool = false) {
 +    let handle = FBSimulatorDTUHIDConnection(connection)
 +    self.connection = handle
@@ -6638,13 +6699,16 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
    }
  
    private static func symbol<T>(_ handle: UnsafeMutableRawPointer, _ name: String, as type: T.Type) -> T? {
-@@ -133,26 +140,43 @@
+@@ -133,28 +140,48 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
    // MARK: FBSimulatorHIDTransport
  
    nonisolated func disconnect() {
 -    xpc_connection_cancel(connection)
 +    enqueueGate.disconnect()
 +  }
++
++  /// Local eligibility only. A later send still requires its normal host and guest proof.
++  func acceptsInput() -> Bool { enqueueGate.acceptsInput }
 +
 +  /// Selected-session startup only. This confirms guest service progress before the first input;
 +  /// it does not confirm UIKit readiness or change contact timing.
@@ -6678,23 +6742,23 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
 +      eventType: twoFingerContact.eventType(for: direction),
 +      edge: nativeEdge.rawValue, target: displayContext?.hidTarget ?? 0)
      try await send(messageType: "IndigoDigitizerEvent", payload: event)
-+  }
-+
+   }
+ 
 +  private func normalizedPoint(_ point: CGPoint) throws -> CGPoint {
 +    if let displayContext {
 +      return try displayContext.normalizedPoint(from: point)
 +    }
 +    return FBSimulatorIndigoHID.screenRatio(
 +      from: point, screenSize: mainScreenSize, screenScale: mainScreenScale)
-   }
- 
-   func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
-@@ -171,6 +195,39 @@
-     try await send(
-       messageType: "IndigoKeyboardButtonEvent",
-       payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
 +  }
 +
+   func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
+     guard let usage = button.dtuhidUsage else {
+       throw FBSimulatorHIDError.notImplementedOnDTUHIDTransport(
+@@ -173,6 +200,39 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+       payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
+   }
+ 
 +  /// Release only input recorded by the owning session, using its original connection.
 +  /// Normal input remains closed. These requests retain the same host and guest proof.
 +  func releaseOwnedInput(_ release: FBSimulatorHIDOwnedRelease) async throws {
@@ -6726,10 +6790,12 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
 +        payload: IndigoButtonEvent(usagePage: UInt64(usage.page), usageCode: UInt64(usage.code), state: .up),
 +        ownedRelease: true)
 +    }
-   }
- 
++  }
++
    // MARK: Sending
-@@ -183,26 +240,174 @@
+ 
+   /// Wraps `payload` in a `DTUHIDMessage` and serializes it to the `xpc_object_t` `dtuhidd` decodes.
+@@ -183,28 +243,182 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
      return try XPCEncoder().encode(message)
    }
  
@@ -6760,29 +6826,26 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
 +      try await enqueueGate.performResult(operation: "DTUHID guest barrier", ownedRelease: ownedRelease) {
 +        connection.sendGuestBarrier(completion: $0)
        }
--    }
--  }
--
--  /// Drains the connection once a gesture's events have all been sent: waits `drainNanos` so
--  /// `dtuhidd` consumes them before the connection is torn down. Run once per gesture (see
--  /// `drainNanos`), not after every primitive.
 +      latestSendEvidence?.guestBarrierCompletedUptime = ProcessInfo.processInfo.systemUptime
 +    } catch {
 +      latestSendEvidence?.failedUptime = ProcessInfo.processInfo.systemUptime
 +      latestSendEvidence?.failurePhase = phase
 +      latestSendEvidence?.errorDescription = String(describing: error)
 +      throw error
-+    }
-+  }
-+
+     }
+   }
+ 
+-  /// Drains the connection once a gesture's events have all been sent: waits `drainNanos` so
+-  /// `dtuhidd` consumes them before the connection is torn down. Run once per gesture (see
+-  /// `drainNanos`), not after every primitive.
 +  /// Keeps the connection alive for `drainNanos` after a dispatched gesture. This wait does not
 +  /// acknowledge guest consumption. It runs once per send, not after every primitive.
    func flush() async throws {
      try? await Task.sleep(nanoseconds: Self.drainNanos)
    }
  
-+}
-+
+ }
+ 
 +/// XPC permits send and cancellation from different threads. The handle never changes.
 +private final class FBSimulatorDTUHIDConnection: @unchecked Sendable {
 +  private let value: xpc_connection_t
@@ -6892,6 +6955,12 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
 +    }
 +  }
 +
++  var acceptsInput: Bool {
++    lock.lock()
++    defer { lock.unlock() }
++    return admission == .open
++  }
++
 +  private func remove(_ identifier: UUID) {
 +    lock.lock(); pending.removeValue(forKey: identifier); lock.unlock()
 +  }
@@ -6916,9 +6985,11 @@ diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulat
 +    cancelConnection()
 +    for result in waiting { result.finish(.failure(FBSimulatorDTUHIDEnqueueError.connectionClosed)) }
 +  }
- }
- 
++}
++
  // MARK: - Button usage mapping
+ 
+ extension FBSimulatorHIDButton {
 diff --git a/FBSimulatorControl/HID/FBSimulatorHID.swift b/FBSimulatorControl/HID/FBSimulatorHID.swift
 index 9e230012f04a5fee522b51061e2eb6c25c3eecdf..803d4d43f555ced133de8f24ddfba47dee1d1530 100644
 --- a/FBSimulatorControl/HID/FBSimulatorHID.swift
@@ -7216,10 +7287,10 @@ index 0000000000000000000000000000000000000000..b9419cab66b41e7c76613477baedc883
 
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift b/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4011c03ae
+index 0000000000000000000000000000000000000000..e74e7b56ef0bd1debe077593460966b6d966f3be
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift
-@@ -0,0 +1,278 @@
+@@ -1,0 +1,335 @@
 +@preconcurrency import CoreSimulator
 +import Foundation
 +
@@ -7349,22 +7420,58 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +
 +  private static func renew(simulator: FBSimulator, first: FBSimulatorHIDMotionSubscription?,
 +                            state: FBSimulatorHIDFeedState, interval: TimeInterval) async {
-+    var current = first
-+    defer { current?.close() }
++    // One listener remains open to detect a change and reversion between fresh reads.
++    defer { first?.close() }
++    let motionRead: (@Sendable () async throws -> FBSimulatorHingeObservation)?
++    if first != nil {
++      motionRead = { try await FBSimulatorHingeReader.read(for: simulator) }
++    } else {
++      motionRead = nil
++    }
++    await FBSimulatorHIDFeedRenewal.run(state: state, interval: interval,
++      motionRead: motionRead, displayRead: { try await FBSimulatorDisplayDiscovery.displays(for: simulator) })
++  }
++}
++
++
++/// Fresh motion samples and display enumeration cannot delay each other's renewal.
++/// The caller owns the persistent change listener and joins both tasks before closing it.
++enum FBSimulatorHIDFeedRenewal {
++  static func run(state: FBSimulatorHIDFeedState, interval: TimeInterval,
++                  motionRead: (@Sendable () async throws -> FBSimulatorHingeObservation)?,
++                  displayRead: @escaping @Sendable () async throws -> [FBSimulatorDisplayInfo]) async {
 +    do {
-+      while true {
-+        try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-+        // The old channel still observes changes while the new channel starts.
-+        let next = try current.map { _ in try FBSimulatorHIDMotionSubscription(simulator: simulator, state: state) }
-+        do {
-+          try await next?.waitForFreshSample()
-+          try Task.checkCancellation()
-+          let displays = try await FBSimulatorDisplayDiscovery.displays(for: simulator)
-+          try Task.checkCancellation()
-+          state.observeDisplays(displays)
-+        } catch { next?.close(); throw error }
-+        current?.close()
-+        current = next
++      try await withThrowingTaskGroup(of: Void.self) { group in
++        if let motionRead {
++          group.addTask {
++            do {
++              while true {
++                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
++                let sample = try await motionRead()
++                try Task.checkCancellation()
++                state.observeMotion(sample)
++              }
++            } catch {
++              if !(error is CancellationError) { state.fail("Motion refresh: \(error)") }
++              throw error
++            }
++          }
++        }
++        group.addTask {
++          do {
++            while true {
++              try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
++              let displays = try await displayRead()
++              try Task.checkCancellation()
++              state.observeDisplays(displays)
++            }
++          } catch {
++            if !(error is CancellationError) { state.fail("Display refresh: \(error)") }
++            throw error
++          }
++        }
++        defer { group.cancelAll() }
++        _ = try await group.next()
 +      }
 +    } catch is CancellationError {
 +      state.close()
@@ -7397,6 +7504,7 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +  private let lock = NSLock()
 +  private let maximumAge: TimeInterval
 +  private let requiresMotion: Bool
++  private let clock: @Sendable () -> TimeInterval
 +  private var generation: UInt64 = 0
 +  private var lastMotion: FBSimulatorHingeObservation?
 +  private var displays: [UInt32: FBSimulatorHIDFeedDisplay] = [:]
@@ -7407,9 +7515,18 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +  private var displayRefreshes: UInt64 = 0
 +  private var failure: String?
 +
++  // Preserve the existing designated initializer and its exported initializing entry.
 +  init(maximumAge: TimeInterval, requiresMotion: Bool = true) {
 +    self.maximumAge = maximumAge
 +    self.requiresMotion = requiresMotion
++    self.clock = { ProcessInfo.processInfo.systemUptime }
++  }
++
++  init(maximumAge: TimeInterval, requiresMotion: Bool,
++       clock: @escaping @Sendable () -> TimeInterval) {
++    self.maximumAge = maximumAge
++    self.requiresMotion = requiresMotion
++    self.clock = clock
 +  }
 +
 +  func observeMotion(_ value: FBSimulatorHingeObservation) {
@@ -7441,7 +7558,7 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +    if hasDisplaySnapshot && displays != next { generation += 1 }
 +    displays = next
 +    hasDisplaySnapshot = true
-+    displayReceived = ProcessInfo.processInfo.systemUptime
++    displayReceived = clock()
 +    displayRefreshes += 1
 +  }
 +
@@ -7450,6 +7567,7 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +    if failure == nil { failure = message }
 +  }
 +  func close() { fail("Feed closed") }
++  func motionSubscriptionCompleted() { fail("Motion subscription completed before close") }
 +
 +  func checkpoint() throws -> UInt64 {
 +    lock.lock(); defer { lock.unlock() }
@@ -7469,16 +7587,26 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +    if let failure {
 +      throw FBSimulatorHIDSessionError.interrupted(reason: .observationUnavailable(failure), cleanup: .notNeeded)
 +    }
-+    let now = ProcessInfo.processInfo.systemUptime
++    let now = clock()
 +    let motionIsFresh = !requiresMotion || lastMotion.map { now - $0.timestampUptime <= maximumAge } == true
-+    guard motionIsFresh, let displayReceived, now - displayReceived <= maximumAge else {
-+      throw FBSimulatorHIDSessionError.interrupted(reason: .observationUnavailable("Native observation feed is stale or not initialized"), cleanup: .notNeeded)
++    let displayIsFresh = displayReceived.map { now - $0 <= maximumAge } == true
++    guard motionIsFresh, displayIsFresh else {
++      let sources = [motionIsFresh ? nil : "motion", displayIsFresh ? nil : "display"].compactMap { $0 }
++      let motionAge = lastMotion.map { String(now - $0.timestampUptime) } ?? "missing"
++      let displayAge = displayReceived.map { String(now - $0) } ?? "missing"
++      let timestamp = lastMotion.map { String($0.timestampUptime) } ?? "missing"
++      let received = lastMotion.map { String($0.receivedUptime) } ?? "missing"
++      let message = "Native observation feed is stale or not initialized; staleSources=\(sources.joined(separator: ",")); "
++        + "nowUptime=\(now); maximumAgeSeconds=\(maximumAge); motionAgeSeconds=\(motionAge); displayAgeSeconds=\(displayAge); "
++        + "motionTimestampUptime=\(timestamp); motionReceivedUptime=\(received); channelID=\(lastMotion?.channelID ?? "missing"); "
++        + "motionSampleCount=\(motionSamples); displayCallbackCount=\(displayCallbacks); displayRefreshCount=\(displayRefreshes); generation=\(generation)"
++      throw FBSimulatorHIDSessionError.interrupted(reason: .observationUnavailable(message), cleanup: .notNeeded)
 +    }
 +  }
 +
 +  func status() -> FBSimulatorHIDFeedStatus {
 +    lock.lock(); defer { lock.unlock() }
-+    let now = ProcessInfo.processInfo.systemUptime
++    let now = clock()
 +    return FBSimulatorHIDFeedStatus(generation: generation, motionSampleCount: motionSamples,
 +      displayCallbackCount: displayCallbacks, displayRefreshCount: displayRefreshes,
 +      motionAgeSeconds: lastMotion.map { now - $0.timestampUptime },
@@ -7500,10 +7628,10 @@ index 0000000000000000000000000000000000000000..dd2c4a8cdfbc8ebfcf02d8c5cf1dd2d4
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift b/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..5c84904300671940884eb113e631c7da37f5ef36
+index 0000000000000000000000000000000000000000..558e7e999fefd67ac02f12ce5996c630e8a1c954
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDMotionFeed.swift
-@@ -0,0 +1,221 @@
+@@ -1,0 +1,225 @@
 +@preconcurrency import CoreSimulator
 +import Darwin
 +import Foundation
@@ -7520,8 +7648,8 @@ index 0000000000000000000000000000000000000000..5c84904300671940884eb113e631c7da
 +  public let maximumDegrees: Double
 +}
 +
-+/// Each renewal opens a new channel before the old one closes. The service sends no stable
-+/// heartbeat, so a quiet old channel alone is never used as proof of current state.
++/// One channel observes changes for the feed lifetime. The service sends no stable
++/// heartbeat; separate fixed one-shot reads provide periodic fresh-sample evidence.
 +final class FBSimulatorHIDMotionSubscription: @unchecked Sendable {
 +  private let connection: xpc_connection_t
 +  private let closed = FBSimulatorHIDFeedClosure()
@@ -7559,6 +7687,10 @@ index 0000000000000000000000000000000000000000..5c84904300671940884eb113e631c7da
 +      if xpc_get_type(reply) != XPC_TYPE_DICTIONARY || xpc_dictionary_get_value(reply, "CoreDevice.error") != nil {
 +        let error = FBSimulatorHIDHingeWire.failure("Motion service rejected or closed the request")
 +        state.fail("Motion subscription rejected"); first.finish(.failure(error))
++      } else {
++        // The original reply ends this stream. Fresh one-shot reads cannot replace its change watcher.
++        state.motionSubscriptionCompleted()
++        first.finish(.failure(FBSimulatorHIDHingeWire.failure("Motion subscription completed before close")))
 +      }
 +    }
 +  }
@@ -7727,10 +7859,12 @@ index 0000000000000000000000000000000000000000..5c84904300671940884eb113e631c7da
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
+index 0000000000000000000000000000000000000000..8c0d936176d2527f95f6cb6e272af312666f1a1c
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,873 @@
+@@ -0,0 +1,955 @@
 +import CoreGraphics
++@preconcurrency import FBControlCore
 +import Foundation
 +
 +/// Owns one fixed display context and one DTUHID connection. A new session and lookup are required
@@ -7740,7 +7874,7 @@ new file mode 100644
 +    case single(CGPoint)
 +    case pair(CGPoint, CGPoint)
 +  }
-+  private enum SubmissionMode: Equatable { case complete, ownedPart, legacyBatch }
++  private enum SubmissionMode: Equatable { case complete, ownedPart, legacyBatch, legacyKeyboard }
 +  private enum OwnedStreamMode: Equatable { case strict, legacyBatch }
 +  private struct OwnedInputState {
 +    let contactCount: Int
@@ -7749,6 +7883,7 @@ new file mode 100644
 +  }
 +
 +  private let transport: any FBSimulatorHIDTransport
++  private let transportLease: FBSimulatorHIDTransportLease?
 +  private let observation: FBSimulatorHIDSessionObservation
 +  private let freshnessProvider: any FBSimulatorHIDFreshnessProvider
 +  private let liveProvider: (any FBSimulatorHIDLiveFreshnessProvider)?
@@ -7789,6 +7924,19 @@ new file mode 100644
 +    } catch { liveFreshnessProvider.close(); throw error }
 +  }
 +
++  /// Explicit healthy transport reuse. Each call creates a new session and input ledger.
++  /// The caller owns the transport owner and must close each returned session.
++  public static func open(for simulator: FBSimulator,
++                          observation: FBSimulatorHIDSessionObservation,
++                          liveFreshnessProvider: any FBSimulatorHIDLiveFreshnessProvider,
++                          transportOwner: FBSimulatorHIDTransportOwner) async throws -> FBSimulatorHIDSession {
++    do {
++      return try await openSession(for: simulator, observation: observation,
++        freshnessProvider: liveFreshnessProvider, liveProvider: liveFreshnessProvider,
++        transportOwner: transportOwner)
++    } catch { liveFreshnessProvider.close(); throw error }
++  }
++
 +  /// Explicit opt-in hint for one fixed selected display. The hint is geometric;
 +  /// successful input delivery does not prove a system navigation effect.
 +  /// Takes ownership of the live provider, including when opening fails.
@@ -7807,31 +7955,63 @@ new file mode 100644
 +                                  observation: FBSimulatorHIDSessionObservation,
 +                                  freshnessProvider: any FBSimulatorHIDFreshnessProvider,
 +                                  liveProvider: (any FBSimulatorHIDLiveFreshnessProvider)?,
-+                                  nativeEdge: FBSimulatorHIDNativeEdge = .none) async throws -> FBSimulatorHIDSession {
-+    guard simulator.udid == observation.simulatorUDID else {
-+      throw FBSimulatorHIDSessionError.invalidObservation("Simulator identity does not match")
-+    }
-+    let display: FBSimulatorDisplayInfo
-+    do { display = try await FBSimulatorDisplayDiscovery.display(for: simulator, screenID: observation.screenID) }
-+    catch is CancellationError { throw CancellationError() }
-+    catch { throw FBSimulatorHIDSessionError.invalidObservation("Runtime display lookup failed: \(error)") }
-+    guard display.uniqueID == observation.screenUniqueID,
-+          display.nativePixelSize == observation.displayContext.nativePixelSize,
-+          display.scale == observation.displayContext.scale,
-+          UInt64(display.screenID) == observation.displayContext.hidTarget else {
-+      throw FBSimulatorHIDSessionError.invalidObservation("Selected runtime display does not match the measured context")
-+    }
-+    guard try await freshnessProvider.observation() == observation else {
-+      throw FBSimulatorHIDSessionError.invalidObservation("Context changed before opening the connection")
-+    }
-+    try Task.checkCancellation()
-+    let transport = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator, displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
++                                  nativeEdge: FBSimulatorHIDNativeEdge = .none,
++                                  transportOwner: FBSimulatorHIDTransportOwner? = nil) async throws -> FBSimulatorHIDSession {
++    var reservation: FBSimulatorHIDTransportReservation?
++    var transport: FBSimulatorDTUHIDTransport?
 +    do {
-+      try await transport.prepareSelectedConnection()
++      if let transportOwner {
++        let reserved = try await transportOwner.reserve(observation: observation)
++        reservation = reserved
++        transport = reserved.transport
++      }
++      guard simulator.udid == observation.simulatorUDID else {
++        throw FBSimulatorHIDSessionError.invalidObservation("Simulator identity does not match")
++      }
++      let display: FBSimulatorDisplayInfo
++      do { display = try await FBSimulatorDisplayDiscovery.display(for: simulator, screenID: observation.screenID) }
++      catch is CancellationError { throw CancellationError() }
++      catch { throw FBSimulatorHIDSessionError.invalidObservation("Runtime display lookup failed: \(error)") }
++      guard display.uniqueID == observation.screenUniqueID,
++            display.nativePixelSize == observation.displayContext.nativePixelSize,
++            display.scale == observation.displayContext.scale,
++            UInt64(display.screenID) == observation.displayContext.hidTarget else {
++        throw FBSimulatorHIDSessionError.invalidObservation("Selected runtime display does not match the measured context")
++      }
++      guard try await freshnessProvider.observation() == observation else {
++        throw FBSimulatorHIDSessionError.invalidObservation("Context changed before opening the connection")
++      }
 +      try Task.checkCancellation()
-+      return FBSimulatorHIDSession(transport: transport, observation: observation, freshnessProvider: freshnessProvider, liveProvider: liveProvider)
++      var connectionID = reservation?.connectionID ?? UUID()
++      if let cached = transport, !(await cached.acceptsInput()) {
++        cached.disconnect()
++        transport = nil
++        connectionID = UUID()
++      }
++      let reused = transport != nil
++      if transport == nil {
++        let opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
++          displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
++        transport = opened
++        try await opened.prepareSelectedConnection()
++      }
++      try Task.checkCancellation()
++      guard let transport else { throw FBSimulatorHIDSessionError.invalidObservation("Missing owned transport") }
++      var lease: FBSimulatorHIDTransportLease?
++      if let transportOwner, let reservation {
++        lease = FBSimulatorHIDTransportLease(owner: transportOwner, reservationID: reservation.identifier,
++          connectionID: connectionID, observation: observation, transport: transport)
++        FBControlCoreGlobalConfiguration.defaultLogger.log("Selected HID transport acquired connection=\(connectionID) reused=\(reused)")
++      }
++      if let lease {
++        return FBSimulatorHIDSession(transport: transport, observation: observation,
++          freshnessProvider: freshnessProvider, liveProvider: liveProvider, transportLease: lease)
++      }
++      return FBSimulatorHIDSession(transport: transport, observation: observation,
++        freshnessProvider: freshnessProvider, liveProvider: liveProvider)
 +    } catch {
-+      transport.disconnect()
++      transport?.disconnect()
++      if let transportOwner, let reservation { await transportOwner.discard(reservation.identifier) }
 +      throw error
 +    }
 +  }
@@ -7841,6 +8021,18 @@ new file mode 100644
 +       freshnessProvider: any FBSimulatorHIDFreshnessProvider,
 +       liveProvider: (any FBSimulatorHIDLiveFreshnessProvider)? = nil) {
 +    self.transport = transport
++    self.transportLease = nil
++    self.observation = observation
++    self.freshnessProvider = freshnessProvider
++    self.liveProvider = liveProvider
++  }
++
++  init(transport: any FBSimulatorHIDTransport, observation: FBSimulatorHIDSessionObservation,
++       freshnessProvider: any FBSimulatorHIDFreshnessProvider,
++       liveProvider: (any FBSimulatorHIDLiveFreshnessProvider)?,
++       transportLease: FBSimulatorHIDTransportLease) {
++    self.transport = transport
++    self.transportLease = transportLease
 +    self.observation = observation
 +    self.freshnessProvider = freshnessProvider
 +    self.liveProvider = liveProvider
@@ -7879,6 +8071,14 @@ new file mode 100644
 +
 +  public func execute(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
 +    try await executePrepared(event, admissionGuard: nil)
++  }
++
++  /// Complete raw keyboard input with legacy duplicate-key credits and no command-size limit.
++  /// Every key must be released in this call. Only keyboard events and delays are accepted.
++  /// Successful fully drained input can return a healthy connection to its transport owner;
++  /// retained legacy batches and interrupted input remain ineligible for reuse.
++  public func executeLegacyKeyboard(_ event: FBSimulatorHIDEvent) async throws -> FBSimulatorHIDSessionReceipt {
++    try await executePrepared(event, admissionGuard: nil, mode: .legacyKeyboard)
 +  }
 +
 +  /// Submit part of one owned logical-coordinate stream. Held single-contact, key and button
@@ -7939,10 +8139,15 @@ new file mode 100644
 +    let firstLegacyBatchPart = mode == .legacyBatch && ownedStreamMode == nil
 +    let events: [FBSimulatorHIDEvent]
 +    switch mode {
-+    case .complete:
++    case .complete, .legacyKeyboard:
 +      guard !usesOwnedParts else { throw FBSimulatorHIDSessionError.invalidEvent("Owned-part sessions cannot execute complete input") }
 +      guard contacts == nil else { throw FBSimulatorHIDSessionError.retainedContactExists }
-+      events = try Self.prepare(event, context: observation.displayContext)
++      events = try Self.prepare(event, context: observation.displayContext, legacyBatch: mode == .legacyKeyboard)
++      if mode == .legacyKeyboard {
++        guard events.allSatisfy({ item in
++          switch item { case .keyboard, .delay: return true; default: return false }
++        }) else { throw FBSimulatorHIDSessionError.invalidEvent("Complete legacy keyboard accepts only keyboard events and delays") }
++      }
 +    case .ownedPart, .legacyBatch:
 +      let streamMode: OwnedStreamMode = mode == .legacyBatch ? .legacyBatch : .strict
 +      guard ownedStreamMode == nil || ownedStreamMode == streamMode else {
@@ -8113,8 +8318,17 @@ new file mode 100644
 +    }
 +    inFlight = true
 +    defer { inFlight = false }
++    var reusable = state == .ready && !hasOwnedInput && token == nil && ownedStreamMode == nil && !Task.isCancelled
++      && lastExecutionEvidence?.phase == .completed && lastExecutionEvidence?.drainCompleted == true
++      && lastExecutionEvidence?.allInputsReleasedBeforeCleanup == true
 +    let cleanup = await cleanupContacts(uncertain: state == .invalidated, trigger: "close")
-+    transport.disconnect()
++    if let liveProvider {
++      do { try liveProvider.validateCurrentRevision(expected: observation) }
++      catch { reusable = false }
++    }
++    if let transportLease {
++      await transportLease.finish(reusable: reusable && cleanup == .notNeeded && !Task.isCancelled)
++    } else { transport.disconnect() }
 +    liveProvider?.close()
 +    state = .closed
 +    return receipt(.closed, started: started, before: before, cleanup: cleanup)
@@ -8295,6 +8509,7 @@ new file mode 100644
 +    let cleanup = await cleanupContacts(uncertain: changed, trigger: String(describing: reason))
 +    // No reuse after interruption: close, then require a fresh observation and connection.
 +    transport.disconnect()
++    await transportLease?.finish(reusable: false)
 +    liveProvider?.close()
 +    state = .invalidated
 +    return .interrupted(reason: reason, cleanup: cleanup)
@@ -9600,14 +9815,14 @@ index 0000000000000000000000000000000000000000..8f9ed662b5f5e37ca314e2aacb4d358b
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeReader.swift b/FBSimulatorControl/HID/FBSimulatorHingeReader.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..65412ba6bbc7999e345ac7030dfc39eb85613774
+index 0000000000000000000000000000000000000000..5bf1cdaf62e540f003a1fe71b966d0be0c1ec0db
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHingeReader.swift
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,111 @@
 +@preconcurrency import XPC
 +import Foundation
 +
-+/// Reuses the live feed wire decoder. A fresh channel supplies a new sample, then closes.
++/// A fresh sample, its cancellation reply and the original request reply complete one read.
 +public enum FBSimulatorHingeReader {
 +  public static func read(for simulator: FBSimulator) async throws -> FBSimulatorHingeObservation {
 +    let channel = UUID()
@@ -9619,24 +9834,100 @@ index 0000000000000000000000000000000000000000..65412ba6bbc7999e345ac7030dfc39eb
 +    let result = FBSimulatorBoundedResult<FBSimulatorHingeObservation>()
 +    return try await result.value(timeout: 3, operation: "Context hinge sample") { finish in
 +      let started = ProcessInfo.processInfo.systemUptime
++      let completion = FBSimulatorHingeReadCompletion(deadline: started + 3, finish: finish)
 +      xpc_connection_set_event_handler(connection) { event in
++        guard !completion.finished else { return }
 +        do {
 +          let samples = try FBSimulatorHIDHingeWire.samples(event, channel: channel, notBefore: started)
-+          let sample = samples.max { $0.timestampUptime < $1.timestampUptime }
-+          if xpc_get_type(event) == XPC_TYPE_DICTIONARY, let reply = xpc_dictionary_create_reply(event) {
-+            xpc_dictionary_set_bool(reply, "CoreDevice.XPCMessageKey.cancellationRequested", sample != nil)
-+            xpc_connection_send_message(connection, reply)
++          let hasSample = completion.remember(samples.max { $0.timestampUptime < $1.timestampUptime })
++          guard let reply = xpc_dictionary_create_reply(event) else {
++            throw FBSimulatorHIDHingeWire.failure("Context motion sample has no reply channel")
 +          }
-+          if let sample { finish(.success(sample)) }
-+        } catch { finish(.failure(error)) }
++          xpc_dictionary_set_bool(reply, "CoreDevice.XPCMessageKey.cancellationRequested", hasSample)
++          xpc_connection_send_message(connection, reply)
++          if hasSample {
++            let sequence = completion.cancellationReplyEnqueued()
++            xpc_connection_send_barrier(connection) {
++              queue.async { completion.cancellationReplyDrained(sequence) }
++            }
++          }
++        } catch { completion.fail(error) }
 +      }
 +      xpc_connection_resume(connection)
 +      xpc_connection_send_message_with_reply(connection, request, queue) { reply in
-+        if xpc_get_type(reply) != XPC_TYPE_DICTIONARY || xpc_dictionary_get_value(reply, "CoreDevice.error") != nil {
-+          finish(.failure(FBSimulatorHIDHingeWire.failure("Context motion service rejected the request")))
++        guard !completion.finished else { return }
++        guard xpc_get_type(reply) == XPC_TYPE_DICTIONARY,
++              xpc_dictionary_get_value(reply, "CoreDevice.error") == nil,
++              let output = xpc_dictionary_get_value(reply, "CoreDevice.output"),
++              xpc_get_type(output) == XPC_TYPE_DICTIONARY,
++              xpc_dictionary_get_count(output) == 0 else {
++          completion.fail(FBSimulatorHIDHingeWire.failure("Context motion service rejected the request"))
++          return
 +        }
++        completion.originalReplyReceived()
 +      }
 +    }
++  }
++}
++
++/// All mutable state and the finish callback belong to the read's existing serial XPC queue.
++/// The send barrier returns to that queue before it changes completion state.
++private final class FBSimulatorHingeReadCompletion: @unchecked Sendable {
++  private let deadline: TimeInterval
++  private let finish: @Sendable (Result<FBSimulatorHingeObservation, Error>) -> Void
++  private var sample: FBSimulatorHingeObservation?
++  private var enqueuedReplies = 0
++  private var drainedReplies = 0
++  private var receivedOriginalReply = false
++  private(set) var finished = false
++
++  init(deadline: TimeInterval,
++       finish: @escaping @Sendable (Result<FBSimulatorHingeObservation, Error>) -> Void) {
++    self.deadline = deadline
++    self.finish = finish
++  }
++
++  func remember(_ candidate: FBSimulatorHingeObservation?) -> Bool {
++    if sample == nil { sample = candidate }
++    return sample != nil
++  }
++
++  func cancellationReplyEnqueued() -> Int {
++    enqueuedReplies += 1
++    return enqueuedReplies
++  }
++
++  func cancellationReplyDrained(_ sequence: Int) {
++    guard !finished else { return }
++    drainedReplies = max(drainedReplies, sequence)
++    completeIfReady()
++  }
++
++  func originalReplyReceived() {
++    guard !finished else { return }
++    guard enqueuedReplies > 0 else {
++      fail(FBSimulatorHIDHingeWire.failure("Context motion service replied before the sample cancellation reply"))
++      return
++    }
++    receivedOriginalReply = true
++    completeIfReady()
++  }
++
++  func fail(_ error: Error) {
++    guard !finished else { return }
++    finished = true
++    finish(.failure(error))
++  }
++
++  private func completeIfReady() {
++    guard !finished, receivedOriginalReply, enqueuedReplies > 0,
++          drainedReplies == enqueuedReplies, let sample else { return }
++    guard ProcessInfo.processInfo.systemUptime <= deadline else {
++      fail(FBSimulatorHIDHingeWire.failure("Context hinge sample timed out"))
++      return
++    }
++    finished = true
++    finish(.success(sample))
 +  }
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeReadinessModels.swift b/FBSimulatorControl/HID/FBSimulatorHingeReadinessModels.swift
@@ -13731,4 +14022,799 @@ new file mode 100644
 +      startedUptime: now, finishedUptime: now)
 +  }
 +  func close() {}
++}
+diff --git a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
+index 35714fa948b5f81476b850f1ce09cd8883e66b8c..775718758c095919ed050e2ae8f07f2d9dd5d347 100644
+--- a/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
++++ b/FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m
+@@ -10,6 +10,8 @@
+ #import <CoreSimulatorUtilities/NSUserDefaults-SimDefaults.h>
+ #import <FBControlCore/FBControlCore.h>
+ #import <objc/message.h>
++#import <math.h>
++#import <mach/mach_time.h>
+ 
+ static NSString *const FBSimulatorAccessibilityBootstrapErrorDomain = @"com.facebook.FBSimulatorControl.AccessibilityBootstrap";
+ 
+@@ -20,6 +22,35 @@
+                          userInfo:@{NSLocalizedDescriptionKey: description}];
+ }
+ 
++static NSTimeInterval FBSimulatorAccessibilityBootstrapRemaining(dispatch_time_t deadline)
++{
++  static dispatch_once_t onceToken;
++  static mach_timebase_info_data_t timebase;
++  dispatch_once(&onceToken, ^{ mach_timebase_info(&timebase); });
++  dispatch_time_t now = dispatch_time(DISPATCH_TIME_NOW, 0);
++  if (now >= deadline || timebase.denom == 0) {
++    return 0;
++  }
++  // The default dispatch clock uses mach ticks, not nanoseconds, on Apple silicon.
++  return ((NSTimeInterval)(deadline - now) * timebase.numer / timebase.denom) / NSEC_PER_SEC;
++}
++
++static BOOL FBSimulatorAccessibilityBootstrapCheckDeadline(dispatch_time_t deadline, NSString *phase, NSError **error)
++{
++  if (FBSimulatorAccessibilityBootstrapRemaining(deadline) > 0) {
++    return YES;
++  }
++  if (error) {
++    *error = FBSimulatorAccessibilityBootstrapError(11, [NSString stringWithFormat:@"Simulator Accessibility preparation deadline expired %@", phase]);
++  }
++  return NO;
++}
++
++static void FBSimulatorAccessibilityBootstrapPhase(id<FBControlCoreLogger> logger, NSString *phase)
++{
++  [logger log:[NSString stringWithFormat:@"AX preparation phase=%@ uptime=%f", phase, NSProcessInfo.processInfo.systemUptime]];
++}
++
+ static void FBSimulatorInvalidateAutomationSession(id session)
+ {
+   SEL invalidateSelector = NSSelectorFromString(@"invalidate");
+@@ -123,7 +154,7 @@ - (NSError *)error
+ @interface FBSimulatorControlFrameworkLoader ()
+ 
+ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice
+-                                                 timeout:(NSTimeInterval)timeout
++                                                deadline:(dispatch_time_t)deadline
+                                                   logger:(nullable id<FBControlCoreLogger>)logger
+                                                    error:(NSError **)error;
+ 
+@@ -189,6 +220,15 @@ + (FBSimulatorControlFrameworkLoader *)accessibilityAutomationFrameworks
+ 
+ + (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
+ {
++  if (!isfinite(timeout) || timeout <= 0 || timeout >= (NSTimeInterval)INT64_MAX / NSEC_PER_SEC) {
++    if (error) {
++      *error = FBSimulatorAccessibilityBootstrapError(10, @"Simulator Accessibility preparation requires a finite positive timeout");
++    }
++    return NO;
++  }
++  // Joining, session creation, and Accessibility loading share this one deadline.
++  dispatch_time_t deadline = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC));
++  FBSimulatorAccessibilityBootstrapPhase(logger, @"start");
+   static dispatch_once_t onceToken;
+   static dispatch_queue_t stateQueue;
+   static NSMapTable *states;
+@@ -210,7 +250,18 @@ + (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NS
+     }
+   });
+   if (!ownsAttempt) {
+-    dispatch_group_wait(attempt.group, DISPATCH_TIME_FOREVER);
++    FBSimulatorAccessibilityBootstrapPhase(logger, @"join-start");
++    if (dispatch_group_wait(attempt.group, deadline) != 0) {
++      if (error) {
++        *error = FBSimulatorAccessibilityBootstrapError(11, @"Timed out joining simulator Accessibility preparation");
++      }
++      // A joining caller does not cancel or remove another caller's attempt.
++      return NO;
++    }
++    if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after joining preparation", error)) {
++      return NO;
++    }
++    FBSimulatorAccessibilityBootstrapPhase(logger, @"join-finished");
+     if (!attempt.success && error) {
+       *error = attempt.error;
+     }
+@@ -219,9 +270,13 @@ + (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NS
+ 
+   NSError *bootstrapError = nil;
+   BOOL success = [self performAccessibilityBootstrapForSimulatorDevice:simulatorDevice
+-                                                               timeout:timeout
++                                                              deadline:deadline
+                                                                 logger:logger
+                                                                  error:&bootstrapError];
++  // Session invalidation is synchronous too. Never report success past the deadline.
++  if (success && !FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after session cleanup", &bootstrapError)) {
++    success = NO;
++  }
+   attempt.success = success;
+   attempt.error = bootstrapError;
+   dispatch_sync(stateQueue, ^{
+@@ -230,17 +285,24 @@ + (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NS
+     }
+   });
+   dispatch_group_leave(attempt.group);
++  FBSimulatorAccessibilityBootstrapPhase(logger, success ? @"finished" : @"failed");
+   if (!success && error) {
+     *error = bootstrapError;
+   }
+   return success;
+ }
+ 
+-+ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
+++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice deadline:(dispatch_time_t)deadline logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
+ {
++  if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"before framework loading", error)) {
++    return NO;
++  }
+   if (![self.accessibilityAutomationFrameworks loadPrivateFrameworks:logger error:error]) {
+     return NO;
+   }
++  if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after framework loading", error)) {
++    return NO;
++  }
+ 
+   Class providerClass = NSClassFromString(@"XCUIDeviceRemoteDaemonConnectionProvider");
+   SEL providerSelector = NSSelectorFromString(@"connectionProviderForSimDevice:");
+@@ -251,6 +313,9 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+     return NO;
+   }
+   id provider = ((id (*)(id, SEL, id))objc_msgSend)(providerClass, providerSelector, simulatorDevice);
++  if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after connection provider creation", error)) {
++    return NO;
++  }
+   if (!provider) {
+     if (error) {
+       *error = FBSimulatorAccessibilityBootstrapError(2, @"Could not create the simulator remote daemon connection provider");
+@@ -266,6 +331,9 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+     }
+     return NO;
+   }
++  if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"before session creation", error)) {
++    return NO;
++  }
+ 
+   dispatch_semaphore_t sessionSemaphore = dispatch_semaphore_create(0);
+   FBSimulatorAccessibilitySessionRequest *sessionRequest = [FBSimulatorAccessibilitySessionRequest new];
+@@ -273,8 +341,9 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+     [sessionRequest completeWithSession:returnedSession error:returnedError];
+     dispatch_semaphore_signal(sessionSemaphore);
+   };
++  FBSimulatorAccessibilityBootstrapPhase(logger, @"session-start");
+   ((void (*)(id, SEL, id, id))objc_msgSend)(sessionClass, requestSelector, provider, sessionCompletion);
+-  if (dispatch_semaphore_wait(sessionSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(timeout * NSEC_PER_SEC))) != 0) {
++  if (dispatch_semaphore_wait(sessionSemaphore, deadline) != 0) {
+     id lateSession = [sessionRequest sessionByMarkingTimedOut];
+     if (lateSession) {
+       FBSimulatorInvalidateAutomationSession(lateSession);
+@@ -293,10 +362,18 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+   }
+ 
+   @try {
++    FBSimulatorAccessibilityBootstrapPhase(logger, @"session-finished");
++    if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"before automation mode", error)) {
++      return NO;
++    }
+     SEL enableSelector = NSSelectorFromString(@"enableAutomationModeWithError:");
+     if ([session respondsToSelector:enableSelector]) {
+       NSError *enableError = nil;
+       BOOL enabled = ((BOOL (*)(id, SEL, NSError **))objc_msgSend)(session, enableSelector, &enableError);
++      // Do not abandon this synchronous call. Check its result against the same deadline.
++      if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after automation mode", error)) {
++        return NO;
++      }
+       if (!enabled) {
+         if (error) {
+           *error = enableError ?: FBSimulatorAccessibilityBootstrapError(6, @"Could not enable simulator automation mode");
+@@ -312,6 +389,9 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+       }
+       return NO;
+     }
++    if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"before Accessibility loading", error)) {
++      return NO;
++    }
+     dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(0);
+     __block BOOL loaded = NO;
+     __block NSError *loadError = nil;
+@@ -320,19 +400,31 @@ + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice time
+       loadError = returnedError;
+       dispatch_semaphore_signal(loadSemaphore);
+     };
+-    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, timeout, loadReply);
+-    if (dispatch_semaphore_wait(loadSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)((timeout + 1) * NSEC_PER_SEC))) != 0) {
++    FBSimulatorAccessibilityBootstrapPhase(logger, @"load-start");
++    NSTimeInterval remaining = FBSimulatorAccessibilityBootstrapRemaining(deadline);
++    if (remaining <= 0) {
++      if (error) {
++        *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out before loading simulator Accessibility");
++      }
++      return NO;
++    }
++    ((void (*)(id, SEL, double, id))objc_msgSend)(session, loadSelector, remaining, loadReply);
++    if (dispatch_semaphore_wait(loadSemaphore, deadline) != 0) {
+       if (error) {
+         *error = FBSimulatorAccessibilityBootstrapError(8, @"Timed out loading simulator Accessibility");
+       }
+       return NO;
+     }
++    if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after Accessibility loading", error)) {
++      return NO;
++    }
+     if (!loaded) {
+       if (error) {
+         *error = loadError ?: FBSimulatorAccessibilityBootstrapError(9, @"The simulator rejected the Accessibility load request");
+       }
+       return NO;
+     }
++    FBSimulatorAccessibilityBootstrapPhase(logger, @"load-finished");
+     [logger log:@"Bootstrapped simulator Accessibility through a short-lived remote automation session"];
+     return YES;
+   } @finally {
+diff --git a/FBSimulatorControl/HID/FBSimulatorHIDTransportOwner.swift b/FBSimulatorControl/HID/FBSimulatorHIDTransportOwner.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..808d521eeaa38a92d7e99c7bbf761a59dd16da40
+--- /dev/null
++++ b/FBSimulatorControl/HID/FBSimulatorHIDTransportOwner.swift
+@@ -0,0 +1,92 @@
++import Foundation
++@preconcurrency import FBControlCore
++
++/// One optional idle transport for an explicit caller. Input ownership stays in each session.
++/// Borrowed sessions must be closed. An abandoned reservation fails closed; it is never reused.
++public actor FBSimulatorHIDTransportOwner {
++  private struct Connection {
++    let identifier: UUID
++    let observation: FBSimulatorHIDSessionObservation
++    let transport: FBSimulatorDTUHIDTransport
++  }
++  private struct Borrow {
++    let identifier: UUID
++    var allowsReuse: Bool
++  }
++  private var idle: Connection?
++  private var borrowed: Borrow?
++  private var closed = false
++
++  public init() {}
++
++  /// Discard idle transport. A current action retains its connection for owned cleanup,
++  /// but cannot return that transport to this owner afterwards.
++  public func invalidate() {
++    idle?.transport.disconnect()
++    idle = nil
++    if borrowed != nil { borrowed?.allowsReuse = false }
++  }
++
++  /// Prevent new borrows and discard idle transport. Close active sessions first when
++  /// waiting for all input cleanup; this method does not interrupt their release work.
++  public func close() {
++    closed = true
++    invalidate()
++  }
++
++  func reserve(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDTransportReservation {
++    guard !closed else { throw FBSimulatorHIDSessionError.closed }
++    guard borrowed == nil else { throw FBSimulatorHIDSessionError.busy }
++    let identifier = UUID()
++    borrowed = Borrow(identifier: identifier, allowsReuse: true)
++    let previous = idle
++    idle = nil
++    guard let previous else {
++      return FBSimulatorHIDTransportReservation(identifier: identifier, connectionID: UUID(), transport: nil)
++    }
++    guard previous.observation == observation else {
++      previous.transport.disconnect()
++      return FBSimulatorHIDTransportReservation(identifier: identifier, connectionID: UUID(), transport: nil)
++    }
++    return FBSimulatorHIDTransportReservation(identifier: identifier,
++      connectionID: previous.identifier, transport: previous.transport)
++  }
++
++  func discard(_ identifier: UUID) {
++    guard borrowed?.identifier == identifier else { return }
++    borrowed = nil
++  }
++
++  func finish(_ lease: FBSimulatorHIDTransportLease, reusable: Bool) {
++    guard let active = borrowed, active.identifier == lease.reservationID else {
++      lease.transport.disconnect()
++      return
++    }
++    borrowed = nil
++    guard reusable, active.allowsReuse, !closed else {
++      lease.transport.disconnect()
++      FBControlCoreGlobalConfiguration.defaultLogger.log("Selected HID transport discarded connection=\(lease.connectionID)")
++      return
++    }
++    idle = Connection(identifier: lease.connectionID, observation: lease.observation, transport: lease.transport)
++    FBControlCoreGlobalConfiguration.defaultLogger.log("Selected HID transport returned connection=\(lease.connectionID)")
++  }
++}
++
++struct FBSimulatorHIDTransportReservation: Sendable {
++  let identifier: UUID
++  let connectionID: UUID
++  let transport: FBSimulatorDTUHIDTransport?
++}
++
++struct FBSimulatorHIDTransportLease: Sendable {
++  let owner: FBSimulatorHIDTransportOwner
++  let reservationID: UUID
++  let connectionID: UUID
++  let observation: FBSimulatorHIDSessionObservation
++  let transport: FBSimulatorDTUHIDTransport
++
++  func finish(reusable: Bool) async {
++    await owner.finish(self, reusable: reusable)
++  }
++}
+diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorHIDCompleteLegacyKeyboardTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorHIDCompleteLegacyKeyboardTests.swift
+new file mode 100644
+index 0000000000000000000000000000000000000000..e84a06c8e916e3b1c432799c713357f10506188b
+--- /dev/null
++++ b/FBSimulatorHIDEventTransportTests/FBSimulatorHIDCompleteLegacyKeyboardTests.swift
+@@ -0,0 +1,270 @@
++import CoreGraphics
++import Foundation
++import Testing
++import XPC
++@testable import FBSimulatorControl
++
++@Suite("Complete legacy keyboard transport reuse", .serialized)
++struct FBSimulatorHIDCompleteLegacyKeyboardTests {
++  @Test func repeatedModifiersAndTargetKeepTheirOrderAndReuse() async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let first = try await fixture.session(owner: owner)
++    let modifiers: [UInt32] = [4, 4, 255, 0, 224, 1, 225, 225]
++    let events = modifiers.map { FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: $0) }
++      + [.keyboard(direction: .down, keyCode: 225), .keyboard(direction: .up, keyCode: 225)]
++      + modifiers.reversed().map { .keyboard(direction: .up, keyCode: $0) }
++    let receipt = try await first.executeLegacyKeyboard(.composite(events))
++    #expect(receipt.enqueuedEventCount == 18 && receipt.cleanup == .notNeeded)
++    #expect(fixture.peer.keyboard == modifiers.map { "down:" + String($0) }
++      + ["down:225", "up:225"] + modifiers.reversed().map { "up:" + String($0) })
++    _ = try await first.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport === fixture.transport)
++    let second = fixture.session(owner: owner, reservation: next)
++    _ = try await second.executeLegacyKeyboard(.shortKeyPress(5))
++    _ = try await second.close()
++    let final = try await owner.reserve(observation: fixture.observation)
++    #expect(final.transport === fixture.transport)
++    #expect(final.connectionID == next.connectionID)
++    #expect(Array(fixture.peer.keyboard.suffix(2)) == ["down:5", "up:5"])
++    await owner.discard(final.identifier)
++    await owner.close()
++  }
++
++  @Test func rawStreamLargerThanAgentLimitsHasNoNewCap() async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    let events = (0..<300).map { _ in FBSimulatorHIDEvent.shortKeyPress(4) }
++    let receipt = try await session.executeLegacyKeyboard(.composite(events))
++    #expect(receipt.enqueuedEventCount == 600)
++    #expect(fixture.peer.keyboard == (0..<300).flatMap { _ in ["down:4", "up:4"] })
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport === fixture.transport)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++
++  @Test(arguments: [false, true])
++  func legacyBatchAndTouchRemainIneligibleForReuse(touch: Bool) async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    _ = try await session.submitLegacyBatchPart(touch ? .tapAt(x: 10, y: 20) : .shortKeyPress(4))
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport == nil)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++
++  @Test(arguments: [false, true])
++  func invalidCompleteStreamCannotSendOrCache(mixedTouch: Bool) async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    let event: FBSimulatorHIDEvent = mixedTouch
++      ? .composite([.shortKeyPress(4), .tapAt(x: 10, y: 20)])
++      : .keyboard(direction: .down, keyCode: 4)
++    await #expect(throws: (any Error).self) { _ = try await session.executeLegacyKeyboard(event) }
++    #expect(fixture.peer.inputCount == 0)
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport == nil)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++
++  @Test func cancellationReleasesHeldKeyAndCannotCache() async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    let operation = Task {
++      try await session.executeLegacyKeyboard(.composite([
++        .keyboard(direction: .down, keyCode: 225), .delay(5),
++        .keyboard(direction: .up, keyCode: 225)
++      ]))
++    }
++    try await fixture.peer.waitForKeyboardCount(1)
++    operation.cancel()
++    do { _ = try await operation.value; Issue.record("Cancelled input must fail") }
++    catch let FBSimulatorHIDSessionError.interrupted(reason, cleanup) {
++      #expect(reason == .cancelled && cleanup == .releaseEnqueuedAndDrained)
++    }
++    #expect(fixture.peer.keyboard == ["down:225", "up:225"])
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport == nil)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++
++  @Test func cancellationBeforeInputCannotSendOrCache() async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    let operation = Task {
++      withUnsafeCurrentTask { $0?.cancel() }
++      return try await session.executeLegacyKeyboard(.shortKeyPress(4))
++    }
++    do { _ = try await operation.value; Issue.record("Cancelled input must fail") }
++    catch let FBSimulatorHIDSessionError.interrupted(reason, cleanup) {
++      #expect(reason == .cancelled && cleanup == .notNeeded)
++    }
++    #expect(fixture.peer.inputCount == 0)
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport == nil)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++
++  @Test func changedRevisionCannotReturnCompletedConnection() async throws {
++    let fixture = try LegacyKeyboardFixture()
++    defer { fixture.close() }
++    let owner = FBSimulatorHIDTransportOwner()
++    let session = try await fixture.session(owner: owner)
++    _ = try await session.executeLegacyKeyboard(.shortKeyPress(4))
++    fixture.provider.invalidate()
++    _ = try await session.close()
++    let next = try await owner.reserve(observation: fixture.observation)
++    #expect(next.transport == nil)
++    await owner.discard(next.identifier)
++    await owner.close()
++  }
++}
++
++/// A normal host XPC peer exercises the real enqueue/reply gate without a simulator.
++private final class LegacyKeyboardFixture {
++  let peer: LegacyKeyboardPeer
++  let listener: xpc_connection_t
++  let transport: FBSimulatorDTUHIDTransport
++  let observation: FBSimulatorHIDSessionObservation
++  let provider: LegacyKeyboardProvider
++
++  init() throws {
++    let context = try FBSimulatorHIDDisplayContext(hidTarget: 1,
++      nativePixelSize: CGSize(width: 600, height: 900), scale: 3, rotation: .rot0)
++    let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: "legacy-keyboard-host",
++      bootIdentity: "boot", screenID: 1,
++      screenUniqueID: "769ED878-389B-4346-9C56-CB0703AB3E58", axDisplayID: 1,
++      displayContext: context, poseRevision: "rigid")
++    self.observation = observation
++    provider = LegacyKeyboardProvider(observation)
++    let peer = LegacyKeyboardPeer()
++    self.peer = peer
++    let listener = xpc_connection_create(nil, nil)
++    self.listener = listener
++    xpc_connection_set_event_handler(listener) { connection in
++      guard xpc_get_type(connection) == XPC_TYPE_CONNECTION else { return }
++      peer.accept(connection)
++    }
++    xpc_connection_resume(listener)
++    let endpoint = xpc_endpoint_create(listener)
++    let connection = xpc_connection_create_from_endpoint(endpoint)
++    transport = FBSimulatorDTUHIDTransport(connection: connection,
++      mainScreenSize: context.nativePixelSize, mainScreenScale: 3,
++      displayContext: context, ownedCleanup: true)
++  }
++
++  func session(owner: FBSimulatorHIDTransportOwner) async throws -> FBSimulatorHIDSession {
++    session(owner: owner, reservation: try await owner.reserve(observation: observation))
++  }
++
++  func session(owner: FBSimulatorHIDTransportOwner,
++               reservation: FBSimulatorHIDTransportReservation) -> FBSimulatorHIDSession {
++    let lease = FBSimulatorHIDTransportLease(owner: owner,
++      reservationID: reservation.identifier, connectionID: reservation.connectionID,
++      observation: observation, transport: reservation.transport ?? transport)
++    return FBSimulatorHIDSession(transport: lease.transport, observation: observation,
++      freshnessProvider: provider, liveProvider: provider, transportLease: lease)
++  }
++
++  func close() {
++    transport.disconnect()
++    xpc_connection_cancel(listener)
++    peer.close()
++  }
++}
++
++private final class LegacyKeyboardPeer: @unchecked Sendable {
++  private let lock = NSLock()
++  private var connections: [xpc_connection_t] = []
++  private var events: [String] = []
++  private var inputs = 0
++  var keyboard: [String] { lock.lock(); defer { lock.unlock() }; return events }
++  var inputCount: Int { lock.lock(); defer { lock.unlock() }; return inputs }
++
++  func accept(_ connection: xpc_connection_t) {
++    lock.lock(); connections.append(connection); lock.unlock()
++    xpc_connection_set_event_handler(connection) { [weak self] message in
++      guard xpc_get_type(message) == XPC_TYPE_DICTIONARY else { return }
++      if xpc_dictionary_get_bool(message, "isBarrier") {
++        if let reply = xpc_dictionary_create_reply(message) { xpc_connection_send_message(connection, reply) }
++        return
++      }
++      self?.record(message)
++    }
++    xpc_connection_resume(connection)
++  }
++
++  private func record(_ message: xpc_object_t) {
++    let type = xpc_dictionary_get_string(message, "messageType").map { String(cString: $0) }
++    let payload = xpc_dictionary_get_value(message, "payload")
++    lock.lock()
++    defer { lock.unlock() }
++    inputs += 1
++    guard type == "IndigoKeyboardButtonEvent", let payload else { return }
++    let state = xpc_dictionary_get_uint64(payload, "state")
++    let code = xpc_dictionary_get_uint64(payload, "usageCode")
++    events.append((state == 1 ? "down:" : "up:") + String(code))
++  }
++
++  func waitForKeyboardCount(_ count: Int) async throws {
++    let deadline = ProcessInfo.processInfo.systemUptime + 1
++    while keyboard.count < count {
++      guard ProcessInfo.processInfo.systemUptime < deadline else {
++        throw FBSimulatorHIDSessionError.invalidEvent("Host peer did not receive the key")
++      }
++      try await Task.sleep(nanoseconds: 1_000_000)
++    }
++  }
++
++  func close() {
++    lock.lock(); let peers = connections; connections.removeAll(); lock.unlock()
++    for peer in peers { xpc_connection_cancel(peer) }
++  }
++}
++
++private final class LegacyKeyboardProvider: FBSimulatorHIDLiveFreshnessProvider,
++    FBSimulatorHIDCleanupIdentityProvider, @unchecked Sendable {
++  let value: FBSimulatorHIDSessionObservation
++  private let lock = NSLock()
++  private var valid = true
++  init(_ value: FBSimulatorHIDSessionObservation) { self.value = value }
++  func observation() async throws -> FBSimulatorHIDSessionObservation { value }
++  func validateCurrentRevision(expected: FBSimulatorHIDSessionObservation) throws {
++    lock.lock(); let current = valid; lock.unlock()
++    guard current && expected == value else {
++      throw FBSimulatorHIDSessionError.interrupted(reason: .staleContext, cleanup: .notNeeded)
++    }
++  }
++  func cleanupIdentity() async throws -> FBSimulatorHIDCleanupIdentity {
++    let now = ProcessInfo.processInfo.systemUptime
++    return FBSimulatorHIDCleanupIdentity(simulatorUDID: value.simulatorUDID,
++      bootIdentity: value.bootIdentity, screenID: value.screenID,
++      screenUUID: value.screenUniqueID, nativePixelWidth: value.displayContext.nativePixelSize.width,
++      nativePixelHeight: value.displayContext.nativePixelSize.height,
++      scale: value.displayContext.scale, startedUptime: now, finishedUptime: now)
++  }
++  func invalidate() { lock.lock(); valid = false; lock.unlock() }
++  func close() {}
++}
+diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorHIDEventTransportTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorHIDEventTransportTests.swift
+index 205432d9a0f6e1c0a2750edf857779f6e017c610..baa8e539477f5d2813f2d1d144897a0fb4f40857 100644
+--- a/FBSimulatorHIDEventTransportTests/FBSimulatorHIDEventTransportTests.swift
++++ b/FBSimulatorHIDEventTransportTests/FBSimulatorHIDEventTransportTests.swift
+@@ -7,6 +7,8 @@
+ 
+ @testable import FBSimulatorControl
+ import XCTest
++import Foundation
++import Testing
+ 
+ final class FBSimulatorHIDEventTransportTests: XCTestCase {
+ 
+@@ -117,3 +119,178 @@
+     }
+   }
+ }
++
++@Suite("Native live feed renewal")
++struct FBSimulatorHIDFeedRenewalTests {
++  private func sample(_ timestamp: TimeInterval, degrees: Double = 180) -> FBSimulatorHingeObservation {
++    FBSimulatorHingeObservation(channelID: "test-channel", timestampUptime: timestamp,
++      receivedUptime: timestamp, mechanicalDegrees: degrees, sensedDegrees: degrees,
++      velocityDegreesPerSecond: 0, minimumDegrees: 0, maximumDegrees: 180)
++  }
++
++  private func state(_ clock: FeedTestClock, motion: Bool = true) -> FBSimulatorHIDFeedState {
++    FBSimulatorHIDFeedState(maximumAge: 0.5, requiresMotion: motion, clock: { clock.read() })
++  }
++
++  private func failure(_ state: FBSimulatorHIDFeedState, generation: UInt64) -> String {
++    do { try state.validate(generation: generation); return "" }
++    catch { return String(describing: error) }
++  }
++
++  @Test func identicalFreshAnglesRefreshTimeWithoutChangingRevision() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    clock.set(100.4); feed.observeMotion(sample(100.4)); feed.observeDisplays([])
++    clock.set(100.8); feed.observeDisplays([])
++    try feed.validate(generation: revision)
++    #expect(feed.status().generation == revision)
++    #expect(feed.status().motionSampleCount == 2)
++    #expect((feed.status().motionAgeSeconds ?? 1) < 0.5)
++  }
++
++  @Test func listenerChangeAndReversionStillInvalidateTheOriginalRevision() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    clock.set(100.2)
++    feed.observeMotion(sample(100.1, degrees: 90)); feed.observeMotion(sample(100.2))
++    #expect(feed.status().generation == revision + 2)
++    #expect(throws: FBSimulatorHIDSessionError.self) { try feed.validate(generation: revision) }
++  }
++
++  @Test func anOlderCallbackCannotRefreshTheMotionClock() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    clock.set(100.6); feed.observeDisplays([]); feed.observeMotion(sample(99.9))
++    let error = failure(feed, generation: revision)
++    #expect(error.contains("staleSources=motion;"))
++    #expect(error.contains("motionTimestampUptime=100.0"))
++    #expect(error.contains("displayAgeSeconds=0.0"))
++    #expect(error.contains("motionSampleCount=2"))
++  }
++
++  @Test func staleDisplayIsReportedSeparatelyFromFreshMotion() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    clock.set(100.6); feed.observeMotion(sample(100.6))
++    let error = failure(feed, generation: revision)
++    #expect(error.contains("staleSources=display;"))
++    #expect(error.contains("motionAgeSeconds=0.0"))
++    #expect(error.contains("displayRefreshCount=1"))
++  }
++
++  @Test func aDisplayOnlyProfileStillRequiresFreshDisplays() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock, motion: false)
++    feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    clock.set(100.4); try feed.validate(generation: revision)
++    clock.set(100.6)
++    let error = failure(feed, generation: revision)
++    #expect(error.contains("staleSources=display;"))
++    #expect(error.contains("motionAgeSeconds=missing"))
++  }
++
++  @Test func aCompletedChangeStreamCannotBeRestoredByFreshSamples() throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let revision = try feed.checkpoint()
++    feed.motionSubscriptionCompleted()
++    clock.set(100.1); feed.observeMotion(sample(100.1)); feed.observeDisplays([])
++    #expect(failure(feed, generation: revision).contains("Motion subscription completed before close"))
++    #expect(feed.status().motionSampleCount == 1)
++    #expect(feed.status().displayRefreshCount == 1)
++  }
++
++  @Test func displayRefreshContinuesWhileTheMotionReadWaits() async throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    feed.observeMotion(sample(100)); feed.observeDisplays([])
++    let blockedMotion = FBSimulatorBoundedResult<FBSimulatorHingeObservation>()
++    let displays = FeedTestDisplayReads()
++    let task = Task {
++      await FBSimulatorHIDFeedRenewal.run(state: feed, interval: 0.001,
++        motionRead: {
++          try await blockedMotion.value(timeout: 3, operation: "Blocked test motion") { _ in }
++        }, displayRead: { displays.record(); return [] })
++    }
++    // The third call proves the first two completed independently of the blocked motion read.
++    let refreshed = try? await displays.three.value(timeout: 1, operation: "Independent display refresh") { _ in }
++    task.cancel(); await task.value
++    try #require(refreshed == true)
++    #expect(feed.status().displayRefreshCount >= 3)
++    #expect(feed.status().motionSampleCount == 1)
++    #expect(feed.status().failure == "Feed closed")
++  }
++
++  @Test func motionFailureCancelsAndJoinsTheDisplayRead() async throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock)
++    let displayStarted = FBSimulatorBoundedResult<Bool>()
++    let blockedDisplay = FBSimulatorBoundedResult<Bool>()
++    let displayFinished = FBSimulatorBoundedResult<Bool>()
++    let completed = FBSimulatorBoundedResult<Bool>()
++    let task = Task {
++      await FBSimulatorHIDFeedRenewal.run(state: feed, interval: 0.001,
++        motionRead: {
++          _ = try await displayStarted.value(timeout: 1, operation: "Display test start") { _ in }
++          throw FeedTestFailure.motion
++        }, displayRead: {
++          defer { displayFinished.finish(.success(true)) }
++          _ = try await blockedDisplay.value(timeout: 3, operation: "Blocked test display") { _ in
++            displayStarted.finish(.success(true))
++          }
++          return []
++        })
++      completed.finish(.success(true))
++    }
++    let joined = try? await completed.value(timeout: 1, operation: "Joined failed feed") { _ in }
++    task.cancel(); await task.value
++    let displayDidFinish = try? await displayFinished.value(timeout: 1, operation: "Display test finish") { _ in }
++    try #require(joined == true && displayDidFinish == true)
++    #expect(feed.status().failure?.hasPrefix("Motion refresh:") == true)
++  }
++
++  @Test func displayOnlyRenewalDoesNotRequireAMotionRead() async throws {
++    let clock = FeedTestClock(100)
++    let feed = state(clock, motion: false)
++    let displays = FeedTestDisplayReads()
++    let task = Task {
++      await FBSimulatorHIDFeedRenewal.run(state: feed, interval: 0.001,
++        motionRead: nil, displayRead: { displays.record(); return [] })
++    }
++    let refreshed = try? await displays.three.value(timeout: 1, operation: "Display-only refresh") { _ in }
++    task.cancel(); await task.value
++    try #require(refreshed == true)
++    #expect(feed.status().displayRefreshCount >= 2)
++    #expect(feed.status().motionSampleCount == 0)
++  }
++}
++
++private enum FeedTestFailure: Error { case motion }
++
++private final class FeedTestClock: @unchecked Sendable {
++  private let lock = NSLock()
++  private var value: TimeInterval
++  init(_ value: TimeInterval) { self.value = value }
++  func read() -> TimeInterval { lock.lock(); defer { lock.unlock() }; return value }
++  func set(_ value: TimeInterval) { lock.lock(); defer { lock.unlock() }; self.value = value }
++}
++
++private final class FeedTestDisplayReads: @unchecked Sendable {
++  private let lock = NSLock()
++  private var count = 0
++  let three = FBSimulatorBoundedResult<Bool>()
++  func record() {
++    lock.lock(); count += 1; let ready = count >= 3; lock.unlock()
++    if ready { three.finish(.success(true)) }
++  }
 +}

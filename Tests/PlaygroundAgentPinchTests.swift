@@ -32,8 +32,7 @@ struct PlaygroundAgentPinchTests {
         case .wrongPID:
             let index = try #require(arguments.firstIndex(of: "--expected-pid"))
             arguments[index + 1] = String(session.pid + 1)
-            code = "observationFailed"
-            message = "processChanged"
+            code = "contextChanged"
         case .mixedCoordinates:
             arguments += ["-x", "20", "-y", "20"]
             message = "Agent pinch accepts an area reference, radius, scale, duration, delta and delays only"

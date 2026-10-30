@@ -34,8 +34,7 @@ struct PlaygroundAgentDoubleTapTests {
         case .wrongPID:
             let index = try #require(arguments.firstIndex(of: "--expected-pid"))
             arguments[index + 1] = String(session.pid + 1)
-            code = "observationFailed"
-            message = "processChanged"
+            code = "contextChanged"
         case .mixedCoordinates:
             arguments += ["-x", "20", "-y", "20"]
             message = "Agent double-tap accepts a reference and timing only, without coordinates, geometry or dimension overrides."

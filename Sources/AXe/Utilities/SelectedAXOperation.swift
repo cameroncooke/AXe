@@ -8,7 +8,8 @@ import FBSimulatorControl
 enum SelectedAXOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
                         brokerID: UUID, logger: AxeLogger, helperURL: URL,
-                        valueOwner: SelectedSliderValueOwner? = nil) async -> SelectedHIDResponse {
+                        valueOwner: SelectedSliderValueOwner? = nil,
+                        transportOwner: FBSimulatorHIDTransportOwner? = nil) async -> SelectedHIDResponse {
         guard let ax = request.ax else {
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: "rejectedBeforeInput", token: nil, enqueuedEventCount: 0,
@@ -30,6 +31,36 @@ enum SelectedAXOperation {
                   simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
             if ax.preDelay > 0 { try await Task.sleep(for: .seconds(ax.preDelay)) }
             let display = try request.selectedDisplay()
+            if ax.kind == .describe || ax.kind == .describePoint {
+                // A snapshot is a bounded read. Live subscriptions belong to actual input.
+                let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helperURL,
+                    screenID: display.id, screenUniqueID: display.uuid)
+                let initial = try await reader.observation()
+                observation = initial
+                try SelectedAXBounds.validateContext(SelectedHIDContext(initial))
+                try request.agentAdmission?.validateContext(initial)
+                let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 4)
+                let acquisition: FBSimulatorAXAcquisition
+                if ax.kind == .describePoint {
+                    guard let point = ax.point else { throw SelectedHIDFailure.invalid("Missing selected AX point") }
+                    result.point = point
+                    acquisition = try await FBSimulatorAXSnapshot.acquire(at: CGPoint(x: point.x, y: point.y),
+                        for: simulator, expectedPID: ax.expectedPID, observation: initial,
+                        freshnessProvider: reader, policy: policy)
+                } else {
+                    acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: ax.expectedPID,
+                        observation: initial, freshnessProvider: reader, policy: policy)
+                }
+                result.acquisition = try SelectedAXAcquisition(acquisition)
+                result.roots = acquisition.snapshot?.roots
+                try SelectedAXBounds.validateContent(result)
+                guard acquisition.outcome == .ready else {
+                    result.failure = .acquisitionFailed
+                    throw SelectedHIDFailure.invalid("Selected AX acquisition ended with \(acquisition.outcome.rawValue): \(acquisition.failureDescription ?? "No further detail")")
+                }
+                return response(request, brokerID: brokerID, result: result, observation: observation,
+                    outcome: "ready", count: 0, cleanup: "notNeeded", error: nil)
+            }
             let live = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
                 screenID: display.id, screenUniqueID: display.uuid)
             feed = live; observation = live.initialObservation
@@ -89,7 +120,7 @@ enum SelectedAXOperation {
                     observation: live.initialObservation, live: live, helperURL: helperURL,
                     selectorKind: selectorKind, selectorValue: selectorValue, expectedPID: ax.expectedPID,
                     elementType: ax.elementType,
-                    admissionGuard: sliderAdmission)
+                    admissionGuard: sliderAdmission, transportOwner: transportOwner)
                 let execution = await valueOwner.run(operation, percent: percentage)
                 result.sliderValue = execution.receipt
                 if execution.error != nil { result.failure = .sliderFailed }
@@ -100,29 +131,6 @@ enum SelectedAXOperation {
                     cleanup: execution.cleanup, error: execution.error)
             }
             let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 4)
-            if ax.kind == .describe || ax.kind == .describePoint {
-                let acquisition: FBSimulatorAXAcquisition
-                if ax.kind == .describePoint {
-                    guard let point = ax.point else { throw SelectedHIDFailure.invalid("Missing selected AX point") }
-                    result.point = point
-                    acquisition = try await FBSimulatorAXSnapshot.acquire(at: CGPoint(x: point.x, y: point.y),
-                        for: simulator, expectedPID: ax.expectedPID, observation: live.initialObservation,
-                        freshnessProvider: live, policy: policy)
-                } else {
-                    acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: ax.expectedPID,
-                        observation: live.initialObservation, freshnessProvider: live, policy: policy)
-                }
-                result.acquisition = try SelectedAXAcquisition(acquisition)
-                result.roots = acquisition.snapshot?.roots
-                try SelectedAXBounds.validateContent(result)
-                guard acquisition.outcome == .ready else {
-                    result.failure = .acquisitionFailed
-                    throw SelectedHIDFailure.invalid("Selected AX acquisition ended with \(acquisition.outcome.rawValue): \(acquisition.failureDescription ?? "No further detail")")
-                }
-                await live.closeAndWait()
-                return response(request, brokerID: brokerID, result: result, observation: observation,
-                    outcome: "ready", count: 0, cleanup: "notNeeded", error: nil)
-            }
             guard let selector = ax.selector else { throw SelectedHIDFailure.invalid("Missing selected selector") }
             if let waitPolicy = ax.waitPolicy {
                 result.wait = try await SelectedAXWait.run(policy: waitPolicy) { timeout in
@@ -163,8 +171,14 @@ enum SelectedAXOperation {
             let guardOwner = SelectedAXSizeGuard(operation: operation, result: result, deadline: deadline,
                 automaticStyle: ax.tapStyle == .automatic ? style : nil, agentAdmission: request.agentAdmission)
             sizeGuard = guardOwner
-            let hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
-                liveFreshnessProvider: live)
+            let hid: FBSimulatorHIDSession
+            if let transportOwner {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live, transportOwner: transportOwner)
+            } else {
+                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                    liveFreshnessProvider: live)
+            }
             session = hid
             let event: FBSimulatorHIDEvent
             if ax.kind == .doubleTap {

@@ -120,7 +120,7 @@ struct KeyCombo: AsyncParsableCommand {
         let comboEvent = FBSimulatorHIDEvent.composite(events)
 
         try await LegacyDuoInput.performKeyboard(
-            comboEvent, simulatorUDID: simulatorUDID, logger: logger
+            comboEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true
         )
 
         logger.info().log("Key combo completed successfully")

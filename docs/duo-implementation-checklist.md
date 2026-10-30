@@ -1,5 +1,106 @@
 # iPhone Duo implementation checklist
 
+## Current status — 30 October 2026
+
+### Duo simulator support
+
+| Work | State |
+| --- | --- |
+| Existing control set on Duo | [x] The current 133-case group passed. This does not test every feature on every screen or orientation. |
+| Input through fold and rotation | [x] Current layout 12 and raw keyboard 4 passed, with zero issues or skips. The checks confirm that AXe stops input, releases held touches or keys, refuses old references, then finds and uses the control again. |
+| Fresh layout observations | [x] The revised native listener keeps change detection separate from fresh sample and display reads. Native 18 passed. Shared service delays still have no proved initiating cause. |
+| Precise slider value | [x] The original 100→63.25 case passed with 36 moves and actual value 63.273453, zero contacts. The 15-second limit, release reserve and tolerance stay unchanged. |
+
+### SimUse improvements and existing commands
+
+| Work | State |
+| --- | --- |
+| Healthy keyboard reuse and terminal busy refusal | [x] The original AXe faults are corrected and physically proved. The first new connection can still refuse with zero input at its two-second readiness limit. |
+| Saved agent references and cache | [x] Both complete 133-case groups passed checks for cross-call reuse, replacement, expiry and stale-reference refusal. The cache contract is unchanged. |
+| Guarded focus reads | [x] One fresh read is allowed only for the exact DTX disconnect within the original deadline. Input is not replayed; the provider fault cause is unproved. Current keyboard/slider unit 24 passed. |
+| Popup cleanup | [x] One normal public proof observed the popup, sent Escape, preserved text and edit counts, then proved a fresh physical Button callback and zero contacts. This adds no suite cases. |
+
+### Final acceptance and delivery
+
+- [x] Current complete ordinary iPhone 133: [133/133 passed](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-iphone/acceptance.json), zero issues or skips; 1966.75 seconds.
+- [x] Current complete Duo 133: [133/133 passed](/Volumes/Developer/AXe/build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/final-combined-candidate-v3/check-duo-agent/acceptance.json), zero issues or skips; 2620.14 seconds.
+- [x] Current layout 12 and raw keyboard 4: separate complete passes.
+- [x] Local arm64 ZIP roundtrip: exact payload and seven strict signatures passed.
+- [ ] Apply the reviewed source and six documents, make the scoped commit, install the exact payload and prove the installed image.
+
+The current isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`. Separate native legacy keyboard 9 also passed. Both complete 133-case runs and the separate layout 12 and raw 4 passed on this same candidate. Focused runs remain separate. V1 and V2 failures remain in the [audit](audits/2026-10-29-keyboard-reliability.md). Source promotion, commit and local installation remain pending.
+
+## Previous status record — superseded
+
+The record below is retained for history. The current status above governs acceptance.
+
+### Previous work record
+
+Isolated candidate: CLI `8a994931` / native `553acba2`, selected wire 36. The [signed payload](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/runtime-ready.json) passed seven strict signature checks. FINAL7 changes one production file from FINAL6 to refuse input when all broker request slots are full. Source checkpoints and delivery have separate receipts; no release acceptance is claimed. Earlier FINAL5/FINAL6 results below use CLI `a9f3d8c1`; they are not new-candidate full passes.
+
+### Duo simulator support
+
+| Bug or feature | Current state | Evidence or remaining check |
+| --- | --- | --- |
+| Find and use controls on either screen | Core finding, tapping, typing, scrolling, swiping, dragging, switches and sliders remain available. | Current full Duo regression is listed below; earlier core results stay in the history. |
+| Type exact raw and selected text on both screens | Literal, file and standard-input text keep their existing parsing. | [12 text-source cases](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-final5-duo-keyboard-sources-v1/result.json) and [300-byte raw text](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-final5-duo-raw-long-text-v1/result.json) passed. |
+| Stop keyboard input after folding or rotation, then use the new layout | Held keys and key sequences stop safely and allow fresh text. | [All four transition cases passed](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-final5-duo-raw-keyboard-interruptions-v1/result.json). Five modifier/cancellation/busy checks also passed; see the [audit](audits/2026-10-29-keyboard-reliability.md#duo-keyboard-safety-proofs). |
+
+### SimUse improvements: optional agent mode and existing commands
+
+| Bug or feature | Current state | Evidence or remaining check |
+| --- | --- | --- |
+| Keep RS/1 references across new CLI calls | One RAM table lasts up to 60 seconds. New captures replace it; old callers cannot erase a newer table. Current app, layout and native state are checked before input. | [Storage and refusal rules](agent-mode-persistence.md). Full ordinary 133 and the amended reference checks are recorded below. |
+| Preserve raw commands beside stateful agent input | No-flag output and coordinate input remain. Complete keyboard commands can reuse a healthy connection after release. | [Five separate calls on one connection](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/ordinary-shared-keyboard-reuse-proof-v1/run-final5-v1/result.json) and the [original seven key-sequence cases](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-final5-key-sequence-v1/result.json) passed. |
+| Refuse a new action when broker request slots are full | The isolated fix sends a terminal busy refusal before any request body. | The same [physical check passed](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/saturation-v1/result.json); no delayed ninth-client input. Release acceptance remains open. |
+| Accept the measured ordinary-iPhone display report | The strict decoder accepts omitted active flags only for the verified report. | Schema 20 and discovery 13 passed within host186; the full ordinary 133 run also passed. |
+
+### Current repeatable results
+
+| Check | Result | Test source / host | Evidence |
+| --- | --- | --- | --- |
+| Complete ordinary-iPhone agent run | **133 passed; zero issues or skips** | FINAL5 `eaf6f6f8` / `9b8dd89a` | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-iphone-full-v1/result.json), 2002.62 seconds |
+| Amended ordinary checks | **1 + 6 + 1 passed; zero issues or skips** | FINAL6 `b506332f` / `baeea9a1` | [Reference recovery](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-iphone-raw-mutation-v1/result.json), [concurrent input](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-raw-admission-v1/result.json), [held touch](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-raw-keyboard-ownership-v1/result.json) |
+| Amended Duo reference recovery | **1 passed; zero issues or skips** | FINAL6 `b506332f` / `baeea9a1` | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-duo-raw-mutation-v1/result.json) |
+| Complete Duo agent run v1 | **Failed: 132 clean cases; 1 failed; zero skips** | FINAL6 `b506332f` / `baeea9a1` | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-duo-full-v1/result.json), 2557.88 seconds |
+| Duo typing after service recovery | **8 passed; zero issues or skips** | FINAL6 `b506332f` / `baeea9a1` | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-focused-after-service-recovery-v1/result.json), 160.47 seconds |
+| Complete Duo repeat after service recovery | **Failed: 129 clean cases; 4 failed; zero skips** | FINAL6 `b506332f` / `baeea9a1` | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-duo-full-v2/result.json), 2512.05 seconds |
+| FINAL7 host checks | **186 passed; zero issues or skips** | FINAL7 `ea9f7785` / `527051ef` | Six disjoint groups, linked below |
+| FINAL7 request-capacity check | **SAFE_BUSY_REFUSAL; physical recovery passed** | FINAL7 `ea9f7785`; standalone CLI proof | [Result](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/saturation-v1/result.json), 14.2 seconds |
+| FINAL7 concurrent input and held-touch ownership | **6 + 1 passed; zero issues or skips** | FINAL7 `ea9f7785` / `527051ef` | [Admission6](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-raw-admission-v1/result.json), [ownership1](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-raw-keyboard-ownership-v1/result.json) |
+| FINAL7 complete simulator acceptance | **Not accepted; no new complete full run** | FINAL7 `ea9f7785` / `527051ef` | Strict full133 gates remain open |
+
+The failed runs remain separate. FINAL6 full v1 failed one stdin AX focus admission before input (`DTXProxyChannel Code 1`,0 events, `cleanup=notNeeded`, no replay). Its [first eight-case repeat](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-focused-after-dtx-v1/result.json) passed 3 and failed 5 during setup. The [unchanged group passed 8/8 after service recovery](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v6/run-focused-after-service-recovery-v1/result.json). Full v2 then failed rotation preparation before dispatch and three display-catalogue preparations. Neither full run recorded a resource stop or crash; the original HID keyboard-startup timeout did not recur. No passing complete Duo run is accepted.
+
+A [direct Apple display query timed out](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/dtx-device-catalogue-fault-v1/result.json), then [passed in 0.13 seconds](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/dtx-device-catalogue-fault-v2/result.json) without a restart. FlowDeck pose/AX, RocketSim hinge and sim-use AX reads passed in that interval; those read-only results do not prove equivalent input admission. Saved [motion accounting](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/hinge-request-completion-diagnostic-v1/guest-motion-accounting.json) shows 17.88-second AXe and 21.68-second RocketSim completion delays and older invocation traffic. Their cause is unproved. The source checkpoint keeps native `553acba2`. A separate native-only candidate `c946160e`, with the same CLI `8a994931`, passed an [actual public hinge-read proof](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/hinge-request-completion-native-v1/actual-library-proof-v1.json). Its serving process loaded the exact new library. The guest received the cancel reply, stopped angle updates and completed the original request before the connection closed. This one observed order does not prove the cause of the earlier long delays or full resource release for every request. The unchanged [typing8](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-hinge-completion-type-v1/result.json), [typing-to-drag1](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-hinge-completion-drag-v1/result.json) and [layout2](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-hinge-completion-layout-v1/result.json) checks passed on this native library, with no issues or skips. The [nine existing native host checks passed](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/hinge-request-completion-native-v1/native-host9-v1/acceptance.json), with the new library proved in the loaded-image trace. One new complete Duo133 run is in progress; no result is accepted yet. The native candidate is not integrated or accepted as a full Duo pass.
+
+The [actual ninth-client reproduction](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/selected-broker-saturation-proof-v1/run-v2/result.json) proved delayed first input after the active owner ended. FINAL7 sends a terminal busy response before it reads that client's request body. The [same physical check on the fix](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/saturation-v1/result.json) passed in 14.2 seconds: no ninth-client text, joined owner release, two quiet seconds, then fresh text and one released Button tap. This proves the isolated capacity fix; it is separate from the keyboard connection-startup fix and is not a full-suite or current-main simulator pass.
+
+
+FINAL7 host checks passed 186 distinct cases with zero issues or skips: [broker/lifetime67](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-unit-v1/result.json), [input boundary63](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-boundary-v1/result.json), [legacy keyboard12](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-legacy-keyboard-v1/result.json), [transport routes11](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-transport-routes-v1/result.json), [rigid schema20](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-rigid-schema-v1/result.json) and [display discovery13](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v7/run-host-display-discovery-v1/result.json). Source `ea9f7785` and host `527051ef` are bound to CLI `8a994931` / native `553acba2`. The [nine native host checks](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/keyboard-startup-native-host-v2/root-acceptance.json) remain separate.
+
+Source integration: the [reversible 57-file checkpoint](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/source-checkpoint-v1/receipt.json) is applied, with 45 changed files and 12 unchanged files. The 14 unrelated work files, managed IDB source, Git index, main runtime and installed CLI remain unchanged. A [fresh offline main compile passed in 39.77 seconds](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/source-checkpoint-v1/compile-only.json). That result proves compilation only; it does not prove simulator acceptance. **Release acceptance remains blocked by the failed full Duo runs**. The strict readiness promoter was not run. The audit is a separate guarded document addition. No local installation, push, publication or deployment is claimed.
+
+### Work still open
+
+- [x] Verify the native hinge reader on `c946160e`. The actual public cancel/completion order, typing8, drag1, layout2 and native host9 checks passed.
+- [ ] Integrate the reviewed HingeReader source and matching native inputs after the current complete Duo run is accepted. Preserve the 14 unrelated work files and managed IDB source.
+- [ ] Obtain current-candidate runtime acceptance through the strict complete 133 gates. Keep each actual CLI, test source and host identity; do not combine focused passes into a full result.
+- [x] Apply the reviewed source checkpoint and compile current main source. The 57-file checkpoint and compile-only pass preserve the 14 unrelated work files and managed IDB source; they do not satisfy the strict full-run gates.
+- [ ] After runtime acceptance, use matching final compile inputs and verify local installation through its separate smoke check. The installed CLI and main runtime are unchanged.
+
+### History and evidence limits
+
+The [earlier FINAL5 Duo run](../build_products/verification/duo-recovery-20261027/agent-persistence-fix-20261028/agent-final-proof-v5/run-duo-full-v1/result.json) executed 133 cases and failed one recovery tap on a control outside its visible scroll area. Its unchanged repeat reproduced that fixture error. Three test-only corrections also updated the exact busy-error assertions. The nine focused passes above remain separate results. They do not change the failed full run or create a new ordinary-iPhone full pass. The [keyboard audit](audits/2026-10-29-keyboard-reliability.md) keeps the failures and exact receipts.
+
+Earlier 130/132/133 failures and the combined 693-case historical ledger remain unchanged. The rejected native `5ec969b3` removed required fresh-app accessibility preparation; it is not the current framework.
+
+The 133-case agent group does not test every action in every Duo screen and orientation. No live foreign-user-ID injection was performed. The `postActionRefreshFailed`, `postActionRefreshQuarantined` and `batchRefreshFailed` branches were not separately forced on this hardware; source and host checks do not prove those live branches. These are evidence limits, not missing core commands. Apple Pay payment screens and Intel execution are excluded. Cold-start stress and unreproduced empty-screen recovery stay deferred.
+
+Use the [remaining task list](duo-remaining-tasks.md) and [repeat commands](agent-mode-persistence.md#repeat-the-candidate-checks).
+
+## Earlier records — unchanged
+
 ## Current work: 28 October 2026
 
 The remaining core checks and the seven-file source integration are complete. The accepted ledger has 693 planned cases marked passed, from inherited history and separate saved runs. This is not one full-suite execution. The 64 selected current case identities all passed; no case was added. Earlier failures remain saved. [Accepted current ledger](../build_products/verification/duo-recovery-20261027/canonical-ledger-merge-v2-proposal/case-ledger.current.json), [remaining tasks](duo-remaining-tasks.md).

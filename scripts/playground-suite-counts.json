@@ -47,7 +47,7 @@
   "PlaygroundAgentDragTests": 7,
   "PlaygroundAgentPinchTests": 8,
   "PlaygroundAgentSliderTests": 12,
-  "PlaygroundAgentNativeStateTests": 4,
+  "PlaygroundAgentNativeStateTests": 5,
   "PlaygroundAgentSystemOwnerTests": 1,
   "PlaygroundAgentBatchTests": 6,
   "PlaygroundClipboardTests": 9,
@@ -63,5 +63,11 @@
   "PlaygroundSelectedClientExitTests": 8,
   "PlaygroundInputHandoverTests": 3,
   "PlaygroundColdInputHandoverTests": 1,
-  "PhotosButtonLeafE2ETests": 2
+  "PhotosButtonLeafE2ETests": 2,
+  "PlaygroundAgentLifecycleTests": 6,
+  "PlaygroundAgentBrokerRestartTests": 1,
+  "PlaygroundRawKeyboardBrokerTests": 1,
+  "PlaygroundRawInputAdmissionTests": 6,
+  "PlaygroundAgentTransportTests": 1,
+  "PlaygroundDuoRawLongTextTests": 1
 }

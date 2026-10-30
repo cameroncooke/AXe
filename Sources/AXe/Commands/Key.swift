@@ -112,7 +112,7 @@ struct Key: AsyncParsableCommand {
         
         // Perform the key event
         try await LegacyDuoInput.performKeyboard(
-            keyEvent, simulatorUDID: simulatorUDID, logger: logger
+            keyEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: duration == nil
         )
         
         logger.info().log("Key press completed successfully")
