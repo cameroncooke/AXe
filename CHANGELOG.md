@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Added `--orientation` to `tap`, `swipe`, `drag`, and `touch`. `--orientation portrait` skips orientation detection, so each command no longer reads the accessibility tree first.
+- Added `--orientation` to `tap`, `swipe`, `drag`, and `touch`. `--orientation portrait` skips orientation detection, so each command no longer reads the accessibility tree first ([#82](https://github.com/cameroncooke/AXe/pull/82) by [@MattJColes](https://github.com/MattJColes)).
 
 ## [v1.8.0] - 2026-07-20
 
