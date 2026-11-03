@@ -41,6 +41,9 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
     var pollInterval: Double = 0.25
 
+    @Option(name: .customLong("orientation"), help: "Use this UI orientation instead of detecting it: portrait, portraitUpsideDown, landscape or landscapeFlipped. With portrait, coordinates are sent unchanged and the accessibility tree is not read.")
+    var orientation: SimulatorOrientation?
+
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
@@ -142,6 +145,7 @@ struct Tap: AsyncParsableCommand {
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: resolution.point,
             for: simulatorUDID,
+            orientationOverride: orientation,
             logger: logger
         )
 

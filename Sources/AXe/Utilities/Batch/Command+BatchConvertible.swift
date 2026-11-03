@@ -110,12 +110,14 @@ extension Tap: BatchConvertible {
                 point: resolution.point,
                 roots: resolvedRoots,
                 for: context.simulatorUDID,
+                orientationOverride: orientation,
                 logger: logger
             )
         } else {
             physicalPoint = try await OrientationAwareCoordinates.translate(
                 point: resolution.point,
                 for: context.simulatorUDID,
+                orientationOverride: orientation,
                 logger: logger
             )
         }
@@ -140,6 +142,7 @@ extension Swipe: BatchConvertible {
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
             points: [(x: startX, y: startY), (x: endX, y: endY)],
             for: context.simulatorUDID,
+            orientationOverride: orientation,
             logger: logger
         )
         let physicalStart = physicalPoints[0]
@@ -183,6 +186,7 @@ extension Touch: BatchConvertible {
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: (x: pointX, y: pointY),
             for: context.simulatorUDID,
+            orientationOverride: orientation,
             logger: logger
         )
 

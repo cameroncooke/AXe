@@ -33,6 +33,9 @@ struct Touch: AsyncParsableCommand {
     @Option(name: .customLong("delay"), help: "Delay between touch down and up events in seconds (if both are specified).")
     var delay: Double?
     
+    @Option(name: .customLong("orientation"), help: "Use this UI orientation instead of detecting it: portrait, portraitUpsideDown, landscape or landscapeFlipped. With portrait, coordinates are sent unchanged and the accessibility tree is not read.")
+    var orientation: SimulatorOrientation?
+
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
@@ -75,6 +78,7 @@ struct Touch: AsyncParsableCommand {
         let physicalPoint = try await OrientationAwareCoordinates.translate(
             point: (x: pointX, y: pointY),
             for: simulatorUDID,
+            orientationOverride: orientation,
             logger: logger
         )
 

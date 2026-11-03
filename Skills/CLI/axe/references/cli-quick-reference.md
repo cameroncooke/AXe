@@ -25,6 +25,9 @@ axe tap --label "Weather Alerts" --udid <UDID>  # Auto physical touch for switch
 axe tap --label "Submit" --tap-style simulator --udid <UDID>
 axe tap -x 320 -y 780 --tap-style physical --udid <UDID>
 
+# Skip orientation detection (portrait simulator); also works on swipe, drag and touch
+axe tap -x 100 -y 200 --orientation portrait --udid <UDID>
+
 # With timing
 axe tap -x 100 -y 200 --pre-delay 1.0 --post-delay 0.5 --udid <UDID>
 ```

@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import AXeCore
+@testable import AXe
 
 // MARK: - Orientation Math Tests
 //
@@ -459,5 +460,22 @@ struct LetterboxCoordinatesTests {
         #expect(screenshotIsLandscape, "Screenshot should be landscape-shaped for rotation detection")
         #expect(axFrameIsLandscape,    "AX frame should be landscape-shaped for rotation detection")
         #expect(screenshotIsLandscape && axFrameIsLandscape, "Both landscape → rotation mapping (not letterbox)")
+    }
+}
+
+@Suite("Orientation override")
+@MainActor
+struct OrientationOverrideTests {
+    @Test("Portrait override passes coordinates through without reading the simulator")
+    func portraitOverrideSkipsDetection() async throws {
+        // The UDID matches no simulator, so any detection step would throw.
+        let point = try await OrientationAwareCoordinates.translate(
+            point: (x: 120, y: 340),
+            for: "00000000-0000-0000-0000-000000000000",
+            orientationOverride: .portrait,
+            logger: AxeLogger()
+        )
+        #expect(point.x == 120)
+        #expect(point.y == 340)
     }
 }

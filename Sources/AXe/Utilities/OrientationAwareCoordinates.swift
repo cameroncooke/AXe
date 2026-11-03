@@ -1,3 +1,4 @@
+import ArgumentParser
 import Darwin
 import Foundation
 import AXeCore
@@ -13,7 +14,7 @@ import FBSimulatorControl
 ///   - `portraitUpsideDown`  — home button at the top (180°)
 ///   - `landscape`           — home button to the right (90° CW from portrait)
 ///   - `landscapeFlipped`    — home button to the left (90° CCW from portrait)
-enum SimulatorOrientation: String, CaseIterable {
+enum SimulatorOrientation: String, CaseIterable, ExpressibleByArgument {
     case portrait
     case portraitUpsideDown
     case landscape
@@ -113,9 +114,9 @@ struct OrientationAwareCoordinates {
     ///
     /// - Parameters:
     ///   - simulatorUDID: Target simulator UDID.
-    ///   - orientationOverride: Forces a specific rotated-device `SimulatorOrientation`.
-    ///     Intended for internal tests or future explicit callers; normal CLI commands
-    ///     rely on automatic private orientation detection.
+    ///   - orientationOverride: Skips detection and uses this `SimulatorOrientation`.
+    ///     Set by the `--orientation` option. `.portrait` passes coordinates through
+    ///     without reading the accessibility tree.
     ///   - logger: AXe logger instance.
     /// - Returns: The `CoordinateMapping` that applies to the current simulator state.
     static func detectMapping(
@@ -123,6 +124,11 @@ struct OrientationAwareCoordinates {
         orientationOverride: SimulatorOrientation? = nil,
         logger: AxeLogger
     ) async throws -> CoordinateMapping {
+        if orientationOverride == .portrait {
+            logger.info().log("Using explicit orientation override: portrait; passthrough")
+            return .passthrough
+        }
+
         let roots = try await AccessibilityFetcher.fetchAccessibilityElements(
             for: simulatorUDID,
             logger: logger

@@ -36,6 +36,9 @@ struct Drag: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after completing the drag in seconds.")
     var postDelay: Double?
 
+    @Option(name: .customLong("orientation"), help: "Use this UI orientation instead of detecting it: portrait, portraitUpsideDown, landscape or landscapeFlipped. With portrait, coordinates are sent unchanged and the accessibility tree is not read.")
+    var orientation: SimulatorOrientation?
+
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
@@ -80,6 +83,7 @@ struct Drag: AsyncParsableCommand {
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
             points: [(x: startX, y: startY), (x: endX, y: endY)],
             for: simulatorUDID,
+            orientationOverride: orientation,
             logger: logger
         )
 
