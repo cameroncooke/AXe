@@ -17,8 +17,11 @@ When reading issues:
 
 ## Tools
 - GitHub CLI for issues/PRs
-- When working on skill sources in `skills/`, use the `skill-creator` skill workflow.
+- When working on the skill sources in `Skills/CLI/axe/`, use the `skill-creator` skill workflow.
 - After modifying any skill source, run `npx skill-check <skill-directory>` and address all errors/warnings before handoff.
+
+## Build and test
+- `scripts/build.sh` (default, `dev`, `clean`) and the `./test-runner.sh` modes that build frameworks (including `--unit-tests`) run `rm -rf build_products build_derived_data`. Never keep anything that must survive under `build_products/`.
 
 ## Style
 - Keep answers short and concise
@@ -27,7 +30,7 @@ When reading issues:
 - Technical prose only, be kind but direct (e.g., "Thanks @user" not "Thanks so much @user!")
 
 ## Docs
-- If modifying or adding/removing commands/options be sure to update docs and skill.md
+- If modifying or adding/removing commands/options, update README.md and the skill in `Skills/CLI/axe/`.
 
 ### Changelog
 Location: `CHANGELOG.md`
@@ -43,8 +46,6 @@ Use these sections under `## [Unreleased]`:
 - Before adding entries, read the full `[Unreleased]` section to see which subsections already exist
 - New entries ALWAYS go under `## [Unreleased]` section
 - Append to existing subsections (e.g., `### Fixed`), do not create duplicates
-- NEVER modify already-released version sections (e.g., `## [0.12.2]`)
-- Each version section is immutable once released
 #### Attribution
 - **Internal changes (from issues)**: `Fixed foo bar ([#123](https://github.com/cameroncooke/AXe/issues/123))`
 - **External contributions**: `Added feature X ([#456](https://github.com/cameroncooke/AXe/pull/456) by [@username](https://github.com/username))`

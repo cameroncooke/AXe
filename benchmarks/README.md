@@ -140,15 +140,12 @@ Each result records tool version, binary/runtime hashes, actual model and Claude
 version, task/app/guide/runner/grader hashes, Xcode, host OS, device runtime and
 screen geometry. Matching conditions are required for ranked comparisons. Tool
 versions can differ; changes to the task, runner, grader or environment create a
-separate comparison group. Moving the complete runner into this repository does
-not retroactively change historical contracts.
+separate comparison group.
 
 Build, installation and launch calls required by the task remain inside its
 clock. Skill activation and approved preparation remain outside it. Each Weather
 run uses fresh DerivedData. Model choices vary; use repeated runs before claiming
-a stable speed improvement. The historical XcodeBuildMCP 14-call / about
-100-second result remains reference-only because its full conditions are absent.
-This suite uses its original tasks and model runner, not a new XcodeBuildMCP tool
+a stable speed improvement. This suite uses its original tasks and model runner, not a new XcodeBuildMCP tool
 comparison.
 
 The grader checks returned UI facts and procedure rules. A zero process exit or

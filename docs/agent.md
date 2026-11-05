@@ -10,7 +10,7 @@ Use the returned page cursor for omitted controls. A compact display cell is lim
 
 Compact top-level and batch-step error messages are limited to 1024 Unicode scalars. Clipping keeps a prefix and suffix, with `messageTruncated` and `originalScalarLength` on the error object. Use typed error codes and recovery fields instead of parsing cause strings. Full view keeps the complete message; do not repeat input to expand diagnostics. Native cleanup, quarantine and context checks remain unchanged.
 
-Read the [agent output and readback contract](../Skills/CLI/axe/references/agent-reference.md#output-format) before parsing or acting on these results. The 2 November output-audit candidate requires a matched wire-38 CLI/broker. Its build, simulator and token-budget checks are pending; the earlier Jev measurements below do not verify it.
+Read the [agent output and readback contract](../Skills/CLI/axe/references/agent-reference.md#output-format) before parsing or acting on these results.
 
 ## Autonomous model command
 
@@ -20,11 +20,11 @@ Read the [agent output and readback contract](../Skills/CLI/axe/references/agent
 axe agent "Open Settings and turn on Airplane Mode" --udid "$UDID"
 ```
 
-It observes the frontmost app, asks TypeSafe AI's Jev model for one next action, validates the response and executes that action through AXe. This is deliberately an agent loop over AXe's existing accessibility and HID primitives rather than a separate automation stack.
+It observes the frontmost app, asks TypeSafe AI's Jev model for one next action, validates the response and executes that action through AXe.
 
-## Why this shape
+## How it works
 
-The design adapts the `browser-use/jev-ultrafast` pattern to iOS:
+Each run:
 
 1. Read the current accessibility hierarchy and normalise it into an rs/1 runtime snapshot (see below).
 2. Build a dynamic action space containing only operations AXe can execute on the current screen.
@@ -193,23 +193,6 @@ axe agent "Open Settings and enable Airplane Mode" \
   --minimum-action-probability 0.65
 ```
 
-## Performance choices
-
-Measured on an iPhone 17 simulator, the Calendar task "Open Calendar app, go to Aug 16 2026, create a new event titled 'Cameron Birthday' and save." (four actions from Settings) went from an 11.4 s loop to 6.4 s. "Open Settings, open General, then open About" takes about 3.7 s.
-
-- Accessibility trees replace screenshot capture, image upload and vision inference.
-- Compact rs/1 rows replace per-element JSON in both the state and target questions.
-- Jev chooses the operation and speculative compatible targets in one request, concurrently with the freshness read.
-- Only the attributes rs/1 uses are requested. `role_description`, `subrole` and `help` add about 45%, 15% and 12% to serialization time.
-- The frontmost-application handle and the coordinate mapping are cached. Re-detecting orientation for every tap cost about 250 ms.
-- Apps are listed and launched in-process rather than by spawning `simctl`.
-- The TypeSafe HTTPS connection opens during setup.
-- Exact app-name matches and single available targets are resolved deterministically, avoiding unnecessary target questions.
-- AXe retains one HID session for the complete run.
-- Scrolls use rs/1 swipe geometry with a 0.5 second drag.
-
-Remaining costs are mostly outside the loop's control: reads of large hierarchies, Jev latency (usually 230-350 ms), launch animations, and typing, which the simulator's HID transport paces at 10 ms per key event.
-
 ## Fail-closed behaviour
 
 Before execution AXe checks that:
@@ -233,8 +216,6 @@ Screen text is labelled as untrusted observation in every decision prompt. The o
 - Picker wheels, sliders, drag-and-drop and hardware-button plans are not yet exposed to Jev.
 - App launch depends on CoreSimulator's installed-app metadata; hidden services and extensions are filtered but unusual system bundles may still appear.
 - Reads reuse the frontmost-application handle between actions, so a system alert that appears while the app's own screen also changes may not be observed until the next refresh.
-- The integration needs simulator E2E coverage under AXe's supported Xcode 26 and Xcode 27 environments before release.
-
 ## Environment summary
 
 | Variable | Purpose | Default |

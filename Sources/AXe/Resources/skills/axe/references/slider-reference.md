@@ -26,8 +26,8 @@ The physical route uses at most one contact, four paths of at most 12 moves each
 
 The receipt is `sliderValue` (`action.sliderValue` in agent mode). It records the requested percentage, native target/domain/value, move count, delivery and cleanup. A native result does not prove every intermediate app callback. Check the visible app value and callback separately. Context changes stop input and release the owned contact. Uncertain release keeps the input owner and quarantine; there is no replay or automatic recovery. These sequential checks do not lock the app layout or guarantee one recipient throughout the gesture.
 
-Percentage requests are standalone only, including numeric 0 and 100. Selected endpoint batch steps keep their behavior. Raw legacy batch slider remains unsupported. Current CLI wire 35 rejects older requests and needs the matching native frameworks with guarded retained DOWN and physical value feedback.
+Percentage requests are standalone only, including numeric 0 and 100. Selected endpoint batch steps keep their behavior. Raw legacy batch slider remains unsupported. Older requests reject; use the matching native frameworks with guarded retained DOWN and physical value feedback.
 
-## Verification
+## Limits
 
-Isolated controllers proved input on the outer display in portrait and the inner display at rotation 90, with actual app value changes and released contacts. One separate fold rejected before DOWN. These checks do not establish this public command, endpoint-to-interior pickup, other positions or general slider support. Earlier failed runs remain recorded. The incremental CLI build and public native proof are pending for this source change. Security scanning is UNVERIFIED per Cam. RTL, custom and vertical Sliders remain unproved. No smooth motion, all-callback history or general slider-domain claim is made.
+RTL, custom and vertical Sliders remain unproved. No smooth motion, all-callback history or general slider-domain claim is made.

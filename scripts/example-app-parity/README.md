@@ -48,7 +48,7 @@ Use the same DEVELOPER_DIR as the app. Add `--guard /absolute/path/to/resource-g
 
 The helper imports Replay from verify-example-apps.py. It reuses whole-stdout JSON decoding, compact paging, row lookup and raw call evidence. It checks all 19 buttons; inline Clear with visible display 0; one four-action batch for 5 + 3 = 8; invalid later-ref refusal before any completed step with display 8 unchanged; old-table refusal followed by successful read-ref and paging on the newer table; and the file reference form with visible display 0. If Clear exposes no native ID, the separate native ID file check is explicitly skipped. No ID or coordinate fallback is invented.
 
-The current helpers check the public adaptive success contract: completed count, ordered step action/status, input outcome, event count, cleanup and batch-level no-replay evidence. After complete success with a fresh final capture, duplicate totals, rollback false, request IDs and per-receipt replay false are omitted. A receipt kind equal to its action is also omitted; typeText stays distinct from type. Failure receipts retain those fields. The Weather switch helper requests full view and still requires the complete base fields. The recorded V5 results below used the earlier contract. V6 ran the updated checks successfully as recorded below.
+The current helpers check the public adaptive success contract: completed count, ordered step action/status, input outcome, event count, cleanup and batch-level no-replay evidence. After complete success with a fresh final capture, duplicate totals, rollback false, request IDs and per-receipt replay false are omitted. A receipt kind equal to its action is also omitted; typeText stays distinct from type. Failure receipts retain those fields. The Weather switch helper requests full view and still requires the complete base fields.
 
 These are helper assertions, not recorded pass results. Unexpected failure stops the run. Expected refusals must have complete actual JSON, a nonzero child exit, the exact error code, zero completed steps and no action receipts. The original failed call record remains. This establishes public prevalidation evidence plus unchanged visible state, not an independent OS event inventory. No input is retried.
 
@@ -76,8 +76,6 @@ Add --from-settings only when Settings is already open; it first taps the normal
 
 Both helpers accept the same --guard and --resource-probe pair, --timeout and --max-pages options as the replay helper. Resource monitoring requires both monitoring arguments or an outer guard. They save their own source, imported replay source, batch JSON, hashes and complete per-call evidence. An action failure stops the run without replay.
 
-On 2 November 2026, final benchmark runtime V5 (CLI SHA-256 d6f2b0f63013903e4f0e7f83f3bb5bd171bd8aa3c26225b140ba66419b2b2656) passed the Calculator batch helper with six checks and one explicit native-ID skip in 15 calls. The Weather switch helper passed in three calls, and the search helper passed in 11 calls including normal setup. All three recorded zero input retries. These results are separate from the earlier installed V5 candidate below; the final benchmark candidate was not installed locally.
-
 ## Repeatable offscreen Weather setting check
 
 Start on the normal London main screen with Celsius selected and Reduce transparency on. Do not expand Settings with another tool. Run the existing public replay plan:
@@ -86,9 +84,7 @@ Start on the normal London main screen with Celsius selected and Reduce transpar
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/weather-scroll-setting-evidence --plan scripts/example-app-parity/weather-scroll-setting.json
 ```
 
-The plan opens Settings, uses at most three reference swipes to find Reduce transparency, reads 1, taps it, reads 0 and closes Settings. The V6 run passed ten checks in nine calls using exactly one six-event swipe, with no input replay or FlowDeck setup. It ended on London with 11 visible. This proves scrolling and use of the offscreen control, not the original task's required final value on or all seven settings together. Use the normal control to establish the stated starting value before another run; the helper does not reset app data.
-
-V6 also repeated the six Calculator batch checks in 15 calls with one explicit native-ID skip. Its host checks passed 83 tests in 13 suites; the unchanged native V3b candidate passed 15 tests in two suites. The candidate CLI SHA-256 is 0e4a1c5be0f771c9216cd4f5c68a61128879b6687a69c3bcc7bd8bbca5b324ed. The earlier V5 seven-setting attempt and separately FlowDeck-expanded tail remain separate evidence; neither is a complete task pass.
+The plan opens Settings, uses at most three reference swipes to find Reduce transparency, reads 1, taps it, reads 0 and closes Settings. Use the normal control to establish the stated starting value before another run; the helper does not reset app data.
 
 ## Verify all seven final Weather settings
 
@@ -98,7 +94,7 @@ Start after the search check with London selected and the Locations sheet open. 
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/weather-seven-settings-evidence --plan scripts/example-app-parity/weather-seven-settings.json
 ```
 
-The unchanged plan passed 18 checks in nine calls on V6. It read the four selected units and both off switches, used one AXe swipe to find Reduce transparency, changed 0 to 1 and closed Settings to London and 11. Its SHA-256 is bf3833cd4211bc88b21a26299e3770115c6973b9439b8c22baf1d4beee493507. This verifies all seven final settings; it is not a fresh full-task benchmark because earlier normal UI actions prepared the other states. V6 separately repeated the London search check in 11 calls with exactly 14 input events and a visible London result.
+Its SHA-256 is bf3833cd4211bc88b21a26299e3770115c6973b9439b8c22baf1d4beee493507.
 
 ## Run the complete original Weather UI task
 
@@ -108,9 +104,7 @@ Use the unchanged Weather app on one existing warm ordinary portrait iPhone simu
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/weather-original-evidence --plan scripts/example-app-parity/weather-original-functional.json
 ```
 
-On V6, this unchanged plan passed all 52 checks in 54 CLI calls with zero input retries. It changed all seven settings from defaults, entered and selected London, read the requested main weather values and read every precipitation detail value. It sent no further input after opening the detail page. The first fresh capture attempt had failed before input; a later warm run of the same plan passed. This proves functional coverage, not startup reliability or model efficiency. Explicit fresh reads, paging and checks make the 54-call total different from the historical 14-call model target. Build/install and normal app restart are outside this replay.
-
-The plan SHA-256 is f0ea431802f9def65db5a057b19d7690a854d7b8c0c0fbab6af975e71bc7a12a. Use the same optional resource tools described above. The recorded run has 54 saved guard receipts with no guard stop, unreaped call or recorded crash.
+The plan SHA-256 is f0ea431802f9def65db5a057b19d7690a854d7b8c0c0fbab6af975e71bc7a12a. Use the same optional resource tools described above.
 
 ## Check app switching and a failed final capture
 
@@ -120,19 +114,7 @@ Prepare Home with one unique visible app icon. For the verified failure path, op
 python3 -B scripts/verify-agent-handoff.py --axe /absolute/path/to/axe --udid SIM_UUID --app-icon Safari --out /absolute/new/safari-handoff-evidence
 ```
 
-The helper captures Home, taps the chosen reference once in one public batch and inspects the actual result. It requires the completed tap receipt to remain when the final capture fails, then requests a fresh agent capture without a caller PID. The optional --expected-home-pid only asserts the independently observed test precondition; it is not passed to AXe. The same optional guard/probe pair is supported. No action is replayed.
-
-The warm Safari V6 case passed two checks in three calls. It retained the two-event completed receipt when the final read reported Home-to-Safari process change; the next capture returned Safari with 39 rows and a new snapshot. A cold first case completed its final capture normally and stayed UNPROVED for this specific failure path. The helper does not force a failure, retry input, add delays or use hooks. The Settings icon mismatch remains a separate open fault.
-
-## Earlier recorded verification
-
-On 2 November 2026, the returned-reference variant completed its first three checks. The next tap on 7, using the public replacement from Clear, was refused with screenChanged before that tap sent input. The earlier Clear tap did run. That failed attempt remains recorded; the plan was not replaced with a fresh-read variant and marked as passing.
-
-The final helper passed calculator-refresh.json with 17 checks in 22 CLI calls and the warm weather-precipitation.json run with four checks in seven calls, including one actual completed swipe. Both runs used V5 CLI 1ca9609a on 2 November 2026. Their saved helper.py files and the current source have the same SHA-256: ca05382ee2218ac27cd44efbfc00fa0315a96fa4b2974c7545436e8132fb5622.
-
-The earlier calculator-arithmetic.json run passed nine checks in ten calls. Keep that result separate from the two final-helper runs. Fresh observations before input add calls and tokens; those successful runs do not convert the returned-reference failure above into a pass or establish its cause.
-
-Settings and Locations were exercised with the prototype helper. Their standalone plans have not each run with the final helper. A prototype precipitation continuation reached the details after five completed swipes; the final warm plan needed one. The first prototype used the wrong main-screen button label (PRECIPITATION instead of PRECIP.); that was a helper query error, not an AXe result.
+The helper captures Home, taps the chosen reference once in one public batch and inspects the actual result. It requires the completed tap receipt to remain when the final capture fails, then requests a fresh agent capture without a caller PID. The optional --expected-home-pid only asserts the independently observed test precondition; it is not passed to AXe. The same optional guard/probe pair is supported. No action is replayed. The helper does not force a failure, retry input, add delays or use hooks.
 
 ## Plan operations
 

@@ -13,7 +13,7 @@ axe --output json screenshot --udid <UDID> --output shot.png
 
 No format option preserves existing command output; `--agent` defaults to one JSON result. `--output text|json` chooses representation. Agent `--view reading` (default) and `--view navigation` use compact schema 2; `--view full` exposes canonical schema 1. JSON failures return one stdout result and a nonzero exit. Ordinary formatted commands keep their common command envelope. See [output fields](agent-reference.md#output-format).
 
-Prefer the format before the command. Non-media leaf placement is accepted when unambiguous. Screenshot/movie `--output` after the command remains a path. `stream-video` rejects explicit format selection before capture. Existing command-specific `--json` flags are unchanged. Supply a real UDID; an empty value never selects a device. New output-format verification is pending.
+Prefer the format before the command. Non-media leaf placement is accepted when unambiguous. Screenshot/movie `--output` after the command remains a path. `stream-video` rejects explicit format selection before capture. Existing command-specific `--json` flags are unchanged. Supply a real UDID; an empty value never selects a device.
 
 ## Simulator discovery
 
@@ -48,7 +48,7 @@ Follow `capture.page.nextOffset` with `--row-offset` and the same snapshot for m
 
 Existing agent coordinate tap/swipe forms remain available with a current snapshot. Raw commands and explicit selected mode without `--agent` keep their existing interfaces and PID rules. Read the [agent reference](agent-reference.md) for action limits and the [agent batch contract](agent-reference.md#run-a-small-ordered-agent-batch) for its JSON file.
 
-Native-object refs require matched CLI, broker and runtime versions. Use the actions advertised by the current ref, including eligible controls without app IDs. The UID stays internal; no caller PID/UID lookup is added. The per-device RAM table expires or is replaced and is lost on broker restart. Opaque sliders, AXPress and pinch remain unsupported. Read [native object references](agent-reference.md#native-object-references); this guidance does not claim simulator acceptance.
+Native-object refs require matched CLI, broker and runtime versions. Use the actions advertised by the current ref, including eligible controls without app IDs. The UID stays internal; no caller PID/UID lookup is added. The per-device RAM table expires or is replaced and is lost on broker restart. Opaque sliders, AXPress and pinch remain unsupported. Read [native object references](agent-reference.md#native-object-references).
 
 ## Tap
 
@@ -163,7 +163,7 @@ axe type --file input.txt --udid <UDID>
 printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UUID>
 ```
 
-Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md). One v6 outer-portrait product-copy plus key101/fresh Paste Button workflow passed exact 22-byte insertion, one callback and release; automatic Paste and other apps remain unproved. Empty-open-stdin signal cancellation passed; running-child cancellation remains unproved.
+Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md).
 
 ## Keyboard
 
@@ -205,7 +205,7 @@ axe button apple-pay --udid <UDID>
 
 Selected mode supports all five buttons with `--input-mode selected --screen-id <ID> --screen-uuid <UUID>`. Optional `--expected-boot <BOOT_ID>` must match before input. The active pair guards context; each button acts on the whole device. Omitted duration has no requested hold; explicit duration is finite, greater than zero and at most 10 seconds. The same names and options work in selected batch steps.
 
-Home keeps its `home` result; the others return `button.kind` and typed execution/cleanup evidence. Apple Pay uses two native side-button presses (four primitives), a 0.15-second gap and half the supplied duration per hold; other buttons use two primitives. Receipts confirm transport, not Siri/payment UI, secure lock, wake or power. Do not replay uncertain input. Selected wire 28 uses a separate broker endpoint and rejects wire 27. Raw routes and defaults are unchanged. New selected Siri/Lock/Apple Pay build and native proof are pending.
+Home keeps its `home` result; the others return `button.kind` and typed execution/cleanup evidence. Apple Pay uses two native side-button presses (four primitives), a 0.15-second gap and half the supplied duration per hold; other buttons use two primitives. Receipts confirm transport, not Siri/payment UI, secure lock, wake or power. Do not replay uncertain input. Selected requests use a separate broker endpoint; older requests reject. Raw routes and defaults are unchanged.
 
 ## Batch (multi-step workflows)
 
