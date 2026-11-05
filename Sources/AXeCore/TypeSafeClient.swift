@@ -150,6 +150,15 @@ public struct TypeSafeClient: Sendable {
         }
     }
 
+    /// Opens the HTTPS connection before the first decision, so DNS and TLS setup are not paid inside
+    /// the agent loop. Failures are ignored; the first real request reconnects.
+    public func warmUp() async {
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        _ = try? await transport(request)
+    }
+
     public func systemOne(_ payload: TypeSafeSystemOneRequest) async throws -> TypeSafeSystemOneResponse {
         let endpoint = baseURL
             .appendingPathComponent("v1", isDirectory: true)

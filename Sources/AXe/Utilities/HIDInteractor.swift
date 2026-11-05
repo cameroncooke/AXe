@@ -214,28 +214,30 @@ struct HIDInteractor {
             try await Task.sleep(for: .seconds(preDelay))
         }
 
-        let touchDownEvent = FBSimulatorHIDEvent.touch(direction: .down, x: point.x, y: point.y)
-        let touchUpEvent = FBSimulatorHIDEvent.touch(direction: .up, x: point.x, y: point.y)
-        var didTouchDown = false
-
-        do {
-            try await performHIDEvent(touchDownEvent, in: session, logger: logger)
-            didTouchDown = true
-            try await Task.sleep(for: .seconds(TapTiming.defaultHoldDuration))
-            try await performHIDEvent(touchUpEvent, in: session, logger: logger)
-            didTouchDown = false
-        } catch {
-            if didTouchDown {
-                // Never replay touch-down after an ambiguous failure. A best-effort touch-up can
-                // only release possible held state; it cannot produce a second tap by itself.
-                try? await performHIDEvent(touchUpEvent, in: session, logger: logger)
-            }
-            throw error
+        try await sendPhysicalTap(at: point) { event in
+            try await performHIDEvent(event, in: session, logger: logger)
         }
 
         if let postDelay, postDelay > 0 {
             logger.info().log("Post-delay: \(postDelay)s")
             try await Task.sleep(for: .seconds(postDelay))
+        }
+    }
+
+    /// Use one 250 ms contact: the 100 ms composite regressed real control actions.
+    /// Drain after UP; draining between DOWN and UP extends the contact.
+    static func sendPhysicalTap(
+        at point: (x: Double, y: Double),
+        perform: (FBSimulatorHIDEvent) async throws -> Void
+    ) async throws {
+        let event = FBSimulatorHIDEvent.tapAt(x: point.x, y: point.y,
+            duration: 0.25)
+        do {
+            try await perform(event)
+        } catch {
+            // A failed send can leave DOWN delivered. Release only; never replay the tap.
+            try? await perform(.touch(direction: .up, x: point.x, y: point.y))
+            throw error
         }
     }
 

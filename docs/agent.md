@@ -1,5 +1,19 @@
 # Agentic iOS Simulator automation
 
+## Provider-free agent output
+
+For an external agent that controls AXe one CLI call at a time, use `axe describe-ui --agent --udid "$UDID"`. This flag is separate from the autonomous `axe agent <goal>` command described below and needs no model key.
+
+The default `--view reading` uses compact public adaptive schema 2; `--view navigation` omits static text, and `--view full` exposes the canonical base schema 1. Select text or JSON with the root `--output text|json` option. Compact rows contain `ref|actions|role|label|value`; action names can be comma-separated. IDs and full native text remain available through bounded read-ref queries on the same live-validated snapshot. Neither filtering nor paging changes reference identity or weakens app, display, hinge, rotation and freshness checks.
+
+Use the returned page cursor for omitted controls. A compact display cell is limited to 160 Unicode scalars (159 plus an ellipsis when clipped); fetch an exact `label`, `value` or `id` with `describe-ui --agent --snapshot-id <UUID> --read-ref <REF> --text-field <FIELD>`. Text offsets count Unicode scalars, with chunks of 1...4096 scalars. A scalar boundary can split a combining sequence. `capture.truncatedFields.displayScalarLength` counts the complete normalized display cell; `data.detail.totalLength` counts the exact native field. These counts can differ after whitespace normalization. Use the returned raw-field cursor for chunks. The normal raw hierarchy and coordinate commands remain available without `--agent`.
+
+Compact top-level and batch-step error messages are limited to 1024 Unicode scalars. Clipping keeps a prefix and suffix, with `messageTruncated` and `originalScalarLength` on the error object. Use typed error codes and recovery fields instead of parsing cause strings. Full view keeps the complete message; do not repeat input to expand diagnostics. Native cleanup, quarantine and context checks remain unchanged.
+
+Read the [agent output and readback contract](../Skills/CLI/axe/references/agent-reference.md#output-format) before parsing or acting on these results. The 2 November output-audit candidate requires a matched wire-38 CLI/broker. Its build, simulator and token-budget checks are pending; the earlier Jev measurements below do not verify it.
+
+## Autonomous model command
+
 `axe agent` accepts an outcome such as:
 
 ```bash
@@ -12,26 +26,68 @@ It observes the frontmost app, asks TypeSafe AI's Jev model for one next action,
 
 The design adapts the `browser-use/jev-ultrafast` pattern to iOS:
 
-1. Read the current accessibility hierarchy and reduce it to a compact, indexed set of visible controls.
+1. Read the current accessibility hierarchy and normalise it into an rs/1 runtime snapshot (see below).
 2. Build a dynamic action space containing only operations AXe can execute on the current screen.
 3. Ask Jev for the next operation and speculative compatible targets in one `/v1/systemone` request.
 4. Validate only the target head selected by the operation head. An unused speculative answer cannot cause an action.
-5. Re-read the hierarchy before acting. If its fingerprint changed while the request was in flight, discard the decision.
-6. Execute one action through a cached AXe HID session and poll briefly for an observable state change.
+5. Re-read the hierarchy while Jev decides and check the decision is still valid (see [Freshness](#freshness)).
+6. Execute one action through a cached AXe HID session, then read the screen once for the next request.
 7. Repeat until Jev selects `DONE`, `BLOCKED`, or the configured action limit is reached.
 
-No screenshot is sent to TypeSafe. The state consists of accessibility labels, values, roles, frames, the installed-app candidates relevant to the goal and a short action history.
+No screenshot is sent to TypeSafe. The state consists of compact rs/1 rows, the installed-app candidates relevant to the goal and a short action history.
+
+## rs/1 runtime snapshots
+
+The screen model is a Swift port of XcodeBuildMCP's rs/1 runtime snapshot (`Sources/AXeCore/RuntimeSnapshot.swift`):
+
+- Every accessibility node gets a ref (`e1`, `e2`, ...), a normalised role (`button`, `text-field`, `switch`, `cell`, `scroll-view`, ...) and derived actions (`tap`, `typeText`, `swipeWithin`, ...).
+- Elements outside the viewport lose their actions. Activation points near the bottom edge move inside the element, and switches activate near their trailing edge.
+- Scroll areas are inferred from containers whose descendants overflow them.
+- Jev receives three capped lists of `ref|action|role|label|value|id` rows instead of per-element JSON: up to 64 `targets` in rs/1 priority order, 32 `scroll` areas and 64 visible `text` rows.
+
+```text
+e19|tap|button|Add||add-plus-button
+e36|swipe|scroll-view|||
+e96|text|text|Sunday – 16 Aug 2026||current-day
+```
+
+Target questions use refs as choice keys and rows as criteria. On a Calendar day view this reduces the request from about 12.4 KB to 5.0 KB while covering the whole hierarchy.
+
+One deliberate difference from XcodeBuildMCP: the screen hash ignores traversal order. rs/1 hashes elements in hierarchy order, but SpringBoard reorders sibling icons between reads, which made every decision look stale.
+
+## Observation and freshness
+
+A screen read serializes the frontmost application's accessibility hierarchy. It is the main cost of each step, from about 130 ms on a small screen to 400-700 ms on a sheet with the keyboard showing, so the loop keeps reads to two per step:
+
+1. **Post-action read.** After an action, AXe waits 300 ms (a UIKit transition takes about 350 ms) and reads once. Reads reuse the cached frontmost-application handle; acquiring a new one costs 250-700 ms on large screens. A handle whose application lost focus serializes empty and is refreshed automatically, and a screen that looks unchanged is re-read with a new handle in case a system alert took focus. After `OPEN_APP`, AXe reads with new handles until the launched application is frontmost.
+2. **Freshness read.** The next Jev request and a second read run concurrently, so the read costs little beyond Jev's own latency. It is compared with the screen Jev saw.
+
+A read that lands mid-transition is caught by the freshness check, which discards the decision and uses the second read as the next observation. Only two stale decisions in a row trigger a full settle: reads until two consecutive screen hashes match, for up to 2.5 seconds. Start-up also settles.
+
+### Freshness
+
+A changed screen hash alone does not discard a decision, because frames of animating or hidden elements change without affecting what Jev saw. The decision is checked in tiers, recorded as `freshness` in the trace:
+
+| Result | When | Operations |
+|---|---|---|
+| `unchanged` | Screen hash is identical | All |
+| `sameCompactRows` | The ref-independent rs/1 rows Jev saw are unchanged. `DONE`, `BLOCKED` and `PRESS_RETURN` also require unchanged target frames, because during a navigation push both screens are in the hierarchy with identical rows. | All |
+| `targetResolved` | Only text rows changed, and the chosen element is found again by role and a unique identifier, label or value (rs/1 semantic selector order), or an identical frame. New or removed targets, such as a presenting sheet, make the decision stale. | `TAP`, `TYPE_TEXT`, `CLEAR_TEXT`, `SCROLL_*` |
+| `screenIndependent` | The operation does not depend on screen content | `OPEN_APP`, `WAIT`, viewport scrolls with an unchanged viewport |
+| `stale` | None of the above; the decision is discarded | All |
+
+Resolved targets execute against the fresh element. If its frame moved, one more read must show the same frame before AXe taps it, so an animating control is not tapped mid-flight.
 
 ## Supported operations
 
 The dynamic operation set can contain:
 
-- `OPEN_APP` — launch an installed app with `simctl launch --terminate-running-process`.
+- `OPEN_APP` — launch an installed app in-process through CoreSimulator. A running app is brought to the foreground with its state intact.
 - `TAP` — tap a visible accessibility element, including switch-aware activation points.
-- `TYPE_TEXT` — focus an editable element, select all, delete and enter replacement text.
+- `TYPE_TEXT` — focus an editable element, select all and delete any existing value, then enter the text.
 - `CLEAR_TEXT` — focus and clear an editable element.
 - `PRESS_RETURN` — submit the currently focused field.
-- `SCROLL_DOWN` / `SCROLL_UP` — reveal lower or higher content.
+- `SCROLL_DOWN` / `SCROLL_UP` — reveal lower or higher content by swiping within an rs/1 scroll area, or the viewport when none is inferred.
 - `WAIT` — wait briefly for a real transition or loading state.
 - `DONE` — all requested outcomes are visibly satisfied.
 - `BLOCKED` — no offered action can progress without guessing.
@@ -89,6 +145,17 @@ axe agent <goal> --udid <UDID>
 
 A trace contains request state, model answers, selected actions and entered values. Treat it as potentially sensitive and do not commit it by default.
 
+## Timing
+
+Each progress line shows Jev latency and the whole step, and the run ends with a breakdown. `loop` starts at the first Jev request; `setup` covers listing apps, the first settled observation and opening the TypeSafe connection.
+
+```text
+2. TAP → Add [p=0.770, Jev 229 ms, step 1400 ms]
+Time: setup 1091 ms, loop 6359 ms (Jev 1241 ms, 10 screen reads 4076 ms, actions 1167 ms)
+```
+
+Trace events include per-step `timing`: Jev latency, the freshness read, the action, the post-action observation and the step total.
+
 ## Usage and cost
 
 When a run finishes, AXe prints Jev token usage and an estimated cost:
@@ -128,12 +195,20 @@ axe agent "Open Settings and enable Airplane Mode" \
 
 ## Performance choices
 
+Measured on an iPhone 17 simulator, the Calendar task "Open Calendar app, go to Aug 16 2026, create a new event titled 'Cameron Birthday' and save." (four actions from Settings) went from an 11.4 s loop to 6.4 s. "Open Settings, open General, then open About" takes about 3.7 s.
+
 - Accessibility trees replace screenshot capture, image upload and vision inference.
-- Jev chooses the operation and speculative compatible targets in one request.
+- Compact rs/1 rows replace per-element JSON in both the state and target questions.
+- Jev chooses the operation and speculative compatible targets in one request, concurrently with the freshness read.
+- Only the attributes rs/1 uses are requested. `role_description`, `subrole` and `help` add about 45%, 15% and 12% to serialization time.
+- The frontmost-application handle and the coordinate mapping are cached. Re-detecting orientation for every tap cost about 250 ms.
+- Apps are listed and launched in-process rather than by spawning `simctl`.
+- The TypeSafe HTTPS connection opens during setup.
 - Exact app-name matches and single available targets are resolved deterministically, avoiding unnecessary target questions.
 - AXe retains one HID session for the complete run.
-- Post-action observation uses short adaptive polling and returns on the first changed hierarchy.
-- State is capped at 160 actionable elements and 8,000 characters of visible text.
+- Scrolls use rs/1 swipe geometry with a 0.5 second drag.
+
+Remaining costs are mostly outside the loop's control: reads of large hierarchies, Jev latency (usually 230-350 ms), launch animations, and typing, which the simulator's HID transport paces at 10 ms per key event.
 
 ## Fail-closed behaviour
 
@@ -145,7 +220,7 @@ Before execution AXe checks that:
 - probabilities sum to approximately one;
 - the selected choice has the highest probability;
 - an optional minimum selected-action probability is met; and
-- the screen fingerprint is unchanged since it was observed for the model request.
+- the decision is still fresh: the screen is unchanged, the rows Jev saw are unchanged, or the chosen target resolves uniquely on the current screen.
 
 Screen text is labelled as untrusted observation in every decision prompt. The original command goal is the only instruction source.
 
@@ -153,9 +228,11 @@ Screen text is labelled as untrusted observation in every decision prompt. The o
 
 - The command automates booted iOS Simulators, not physical devices.
 - It is accessibility-first and has no screenshot/vision fallback, so canvas-only or poorly labelled interfaces may be blocked.
+- rs/1 rows omit frames. Unlabelled scroll areas are indistinguishable to Jev, and targets beyond the 64-row cap are not offered until the screen changes.
 - Text entry inherits AXe's current US HID keyboard character support.
 - Picker wheels, sliders, drag-and-drop and hardware-button plans are not yet exposed to Jev.
-- App launch depends on `simctl listapps` metadata; hidden services and extensions are filtered but unusual system bundles may still appear.
+- App launch depends on CoreSimulator's installed-app metadata; hidden services and extensions are filtered but unusual system bundles may still appear.
+- Reads reuse the frontmost-application handle between actions, so a system alert that appears while the app's own screen also changes may not be observed until the next refresh.
 - The integration needs simulator E2E coverage under AXe's supported Xcode 26 and Xcode 27 environments before release.
 
 ## Environment summary

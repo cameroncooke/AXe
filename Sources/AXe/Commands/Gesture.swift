@@ -136,7 +136,7 @@ struct Gesture: AsyncParsableCommand {
         Execute a preset, or one complete gesture on an explicit selected display.
         Selected gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
         Double-tap requires -x/-y; rotate also requires --radius/--degrees.
-        With --agent, double-tap instead requires a current --snapshot-id/--ref and --expected-pid.
+        With --agent, double-tap instead requires a current --snapshot-id/--ref; --expected-pid is optional.
         It uses the fresh target point; the app can change between the two taps.
         Agent pinch uses a current area reference plus --radius/--scale, without -x/-y.
         Both starts are checked before input; folding/rotation checks and owned release continue during motion.
@@ -234,7 +234,7 @@ struct Gesture: AsyncParsableCommand {
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent gesture only: expected application PID before input.")
+    @Option(name: .customLong("expected-pid"), help: "Agent gesture only: optional assertion of the snapshot owner PID.")
     var expectedPID: Int32?
 
     func validate() throws {

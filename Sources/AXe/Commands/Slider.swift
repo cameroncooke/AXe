@@ -5,7 +5,7 @@ import FBSimulatorControl
 struct Slider: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Set a slider percentage, or move to a verified native endpoint.",
-        discussion: "Selected and agent modes accept exactly one --endpoint or finite --value in 0...100. Agent mode requires a current slider snapshot/ref and --expected-pid, without selectors."
+        discussion: "Selected and agent modes accept exactly one --endpoint or finite --value in 0...100. Agent mode requires a current slider snapshot/ref, without selectors; --expected-pid is optional."
     )
 
     private static let directDragSteps = 120
@@ -142,7 +142,7 @@ struct Slider: AsyncParsableCommand {
         )
 
         logger.info().log("Slider set completed successfully")
-        print("✓ Slider set to \(formatPercent(value)) successfully (AXValue: \(observedValue))")
+        CLIOutput.message("✓ Slider set to \(formatPercent(value)) successfully (AXValue: \(observedValue))")
     }
 
     private func accessibilityQuery() throws -> AccessibilityQuery {
@@ -260,6 +260,7 @@ struct Slider: AsyncParsableCommand {
             primitives: [], ax: ax)
         logger.info().log("Slider uses current native value feedback on its measured active display")
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        if CLIOutput.isFormatted { try CLIOutput.writeJSON(response) }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let receipt = response.ax?.sliderValue,
               receipt.outcome == "reached" || receipt.outcome == "alreadyAtValue" else {

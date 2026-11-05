@@ -51,12 +51,19 @@ struct ListSimulators: AsyncParsableCommand {
             guard let json = String(data: data, encoding: .utf8) else {
                 throw CLIError(errorDescription: "Could not encode the display catalogue.")
             }
-            print(json)
+            try CLIOutput.writeJSONText(json)
             return
         }
 
         let simulators = simulatorSet.allSimulators
-        simulators.forEach { print($0.description) }
+        if CLIOutput.isFormatted {
+            let inventory = SimulatorInventoryOutput(simulators: simulators.map {
+                SimulatorSummaryOutput(udid: $0.udid, name: $0.name, description: $0.description)
+            })
+            try CLIOutput.writeJSON(inventory)
+        } else {
+            simulators.forEach { CLIOutput.message($0.description) }
+        }
     }
 }
 
@@ -80,4 +87,14 @@ struct DisplayDiscoveryOutput: Encodable {
         try values.encode(ReadInterval(startedUptime: startedUptime, finishedUptime: finishedUptime),
             forKey: .readInterval)
     }
+}
+
+private struct SimulatorInventoryOutput: Encodable {
+    let simulators: [SimulatorSummaryOutput]
+}
+
+private struct SimulatorSummaryOutput: Encodable {
+    let udid: String
+    let name: String
+    let description: String
 }

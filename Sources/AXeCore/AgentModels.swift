@@ -45,78 +45,23 @@ public struct AgentPoint: Codable, Equatable, Sendable {
     }
 }
 
-public struct AgentObservedElement: Codable, Equatable, Sendable {
-    public let stableKey: String
-    public let type: String?
-    public let role: String?
-    public let roleDescription: String?
-    public let label: String?
-    public let identifier: String?
-    public let value: String?
-    public let frame: AgentFrame
-    public let isSwitchLike: Bool
-    public let supportsTap: Bool
-    public let supportsTextEntry: Bool
-
-    public init(
-        stableKey: String,
-        type: String?,
-        role: String?,
-        roleDescription: String?,
-        label: String?,
-        identifier: String?,
-        value: String?,
-        frame: AgentFrame,
-        isSwitchLike: Bool,
-        supportsTap: Bool,
-        supportsTextEntry: Bool
-    ) {
-        self.stableKey = stableKey
-        self.type = type
-        self.role = role
-        self.roleDescription = roleDescription
-        self.label = label
-        self.identifier = identifier
-        self.value = value
-        self.frame = frame
-        self.isSwitchLike = isSwitchLike
-        self.supportsTap = supportsTap
-        self.supportsTextEntry = supportsTextEntry
-    }
-
-    public var displayName: String {
-        label ?? identifier ?? value ?? type ?? role ?? stableKey
-    }
-
-    public var activationPoint: AgentPoint {
-        if isSwitchLike, frame.width > 100 {
-            return AgentPoint(x: frame.x + frame.width - 31, y: frame.y + (frame.height / 2))
-        }
-        return frame.centre
-    }
-}
-
+/// An rs/1 runtime snapshot of the frontmost application.
 public struct AgentScreenSnapshot: Codable, Equatable, Sendable {
     public let fingerprint: String
     public let applicationName: String?
     public let bundleIdentifier: String?
-    public let text: String
-    public let applicationFrame: AgentFrame?
-    public let elements: [AgentObservedElement]
+    public let viewport: AgentFrame?
+    public let elements: [RuntimeSnapshotElement]
 
     public init(
-        fingerprint: String,
         applicationName: String?,
         bundleIdentifier: String?,
-        text: String,
-        applicationFrame: AgentFrame?,
-        elements: [AgentObservedElement]
+        elements: [RuntimeSnapshotElement]
     ) {
-        self.fingerprint = fingerprint
+        self.fingerprint = RuntimeSnapshotBuilder.screenHash(of: elements)
         self.applicationName = applicationName
         self.bundleIdentifier = bundleIdentifier
-        self.text = text
-        self.applicationFrame = applicationFrame
+        self.viewport = RuntimeSnapshotBuilder.viewportFrame(in: elements)
         self.elements = elements
     }
 }
@@ -162,22 +107,23 @@ public struct AgentHistoryEntry: Codable, Equatable, Sendable {
 public struct AgentPreparedRequest: Sendable {
     public let payload: TypeSafeSystemOneRequest
     public let availableOperations: Set<AgentOperation>
-    public let elementChoicesByOperation: [AgentOperation: [String: AgentObservedElement]]
+    /// Offered element choices keyed by rs/1 ref.
+    public let elementChoicesByOperation: [AgentOperation: [String: RuntimeSnapshotElement]]
     public let applicationsByChoice: [String: AgentApplication]
-    public let soleElementByOperation: [AgentOperation: AgentObservedElement]
+    public let soleElementByOperation: [AgentOperation: RuntimeSnapshotElement]
     public let soleApplication: AgentApplication?
     public let textCandidatesByChoice: [String: String]
-    public let textQuestionByElementKey: [String: String]
+    public let textQuestionByElementRef: [String: String]
 
     public init(
         payload: TypeSafeSystemOneRequest,
         availableOperations: Set<AgentOperation>,
-        elementChoicesByOperation: [AgentOperation: [String: AgentObservedElement]],
+        elementChoicesByOperation: [AgentOperation: [String: RuntimeSnapshotElement]],
         applicationsByChoice: [String: AgentApplication],
-        soleElementByOperation: [AgentOperation: AgentObservedElement],
+        soleElementByOperation: [AgentOperation: RuntimeSnapshotElement],
         soleApplication: AgentApplication?,
         textCandidatesByChoice: [String: String],
-        textQuestionByElementKey: [String: String]
+        textQuestionByElementRef: [String: String]
     ) {
         self.payload = payload
         self.availableOperations = availableOperations
@@ -186,13 +132,14 @@ public struct AgentPreparedRequest: Sendable {
         self.soleElementByOperation = soleElementByOperation
         self.soleApplication = soleApplication
         self.textCandidatesByChoice = textCandidatesByChoice
-        self.textQuestionByElementKey = textQuestionByElementKey
+        self.textQuestionByElementRef = textQuestionByElementRef
     }
 }
 
 public struct AgentDecision: Codable, Equatable, Sendable {
     public let operation: AgentOperation
-    public let element: AgentObservedElement?
+    /// Target for TAP, TYPE_TEXT and CLEAR_TEXT, or the scroll area for SCROLL_* (nil scrolls the viewport).
+    public let element: RuntimeSnapshotElement?
     public let application: AgentApplication?
     public let text: String?
     public let operationConfidence: Double
@@ -202,7 +149,7 @@ public struct AgentDecision: Codable, Equatable, Sendable {
 
     public init(
         operation: AgentOperation,
-        element: AgentObservedElement?,
+        element: RuntimeSnapshotElement?,
         application: AgentApplication?,
         text: String?,
         operationConfidence: Double,

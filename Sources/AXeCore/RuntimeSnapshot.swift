@@ -69,6 +69,8 @@ public struct RuntimeSnapshotNode: Sendable {
     public let frame: AgentFrame?
     public let enabled: Bool?
     public let customActions: [String]
+    /// Exact names for observation only; these do not grant input actions.
+    public let customActionNames: [String]
     public let children: [RuntimeSnapshotNode]
 
     public init(
@@ -82,6 +84,7 @@ public struct RuntimeSnapshotNode: Sendable {
         frame: AgentFrame? = nil,
         enabled: Bool? = nil,
         customActions: [String] = [],
+        customActionNames: [String] = [],
         children: [RuntimeSnapshotNode] = []
     ) {
         self.type = type
@@ -94,6 +97,7 @@ public struct RuntimeSnapshotNode: Sendable {
         self.frame = frame
         self.enabled = enabled
         self.customActions = customActions
+        self.customActionNames = customActionNames
         self.children = children
     }
 }
@@ -109,6 +113,8 @@ public struct RuntimeSnapshotElement: Codable, Equatable, Sendable {
     public internal(set) var actions: [RuntimeElementAction]
     /// Dot-separated child indices from the hierarchy root, used to find ancestors.
     public let path: String
+    /// Read-only names from the accessibility provider, without input authority.
+    public let customActionNames: [String]
     public internal(set) var activationPointOverride: AgentPoint?
     public internal(set) var swipeFrame: AgentFrame?
 
@@ -123,7 +129,8 @@ public struct RuntimeSnapshotElement: Codable, Equatable, Sendable {
         actions: [RuntimeElementAction],
         path: String? = nil,
         activationPointOverride: AgentPoint? = nil,
-        swipeFrame: AgentFrame? = nil
+        swipeFrame: AgentFrame? = nil,
+        customActionNames: [String] = []
     ) {
         self.ref = ref
         self.role = role
@@ -136,6 +143,28 @@ public struct RuntimeSnapshotElement: Codable, Equatable, Sendable {
         self.path = path ?? ref
         self.activationPointOverride = activationPointOverride
         self.swipeFrame = swipeFrame
+        self.customActionNames = customActionNames
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case ref, role, label, value, identifier, frame, state, actions, path
+        case activationPointOverride, swipeFrame, customActionNames
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(ref: try values.decode(String.self, forKey: .ref),
+            role: try values.decodeIfPresent(RuntimeElementRole.self, forKey: .role),
+            label: try values.decodeIfPresent(String.self, forKey: .label),
+            value: try values.decodeIfPresent(String.self, forKey: .value),
+            identifier: try values.decodeIfPresent(String.self, forKey: .identifier),
+            frame: try values.decode(AgentFrame.self, forKey: .frame),
+            state: try values.decode(RuntimeElementState.self, forKey: .state),
+            actions: try values.decode([RuntimeElementAction].self, forKey: .actions),
+            path: try values.decode(String.self, forKey: .path),
+            activationPointOverride: try values.decodeIfPresent(AgentPoint.self, forKey: .activationPointOverride),
+            swipeFrame: try values.decodeIfPresent(AgentFrame.self, forKey: .swipeFrame),
+            customActionNames: try values.decodeIfPresent([String].self, forKey: .customActionNames) ?? [])
     }
 
     public var displayName: String {
@@ -171,7 +200,28 @@ public struct RuntimeSnapshotElement: Codable, Equatable, Sendable {
 }
 
 public enum RuntimeSnapshotBuilder {
+    /// Preserve the original raw snapshot entry point and inferred native viewport.
     public static func elements(from roots: [RuntimeSnapshotNode]) -> [RuntimeSnapshotElement] {
+        elements(from: roots, viewport: nil)
+    }
+
+    /// Conservative physical-hit assessment, before availability or viewport filtering.
+    /// This shares the normal role/action rules and does not authorize an input target.
+    public static func hasPotentialTapAction(_ node: RuntimeSnapshotNode) -> Bool {
+        let element = normalize(node, path: "", index: 0, ignoringAvailability: true)
+        return element.actions.contains(.tap) || element.actions.contains(.typeText)
+    }
+
+    /// Container semantics before state, viewport or public-row filtering.
+    /// Cells can accept a swipe but are not independent scroll containers.
+    public static func hasPotentialScrollContainerAction(_ node: RuntimeSnapshotNode) -> Bool {
+        let element = normalize(node, path: "", index: 0, ignoringAvailability: true)
+        return element.role == .scrollView || element.role == .list
+    }
+
+    /// A verified selected-display viewport overrides the native root frame, which can remain
+    /// in portrait coordinates after simulator rotation. Nil preserves raw hierarchy behaviour.
+    public static func elements(from roots: [RuntimeSnapshotNode], viewport: AgentFrame?) -> [RuntimeSnapshotElement] {
         var flattened: [(node: RuntimeSnapshotNode, path: String)] = []
         func visit(_ node: RuntimeSnapshotNode, path: String) {
             flattened.append((node, path))
@@ -186,7 +236,7 @@ public enum RuntimeSnapshotBuilder {
         var elements = flattened.enumerated().map { index, entry in
             normalize(entry.node, path: entry.path, index: index)
         }
-        applyViewportVisibility(&elements)
+        applyViewportVisibility(&elements, viewport: viewport)
         inferScrollableContainers(&elements)
         return elements
     }
@@ -214,6 +264,7 @@ public enum RuntimeSnapshotBuilder {
                 String(element.state.enabled),
                 String(element.state.visible),
                 element.actions.map(\.rawValue).joined(separator: ","),
+                element.customActionNames.map { "\($0.utf8.count):\($0)" }.joined(),
             ].joined(separator: "\u{1F}")
         }
         return fnv1a64(RuntimeSnapshotProtocol.version + "\n" + rows.sorted().joined(separator: "\n"))
@@ -243,11 +294,13 @@ public enum RuntimeSnapshotBuilder {
     private static func normalize(
         _ node: RuntimeSnapshotNode,
         path: String,
-        index: Int
+        index: Int,
+        ignoringAvailability: Bool = false
     ) -> RuntimeSnapshotElement {
         let frame = normalizedFrame(node.frame ?? AgentFrame(x: 0, y: 0, width: 0, height: 0))
-        let label = normalizedText(node.label)
-        let value = normalizedText(node.value)
+        // Display content is exact. Search and capability checks normalize separately.
+        let label = node.label
+        let value = node.value
         let identifier = normalizedText(node.identifier)
         let role = deriveRole(node, identifier: identifier)
         let enabled = node.enabled != false
@@ -257,9 +310,10 @@ public enum RuntimeSnapshotBuilder {
             enabled: enabled,
             frame: frame,
             hasCustomActions: !customActions.isEmpty,
-            hasSemanticIdentity: label != nil
-                || value != nil
-                || (identifier != nil && !isGenericInternalIdentifier(identifier))
+            hasSemanticIdentity: normalizedText(label) != nil
+                || normalizedText(value) != nil
+                || (identifier != nil && !isGenericInternalIdentifier(identifier)),
+            ignoringAvailability: ignoringAvailability
         )
 
         return RuntimeSnapshotElement(
@@ -271,7 +325,8 @@ public enum RuntimeSnapshotBuilder {
             frame: frame,
             state: RuntimeElementState(enabled: enabled, visible: isVisible(frame)),
             actions: actions,
-            path: path
+            path: path,
+            customActionNames: node.customActionNames
         )
     }
 
@@ -348,9 +403,10 @@ public enum RuntimeSnapshotBuilder {
         enabled: Bool,
         frame: AgentFrame,
         hasCustomActions: Bool,
-        hasSemanticIdentity: Bool
+        hasSemanticIdentity: Bool,
+        ignoringAvailability: Bool = false
     ) -> [RuntimeElementAction] {
-        guard enabled, isVisible(frame) else { return [] }
+        guard ignoringAvailability || (enabled && isVisible(frame)) else { return [] }
 
         var actions: [RuntimeElementAction] = []
         if isTapRole(role) || (hasCustomActions && hasSemanticIdentity) {
@@ -371,8 +427,8 @@ public enum RuntimeSnapshotBuilder {
 
     // MARK: - Viewport visibility
 
-    private static func applyViewportVisibility(_ elements: inout [RuntimeSnapshotElement]) {
-        guard let viewport = viewportFrame(in: elements) else { return }
+    private static func applyViewportVisibility(_ elements: inout [RuntimeSnapshotElement], viewport: AgentFrame?) {
+        guard let viewport = viewport ?? viewportFrame(in: elements) else { return }
 
         for index in elements.indices {
             let element = elements[index]
@@ -460,7 +516,7 @@ public enum RuntimeSnapshotBuilder {
                    frameVerticallyOverflows(descendant.frame, container: ancestorFrame) {
                     summaries[ancestorIndex].hasSemanticVerticalOverflowingDescendant = true
                 }
-                if descendant.label?.lowercased() == "sheet grabber" {
+                if normalizedText(descendant.label)?.lowercased() == "sheet grabber" {
                     summaries[ancestorIndex].hasSheetGrabberDescendant = true
                 }
             }
@@ -528,16 +584,16 @@ public enum RuntimeSnapshotBuilder {
     }
 
     private static func hasSemanticIdentity(_ element: RuntimeSnapshotElement) -> Bool {
-        element.label != nil
-            || element.value != nil
+        normalizedText(element.label) != nil
+            || normalizedText(element.value) != nil
             || (element.identifier != nil && !isGenericInternalIdentifier(element.identifier))
     }
 
     private static func isUnidentifiedOtherSwipeTarget(_ element: RuntimeSnapshotElement) -> Bool {
         element.role == .other
             && element.actions.contains(.swipeWithin)
-            && element.label == nil
-            && element.value == nil
+            && normalizedText(element.label) == nil
+            && normalizedText(element.value) == nil
             && element.identifier == nil
     }
 
@@ -701,7 +757,7 @@ public enum RuntimeSnapshotCompactor {
     public static func text(in elements: [RuntimeSnapshotElement], offset: Int = 0, limit: Int = RuntimeSnapshotProtocol.textLimit) -> [RuntimeSnapshotRow] {
         elements.enumerated()
             .filter { _, element in
-                element.role == .text
+                (element.role == .text || element.role == .image)
                     && element.state.visible
                     && (!compactText(element.label).isEmpty || !compactText(element.value).isEmpty)
             }
@@ -720,11 +776,17 @@ public enum RuntimeSnapshotCompactor {
             element.ref,
             action,
             element.role?.rawValue ?? "",
-            compactText(element.label),
-            compactText(element.value),
+            displayText(element.label),
+            displayText(element.value),
             compactText(element.identifier),
         ].joined(separator: "|")
         return RuntimeSnapshotRow(element: element, text: text)
+    }
+
+    /// Keep exact visible whitespace. Pipe replacement is the existing RS/1 cell convention;
+    /// native --read-ref text remains the exact path for a literal pipe.
+    private static func displayText(_ value: String?) -> String {
+        (value ?? "").replacingOccurrences(of: "|", with: "/")
     }
 
     private static func compactText(_ value: String?) -> String {

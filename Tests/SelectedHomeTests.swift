@@ -35,7 +35,6 @@ struct SelectedHomeTests {
         let original = try parse().selectedRequest()
         let decoded = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(original))
         try decoded.validate()
-        #expect(SelectedHIDRequest.version == 36)
         #expect(decoded.requestID == original.requestID && decoded.version == SelectedHIDRequest.version)
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)

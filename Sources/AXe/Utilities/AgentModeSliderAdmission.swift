@@ -24,7 +24,7 @@ struct AgentModeSliderAdmission: FBSimulatorSliderAdmissionGuard {
         guard let kind = admission.selectorKind, let value = admission.selectorValue else {
             throw AgentModeFailure("unsupportedSliderReference", "The slider admission has no native selector.")
         }
-        let snapshot = try AgentModeSnapshot(roots: roots)
+        let snapshot = try AgentModeSnapshot(roots: roots, context: admission.context)
         let node = try snapshot.sliderNode(kind: kind, value: value)
         try target.validate(node, allowingValueChange: true)
     }

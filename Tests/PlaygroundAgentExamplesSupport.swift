@@ -36,19 +36,20 @@ struct PlaygroundAgentExamplesSession {
     let document: PlaygroundDocumentReader<PlaygroundAgentExamplesDocument>
     let artifacts: URL
 
-    static func open() async throws -> Self {
+    static func open(position: DuoControlsPosition = .outer0) async throws -> Self {
         let app = try AgentPlaygroundSession()
         let core = try CorePlaygroundSession()
         let root = try #require(ProcessInfo.processInfo.environment["AXE_E2E_ARTIFACT_DIR"])
         let artifacts = URL(fileURLWithPath: root).appendingPathComponent("agent-examples-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: true)
-        let pid = try await openAgentPlaygroundScreen(app, screen: "agent-examples", readyID: "agent-examples.tap")
+        let pid = try await openAgentPlaygroundScreen(app, screen: "agent-examples", readyID: "agent-examples.tap", position: position)
         let document = try await PlaygroundDocumentReader<PlaygroundAgentExamplesDocument>(
             udid: app.udid, pid: pid, fileName: "agent-examples.json")
         return Self(app: app, core: core, pid: pid, document: document, artifacts: artifacts)
     }
 
     func run(_ arguments: [String], allowFailure: Bool = false, timeout: TimeInterval = 30) async throws -> CommandOutput {
+        let arguments = canonicalAgentArguments(arguments)
         let identifier = UUID().uuidString
         try Data(contentsOf: document.url).write(to: artifacts.appendingPathComponent(identifier + "-before.json"))
         let output = try await core.command(arguments, allowFailure: allowFailure, timeout: timeout)

@@ -12,10 +12,10 @@ struct AgentPolicyTests {
         let prepared = try AgentPolicy().prepareRequest(
             goal: "Open Settings, tap General, then search for 'Keyboard'",
             screen: makeScreen(elements: [
-                makeElement(key: "general", label: "General", tap: true),
-                makeElement(key: "privacy", label: "Privacy", tap: true),
-                makeElement(key: "search", label: "Search", tap: true, text: true),
-                makeElement(key: "name", label: "Name", tap: true, text: true),
+                makeElement(label: "General"),
+                makeElement(label: "Privacy"),
+                makeElement(label: "Search", text: true),
+                makeElement(label: "Name", text: true),
             ]),
             applications: [
                 AgentApplication(name: "Settings", bundleIdentifier: "com.apple.Preferences"),
@@ -37,10 +37,10 @@ struct AgentPolicyTests {
         let prepared = try AgentPolicy().prepareRequest(
             goal: "Tap Continue",
             screen: makeScreen(elements: [
-                makeElement(key: "continue", label: "Continue", tap: true),
-                makeElement(key: "cancel", label: "Cancel", tap: true),
-                makeElement(key: "email", label: "Email", tap: true, text: true),
-                makeElement(key: "password", label: "Password", tap: true, text: true),
+                makeElement(label: "Continue"),
+                makeElement(label: "Cancel"),
+                makeElement(label: "Email", text: true),
+                makeElement(label: "Password", text: true),
             ]),
             applications: [],
             history: []
@@ -107,7 +107,7 @@ struct AgentPolicyTests {
         let prepared = try AgentPolicy().prepareRequest(
             goal: "Tap Continue",
             screen: makeScreen(elements: [
-                makeElement(key: "continue", label: "Continue", tap: true),
+                makeElement(label: "Continue"),
             ]),
             applications: [],
             history: []
@@ -141,6 +141,47 @@ struct AgentPolicyTests {
         #expect(!AgentTextCandidateExtractor.candidates(from: "Search for cats then tap Images").contains("cats then tap Images"))
     }
 
+    @Test("Splits a list of values and rejects instruction fragments")
+    func extractsListedValues() {
+        let candidates = AgentTextCandidateExtractor.candidates(
+            from: "Open Maps and take me on a world tour: search for and show each of these cities in turn - Paris, Tokyo, New York, Sydney, Cairo, Rio de Janeiro"
+        )
+
+        for city in ["Paris", "Tokyo", "New York", "Sydney", "Cairo", "Rio de Janeiro"] {
+            #expect(candidates.contains(city))
+        }
+        #expect(!candidates.contains { $0.localizedCaseInsensitiveContains("each of these") })
+        #expect(!candidates.contains { $0.localizedCaseInsensitiveContains("show") })
+    }
+
+    @Test("Takes only value-shaped text from a goal that spells out the steps")
+    func rejectsInstructionFragments() {
+        let candidates = AgentTextCandidateExtractor.candidates(
+            from: "Open Maps and tour these cities in order: Paris, Tokyo, New York. For each one: type the city name in the search field, tap its top matching result so the map moves to that city, then clear the search and do the next city."
+        )
+
+        #expect(candidates.contains("Paris"))
+        #expect(candidates.contains("New York"))
+        #expect(!candidates.contains("do the next city"))
+        #expect(!candidates.contains { $0.first?.isLowercase == true })
+    }
+
+    @Test("Offers a single extracted value to the model instead of typing it unchecked")
+    func offersSingleCandidateForReview() throws {
+        let field = makeElement(label: "Search", text: true)
+        let prepared = try AgentPolicy().prepareRequest(
+            goal: "Search for cats",
+            screen: makeScreen(elements: [field]),
+            applications: [],
+            history: []
+        )
+
+        let questionName = try #require(prepared.textQuestionByElementRef[field.ref])
+        let question = try #require(prepared.payload.questions[questionName])
+        #expect(question.criteria["GENERATE"] != nil)
+        #expect(question.criteria.values.contains(.string("cats")))
+    }
+
     @Test("Ranks the app explicitly named in the goal first")
     func filtersApplications() {
         let applications = [
@@ -171,27 +212,68 @@ struct AgentPolicyTests {
         #expect(filtered.isEmpty)
     }
 
-    @Test("Screen fingerprint ignores accessibility traversal order")
-    func fingerprintIgnoresOrder() {
-        let lines = ["Utilities folder", "Passwords", "Shortcuts", "Contacts"]
-        let elements = [
-            makeElement(key: "safari", label: "Safari", tap: true),
-            makeElement(key: "messages", label: "Messages", tap: true),
-        ]
-        let original = AgentScreenFingerprint.make(screenTextLines: lines, elements: elements)
+    @Test("Sends compact rs/1 rows and offers refs as target choices")
+    func sendsCompactRuntimeSnapshotRows() throws {
+        let prepared = try AgentPolicy().prepareRequest(
+            goal: "Tap Continue",
+            screen: makeScreen(elements: [
+                makeElement(label: "Continue"),
+                makeElement(label: "Cancel"),
+                makeElement(label: "Heading", role: .text, actions: [.longPress, .touch]),
+            ]),
+            applications: [],
+            history: []
+        )
 
-        #expect(original == AgentScreenFingerprint.make(
-            screenTextLines: ["Utilities folder", "Shortcuts", "Passwords", "Contacts"],
-            elements: elements.reversed()
-        ))
-        #expect(original != AgentScreenFingerprint.make(
-            screenTextLines: lines + ["Calendar"],
-            elements: elements
-        ))
-        #expect(original != AgentScreenFingerprint.make(
-            screenTextLines: lines,
-            elements: [elements[0]]
-        ))
+        guard case .object(let state) = prepared.payload.state,
+              case .object(let screen) = state["screen"],
+              case .object(let snapshot) = screen["snapshot"] else {
+            Issue.record("Expected state.screen.snapshot to be an object.")
+            return
+        }
+        #expect(snapshot["protocol"] == .string("rs/1"))
+        #expect(snapshot["targets"] == .array([
+            .string("e-continue|tap|button|Continue||"),
+            .string("e-cancel|tap|button|Cancel||"),
+        ]))
+        #expect(snapshot["text"] == .array([.string("e-heading|text|text|Heading||")]))
+        #expect(screen["elements"] == nil)
+
+        let tapQuestion = try #require(prepared.payload.questions[AgentPolicy.tapTargetQuestion])
+        #expect(tapQuestion.criteria["e-continue"] == .string("e-continue|tap|button|Continue||"))
+    }
+
+    @Test("Scroll operations target inferred scroll areas and fall back to the viewport")
+    func resolvesScrollTargets() throws {
+        let list = makeElement(label: "Events", role: .list, actions: [.longPress, .touch, .swipeWithin])
+        let sidebar = makeElement(label: "Sidebar", role: .scrollView, actions: [.longPress, .touch, .swipeWithin])
+
+        func decide(_ elements: [RuntimeSnapshotElement], scrollChoice: String?) throws -> AgentDecision {
+            let prepared = try AgentPolicy().prepareRequest(
+                goal: "Scroll to the bottom",
+                screen: makeScreen(elements: elements),
+                applications: [],
+                history: []
+            )
+            var answers = [
+                AgentPolicy.operationQuestion: answer(
+                    choosing: AgentOperation.scrollDown.rawValue,
+                    from: Set(prepared.availableOperations.map(\.rawValue))
+                )
+            ]
+            if let scrollChoice {
+                let choices = try #require(prepared.elementChoicesByOperation[.scrollDown])
+                answers[AgentPolicy.scrollTargetQuestion] = answer(choosing: scrollChoice, from: Set(choices.keys))
+            }
+            return try AgentPolicy().resolveDecision(
+                response: TypeSafeSystemOneResponse(model: "jev-latest", answers: answers, usage: nil),
+                prepared: prepared
+            )
+        }
+
+        #expect(try decide([list, sidebar], scrollChoice: sidebar.ref).element?.ref == sidebar.ref)
+        #expect(try decide([list], scrollChoice: nil).element?.ref == list.ref)
+        #expect(try decide([], scrollChoice: nil).element == nil)
     }
 
     @Test("Usage summary totals tokens and prices input only")
@@ -324,35 +406,33 @@ struct AgentPolicyTests {
         }
     }
 
-    private func makeScreen(elements: [AgentObservedElement]) -> AgentScreenSnapshot {
-        AgentScreenSnapshot(
-            fingerprint: "screen-1",
+    private func makeScreen(elements: [RuntimeSnapshotElement]) -> AgentScreenSnapshot {
+        let application = RuntimeSnapshotElement(
+            ref: "e-app",
+            role: .application,
+            label: "Example",
+            frame: AgentFrame(x: 0, y: 0, width: 390, height: 844),
+            actions: []
+        )
+        return AgentScreenSnapshot(
             applicationName: "Example",
             bundleIdentifier: "com.example.app",
-            text: elements.compactMap(\.label).joined(separator: "\n"),
-            applicationFrame: AgentFrame(x: 0, y: 0, width: 390, height: 844),
-            elements: elements
+            elements: [application] + elements
         )
     }
 
     private func makeElement(
-        key: String,
         label: String,
-        tap: Bool,
-        text: Bool = false
-    ) -> AgentObservedElement {
-        AgentObservedElement(
-            stableKey: key,
-            type: text ? "TextField" : "Button",
-            role: nil,
-            roleDescription: nil,
+        text: Bool = false,
+        role: RuntimeElementRole? = nil,
+        actions: [RuntimeElementAction]? = nil
+    ) -> RuntimeSnapshotElement {
+        RuntimeSnapshotElement(
+            ref: "e-\(label.lowercased())",
+            role: role ?? (text ? .textField : .button),
             label: label,
-            identifier: key,
-            value: nil,
             frame: AgentFrame(x: 10, y: 20, width: 100, height: 44),
-            isSwitchLike: false,
-            supportsTap: tap,
-            supportsTextEntry: text
+            actions: actions ?? (text ? [.tap, .typeText, .longPress, .touch] : [.tap, .longPress, .touch])
         )
     }
 

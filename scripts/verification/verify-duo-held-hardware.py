@@ -28,7 +28,7 @@ parser.add_argument('--public', action='store_true', help='Use the real public C
 args = parser.parse_args()
 assert args.pid > 0 and 0 <= args.fold_angle <= 180
 if args.public:
-    # The initial description can start the broker before the hold command.
+    # A per-proof worker is started with this flag, then stopped after safe cleanup.
     os.environ['FBSIMULATORCONTROL_LOG_HID_DETAILS'] = '1'
 args.case = ('public-held-' if args.public else 'library-held-') + args.button + '-' + args.mode
 spec = importlib.util.spec_from_file_location('duo_controls', Path(__file__).with_name('verify-duo-controls.py'))
@@ -40,6 +40,122 @@ probe_files = []
 probe_command = None
 probe_started = None
 probe_saved = False
+
+class PublicHardwareBroker:
+    """Test-only exact worker lifetime. Never reads a process environment."""
+    def __init__(self, check):
+        self.check = check
+        self.created = None
+        self.input_started = False
+        self.cleanup_verified = False
+        self.receipt = {'scope': 'this public hardware proof only', 'signals': [], 'prepared': False}
+        source = Path(__file__).with_name('observe-media-process.py')
+        spec = importlib.util.spec_from_file_location('hardware_kernel_identity', source)
+        self.kernel = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.kernel)
+
+    def identify(self, pid):
+        # The same proc_bsdinfo/start/executable/UID binding as the existing broker restart test.
+        value = self.kernel.BSDInfo()
+        size = self.kernel.ctypes.sizeof(value)
+        if self.kernel.libproc.proc_pidinfo(pid, 3, 0, self.kernel.ctypes.byref(value), size) != size:
+            return None
+        executable = self.kernel.ctypes.create_string_buffer(4096)
+        if self.kernel.libproc.proc_pidpath(pid, executable, len(executable)) <= 0:
+            return None
+        return {'pid': pid, 'uid': value.uid, 'realUID': value.ruid,
+                'startSeconds': value.startSeconds, 'startMicroseconds': value.startMicroseconds,
+                'binary': str(Path(os.fsdecode(executable.value)).resolve(strict=True))}
+
+    def find(self):
+        # ps args excludes the environment. Do not use the media helper's argv/environment reader.
+        result = subprocess.run(['/bin/ps', '-ww', '-axo', 'pid=,uid=,args='],
+                                capture_output=True, text=True, timeout=5, check=True)
+        expected = self.check.cli + ' hid-broker --selected --udid ' + self.check.args.device
+        matches = []
+        for line in result.stdout.splitlines():
+            fields = line.split(None, 2)
+            if len(fields) == 3 and fields[0].isdigit() and fields[1].isdigit() and int(fields[1]) == os.getuid() and fields[2] == expected:
+                matches.append(int(fields[0]))
+        assert len(matches) == 1, 'Cannot identify exactly one owned broker; no signal was sent'
+        identity = self.identify(matches[0])
+        assert identity and identity['uid'] == identity['realUID'] == os.getuid() and identity['binary'] == self.check.cli
+        return identity
+
+    def unchanged(self, before, after):
+        for key in ['counts', 'windowTouchTrace', 'text', 'textFocused', 'slider', 'switchOn',
+                    'pageOffsetY', 'listOffsetY', 'pinchScale', 'rotationRadians']:
+            assert before[key] == after[key], 'Broker preparation changed app input: ' + key
+
+    def idle(self, name, expected_pid=None):
+        arguments = ['describe-ui', '--agent', '--output', 'json', '--view', 'full']
+        if expected_pid is not None:
+            arguments += ['--expected-pid', str(expected_pid)]
+        result = self.check.axe(name, *arguments)
+        assert result.get('schema') == 'axe.output.agent-result' and result.get('didError') is False
+        data = result['data']
+        assert data.get('action') is None and data.get('quarantine') is None
+        capture = data.get('capture')
+        assert isinstance(capture, dict) and type(capture.get('applicationPID')) is int and capture['applicationPID'] > 0
+        if expected_pid is not None:
+            assert capture['applicationPID'] == expected_pid
+        # This is the existing restart test's successful read-only broker-admission boundary.
+        return capture
+
+    def stop(self, owned):
+        assert self.find() == owned and self.identify(owned['pid']) == owned
+        os.kill(owned['pid'], signal.SIGTERM)
+        self.receipt['signals'].append({'pid': owned['pid'], 'signal': 'SIGTERM', 'identity': owned})
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            current = self.identify(owned['pid'])
+            if current is not None:
+                if (current['startSeconds'], current['startMicroseconds']) != (owned['startSeconds'], owned['startMicroseconds']):
+                    return
+            else:
+                try:
+                    os.kill(owned['pid'], 0)
+                except ProcessLookupError:
+                    return
+            time.sleep(0.05)
+        raise RuntimeError('Identified broker did not exit after SIGTERM; no further signal was sent')
+
+    def prepare(self):
+        assert os.environ.get('FBSIMULATORCONTROL_LOG_HID_DETAILS') == '1'
+        before = self.check.state('hardware-broker-before-restart')
+        self.idle('hardware-broker-old-idle', self.check.args.pid)
+        owned = self.find()
+        self.unchanged(before, self.check.state('hardware-broker-before-signal'))
+        self.receipt['retired'] = owned
+        controls.save(self.check.folder / 'hardware-diagnostic-broker.json', self.receipt)
+        self.stop(owned)
+        self.idle('hardware-broker-fresh-capture', self.check.args.pid)
+        self.created = self.find()
+        self.receipt['created'] = self.created
+        assert self.created != owned, 'Hardware proof did not get a new broker'
+        self.unchanged(before, self.check.state('hardware-broker-after-restart'))
+        self.receipt['prepared'] = True
+        controls.save(self.check.folder / 'hardware-diagnostic-broker.json', self.receipt)
+
+    def close(self):
+        if self.created is None:
+            return
+        try:
+            assert not self.input_started or self.cleanup_verified, 'Hardware cleanup is unverified; diagnostic broker was not signalled'
+            before = self.check.state('hardware-broker-before-close')
+            self.idle('hardware-broker-final-idle')
+            self.unchanged(before, self.check.state('hardware-broker-after-final-idle'))
+            self.stop(self.created)
+            self.receipt['diagnosticBrokerExitConfirmed'] = True
+        except BaseException as error:
+            self.receipt['diagnosticBrokerExitConfirmed'] = False
+            self.receipt['closeError'] = str(error)
+            raise
+        finally:
+            controls.save(self.check.folder / 'hardware-diagnostic-broker.json', self.receipt)
+
+
+diagnostic_broker = PublicHardwareBroker(check) if args.public else None
 
 
 def finish_probe():
@@ -69,6 +185,8 @@ def finish_probe():
 
 try:
     check.container()
+    if diagnostic_broker is not None:
+        diagnostic_broker.prepare()
     before = check.state('before')
     catalogue = check.catalogue('before-catalogue')
     check.description('before-description', catalogue, args.pid)
@@ -86,6 +204,8 @@ try:
     probe_started = time.monotonic()
     probe = subprocess.Popen(probe_command, stdout=probe_files[0], stderr=probe_files[1],
                              env=dict(os.environ, FBSIMULATORCONTROL_LOG_HID_DETAILS='1'))
+    if diagnostic_broker is not None:
+        diagnostic_broker.input_started = True
     controls.save(check.folder / 'hardware-probe-started.json', {'pid': probe.pid, 'command': probe_command})
     marker = None
     if args.public:
@@ -144,6 +264,8 @@ try:
     assert cleanup['drainCompletedUptime'] >= release['finishedUptime']
     assert cleanup['identityBefore']['bootIdentity'] == cleanup['identityAfter']['bootIdentity'] == catalogue['bootIdentity']
     assert cleanup['boundScreenID'] == active['displayID']
+    if diagnostic_broker is not None:
+        diagnostic_broker.cleanup_verified = True
     after = check.state('after-cleanup')
     assert before['windowTouchTrace'] == after['windowTouchTrace'] and before['counts'] == after['counts']
     fresh = check.catalogue('after-catalogue')
@@ -165,4 +287,10 @@ except BaseException as error:
     raise
 finally:
     finish_probe()
+    if diagnostic_broker is not None:
+        try:
+            diagnostic_broker.close()
+        except BaseException as error:
+            check.finish(error)
+            raise
 check.finish()

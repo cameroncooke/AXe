@@ -147,6 +147,14 @@ struct PlaygroundAgentTests {
     }
 }
 
+/// Existing native-action suites decode the canonical base schema. Compact output has separate checks.
+func canonicalAgentArguments(_ arguments: [String]) -> [String] {
+    guard arguments.contains("--agent"),
+          !arguments.contains("--view"),
+          !arguments.contains(where: { $0.hasPrefix("--view=") }) else { return arguments }
+    return arguments + ["--view", "full"]
+}
+
 struct AgentPlaygroundSession {
     let udid: String
     private let axePath: String
@@ -157,7 +165,7 @@ struct AgentPlaygroundSession {
     }
 
     func run(_ arguments: [String], allowFailure: Bool = false) async throws -> CommandOutput {
-        let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
+        let command = ([axePath] + canonicalAgentArguments(arguments) + ["--udid", udid]).map(Self.quote).joined(separator: " ")
         let result = try await CommandRunner.run(command, allowFailure: allowFailure, timeout: 30)
         return CommandOutput(output: result.output, exitCode: result.exitCode)
     }

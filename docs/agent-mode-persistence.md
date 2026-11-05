@@ -2,16 +2,92 @@
 
 The `--agent` flag adds compact RS/1 rows and saved references to the existing CLI. Commands without this flag keep their existing output and coordinate input.
 
+## Read-only custom-action names
+
+The broker retains exact provider custom-action names in its snapshot. Full canonical output keeps the ref-keyed `capture.customActions` map in base schema version 1. Reading and navigation use only `capture.customActionGroups` in the public adaptive schema, version 2: each group has `refs` and one ordered `names` preview. Every listed ref receives that exact preview. Group order follows the first published ref; ref order follows the rows. The map is not also returned in adaptive output. This is the first released optional metadata contract; earlier isolated Source22 adaptive maps are not the public contract.
+
+Both forms keep at most four names, each at most 96 Unicode scalars. `capture.truncatedCustomActionRefs` marks omitted or clipped names per ref. Grouping uses exact name bytes and order, preserves duplicates and never removes descendant refs. Identical clipped previews do not prove identical complete arrays. Adaptive metadata belongs only to emitted refs and shares the existing 16 KiB capture budget and row cursor. Full captures keep the same preview bound. One short singleton group has more JSON overhead than a map; it still uses the same adaptive shape. Saved-output analysis of one 23-ref, four-name reading capture reduced 3221 to 2145 bytes; no token, model or new native result is claimed.
+
+Read the complete JSON string array through `describe-ui --agent --snapshot-id <UUID> --read-ref <REF> --text-field custom-actions`. Join `data.detail.text` chunks using `nextOffset`, then decode the array. Every chunk uses the existing fresh snapshot checks. Changes to names invalidate the normalized hash and exact native fingerprint. Names add no input actions and no named-action execution. Existing raw output is unchanged. Use matched wire-54 CLI/broker and Native11 frameworks. Source preparation and later native verification are separate; no new simulator pass is claimed here.
+
+## Current output verification — 1 November 2026
+
+Output selection passed on CLI `be6a4f92` with native `b409f6e6`, wire 37. This exact build is installed as the local `axe` command.
+
+- 21 output cases passed, including whole-output JSON parsing, parser and runtime errors, text errors, media destination paths, help/version and skill printing.
+- Three literal-argument comparisons matched the previous CLI byte for byte. Successful JSON inventory, formatted hierarchy and the legacy hierarchy array passed.
+- On Duo, a text capture supplied a reference for a JSON physical tap; its replacement reference supplied a text physical tap. Exactly two callbacks and zero held touches were observed. Text retained screen identity, boot, keyboard and other capture data.
+- A selected two-step batch returned both native receipts in one JSON object, with exactly two callbacks and zero held touches.
+- The existing host PID/reference 9, ordinary iPhone 6 + system prompt 1, and Duo 6 + system prompt 1 all passed with zero issues or skips.
+- Nine console cases preserved large integers and finite floating-point extremes. Local skill checks and installed-command checks passed.
+
+Heavy jobs ran one at a time with CPU and memory checks; no resource stop or owned guest crash was recorded. These are focused checks, not a new full 133-case run. The [master checklist](duo-implementation-checklist.md) links the exact receipts. The skill resources were frozen before verification; their pending proof notes are superseded by this dated record. The source is not committed. No push, publication or deployment occurred.
+
+## Output format
+
+Use `axe --output text describe-ui --agent --udid "$SIM_UUID"` for compact RS/1 text, or `axe --output json describe-ui --agent --udid "$SIM_UUID"` for JSON. Without an explicit format, `--agent` still returns one JSON result. Text includes the RS/1 header, snapshot and cache state, action information and compact reference rows. JSON keeps the existing `axe.output.agent-result` envelope; it is not wrapped in another command result. Snapshot IDs, refs, expiry, cache invalidation and input checks are independent of this choice.
+
+For ordinary commands, explicit JSON uses `schema: "axe.output.command-result"` and `schemaVersion: "1"`, plus `command`, `didError`, `data` and `nextSteps`. `data` can contain a typed `result`, multiple typed `results`, or text `messages`; absent values are omitted. On failure, `error` contains `code` and `message`. JSON failures use one stdout result and a nonzero exit, without a second plain error. Parse stdout for JSON. Diagnostic messages can remain on stderr; do not merge the streams when parsing. Existing output without `--output`, and command-specific `--json` flags, keep their meanings.
+
+Prefer the format before the command. Non-media leaf placement is accepted when unambiguous. Keep screenshot and movie destination paths after their commands:
+
+```sh
+axe --output json screenshot --udid "$SIM_UUID" --output screen.png
+axe --output json record-video --udid "$SIM_UUID" --output recording.mp4
+```
+
+Explicit format selection for `stream-video` is rejected before capture; normal binary streaming stays unchanged. Set `SIM_UUID` to an actual simulator UDID. An empty value, such as an unset variable in `--udid "$SIM_UUID"`, fails with a device validation error rather than selecting a simulator. Current output checks are recorded above. The earlier automatic-PID results below used the previous output contract.
+
+## Previous automatic-PID verification — 1 November 2026
+
+Automatic app selection passed on CLI `feba117c` and native `b409f6e6`, wire 37. The exact tested build is installed as the local `axe` command. Use:
+
+```sh
+axe describe-ui --agent --udid "$SIM_UUID"
+```
+
+No PID lookup is required. A new capture finds the active app or SpringBoard. Reference actions use the app saved with the snapshot. Optional `--expected-pid` must be positive and match. After Home or an app change, capture again and use the new references.
+
+- PID/reference host checks: 9/9 passed.
+- Ordinary iPhone: six automatic-app checks and one real system-prompt check passed.
+- Duo: the same six checks passed on the partly open inner screen; the system-prompt check passed on the outer screen.
+- Existing selected-input protocol checks: 169/169 cases in 51 test functions passed.
+- Local installation, seven strict signatures and a normal installed capture without a PID passed.
+
+The simulator checks verified separate CLI calls, saved references, cache validation and reuse, replacement, refusal after Home and app changes, physical button callbacks, exact text, ordered batch steps, optional PID checks and raw command compatibility. All recorded checks had zero issues or skips. See the [master checklist](duo-implementation-checklist.md) for exact receipts and limits.
+
+These are focused checks, not a new complete 133-case run. The dated results below retain their original builds. The CLI resources were frozen before these checks; their pending proof notes describe that earlier state and are superseded by this section. Heavy jobs ran one at a time, without a resource stop or crash. Source changes remain uncommitted. No push, publication or deployment occurred.
+
+## Automatic PID selection
+
+When `--expected-pid` is omitted, a new agent capture selects the frontmost app, or SpringBoard on Home, from the same native app/display observation. A reference action uses the PID saved in its snapshot. Optional `--expected-pid <PID>` adds an assertion that must be positive and match that owner; zero and negative values reject. It does not launch an app or retarget an old reference.
+
+Use `axe describe-ui --agent --udid <UDID>` again after Home or opening another app. No raw hierarchy read or PID lookup is required first. A changed app, layout or focus still refuses old references before input. Existing agent coordinate tap/swipe forms remain available with a current snapshot. Raw commands and public selected mode without `--agent` keep their existing PID rules.
+
+Verification for automatic PID selection is pending as of 31 October 2026. The earlier candidate results below do not verify this change. Use matching wire-37 CLI/broker and native frameworks; recorded proof notes retain their original wire versions.
+
+## Controls without an accessibility ID
+
+AXe can keep an eligible control's exact native process/object UID as private reference authority when a complete native read proves one occurrence. Callers still pass only the snapshot ID and `eN` ref. AXe discovers and keeps the app PID internally; optional `--expected-pid` remains a caller assertion. Raw commands and public selected mode keep their existing PID rules.
+
+The broker keeps the complete reference table and native identities in RAM for that device and broker instance. Object UIDs are exact private UInt64 values, not public accessibility IDs or identifiers valid across app or broker restarts. They are not sent to a model or written as a persistent reference cache. No new PID/UID CLI option is added. `read-ref --text-field id` can therefore be empty even when the ref has an available action.
+
+The identity mode is chosen when the table is published. Each opaque input needs a fresh complete native read, exact unique object/state checks and the existing app, display and native hit guards. Missing or duplicate object evidence refuses input. If optional identity traversal is incomplete, existing semantic-ID/label controls retain their current capabilities; affected unavailable refs can report `capture.unavailableReferences[ref]` as `nativeIdentityIncomplete`. A refused opaque ref never falls back to a label, path or coordinates.
+
+Use the advertised action. An anonymous field must still be an enabled, visible, already focused native `TextField` with `typeText`; key DOWNs keep the current field/focus checks and owned key release. Existing TextView-like roles are not made editable by this feature. Opaque identity does not authorize sliders, AXPress or pinch, and it does not infer scroll support from a Group. Native-ID batch documents still require real app IDs; reference batches can use eligible refs from their original table. Reference expiry, replacement, shared callers and no replay remain as described below.
+
+This contract requires matched CLI, broker and runtime versions. It is not a simulator acceptance result. Use the [master checklist](duo-implementation-checklist.md) for exact tested candidates and limits.
+
 ## Separate CLI calls
 
 Each call starts a new CLI process. Calls for the same user, simulator, Xcode directory and wire-protocol version connect to one background AXe broker. That broker keeps one reference table in RAM. It does not save the table to disk.
 
-1. Run `describe-ui --agent --udid <UDID> --expected-pid <PID>`.
+1. Run `describe-ui --agent --udid <UDID>`.
 2. Read the returned `snapshotID` and a row reference, such as `e13`.
 3. Send both values with the next action:
 
    ```sh
-   axe tap --agent --udid <UDID> --expected-pid <PID> \
+   axe tap --agent --udid <UDID> \
      --snapshot-id <snapshotID> --ref e13
    ```
 
@@ -38,7 +114,7 @@ At the eight-request capacity limit, the isolated fix returns terminal busy befo
 
 ## Keyboard connection reuse
 
-No-flag `type`, `key`, `key-combo` and `key-sequence` on Duo and verified ordinary DTUHID profiles use the selected broker's input owner. Other profiles keep their existing route. Raw text parsing, literal/file/stdin loading, repeated modifier order and plain command output remain. The boot, display and device layout are checked before input. Raw keyboard input still goes to the current focused app. Exact app-PID and field-focus checks apply to selected and `--agent` input. A matched native framework is required; wire 36 and the command flags are unchanged.
+No-flag `type`, `key`, `key-combo` and `key-sequence` on Duo and verified ordinary DTUHID profiles use the selected broker's input owner. Other profiles keep their existing route. Raw text parsing, literal/file/stdin loading, repeated modifier order and plain command output remain. The boot, display and device layout are checked before input. Raw keyboard input still goes to the current focused app. Exact app-PID and field-focus checks apply to selected and `--agent` input. A matched native framework is required; raw command flags remain unchanged.
 
 A complete keyboard command can return its native connection only after all keys are released, the input has drained and its context is still current. A later CLI process can borrow that connection with a new session and empty input state. Failed or uncertain input, cancellation and layout changes discard the connection. A reference table and a native input connection have separate lifetimes.
 
@@ -50,7 +126,7 @@ The reference table remains in RAM. A raw keyboard request uses a separate tempo
 
 Abrupt process death before consumption, or a cleanup error, can leave a private payload file. No automatic stale-file pruning is claimed. Cancellation closes the socket write side and waits for the broker's owned cleanup reply. Lost or uncertain input is not replayed. Zero touch contacts alone do not prove that every key was released.
 
-## Current verification — 30 October 2026
+## Previous accepted build — 30 October 2026
 
 The current isolated candidate is CLI `ddca4cc6`, native `a42360f5`, source `becb4de5`, host `da5bcfb7`. Its keyboard/slider unit 24, layout 12 and raw keyboard 4 passed with zero issues or skips. Native transport/feed 18 and legacy keyboard 9 are separate host proofs. One public popup/Escape proof preserved text and edits and ended with a fresh physical Button callback and zero contacts; it adds no suite cases.
 

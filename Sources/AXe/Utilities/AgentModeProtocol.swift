@@ -3,7 +3,8 @@ import Foundation
 import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, tap, typeText, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, sliderPercentage, pinch, complete }
+    static let maximumRows = 12_288
+    enum Kind: String, Codable, Sendable { case describe, read, tap, typeText, focusAndType, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, sliderPercentage, pinch, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -30,12 +31,44 @@ struct AgentModeRequest: Codable, Sendable {
     var pinch: AgentModePinch? = nil
     var rowOffset: Int = 0
     var rowLimit: Int = 64
+    var readReference: String? = nil
+    var textQuery: AgentModeTextQuery? = nil
 
     func validate() throws {
-        guard let expectedPID, expectedPID > 0 else {
-            throw AgentModeFailure("expectedPIDRequired", "Agent mode requires a positive --expected-pid.")
+        _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
+        if kind == .focusAndType {
+            guard snapshotID != nil, ref != nil, let text,
+                  point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
+                  elementType == nil, keyEvents == nil, direction == nil, sinceScreenHash == nil,
+                  destination == nil, steps == nil, tapStyle == nil, doubleTapTiming == nil,
+                  sliderEndpoint == nil, sliderPercentage == nil, pinch == nil,
+                  readReference == nil, textQuery == nil, rowOffset == 0, rowLimit == 64,
+                  duration == 1, preDelay == 0, postDelay == 0, distance == 1 else {
+                throw AgentModeFailure("invalidFocusAndType", "Focus and type requires one snapshot/ref and text, without other targets, actions or timing options.")
+            }
+            // Validate all text before a focus tap, including private broker callers.
+            let events = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
+            try SelectedKeyboardRequest.validateEvents(events)
         }
-        guard rowOffset >= 0, rowOffset <= 4096, (1...64).contains(rowLimit),
+        if kind == .read {
+            guard snapshotID != nil, let readReference, let textQuery,
+                  readReference.first == "e", readReference.utf8.count <= 32,
+                  let number = Int(readReference.dropFirst()), number > 0,
+                  ref == nil, point == nil, selectorKind == nil, selectorValue == nil,
+                  tapSelector == nil, elementType == nil, text == nil, keyEvents == nil,
+                  direction == nil, sinceScreenHash == nil, destination == nil, steps == nil,
+                  tapStyle == nil, doubleTapTiming == nil, sliderEndpoint == nil,
+                  sliderPercentage == nil, pinch == nil, rowOffset == 0, rowLimit == 64,
+                  duration == 1, preDelay == 0, postDelay == 0, distance == 1 else {
+                throw AgentModeFailure("invalidReadReference", "Read-ref requires one snapshot and reference, without input or row options.")
+            }
+            try textQuery.validate()
+            return
+        }
+        guard readReference == nil, textQuery == nil else {
+            throw AgentModeFailure("mixedPayload", "Text read options apply only to a reference read.")
+        }
+        guard rowOffset >= 0, rowOffset <= Self.maximumRows, (1...64).contains(rowLimit),
               distance.isFinite, distance > 0, distance <= 1,
               duration.isFinite, duration > 0, duration <= 10,
               preDelay.isFinite, (0...10).contains(preDelay),
@@ -241,6 +274,33 @@ struct AgentModeRequest: Codable, Sendable {
     }
 }
 
+/// The caller may assert an app; the snapshot and native read establish its owner.
+enum AgentModePIDPolicy {
+    static func expectedPID(assertion: Int32?, snapshot: Int32?) throws -> Int32? {
+        if let assertion, assertion <= 0 {
+            throw AgentModeFailure("expectedPIDRequired", "--expected-pid must be positive when provided.")
+        }
+        guard let snapshot else { return assertion }
+        guard snapshot > 0 else {
+            throw AgentModeFailure("processEvidenceMissing", "The snapshot has no verified application PID.")
+        }
+        if let assertion, assertion != snapshot {
+            throw AgentModeFailure("contextChanged", "The expected application differs from the snapshot owner. Refresh the snapshot.")
+        }
+        return snapshot
+    }
+
+    static func verifiedPID(_ observedPID: Int32, expected: Int32?) throws -> Int32 {
+        guard observedPID > 0 else {
+            throw AgentModeFailure("processEvidenceMissing", "The native observation has no positive application PID.")
+        }
+        if let expected, expected != observedPID {
+            throw AgentModeFailure("contextChanged", "The frontmost application changed. Refresh the snapshot.")
+        }
+        return observedPID
+    }
+}
+
 struct AgentModeFailure: Error, Codable, Sendable, LocalizedError {
     let code: String
     let message: String
@@ -251,6 +311,13 @@ struct AgentModeFailure: Error, Codable, Sendable, LocalizedError {
 /// Keep native cleanup and quarantine evidence when a read fails before an action.
 struct AgentModeNativeFailure: Error, Sendable {
     let response: SelectedHIDResponse
+}
+
+/// Internal broker metadata; compact output alone exposes this bounded preview.
+struct AgentModeScrollPreview: Codable, Sendable {
+    let rows: [String]
+    let hasMore: Bool
+    var truncatedFields: [CLIOutputValue]? = nil
 }
 
 struct AgentModeCapture: Codable, Sendable {
@@ -274,6 +341,14 @@ struct AgentModeCapture: Codable, Sendable {
     let truncated: Bool
     let expiresInSeconds: Double
     let keyboard: AgentModeKeyboardObservation?
+    var totalRows: Int? = nil
+    var nextRowOffset: Int? = nil
+    var redundantTextRefs: [String]? = nil
+    var unavailableReferences: [String: String]? = nil
+    /// Bounded read-only previews; complete exact arrays use guarded read-ref chunks.
+    var customActions: [String: [String]]? = nil
+    var truncatedCustomActionRefs: [String]? = nil
+    var scrollPreview: AgentModeScrollPreview? = nil
 }
 
 struct AgentModeActionReceipt: Codable, Sendable {
@@ -302,7 +377,7 @@ struct AgentModeObservationEvidence: Codable, Sendable {
         let rootPID: Int32
         let outcome: FBSimulatorAXAcquisitionOutcome
     }
-    let expectedPID: Int32
+    let expectedPID: Int32?
     let observedPID: Int32?
     let outcome: FBSimulatorAXAcquisitionOutcome
     let attempts: [Attempt]
@@ -322,7 +397,7 @@ struct AgentModeObservationEvidence: Codable, Sendable {
 
     func captureInstruction(udid: String) -> String? {
         guard outcome == .processChanged, let observedPID, observedPID != expectedPID else { return nil }
-        return "The AX read observed PID \(observedPID) instead of expected PID \(expectedPID). Confirm the visible owner, then run describe-ui --agent --udid \(udid) --expected-pid \(observedPID) for a new snapshot. The expected PID was not changed. Do not replay completed input."
+        return "The frontmost application changed during the AX read. Run describe-ui --agent --udid \(udid) for a fresh snapshot. Old references were not retargeted. Do not replay completed input."
     }
 }
 
@@ -335,6 +410,7 @@ struct AgentModeResult: Codable, Sendable {
         let context: SelectedHIDContext?
         let quarantine: SelectedHIDQuarantine?
         let observation: AgentModeObservationEvidence?
+        let detail: AgentModeTextDetail?
     }
     let schema: String
     let schemaVersion: String
@@ -346,13 +422,17 @@ struct AgentModeResult: Codable, Sendable {
     init(error: AgentModeFailure? = nil, capture: AgentModeCapture? = nil,
          action: AgentModeActionReceipt? = nil, batch: AgentBatchReceipt? = nil, cache: AgentModeCacheState,
          context: SelectedHIDContext? = nil, quarantine: SelectedHIDQuarantine? = nil,
-         observation: AgentModeObservationEvidence? = nil, nextSteps: [String] = []) {
+         observation: AgentModeObservationEvidence? = nil, detail: AgentModeTextDetail? = nil,
+         nextSteps: [String] = []) {
         schema = "axe.output.agent-result"
         schemaVersion = "1"
         didError = error != nil
         self.error = error
-        data = Data(capture: capture, action: action, batch: batch, cache: cache,
-                    context: capture?.context ?? context, quarantine: quarantine, observation: observation)
+        data = Data(capture: capture, action: AgentModePublicErrorProjection.action(action),
+                    batch: AgentModePublicErrorProjection.batch(batch), cache: cache,
+                    context: capture?.context ?? context,
+                    quarantine: AgentModePublicErrorProjection.quarantine(quarantine),
+                    observation: observation, detail: detail)
         self.nextSteps = nextSteps
     }
 }
@@ -366,6 +446,7 @@ struct AgentModeAdmission: Codable, Sendable {
     let target: AgentModeTarget?
     var selectorKind: SelectedAXRequest.SelectorKind? = nil
     var selectorValue: String? = nil
+    var nativeTarget: SelectedNativeTarget? = nil
 
     func validateContext(_ observation: FBSimulatorHIDSessionObservation) throws {
         guard context == SelectedHIDContext(observation) else {
@@ -373,9 +454,19 @@ struct AgentModeAdmission: Codable, Sendable {
         }
     }
 
-    func validateScreen(_ roots: [FBSimulatorAXNode]) throws {
-        guard try AgentModeSnapshot(roots: roots).nativeFingerprint == nativeFingerprint else {
+    func validateScreen(_ roots: [FBSimulatorAXNode],
+                        nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata? = nil) throws {
+        let snapshot = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: nativeIdentityMetadata, context: context)
+        try validateScreen(snapshot)
+    }
+
+    func validateScreen(_ snapshot: AgentModeSnapshot) throws {
+        guard snapshot.nativeFingerprint == nativeFingerprint else {
             throw AgentModeFailure("screenChanged", "The screen changed before input. Refresh the snapshot.")
+        }
+        if let nativeTarget, nativeTarget.nativeIdentity != nil {
+            let node = try snapshot.match(target: nativeTarget)
+            try target?.validate(node)
         }
     }
 }
@@ -387,15 +478,47 @@ struct AgentModeTarget: Codable, Sendable {
     let value: FBSimulatorAXValue?
     let frame: AgentFrame
     let pid: Int32?
+    let nativeIdentity: FBSimulatorAXNativeIdentity?
+    private let nativeRole: String?
+    private let nativeSubrole: String?
+    private let nativeRoleDescription: String?
+    private let nativeFocused: Bool?
+    private let nativeEnabled: Bool?
+    private let nativeHidden: Bool?
 
-    init(_ node: FBSimulatorAXNode) throws {
+    init(_ node: FBSimulatorAXNode, nativeTarget: SelectedNativeTarget? = nil) throws {
         guard let frame = node.frame else { throw AgentModeFailure("missingFrame", "The selected target has no native frame.") }
+        if let identity = nativeTarget?.nativeIdentity {
+            try nativeTarget?.validate()
+            guard node.nativeIdentity == identity, node.pid == identity.pid, node.type == nativeTarget?.elementType else {
+                throw AgentModeFailure("targetChanged", "The selected native object does not match its captured node.")
+            }
+            nativeIdentity = identity
+            nativeRole = node.role; nativeSubrole = node.subrole; nativeRoleDescription = node.roleDescription
+            nativeFocused = node.focused; nativeEnabled = node.enabled; nativeHidden = node.hidden
+        } else {
+            nativeIdentity = nil
+            nativeRole = nil; nativeSubrole = nil; nativeRoleDescription = nil
+            nativeFocused = nil; nativeEnabled = nil; nativeHidden = nil
+        }
         type = node.type; identifier = node.identifier; label = node.label; value = node.value; pid = node.pid
         self.frame = AgentFrame(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height)
     }
 
+    func validateNativeIdentity(_ node: FBSimulatorAXNode) throws {
+        guard let nativeIdentity else { return }
+        guard nativeIdentity == node.nativeIdentity, type == node.type, pid == node.pid,
+              identifier == node.identifier, label == node.label,
+              nativeRole == node.role, nativeSubrole == node.subrole,
+              nativeRoleDescription == node.roleDescription, nativeFocused == node.focused,
+              nativeEnabled == node.enabled, nativeHidden == node.hidden else {
+            throw AgentModeFailure("targetChanged", "The protected native object or state changed before input.")
+        }
+    }
+
     func validate(_ node: FBSimulatorAXNode, allowingValueChange: Bool = false) throws {
         let fresh = try AgentModeTarget(node)
+        try validateNativeIdentity(node)
         guard type == fresh.type, identifier == fresh.identifier, label == fresh.label, pid == fresh.pid,
               frame == fresh.frame, allowingValueChange || value == fresh.value else {
             throw AgentModeFailure("targetChanged", "The native target identity or frame changed before input. Refresh the snapshot.")

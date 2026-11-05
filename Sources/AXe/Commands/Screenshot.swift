@@ -82,7 +82,7 @@ struct Screenshot: AsyncParsableCommand {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
             let receiptBytes = try encoder.encode(receipt)
             try SelectedScreenshotOutput.publish(capture.png, to: outputURL)
-            print(String(decoding: receiptBytes, as: UTF8.self))
+            try CLIOutput.writeJSONData(receiptBytes)
             return
         }
 
@@ -92,8 +92,10 @@ struct Screenshot: AsyncParsableCommand {
 
         try screenshotData.write(to: outputURL)
 
-        FileHandle.standardError.write(Data("Screenshot saved to \(outputURL.path)\n".utf8))
-        print(outputURL.path)
+        if !CLIOutput.isFormatted {
+            FileHandle.standardError.write(Data("Screenshot saved to \(outputURL.path)\n".utf8))
+        }
+        CLIOutput.message(outputURL.path)
     }
 
     private func prepareOutputURL(simulator: FBSimulator, replaceExisting: Bool = true) throws -> URL {

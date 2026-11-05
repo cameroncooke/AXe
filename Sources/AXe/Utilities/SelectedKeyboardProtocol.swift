@@ -6,14 +6,70 @@ struct SelectedKeyboardRequest: Codable, Sendable {
     static let maximumTextBytes = 256
     static let maximumEvents = 1024
     let expectedPID: Int32
-    let focusID: String
+    let fieldTarget: SelectedNativeTarget
     let events: [SelectedKeyboardPrimitive]
 
-    func validate() throws {
-        guard expectedPID > 0, !focusID.isEmpty, focusID.utf8.count <= 4096,
-              focusID == focusID.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            throw SelectedHIDFailure.invalid("Selected keyboard requires a positive PID and an exact nonempty focus ID")
+    var focusID: String? { fieldTarget.semanticID }
+
+    init(expectedPID: Int32, focusID: String, events: [SelectedKeyboardPrimitive]) {
+        self.init(expectedPID: expectedPID,
+            fieldTarget: .semantic(kind: .id, value: focusID, elementType: "TextField"), events: events)
+    }
+
+    init(expectedPID: Int32, fieldTarget: SelectedNativeTarget, events: [SelectedKeyboardPrimitive]) {
+        self.expectedPID = expectedPID
+        self.fieldTarget = fieldTarget
+        self.events = events
+    }
+
+    private enum CodingKeys: String, CodingKey { case expectedPID, focusID, fieldTarget, events }
+
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        expectedPID = try values.decode(Int32.self, forKey: .expectedPID)
+        events = try values.decode([SelectedKeyboardPrimitive].self, forKey: .events)
+        let identifier = try values.decodeIfPresent(String.self, forKey: .focusID)
+        let target = try values.decodeIfPresent(SelectedNativeTarget.self, forKey: .fieldTarget)
+        guard (identifier == nil) != (target == nil) else {
+            throw SelectedHIDFailure.invalid("Selected keyboard requires one field identity")
         }
+        if let target { fieldTarget = target }
+        else if let identifier {
+            fieldTarget = .semantic(kind: .id, value: identifier, elementType: "TextField")
+        } else { throw SelectedHIDFailure.invalid("Selected keyboard field identity is missing") }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encode(expectedPID, forKey: .expectedPID)
+        try values.encode(events, forKey: .events)
+        if case let .semantic(kind, value, type) = fieldTarget,
+           kind == .id, type == nil || type == "TextField" {
+            try values.encode(value, forKey: .focusID)
+        } else { try values.encode(fieldTarget, forKey: .fieldTarget) }
+    }
+
+    func validate() throws {
+        try fieldTarget.validate()
+        guard expectedPID > 0 else {
+            throw SelectedHIDFailure.invalid("Selected keyboard requires a positive PID")
+        }
+        switch fieldTarget {
+        case let .semantic(kind, value, type):
+            guard kind == .id, !value.isEmpty, value.utf8.count <= 4096,
+                  value == value.trimmingCharacters(in: .whitespacesAndNewlines),
+                  type == nil || type == "TextField" else {
+                throw SelectedHIDFailure.invalid("Selected keyboard requires an exact nonempty focus ID")
+            }
+        case let .nativeObject(identity, type):
+            guard identity.pid == expectedPID, type == "TextField" else {
+                throw SelectedHIDFailure.invalid("Selected keyboard requires an exact native TextField in the expected process")
+            }
+        }
+        try Self.validateEvents(events)
+    }
+
+    static func validateEvents(_ events: [SelectedKeyboardPrimitive]) throws {
         guard !events.isEmpty, events.count <= Self.maximumEvents else {
             throw SelectedHIDFailure.invalid("Selected keyboard requires 1...1024 events")
         }
@@ -88,8 +144,32 @@ enum SelectedKeyboardPrimitive: Codable, Sendable {
 /// These checks admit one observed field, not an atomic OS keyboard recipient.
 enum SelectedKeyboardFocusPolicy {
     static func validate(_ node: FBSimulatorAXNode, expectedPID: Int32, focusID: String) throws {
-        guard node.pid == expectedPID, node.identifier == focusID, node.type == "TextField",
-              node.focused == true, node.enabled == true, node.hidden == false else {
+        try validate(node, expectedPID: expectedPID,
+            fieldTarget: .semantic(kind: .id, value: focusID, elementType: "TextField"))
+    }
+
+    static func validate(_ node: FBSimulatorAXNode, expectedPID: Int32,
+                         fieldTarget: SelectedNativeTarget) throws {
+        try validateIdentity(node, expectedPID: expectedPID, fieldTarget: fieldTarget)
+        guard node.focused == true, node.enabled == true, node.hidden == false else {
+            throw SelectedHIDFailure.invalid("Selected keyboard requires the exact focused, enabled, non-hidden TextField in the expected process")
+        }
+    }
+
+    /// The composite focus action checks this same identity before focus exists.
+    /// This does not grant typing capability or relax the ordinary focused-field gate.
+    static func validateIdentity(_ node: FBSimulatorAXNode, expectedPID: Int32,
+                                 fieldTarget: SelectedNativeTarget) throws {
+        try fieldTarget.validate()
+        let matches: Bool
+        switch fieldTarget {
+        case let .semantic(kind, value, type):
+            matches = kind == .id && node.identifier == value && (type == nil || type == "TextField")
+        case let .nativeObject(identity, type):
+            matches = identity.pid == expectedPID && node.nativeIdentity == identity && type == "TextField" &&
+                node.identifier?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false
+        }
+        guard matches, node.pid == expectedPID, node.type == "TextField" else {
             throw SelectedHIDFailure.invalid("Selected keyboard requires the exact focused, enabled, non-hidden TextField in the expected process")
         }
     }
@@ -97,7 +177,7 @@ enum SelectedKeyboardFocusPolicy {
 
 struct SelectedKeyboardResult: Codable, Sendable {
     let expectedPID: Int32
-    let focusID: String
+    let focusID: String?
     var initialTarget: FBSimulatorAXNode?
     var lastValidatedTarget: FBSimulatorAXNode?
     var validatedKeyDownCount = 0

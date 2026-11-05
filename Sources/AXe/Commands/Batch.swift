@@ -7,7 +7,10 @@ struct Batch: AsyncParsableCommand {
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
         Steps are executed in order.
-        --agent --file steps.json --expected-pid PID accepts 1...8 exact-ID tap/type steps.
+        --agent accepts 1...8 JSON tap/type steps with native IDs or published refs.
+        Supply exactly one --file steps.json or --steps-json '<JSON document>'.
+        Ref JSON includes one snapshotID and ref on every step; do not mix refs with IDs.
+        Optional --expected-pid asserts that app PID for every step.
         It resolves each target again, stops on failed action/refresh or changed device context,
         and reports completed steps without rollback or replay. See the agent guide for JSON.
         Legacy mode uses one simulator/HID session and supports --continue-on-error.
@@ -51,17 +54,23 @@ struct Batch: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
 
-    @Flag(name: .customLong("agent"), help: "Execute 1...8 JSON tap/type steps with fresh native IDs and one agent result.")
+    @Flag(name: .customLong("agent"), help: "Execute 1...8 JSON tap/type steps with native IDs or one snapshot's refs and one agent result.")
     var agentMode = false
 
-    @Option(name: .customLong("expected-pid"), help: "Agent batch only: require this app PID for every step.")
+    @Option(name: .customLong("view"), help: "Agent output: reading (default), navigation, or full canonical detail. Raw commands are unchanged.")
+    var agentView: AgentOutputView?
+
+    @Option(name: .customLong("expected-pid"), help: "Agent batch only: optionally require this app PID for every step.")
     var expectedPID: Int32?
 
     @Option(name: .customLong("step"), help: "Step to execute. Repeat for multiple steps.")
     var steps: [String] = []
 
-    @Option(name: .customLong("file"), help: "Read steps from a file (one step per line).")
+    @Option(name: .customLong("file"), help: "Read steps from a file: one step per line, or JSON with --agent.")
     var file: String?
+
+    @Option(name: .customLong("steps-json"), help: "Agent only: inline JSON document, instead of --file. The same 16384-byte and eight-step limits apply.")
+    var stepsJSON: String?
 
     @Flag(name: .customLong("stdin"), help: "Read steps from stdin (one step per line).")
     var useStdin: Bool = false
@@ -92,13 +101,23 @@ struct Batch: AsyncParsableCommand {
 
     func validate() throws {
         try selectedInput.validate()
+        guard agentMode || agentView == nil else {
+            throw ValidationError("--view requires --agent.")
+        }
+        guard agentMode || stepsJSON == nil else {
+            throw ValidationError("--steps-json requires --agent.")
+        }
         if agentMode {
-            guard let expectedPID, expectedPID > 0, file != nil, steps.isEmpty, !useStdin,
+            CLIOutput.setAgentView(agentView ?? .reading)
+            if let expectedPID, expectedPID <= 0 {
+                throw ValidationError("--expected-pid must be positive when provided with --agent.")
+            }
+            guard (file != nil) != (stepsJSON != nil), steps.isEmpty, !useStdin,
                   selectedInput.screenID == nil, selectedInput.screenUUID == nil,
                   selectedInput.mode != .selected, !continueOnError, !verbose, axCachePolicy == .perBatch,
                   typeSubmissionMode == .chunked, typeChunkSize == 200, tapStyle == .automatic,
                   waitTimeout == 0, pollInterval == 0.25 else {
-                throw ValidationError("Agent batch requires --file JSON and a positive --expected-pid; screen, legacy batch settings, stdin and continued errors are unsupported.")
+                throw ValidationError("Agent batch requires exactly one --file or --steps-json JSON source; screen, legacy batch settings, stdin and continued errors are unsupported.")
             }
         } else if expectedPID != nil {
             throw ValidationError("Batch-level --expected-pid requires --agent; selected steps keep their own PID options.")
@@ -109,9 +128,11 @@ struct Batch: AsyncParsableCommand {
                 throw ValidationError("Selected batch stops on failure and does not use legacy cache, type chunk, tap-style or polling settings.")
             }
         }
-        let sourceCount = [!steps.isEmpty, file != nil, useStdin].filter { $0 }.count
+        let sourceCount = [!steps.isEmpty, file != nil, useStdin, stepsJSON != nil].filter { $0 }.count
         guard sourceCount == 1 else {
-            throw ValidationError("Specify exactly one step source: --step, --file, or --stdin.")
+            throw ValidationError(agentMode
+                ? "Specify exactly one agent JSON source: --file or --steps-json."
+                : "Specify exactly one step source: --step, --file, or --stdin.")
         }
 
         guard typeChunkSize > 0 else {
@@ -132,8 +153,13 @@ struct Batch: AsyncParsableCommand {
     func run() async throws {
         if agentMode {
             try validate()
-            guard let file, let expectedPID else { throw ValidationError("Missing agent batch file or PID.") }
-            try AgentBatchCommandAdapter.run(file: file, expectedPID: expectedPID, simulatorUDID: simulatorUDID)
+            if let stepsJSON {
+                try AgentBatchCommandAdapter.run(data: Data(stepsJSON.utf8), expectedPID: expectedPID,
+                    simulatorUDID: simulatorUDID)
+            } else {
+                guard let file else { throw ValidationError("Missing agent batch JSON source.") }
+                try AgentBatchCommandAdapter.run(file: file, expectedPID: expectedPID, simulatorUDID: simulatorUDID)
+            }
             return
         }
         if selectedInput.mode == .selected {
@@ -152,7 +178,7 @@ struct Batch: AsyncParsableCommand {
         }
 
         try await runOrdinaryBatch(stepLines, logger: logger)
-        print("✓ Batch completed successfully (\(stepLines.count) steps)")
+        CLIOutput.message("✓ Batch completed successfully (\(stepLines.count) steps)")
     }
 
     @MainActor

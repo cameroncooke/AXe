@@ -5,7 +5,7 @@ import Foundation
 import FBSimulatorControl
 
 /// One owned six-phase pickup. Each short-lived read process closes its native owners.
-/// Raw scrubber coordinates select a search point only; exact parent identity admits DOWN.
+/// Raw scrubber coordinates select a search point only; exact native identity admits DOWN.
 @MainActor
 final class SliderPickupHelper {
     private struct Prepared {
@@ -140,8 +140,8 @@ final class SliderPickupHelper {
         }
         let (geometry, _) = try await readPhase("geometry", point: .zero, binding: targetFile)
         try requireIdentity(geometry, as: target)
-        guard geometry.status == "GEOMETRY_PHASE_COMPLETE", geometry.nativeSessionClosed,
-              geometry.nativeRole == 33, geometry.nativeToken == token,
+        guard geometry.status == "GEOMETRY_PHASE_COMPLETE", geometry.axpOwnerClosed,
+              geometry.nativeAXRole == NSAccessibility.Role.slider.rawValue, geometry.nativeToken == token,
               let window = geometry.windowContextID, window > 0 else {
             throw SliderValueFailure.rejected("Scrubber geometry lacks an independent native Slider")
         }
@@ -158,12 +158,12 @@ final class SliderPickupHelper {
                   x.isFinite, y.isFinite else { throw SliderValueFailure.rejected("Raw scrubber point has an unsupported representation") }
             return CGPoint(x: x, y: y)
         }
-        guard let fraction = try rawValue("XC_kAXXCAttributeAbsoluteValue") as? NSNumber,
+        guard let fraction = try rawValue("kAXXCAttributeAbsoluteValue") as? NSNumber,
               fraction.doubleValue.isFinite, (0...1).contains(fraction.doubleValue) else {
             throw SliderValueFailure.rejected("Raw value cannot form a bounded search candidate")
         }
-        let minimum = try rawPoint("XC_kAXXCAttributeMinScrubberPosition")
-        let maximum = try rawPoint("XC_kAXXCAttributeMaxScrubberPosition")
+        let minimum = try rawPoint("kAXXCAttributeMinScrubberPosition")
+        let maximum = try rawPoint("kAXXCAttributeMaxScrubberPosition")
         let raw = CGPoint(x: minimum.x + (maximum.x - minimum.x) * CGFloat(fraction.doubleValue),
             y: minimum.y + (maximum.y - minimum.y) * CGFloat(fraction.doubleValue))
         guard let frame = before.node.frame, minimum.x < maximum.x, minimum.y == maximum.y,
@@ -185,15 +185,26 @@ final class SliderPickupHelper {
         try requireIdentity(point, as: target)
         let (parent, _) = try await readPhase("native", point: candidate, binding: pointFile)
         try requireIdentity(parent, as: target)
-        guard point.status == "POINT_PHASE_COMPLETE", point.initialRootClosed,
-              parent.status == "NATIVE_PARENT_PHASE_COMPLETE_MATCHED", parent.parentVerified,
-              parent.nativeSessionClosed, parent.windowContextID == window,
+        guard point.status == "POINT_PHASE_COMPLETE", point.initialRootClosed, parent.axpOwnerClosed,
+              parent.windowContextID == window, parent.nativeToken == token,
               parent.pointToken == point.pointToken, parent.pointFrame == point.pointFrame,
-              let hit = point.pointFrame else { throw SliderValueFailure.rejected("Search point has no exact native Slider parent") }
+              let hit = point.pointFrame else { throw SliderValueFailure.rejected("Search point has no exact native Slider proof") }
         let hitFrame = CGRect(x: hit.x, y: hit.y, width: hit.width, height: hit.height)
-        let centre = CGPoint(x: hitFrame.midX, y: hitFrame.midY)
+        let centre: CGPoint
+        if point.pointKind == "directSlider" {
+            guard parent.status == "NATIVE_DIRECT_SLIDER_PHASE_COMPLETE_MATCHED", parent.directSliderVerified,
+                  !parent.parentVerified, point.pointToken == token, point.pointFrame == target.selectedFrame else {
+                throw SliderValueFailure.rejected("Direct Slider point proof differs")
+            }
+            // Preserve the admitted search point; a full Slider frame has no thumb-centre meaning.
+            centre = candidate
+        } else {
+            guard point.pointKind == "distinctGroup", parent.status == "NATIVE_PARENT_PHASE_COMPLETE_MATCHED",
+                  parent.parentVerified, !parent.directSliderVerified else { throw SliderValueFailure.rejected("Group parent proof unavailable") }
+            centre = CGPoint(x: hitFrame.midX, y: hitFrame.midY)
+        }
         guard frame.contains(hitFrame), hitFrame.contains(centre), frame.contains(centre) else {
-            throw SliderValueFailure.rejected("Admitted native hit has no contained pickup centre")
+            throw SliderValueFailure.rejected("Admitted native hit has no contained pickup point")
         }
         prepared = Prepared(initial: before, target: target, point: point, window: window, centre: centre)
         pickup = centre
@@ -217,8 +228,11 @@ final class SliderPickupHelper {
         try requireIdentity(parent, as: prepared.target)
         guard point.status == "POINT_PHASE_COMPLETE", point.initialRootClosed,
               point.pointToken == prepared.point.pointToken, point.pointFrame == prepared.point.pointFrame,
-              parent.status == "NATIVE_PARENT_PHASE_COMPLETE_MATCHED", parent.parentVerified,
-              parent.nativeSessionClosed, parent.windowContextID == prepared.window,
+              point.pointKind == prepared.point.pointKind,
+              parent.axpOwnerClosed, parent.windowContextID == prepared.window,
+              (prepared.point.pointKind == "directSlider"
+                ? parent.status == "NATIVE_DIRECT_SLIDER_PHASE_COMPLETE_MATCHED" && parent.directSliderVerified && !parent.parentVerified
+                : parent.status == "NATIVE_PARENT_PHASE_COMPLETE_MATCHED" && parent.parentVerified && !parent.directSliderVerified),
               parent.pointToken == prepared.point.pointToken, parent.pointFrame == prepared.point.pointFrame else {
             throw SliderValueFailure.rejected("Pickup point and exact native parent did not repeat inside the input guard")
         }

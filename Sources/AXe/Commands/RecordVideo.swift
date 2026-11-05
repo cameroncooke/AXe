@@ -117,7 +117,7 @@ struct RecordVideo: AsyncParsableCommand {
                 cancellationFlag: cancellationFlag
             )
             FileHandle.standardError.write(Data("Recording saved to \(outputURL.path)\n".utf8))
-            print(outputURL.path)
+            CLIOutput.message(outputURL.path)
         } catch {
             throw CLIError(errorDescription: "Failed to record video: \(error.localizedDescription)")
         }

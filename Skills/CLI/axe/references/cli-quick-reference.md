@@ -2,6 +2,19 @@
 
 Comprehensive reference for all AXe commands. Most simulator-interaction commands require `--udid <UDID>` unless noted.
 
+## Output format
+
+```bash
+axe --output text describe-ui --agent --udid <UDID>
+axe --output json describe-ui --agent --udid <UDID>
+axe --output json list-simulators
+axe --output json screenshot --udid <UDID> --output shot.png
+```
+
+No format option preserves existing command output; `--agent` defaults to one JSON result. `--output text|json` chooses representation. Agent `--view reading` (default) and `--view navigation` use compact schema 2; `--view full` exposes canonical schema 1. JSON failures return one stdout result and a nonzero exit. Ordinary formatted commands keep their common command envelope. See [output fields](agent-reference.md#output-format).
+
+Prefer the format before the command. Non-media leaf placement is accepted when unambiguous. Screenshot/movie `--output` after the command remains a path. `stream-video` rejects explicit format selection before capture. Existing command-specific `--json` flags are unchanged. Supply a real UDID; an empty value never selects a device. New output-format verification is pending.
+
 ## Simulator discovery
 
 ```bash
@@ -9,6 +22,33 @@ axe list-simulators
 ```
 
 No `--udid` needed. Lists all available simulators with their UDIDs and boot state.
+
+
+## Optional agent references
+
+```bash
+# Capture the current frontmost app or SpringBoard on Home.
+axe describe-ui --agent --udid <UDID>
+# Omit static text when only controls are needed.
+axe describe-ui --agent --view navigation --udid <UDID>
+# Read an exact ID or full label/value from the same snapshot, without input.
+axe describe-ui --agent --snapshot-id <SNAPSHOT_ID> --read-ref <REF> --text-field id --udid <UDID>
+axe describe-ui --agent --snapshot-id <SNAPSHOT_ID> --read-ref <REF> --text-field label --text-offset 0 --text-limit 1024 --udid <UDID>
+# Use that capture's snapshot ID and ref; its PID stays bound.
+axe tap --agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref <REF>
+# Add a positive PID assertion only when required by the caller.
+axe describe-ui --agent --udid <UDID> --expected-pid <PID>
+# Agent batches use the JSON contract in agent-reference.md.
+axe batch --agent --file steps.json --udid <UDID>
+```
+
+Without a PID assertion, a new capture discovers its owner from one native app/display observation. Snapshot validation and reference actions use the saved PID; an optional positive assertion must match it. Zero and negative PIDs reject. After Home, opening another app or a layout/focus change, capture again and select fresh references. No raw hierarchy read or PID lookup is required first. Input is not replayed after failure.
+
+Follow `capture.page.nextOffset` with `--row-offset` and the same snapshot for more rows. `--row-limit 1...64` bounds one total page across targets, scrolling and text; offsets are 0...12288. Compact rows can merge actions and omit proved repeated child labels. Display cells have a limit of 160 Unicode scalars (159 plus an ellipsis when clipped); read-ref chunks preserve exact native fields and use Unicode-scalar offsets. `truncatedFields.displayScalarLength` counts the complete normalized cell, while `data.detail.totalLength` counts the exact native field; whitespace normalization can make them differ. Read `data.detail.nextOffset` for the next text chunk. Full view uses `nextRowOffset` and can contain large text.
+
+Existing agent coordinate tap/swipe forms remain available with a current snapshot. Raw commands and explicit selected mode without `--agent` keep their existing interfaces and PID rules. Read the [agent reference](agent-reference.md) for action limits and the [agent batch contract](agent-reference.md#run-a-small-ordered-agent-batch) for its JSON file.
+
+Native-object refs require matched CLI, broker and runtime versions. Use the actions advertised by the current ref, including eligible controls without app IDs. The UID stays internal; no caller PID/UID lookup is added. The per-device RAM table expires or is replaced and is lost on broker restart. Opaque sliders, AXPress and pinch remain unsupported. Read [native object references](agent-reference.md#native-object-references); this guidance does not claim simulator acceptance.
 
 ## Tap
 

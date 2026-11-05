@@ -83,8 +83,77 @@ struct SelectedAgentLifetimeTests {
         #expect(fixture.state.calls == 1 && fixture.state.persists == 1 && owner.isBusy)
     }
 
+    @Test("Agent requests accept an omitted PID and reject explicit nonpositive assertions")
+    func optionalAgentPIDValidation() throws {
+        let snapshot = UUID()
+        for pid in [Int32?.none, Int32(42)] {
+            try AgentModeRequest(kind: .describe, expectedPID: pid).validate()
+            try AgentModeRequest(kind: .tap, expectedPID: pid, snapshotID: snapshot, ref: "e1").validate()
+        }
+        for pid in [Int32(0), -1] {
+            #expect(throws: (any Error).self) {
+                try AgentModeRequest(kind: .describe, expectedPID: pid).validate()
+            }
+            #expect(throws: (any Error).self) {
+                try AgentModeRequest(kind: .tap, expectedPID: pid, snapshotID: snapshot, ref: "e1").validate()
+            }
+        }
+    }
+
+    @Test("A saved owner binds omitted PID actions and cannot be replaced by an assertion")
+    func optionalPIDUsesSavedOwner() throws {
+        #expect(try AgentModePIDPolicy.expectedPID(assertion: nil, snapshot: nil) == nil)
+        #expect(try AgentModePIDPolicy.expectedPID(assertion: 42, snapshot: nil) == 42)
+        #expect(try AgentModePIDPolicy.expectedPID(assertion: nil, snapshot: 42) == 42)
+        #expect(try AgentModePIDPolicy.expectedPID(assertion: 42, snapshot: 42) == 42)
+        #expect(throws: (any Error).self) {
+            _ = try AgentModePIDPolicy.expectedPID(assertion: 43, snapshot: 42)
+        }
+        for invalid in [Int32(0), -1] {
+            #expect(throws: (any Error).self) {
+                _ = try AgentModePIDPolicy.expectedPID(assertion: invalid, snapshot: nil)
+            }
+            #expect(throws: (any Error).self) {
+                _ = try AgentModePIDPolicy.expectedPID(assertion: nil, snapshot: invalid)
+            }
+        }
+    }
+
+    @Test("Native owner evidence must be positive and match the bound PID")
+    func automaticPIDRequiresVerifiedRoot() throws {
+        #expect(try AgentModePIDPolicy.verifiedPID(42, expected: nil) == 42)
+        #expect(try AgentModePIDPolicy.verifiedPID(42, expected: 42) == 42)
+        #expect(throws: (any Error).self) {
+            _ = try AgentModePIDPolicy.verifiedPID(43, expected: 42)
+        }
+        for invalid in [Int32(0), -1] {
+            #expect(throws: (any Error).self) {
+                _ = try AgentModePIDPolicy.verifiedPID(invalid, expected: nil)
+            }
+        }
+    }
+
+    @Test("Only a native full description can omit its internal PID")
+    func unboundPIDCannotAdmitNativeInput() throws {
+        let describe = SelectedAXRequest(kind: .describe, expectedPID: nil,
+            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
+        try describe.validate()
+        for invalid in [Int32(0), -1] {
+            let request = SelectedAXRequest(kind: .describe, expectedPID: invalid,
+                endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
+            #expect(throws: (any Error).self) { try request.validate() }
+        }
+        let tap = SelectedAXRequest(kind: .tap, expectedPID: nil,
+            endpoint: nil, selectorKind: .id, selectorValue: "button", preDelay: 0, postDelay: 0)
+        #expect(throws: (any Error).self) { try tap.validate() }
+        var point = SelectedAXRequest(kind: .describePoint, expectedPID: nil,
+            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
+        point.point = .init(x: 10, y: 10)
+        #expect(throws: (any Error).self) { try point.validate() }
+    }
+
     private func makeOwner(_ clock: LifetimeClock) -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
             clock.nativeCalls += 1
             Issue.record("Idle maintenance must not start a native operation.")
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
@@ -144,7 +213,7 @@ private struct RotationLifetimeFixture {
     }
 
     func owner() -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
             state.calls += 1
             if request.rotation != nil {
                 var rotation = SelectedRotationResult(direction: .right)

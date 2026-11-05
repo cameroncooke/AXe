@@ -101,14 +101,14 @@ struct PlaygroundAgentObservationTests {
         let signals = keyboard.signals
         try #require(signals.idChromeCount >= 0 && signals.letterKeyCount >= 0 && signals.chromeKeyCount >= 0)
         let visible = signals.idChromeCount >= 2 || signals.globeSeen
-            || signals.letterKeyCount >= 10 || signals.chromeKeyCount >= 3
+            || signals.letterKeyCount >= 10 || signals.chromeKeyCount >= 3 || signals.numericKeyCount == 10
         try #require(keyboard.state == (visible ? "likelyVisible" : "unknown"))
     }
 
     private func requireVisible(_ keyboard: KeyboardObservation) throws {
         try #require(keyboard.state == "likelyVisible")
         try #require(keyboard.signals.idChromeCount >= 2 || keyboard.signals.globeSeen
-            || keyboard.signals.letterKeyCount >= 10 || keyboard.signals.chromeKeyCount >= 3)
+            || keyboard.signals.letterKeyCount >= 10 || keyboard.signals.chromeKeyCount >= 3 || keyboard.signals.numericKeyCount == 10)
     }
 
     private func decode(_ output: String) throws -> KeyboardEnvelope {
@@ -144,6 +144,7 @@ private struct KeyboardObservation: Decodable, Equatable {
         let globeSeen: Bool
         let letterKeyCount: Int
         let chromeKeyCount: Int
+        let numericKeyCount: Int?
     }
     let state: String
     let source: String

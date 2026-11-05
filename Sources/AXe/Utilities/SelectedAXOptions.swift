@@ -8,7 +8,7 @@ enum SelectedSliderEndpoint: String, ExpressibleByArgument {
 }
 
 struct SelectedAXOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Selected AX only: require this frontmost application process ID.")
+    @Option(name: .customLong("expected-pid"), help: "Required for selected AX; optional with --agent to assert the snapshot or frontmost app PID.")
     var expectedPID: Int32?
 
     func validate(required: Bool) throws {

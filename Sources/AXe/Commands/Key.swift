@@ -9,7 +9,7 @@ struct Key: AsyncParsableCommand {
         discussion: """
         Press individual keys using their HID keycode values.
         Agent mode sends one default down/up to a current focused TextField reference.
-        It requires --snapshot-id, --ref and --expected-pid; duration and batch use reject.
+        It requires --snapshot-id and --ref; --expected-pid is an optional app assertion. Duration and batch use reject.
         
         Common keycodes:
           40 - Return/Enter

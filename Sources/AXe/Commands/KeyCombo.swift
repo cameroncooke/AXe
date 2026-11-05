@@ -8,7 +8,7 @@ struct KeyCombo: AsyncParsableCommand {
         abstract: "Press a key while holding one or more modifier keys on the simulator.",
         discussion: """
         Hold modifier keys and press another key as one complete sequence.
-        Agent mode requires a current focused TextField snapshot/ref and --expected-pid.
+        Agent mode requires a current focused TextField snapshot/ref; --expected-pid is optional.
         It checks focus before each key down; OS recipient control is not atomic.
         Modifier keys are held down, the target key is pressed and released,
         then modifier keys are released in reverse order (LIFO).

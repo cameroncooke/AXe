@@ -43,7 +43,11 @@ struct PhotosButtonLeafE2ETests: Sendable {
             let context = try #require(try decode(Envelope.self, captureReply.output).data?.context)
             let rows = try capture.targets.map(AgentPlaygroundRow.init).filter { $0.identifier == "kTCCServicePhotos-deny-button" }
             let available = rows.filter { $0.action == "tap" }
-            try #require(available.count == 1 && rows.contains { $0.action == "unavailable" })
+            try #require(rows.count == 2 && available.count == 2 && Set(rows.map(\.ref)).count == 2)
+            let initialBodies = Set(capture.targets.filter { $0.contains("|kTCCServicePhotos-deny-button") }.map {
+                $0.split(separator: "|", omittingEmptySubsequences: false).dropFirst().joined(separator: "|")
+            })
+            try #require(initialBodies.count == 1)
 
             let flags = ["--input-mode", "selected", "--screen-id", String(context.screenID), "--screen-uuid", context.screenUUID.uuidString]
             let rawReply = try await command(["describe-ui", "--expected-pid", String(owner)] + flags,
@@ -61,9 +65,17 @@ struct PhotosButtonLeafE2ETests: Sendable {
                 // The raw read can replace broker state. Get a new immutable reference immediately before input.
                 let freshReply = try await waitForPrompt(session: session, owner: owner)
                 let fresh = try #require(try session.decode(freshReply.output).data.capture)
-                let leaf = try #require(try fresh.targets.map(AgentPlaygroundRow.init).first {
-                    $0.identifier == "kTCCServicePhotos-deny-button" && $0.action == "tap"
+                let matches = try fresh.targets.map { ($0, try AgentPlaygroundRow($0)) }.filter {
+                    $0.1.identifier == "kTCCServicePhotos-deny-button"
+                }
+                try #require(matches.count == 2 && Set(matches.map { $0.1.ref }).count == 2)
+                try #require(matches.allSatisfy { $0.1.action == "tap" })
+                let rowBodies = Set(matches.map {
+                    $0.0.split(separator: "|", omittingEmptySubsequences: false).dropFirst().joined(separator: "|")
                 })
+                try #require(rowBodies.count == 1)
+                // Equal target priority preserves native preorder: the matching child follows its parent.
+                let leaf = try #require(matches.last?.1)
                 arguments = ["tap", "--agent", "--expected-pid", String(owner), "--snapshot-id", fresh.snapshotID.uuidString, "--ref", leaf.ref]
             }
             primaryDenyAttempted = true
@@ -132,7 +144,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         repeat {
             try Task.checkCancellation()
-            let reply = try await command(["describe-ui", "--agent", "--expected-pid", String(session.pid)],
+            let reply = try await command(["describe-ui", "--agent", "--view", "full", "--expected-pid", String(session.pid)],
                 session: session, name: "wait-system-owner-" + UUID().uuidString, deadline: deadline)
             if let owner = observedOwner(in: reply.output, expectedPID: session.pid) { return owner }
             try await Task.sleep(nanoseconds: 50_000_000)
@@ -169,7 +181,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         do {
             repeat {
-                let reply = try await command(["describe-ui", "--agent", "--expected-pid", String(context.appPID)],
+                let reply = try await command(["describe-ui", "--agent", "--view", "full", "--expected-pid", String(context.appPID)],
                     context: context, name: "cleanup-observe-" + UUID().uuidString, deadline: deadline)
                 if reply.exitCode == 0, let capture = try? decode(AgentPlaygroundResult.self, reply.output).data.capture,
                    capture.applicationPID == context.appPID,
@@ -179,7 +191,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
                 }
                 if !result.denyAttempted, ProcessInfo.processInfo.systemUptime < deadline,
                    let owner = observedOwner(in: reply.output, expectedPID: context.appPID) {
-                    let promptReply = try await command(["describe-ui", "--agent", "--expected-pid", String(owner)],
+                    let promptReply = try await command(["describe-ui", "--agent", "--view", "full", "--expected-pid", String(owner)],
                         context: context, name: "cleanup-prompt-" + UUID().uuidString, deadline: deadline)
                     if promptReply.exitCode == 0, let capture = try? decode(AgentPlaygroundResult.self, promptReply.output).data.capture,
                        capture.applicationPID == owner,
@@ -212,7 +224,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         repeat {
             try Task.checkCancellation()
-            let reply = try await command(["describe-ui", "--agent", "--expected-pid", String(owner)],
+            let reply = try await command(["describe-ui", "--agent", "--view", "full", "--expected-pid", String(owner)],
                 session: session, name: "wait-prompt-" + UUID().uuidString, deadline: deadline)
             if reply.exitCode == 0, let capture = try? session.decode(reply.output).data.capture,
                capture.targets.contains(where: { $0.contains("kTCCServicePhotos-deny-button") }) { return reply }
@@ -257,10 +269,13 @@ struct PhotosButtonLeafE2ETests: Sendable {
             // The extra five seconds permit test process cleanup after a failed direct-command deadline.
             try await process.wait(timeout: limit + 5)
             let receipt = try JSONDecoder().decode(DeferredCommandReceipt.self, from: Data(contentsOf: receiptURL))
-            try #require(receipt.schemaVersion == 1 && receipt.directCLIReaped && receipt.groupCheckDeferred
-                && receipt.forcedCleanup.isEmpty && receipt.failures.isEmpty
-                && !receipt.owned.isEmpty && receipt.owned.contains { $0.pid == receipt.cliPID }
-                && process.exitCode == receipt.cliExitCode)
+            try #require(receipt.schemaVersion == 1)
+            try #require(receipt.directCLIReaped && receipt.groupCheckDeferred)
+            try #require(receipt.forcedCleanup.isEmpty && receipt.failures.isEmpty)
+            try #require(!receipt.owned.isEmpty)
+            let ownsCLI = receipt.owned.contains { $0.pid == receipt.cliPID }
+            try #require(ownsCLI)
+            try #require(process.exitCode == receipt.cliExitCode)
             let result = CommandOutput(output: try process.diagnostics(), exitCode: receipt.cliExitCode)
             await process.finish()
             return result
@@ -274,11 +289,12 @@ struct PhotosButtonLeafE2ETests: Sendable {
             let name = "final-processes"
             let receipt = context.artifacts.appendingPathComponent(name + "-ownership.json")
             let process = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: ["python3", observer,
-                "--receipt", receipt.path, "--timeout", "35", "--verify-deferred-directory", context.artifacts.path,
+                "--receipt", receipt.path, "--timeout", "75", "--verify-deferred-directory", context.artifacts.path,
                 "--", context.cli, "--udid", context.udid], directory: context.artifacts, name: name)
             do {
                 try process.start()
-                try await process.wait(timeout: 40)
+                // Agent snapshots retain the idle broker for 60 seconds. This waits for normal expiry.
+                try await process.wait(timeout: 80)
                 let diagnostics = try process.diagnostics()
                 try #require(process.exitCode == 0, "Final owned-process verification failed: \(diagnostics)")
                 _ = try PlaygroundMediaProcess.requireClean(directory: context.artifacts, name: name)

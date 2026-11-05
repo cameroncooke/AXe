@@ -19,16 +19,7 @@ struct PlaygroundDuoAdditionalInterruptionTests {
         let before = try app.documents.read()
         let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: arguments + ["--udid", app.app.udid],
             directory: app.artifacts, name: "raw-motion")
-        do {
-            try process.start()
-            _ = try await app.documents.waitFor("real moving raw contact before interruption") {
-                $0.activeWindowTouches == 1 && $0.windowTouchTrace.dropFirst(before.windowTouchTrace.count).contains {
-                    $0.phase == "windowTouchMoved" && $0.x > start.0 + 2 && $0.x < end.0 - 10
-                }
-            }
-            try #require(process.isRunning)
-            if stop == .interrupt { try process.signal(SIGINT) }
-            else { _ = try await changeDuoControls(app, change: stop == .fold ? .fold : .rotate) }
+        func requireStoppedInput() async throws {
             try await process.wait(timeout: 15)
             struct RawMotionExit: Encodable {
                 let gesture: String
@@ -54,6 +45,21 @@ struct PlaygroundDuoAdditionalInterruptionTests {
             try #require(!reachedEnd, "Interrupted input reached its old endpoint.")
             try await Task.sleep(nanoseconds: 500_000_000)
             try #require(try app.documents.read().windowTouchTrace.count == released.windowTouchTrace.count)
+        }
+        do {
+            try process.start()
+            _ = try await app.documents.waitFor("real moving raw contact before interruption") {
+                $0.activeWindowTouches == 1 && $0.windowTouchTrace.dropFirst(before.windowTouchTrace.count).contains {
+                    $0.phase == "windowTouchMoved" && $0.x > start.0 + 2 && $0.x < end.0 - 10
+                }
+            }
+            try #require(process.isRunning)
+            if stop == .interrupt { try process.signal(SIGINT) }
+            else {
+                _ = try await changeDuoControls(app, change: stop == .fold ? .fold : .rotate,
+                    afterInputRelease: stop == .fold ? { try await requireStoppedInput() } : nil)
+            }
+            if stop != .fold { try await requireStoppedInput() }
             try await app.freshTap()
         } catch { await process.finish(); throw error }
         await process.finish()

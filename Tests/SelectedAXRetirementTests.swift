@@ -123,7 +123,7 @@ private struct RetirementFixture {
             screenUUID: screen, operation: .complete, token: nil, primitives: [], ax: ax)
     }
     func owner() -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
             state.calls += 1
             let axRequest = request.ax!
             var ax = SelectedAXResult(kind: exclusion == .wrongAXKind ? .tap : axRequest.kind,

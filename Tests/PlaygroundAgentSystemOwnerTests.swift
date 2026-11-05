@@ -37,7 +37,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
             try #require(!observation.attempts.isEmpty && observation.attempts.allSatisfy {
                 $0.rootPID == owner && $0.outcome == "processChanged" && $0.endUptime >= $0.startUptime
             })
-            try #require(details.nextSteps.contains { $0.contains(String(owner)) && $0.contains("--expected-pid") })
+            try #require(details.nextSteps.contains { $0.contains("describe-ui --agent") && $0.contains("fresh snapshot") })
             let wrong = try await command(["describe-ui", "--agent", "--expected-pid", String(session.pid)],
                 session: session, name: "wrong-pid")
             let wrongEnvelope = try session.decode(wrong.output)
@@ -256,9 +256,10 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let deadline = ProcessInfo.processInfo.systemUptime + 15
         repeat {
             try Task.checkCancellation()
-            let reply = try await command(["describe-ui", "--agent", "--expected-pid", String(owner)],
+            let reply = try await command(["describe-ui", "--agent"],
                 session: session, name: "wait-prompt-" + UUID().uuidString, deadline: deadline)
             if reply.exitCode == 0, let capture = try? session.decode(reply.output).data.capture,
+               capture.applicationPID > 0, capture.applicationPID == owner,
                capture.targets.contains(where: { $0.contains("kTCCServicePhotos-deny-button") }) { return reply }
             try await Task.sleep(nanoseconds: 50_000_000)
         } while ProcessInfo.processInfo.systemUptime < deadline

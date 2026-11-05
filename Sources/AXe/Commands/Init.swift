@@ -55,7 +55,7 @@ struct Init: AsyncParsableCommand {
         }
 
         if printSkill {
-            Swift.print(try Self.loadSkillMarkdown(), terminator: "")
+            CLIOutput.message(try Self.loadSkillMarkdown(), terminator: "")
             return
         }
 
@@ -126,7 +126,7 @@ struct Init: AsyncParsableCommand {
         }
 
         for entry in installedPaths {
-            fputs("Installed AXe skill -> \(entry)\n", stdout)
+            CLIOutput.message("Installed AXe skill -> \(entry)")
         }
     }
 
@@ -150,12 +150,12 @@ struct Init: AsyncParsableCommand {
         }
 
         if removedPaths.isEmpty {
-            fputs("No installed AXe skill directories were found.\n", stdout)
+            CLIOutput.message("No installed AXe skill directories were found.")
             return
         }
 
         for entry in removedPaths {
-            fputs("Removed AXe skill -> \(entry)\n", stdout)
+            CLIOutput.message("Removed AXe skill -> \(entry)")
         }
     }
 

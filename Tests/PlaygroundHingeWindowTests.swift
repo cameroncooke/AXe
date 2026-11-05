@@ -15,6 +15,8 @@ struct PlaygroundDuoHingeWindowTests {
             let reader = try await PlaygroundDocumentReader<HingeDocument>(udid: TestHelpers.requireSimulatorUDID(), pid: pid, fileName: "hinge-layout.json")
             let flat = try await reader.waitFor("flat document and hinge update") { $0.mode == "single" && $0.hingeUpdates > 0 }
             let half = try await device.setPose(.tabletop, boot: beforeLaunch.bootIdentity)
+            print("Hinge layout context: rotation=\(rotation), phase=before, boot=\(beforeLaunch.bootIdentity), activePanel=\(String(reflecting: beforeLaunch.activePanel))")
+            print("Hinge layout context: rotation=\(rotation), phase=partial, boot=\(half.bootIdentity), activePanel=\(String(reflecting: half.activePanel))")
             let moved = try await reader.waitFor("real fold region rearranged the app") {
                 $0.generation == flat.generation && $0.layoutRevision > flat.layoutRevision
                     && $0.hingeUpdates > flat.hingeUpdates && $0.mode.hasPrefix("split-")

@@ -323,6 +323,10 @@ enum SelectedBatchRunner {
     }
 
     static func writeReceipt(_ receipt: SelectedBatchStepReceipt) throws {
+        if CLIOutput.isFormatted {
+            try CLIOutput.writeJSON(receipt)
+            return
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         var bytes = try encoder.encode(receipt)

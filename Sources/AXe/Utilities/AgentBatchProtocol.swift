@@ -1,15 +1,26 @@
 import Foundation
 
-/// Only complete tap/type actions. IDs are resolved again before each step.
+/// Only complete tap/type actions. A batch uses fresh IDs or one published reference table.
 struct AgentBatchRequest: Codable, Sendable {
-    let expectedPID: Int32
+    let expectedPID: Int32?
+    var snapshotID: UUID? = nil
     let steps: [AgentBatchStep]
 
+    var usesReferences: Bool { steps.contains { $0.ref != nil } }
+
     func validate() throws {
-        guard expectedPID > 0, (1...8).contains(steps.count) else {
-            throw AgentModeFailure("invalidBatch", "Agent batch requires a positive PID and 1...8 tap/type steps.")
+        _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
+        guard (1...8).contains(steps.count) else {
+            throw AgentModeFailure("invalidBatch", "Agent batch requires 1...8 tap/type steps.")
         }
         for step in steps { try step.validate(expectedPID: expectedPID) }
+        if usesReferences {
+            guard snapshotID != nil, steps.allSatisfy({ $0.ref != nil }) else {
+                throw AgentModeFailure("mixedBatchTargets", "A reference batch requires one snapshotID and only ref steps. Native ID and reference steps cannot be mixed.")
+            }
+        } else if snapshotID != nil {
+            throw AgentModeFailure("unexpectedBatchSnapshot", "A native ID batch does not use snapshotID. Use ref steps to target a published table.")
+        }
     }
 
     // Each existing action keeps its timeout. The single reply must cover all steps
@@ -20,21 +31,37 @@ struct AgentBatchRequest: Codable, Sendable {
 struct AgentBatchStep: Codable, Sendable {
     enum Action: String, Codable, Sendable { case tap, type }
     let action: Action
-    let id: String
+    let id: String?
+    let ref: String?
     let text: String?
 
     init(from decoder: Decoder) throws {
-        try AgentBatchJSONKey.requireOnly(["action", "id", "text"], decoder: decoder)
+        try AgentBatchJSONKey.requireOnly(["action", "id", "ref", "text"], decoder: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         action = try container.decode(Action.self, forKey: .action)
-        id = try container.decode(String.self, forKey: .id)
+        id = try container.decodeIfPresent(String.self, forKey: .id)
+        ref = try container.decodeIfPresent(String.self, forKey: .ref)
         text = try container.decodeIfPresent(String.self, forKey: .text)
     }
 
-    func validate(expectedPID: Int32) throws {
-        guard !id.isEmpty, id.utf8.count <= 4096,
-              id == id.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            throw AgentModeFailure("invalidBatchID", "Every agent batch step requires an exact nonempty native ID.")
+    func validate(expectedPID: Int32?) throws {
+        _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
+        guard (id != nil) != (ref != nil) else {
+            throw AgentModeFailure("invalidBatchTarget", "Every agent batch step requires exactly one native id or published ref.")
+        }
+        if let id {
+            guard !id.isEmpty, id.utf8.count <= 4096,
+                  id == id.trimmingCharacters(in: .whitespacesAndNewlines) else {
+                throw AgentModeFailure("invalidBatchID", "Every native ID batch step requires an exact nonempty ID.")
+            }
+        }
+        if let ref {
+            let digits = ref.dropFirst()
+            guard ref.first == "e", ref.utf8.count <= 32, !digits.isEmpty,
+                  digits.allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let ordinal = UInt64(digits), ordinal > 0 else {
+                throw AgentModeFailure("invalidBatchReference", "Every reference batch step requires a published eN reference.")
+            }
         }
         switch action {
         case .tap:
@@ -42,17 +69,20 @@ struct AgentBatchStep: Codable, Sendable {
         case .type:
             guard let text else { throw AgentModeFailure("missingBatchText", "A type step requires literal text.") }
             let events = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
-            try SelectedKeyboardRequest(expectedPID: expectedPID, focusID: id, events: events).validate()
+            try SelectedKeyboardRequest.validateEvents(events)
         }
     }
 }
 
 struct AgentBatchDocument: Decodable {
+    let snapshotID: UUID?
     let steps: [AgentBatchStep]
-    private enum CodingKeys: String, CodingKey { case steps }
+    private enum CodingKeys: String, CodingKey { case snapshotID, steps }
     init(from decoder: Decoder) throws {
-        try AgentBatchJSONKey.requireOnly(["steps"], decoder: decoder)
-        steps = try decoder.container(keyedBy: CodingKeys.self).decode([AgentBatchStep].self, forKey: .steps)
+        try AgentBatchJSONKey.requireOnly(["snapshotID", "steps"], decoder: decoder)
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        snapshotID = try container.decodeIfPresent(UUID.self, forKey: .snapshotID)
+        steps = try container.decode([AgentBatchStep].self, forKey: .steps)
     }
 }
 
@@ -64,7 +94,7 @@ private struct AgentBatchJSONKey: CodingKey {
     static func requireOnly(_ allowed: Set<String>, decoder: Decoder) throws {
         let keys = try decoder.container(keyedBy: Self.self).allKeys.map(\.stringValue)
         guard keys.allSatisfy(allowed.contains) else {
-            throw AgentModeFailure("unsupportedBatchField", "Agent batch contains an unsupported field; only steps with action, id and type text are accepted.")
+            throw AgentModeFailure("unsupportedBatchField", "Agent batch contains an unsupported field. Use snapshotID with ref steps, or native id steps, and literal text for type actions.")
         }
     }
 }

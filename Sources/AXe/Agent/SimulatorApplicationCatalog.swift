@@ -1,5 +1,6 @@
 import AXeCore
 import Foundation
+import FBSimulatorControl
 
 struct SimulatorApplicationCatalog {
     private static let displayNameOverrides: [String: String] = [
@@ -17,32 +18,16 @@ struct SimulatorApplicationCatalog {
         "com.apple.mobiletimer": "Clock"
     ]
 
-    static func applications(for simulatorUDID: String) async throws -> [AgentApplication] {
-        let result = try await AgentProcess.run(
-            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-            arguments: ["simctl", "listapps", simulatorUDID]
-        )
-        guard result.status == 0 else {
-            throw CLIError(
-                errorDescription: "Unable to list applications installed on simulator \(simulatorUDID): \(result.standardError)"
-            )
-        }
-
-        let propertyList: Any
+    /// Lists installed applications in-process through CoreSimulator (about 10 ms, versus about
+    /// 100 ms for spawning `simctl listapps`).
+    static func applications(on simulator: FBSimulator) throws -> [AgentApplication] {
+        let dictionary: [String: Any]
         do {
-            propertyList = try PropertyListSerialization.propertyList(
-                from: result.standardOutputData,
-                options: [],
-                format: nil
-            )
+            dictionary = try FBSimDeviceWrapper.installedApps(onDevice: device(of: simulator))
         } catch {
             throw CLIError(
-                errorDescription: "Unable to parse the simulator application list: \(error.localizedDescription)"
+                errorDescription: "Unable to list applications installed on simulator \(simulator.udid): \(error.localizedDescription)"
             )
-        }
-
-        guard let dictionary = propertyList as? [String: Any] else {
-            throw CLIError(errorDescription: "The simulator returned an unexpected application list.")
         }
 
         var seen = Set<String>()
@@ -77,64 +62,37 @@ struct SimulatorApplicationCatalog {
         }
     }
 
+    /// Launches an application in-process, bringing it to the foreground without restarting it
+    /// when it is already running.
     static func launch(
         _ application: AgentApplication,
-        on simulatorUDID: String
+        on simulator: FBSimulator
     ) async throws {
-        let result = try await AgentProcess.run(
-            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
-            arguments: [
-                "simctl",
-                "launch",
-                "--terminate-running-process",
-                simulatorUDID,
-                application.bundleIdentifier,
-            ]
-        )
-        guard result.status == 0 else {
-            throw CLIError(
-                errorDescription: "Unable to launch \(application.name) (\(application.bundleIdentifier)): \(result.standardError)"
-            )
+        let device = try device(of: simulator)
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            FBSimDeviceWrapper.launchApplicationAsync(
+                onDevice: device,
+                bundleID: application.bundleIdentifier,
+                options: [:],
+                completionQueue: .main
+            ) { error, _ in
+                if let error {
+                    continuation.resume(
+                        throwing: CLIError(
+                            errorDescription: "Unable to launch \(application.name) (\(application.bundleIdentifier)): \(error.localizedDescription)"
+                        )
+                    )
+                } else {
+                    continuation.resume()
+                }
+            }
         }
     }
-}
 
-private struct AgentProcessResult: Sendable {
-    let status: Int32
-    let standardOutputData: Data
-    let standardErrorData: Data
-
-    var standardError: String {
-        String(data: standardErrorData, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines) ?? "Unknown error"
-    }
-}
-
-private enum AgentProcess {
-    static func run(
-        executableURL: URL,
-        arguments: [String]
-    ) async throws -> AgentProcessResult {
-        try await Task.detached(priority: .userInitiated) {
-            let process = Process()
-            let outputPipe = Pipe()
-            let errorPipe = Pipe()
-            process.executableURL = executableURL
-            process.arguments = arguments
-            process.standardOutput = outputPipe
-            process.standardError = errorPipe
-
-            try process.run()
-            // Read stdout while the process is running so a large `simctl listapps` plist cannot
-            // fill the pipe and stall the child process. simctl writes only short diagnostics to stderr.
-            let output = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            let error = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            return AgentProcessResult(
-                status: process.terminationStatus,
-                standardOutputData: output,
-                standardErrorData: error
-            )
-        }.value
+    private static func device(of simulator: FBSimulator) throws -> AnyObject {
+        guard let device = simulator.value(forKey: "device") as AnyObject? else {
+            throw CLIError(errorDescription: "Simulator \(simulator.udid) does not expose a CoreSimulator device.")
+        }
+        return device
     }
 }

@@ -2,6 +2,7 @@
   "PlaygroundCoreTests": 9,
   "PlaygroundKeyboardTests": 1,
   "PlaygroundAgentTests": 4,
+  "PlaygroundAgentAdaptiveOutputTests": 4,
   "PlaygroundDuoCoreTests": 20,
   "PlaygroundDuoTests": 6,
   "PlaygroundDuoInterruptionTests": 6,
@@ -47,7 +48,7 @@
   "PlaygroundAgentDragTests": 7,
   "PlaygroundAgentPinchTests": 8,
   "PlaygroundAgentSliderTests": 12,
-  "PlaygroundAgentNativeStateTests": 5,
+  "PlaygroundAgentNativeStateTests": 6,
   "PlaygroundAgentSystemOwnerTests": 1,
   "PlaygroundAgentBatchTests": 6,
   "PlaygroundClipboardTests": 9,
@@ -69,5 +70,8 @@
   "PlaygroundRawKeyboardBrokerTests": 1,
   "PlaygroundRawInputAdmissionTests": 6,
   "PlaygroundAgentTransportTests": 1,
-  "PlaygroundDuoRawLongTextTests": 1
+  "PlaygroundDuoRawLongTextTests": 1,
+  "PlaygroundAutomaticPIDTests": 6,
+  "PlaygroundAgentFocusAndTypeTests": 2,
+  "PlaygroundDuoAgentFocusAndTypeTests": 4
 }

@@ -99,13 +99,10 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
 
     func validateKeyDown(observation: FBSimulatorHIDSessionObservation, keyCode: UInt32) async throws {
         try agentAdmission?.validateContext(observation)
-        guard observation == feed.initialObservation, keyCode <= 255, let initial = result.initialTarget else {
+        guard observation == feed.initialObservation, keyCode <= 255, result.initialTarget != nil else {
             throw SelectedHIDFailure.invalid("Keyboard context or initial field is missing or changed")
         }
         let field = try await readFocusedField()
-        guard field.frame == initial.frame else {
-            throw SelectedHIDFailure.invalid("Focused field geometry changed before key down")
-        }
         result.lastValidatedTarget = field
         result.validatedKeyDownCount += 1
         guard try JSONEncoder().encode(result).count <= SelectedAXBounds.contentBytes else {
@@ -117,13 +114,32 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     private func readFocusedField() async throws -> FBSimulatorAXNode {
         // Read a new root and exact field before every down; do not serialize the whole tree.
         let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: remainingSeconds) { remaining in
-            try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
-                expectedPID: request.expectedPID, identifier: request.focusID,
+            if let identifier = request.fieldTarget.semanticID {
+                return try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
+                    expectedPID: request.expectedPID, identifier: identifier,
+                    observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
+            }
+            guard let identity = request.fieldTarget.nativeIdentity else {
+                throw SelectedHIDFailure.invalid("Selected keyboard field identity is unavailable")
+            }
+            return try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
+                expectedPID: request.expectedPID, identity: identity,
                 observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
         }
         _ = try remainingSeconds()
-        try SelectedKeyboardFocusPolicy.validate(field, expectedPID: request.expectedPID, focusID: request.focusID)
-        try agentAdmission?.target?.validate(field, allowingValueChange: result.validatedKeyDownCount > 0)
+        let logicalSize = feed.initialObservation.displayContext.logicalSize
+        let target: AgentModeTarget?
+        if let admitted = agentAdmission?.target { target = admitted }
+        else if let initial = result.initialTarget { target = try AgentModeTarget(initial, nativeTarget: request.fieldTarget) }
+        else { target = nil }
+        if let target {
+            try SelectedKeyboardEditingTargetPolicy.validate(field, against: target,
+                expectedPID: request.expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize,
+                editingStarted: result.validatedKeyDownCount > 0)
+        } else {
+            try SelectedKeyboardEditingTargetPolicy.validateCurrentField(field,
+                expectedPID: request.expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize)
+        }
         _ = try remainingSeconds()
         return field
     }

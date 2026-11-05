@@ -61,6 +61,15 @@ struct SelectedSliderResult: Codable, Sendable {
         samples = source.samples.map(Sample.init); actions = source.actionReceipts.map(Action.init)
     }
 
+    /// Copy scalar evidence for the public agent view without the private diagnostic text.
+    init(agentPublic source: Self, reason: String?) {
+        outcome = source.outcome; self.reason = reason; reasonTruncated = source.reasonTruncated
+        delivery = source.delivery; endpoint = source.endpoint
+        actionAttempts = source.actionAttempts; actionsReturned = source.actionsReturned
+        startedUptime = source.startedUptime; deadlineUptime = source.deadlineUptime
+        elapsedSeconds = source.elapsedSeconds; samples = source.samples; actions = source.actions
+    }
+
     static func validateCapacity(result: SelectedAXResult, context: SelectedHIDContext) throws {
         // A scalar sample/action encodes to less than 2 KiB: fixed keys, UUID,
         // bounded phase (at most 16 ASCII bytes), native type (Slider), finite IEEE numbers and booleans.

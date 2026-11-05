@@ -26,7 +26,7 @@ struct Shutdown: AsyncParsableCommand {
         guard let output = String(data: data, encoding: .utf8) else {
             throw CLIError(errorDescription: "Could not encode the simulator shutdown result.")
         }
-        print(output)
+        try CLIOutput.writeJSONText(output)
     }
 }
 

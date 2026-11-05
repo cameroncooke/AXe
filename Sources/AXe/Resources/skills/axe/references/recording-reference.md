@@ -1,5 +1,16 @@
 # Video recording modes
 
+## Output format and destination paths
+
+Keep the format before the command; keep the file path after it:
+
+```bash
+axe --output json record-video --udid <UDID> --output recording.mp4
+axe --output json screenshot --udid <UDID> --output screenshot.png
+```
+
+The root `--output text|json` selects the command result format. `record-video --output` and `screenshot --output` retain their existing destination-path meaning. Normal output is unchanged when no format is selected. Explicit format selection for `stream-video` is rejected before capture; stream bytes remain on stdout only in its existing no-format mode. Read [output fields](agent-reference.md#output-format) for JSON success and error results.
+
 For one fixed measured panel:
 
 ```bash

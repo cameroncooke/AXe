@@ -112,20 +112,22 @@ struct AgentCommand: AsyncParsableCommand {
             textModelClient: textModelClient,
             traceURL: traceURL,
             logger: logger,
-            emitProgress: !jsonOutput
+            emitProgress: !jsonOutput && !CLIOutput.isFormatted
         )
         let result: SimulatorAgentRunResult
         do {
             result = try await runner.run()
         } catch {
             let usage = await runner.usage
-            if !jsonOutput, usage.calls > 0 {
+            if !jsonOutput, !CLIOutput.isFormatted, usage.calls > 0 {
                 print(Self.usageDescription(usage), to: &standardError)
             }
             throw error
         }
 
-        if jsonOutput {
+        if CLIOutput.isFormatted {
+            try CLIOutput.writeJSON(result)
+        } else if jsonOutput {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
             let data = try encoder.encode(result)
@@ -137,6 +139,12 @@ struct AgentCommand: AsyncParsableCommand {
             let symbol = result.status == .completed ? "✓" : "✗"
             print("\(symbol) \(result.message)")
             print("Steps: \(result.steps), model calls: \(result.modelCalls), elapsed: \(result.elapsedMilliseconds) ms")
+            let timing = result.timing
+            print(
+                "Time: setup \(timing.setupMilliseconds) ms, loop \(timing.loopMilliseconds) ms "
+                    + "(Jev \(timing.jevMilliseconds) ms, \(timing.observations) screen reads \(timing.observationMilliseconds) ms, "
+                    + "actions \(timing.actionMilliseconds) ms)"
+            )
             print(Self.usageDescription(result.usage))
         }
 

@@ -10,6 +10,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added a repeatable serial Weather, Reminders and Contacts benchmark for AXe, FlowDeck and RocketSim. It records tool versions and hashes, task evidence, calls, time and returned tokens, with explicit acceptance of comparable successful AXe baselines. See [benchmark setup](benchmarks/README.md).
+
+- Show a bounded preview of cached scroll areas on compact first pages when their canonical rows are on a later page. Keep canonical rows/cursors, full/base and legacy output unchanged; perform no extra accessibility read. Requires matched wire-77 CLI/broker.
+
+- Added explicit `type --agent --focus --snapshot-id --ref` to validate all text, physically focus the same current TextField and type with two phase receipts. Existing focus, identity, context, cleanup and no-replay checks remain; raw typing, default agent typing and reference batches are unchanged. Requires matched wire-73 CLI/broker. Build and live proof are pending.
+
+- Added bounded read-only custom-action name previews for agent refs and complete JSON-array text through guarded `--text-field custom-actions` chunks. Names participate in freshness checks without adding tap or named-action authority. Raw output and existing rows remain unchanged. Requires matched wire-54 CLI/broker and Native11 frameworks; source-only preparation is not native verification.
+
+- Added guarded native-object identity for eligible agent refs without app accessibility IDs. A complete unique native read is required; identities stay private to the per-device RAM table. Existing semantic controls and raw commands retain their behavior. Opaque sliders, AXPress and pinch remain unsupported. Requires matched CLI, broker and runtime versions.
+
+- Added snapshot-bound reference batches and inline `batch --agent --steps-json` input. Up to eight tap/type steps share initial reference validation, fresh target and layout checks, ordered receipts and one final capture. Native-ID/file batches and legacy commands remain available; matched CLI/broker wire 42 is required.
+
+- Added agent output views: default `--view reading`, filtered `--view navigation`, and canonical `--view full`, with text or JSON representation. Added read-only `describe-ui --read-ref` field chunks for exact native labels, values and IDs, with explicit Unicode-scalar cursors. These changes require a matched wire-38 CLI/broker; native framework protocol is unchanged.
 - Add one repeatable 300-byte mixed-case Duo raw typing check to the canonical full Duo and keyboard/hardware plans. It verifies exact callback counts, unchanged touch/control state and lowercase input after modifiers. It stays separate from the 133-case agent group. Document the normal visible-software-keyboard prerequisite; no detector, hidden app route or mandatory vendor dependency is added.
 - Added a tracked XcodeGen Playground project and one serial 50-case local iPhone/Duo check through the public CLI. It reads real app results for core controls and keyboard edits, Duo screen/hinge/rotation changes, held-input release and fresh taps, plus the separate optional agent interface and cache/reference checks. A visible Touch Monitor records real contacts. The runner reuses existing devices, records exact case results and CPU/memory samples, and rejects missing or skipped cases. Three legacy coordinate-tap cases passed separately. Full acceptance remains open after the latest 35/47 full-run result; no full 50-case pass is claimed and each failed native result is retained. See [Playground testing](docs/playground-testing.md).
 - Add standalone selected and optional agent slider percentages with current target checks, guarded retained input and bounded native value feedback. Interior values use the current measured display context and require horizontal native scrubber geometry that increases from left to right; numeric 0/100 use the existing endpoint route before input. Raw sliders and endpoint batches stay unchanged. CLI wire 34 and matching native frameworks are required. Isolated controllers checked outer portrait and inner rotation 90 only; the incremental CLI build and public simulator verification remain pending. RTL, custom and vertical Sliders remain unproved.
@@ -81,7 +93,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added full-package Playground groups for reference lifetime, broker restarts, cache invalidation after raw edits, equal-hash native changes, retained keyboard ownership and concurrent raw input. Direct groups remain separate from the standalone matrix.
 
+- Added `--output text|json` for explicit command result formatting. Agent text uses compact RS/1; agent JSON keeps its existing envelope. Ordinary JSON uses one versioned command result, including failures. Existing no-format output and command-specific `--json` remain. Put formatting before screenshot/movie commands to preserve their `--output` paths; explicit formatted streaming rejects before capture. Output-format build and simulator checks are pending.
+
 ### Changed
+
+- Group identical ordered custom-action previews in adaptive `capture.customActionGroups`, with every published ref retained. Canonical/full keeps its `customActions` map. Both forms preserve name bounds, per-ref truncation and guarded full readback; input and freshness checks are unchanged. The unreleased public adaptive schema remains version 2. Grouping is source-only until this candidate passes its checks.
+
+- Use public adaptive agent schema 2 for reading/navigation output while preserving canonical schema 1 in full view and all no-flag raw commands. Compact rows merge capabilities without renumbering refs, cap displayed cells, and return explicit page cursors. Row limits now apply to one global page across targets, scrolling and text. Unchanged replies retain only current snapshot identity, sequence and displayed expiry after the existing live checks. Build, simulator and token-comparison proof is pending for this candidate.
+
+- Make `--expected-pid` optional with `--agent`: a new capture discovers the frontmost app or SpringBoard from one native observation, while references keep their saved PID. A supplied PID must be positive and match. App, layout and focus checks, coordinate forms and raw commands remain. Wire 37 and matching native frameworks are required; build and simulator verification are pending.
 
 - Removed the new Duo `--ax-preparation` option and retained AX-preparation layer. Selected reads and physical target checks keep the normal IDB accessibility-readiness check, including the original short-lived bootstrap where required by the existing runtime policy. Original v1.8.0 IDB bootstrap behavior, native slider/switch identity sessions and HID input remain unchanged. CLI wire 35 rejects older requests; matched rebuilt native frameworks are required. Earlier transition and core failures remain recorded. Current Debug core checks passed seven of eight; Slider75 refused before input. Four of five Duo transition checks passed. The outer repeat made three real callbacks, then failed its final orientation assertion; all twelve ordinary-iPhone core/agent checks passed. The corrected Duo test run passed four of five cases; its final rotation-agent read failed with a disconnected channel before input. The exact rotation case passed separately after explicit guest-service restart on the same boot/data; automatic recovery is not claimed. All four Duo agent checks also passed. Those Debug failures remain recorded. Clean 25e Release later passed all four Duo agent checks and all five layout checks. The current universal Release passed eight core checks on each device and the separate inner Slider case, plus an exact ZIP/tar round trip with seven strict signatures. The current artifact later passed a unique local unlinked Homebrew installation, seven strict signatures and a real Playground Button tap through the installed wrapper, followed by removal and restoration of original paths and inputs. No push, publication or deployment occurred; earlier failed receipts remain separate.
 
@@ -89,6 +109,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
 
 ### Fixed
+
+- Fill compact agent reading pages from the captured snapshot without a second simulator read. Explicit page requests still validate the current UI.
+- Support the measured DeviceKit 689.2 display report and the iPhone 18 Pro simulator profile 407 with its verified model and display ID. If the report omits the active flag, accept one lit primary built-in display that matches the host catalogue. Multiple built-in displays require an explicit state for each display and exactly one active display.
+
+- Publish agent swipe references only after two exact native observations agree. If the bounded check does not confirm a stable view, retain the completed-input receipt and require a fresh read without replaying input. Existing input guards remain. Requires matched wire-80 CLI/broker.
+
+- Recognize verified numeric keyboards and use measured docked bounds for agent swipe planning. Preserve exact target, identity, context and cleanup guards. Requires matched wire-79 CLI/broker.
+- Include visible labelled image content in agent reading/full observations without adding tap authority.
+
+- Preserve exact agent label and value whitespace in full and compact snapshots, and invalidate cached references after whitespace-only changes. Keep search normalization and raw legacy output unchanged. Requires matched wire-78 CLI/broker.
+
+- Stop advertising navigation continuation pages when only static text remains; keep reading/full cursors and pages with more controls unchanged.
+
+- Keep explicitly formatted screenshot success output on stdout without a second plain stderr message. Default screenshot output and selected capture are unchanged.
+
+- Omit misleading native totals and initial offset zero from terminal compact agent pages. Preserve explicit nonzero offsets, real continuation cursors, page-fill evidence and warnings; full/base and legacy output are unchanged.
+
+- Fixed legacy physical taps returning success without changing real controls after the contact was shortened to 100 ms. They now use one 250 ms contact, with the transport drain after release and the existing release-only cleanup.
+
+- Fixed omitted `tap --agent --tap-style` using the automatic style instead of the documented physical default. Explicit styles and legacy commands are unchanged.
+
+- Fixed physical single `--agent` Button reference taps failing when a unique semantic label and a row-level point result used different accessibility representations. After the existing reference checks, eligible Buttons bind the same fresh native object for the unchanged guarded input path. Reference batches and nested permission Button chains are unchanged.
+
+- Fixed extra delay in legacy physical taps by sending the complete press in one event sequence. Release cleanup remains available after failed delivery.
+
+- Keep guarded keyboard input on the same focused field when its editing bounds change after the first owned key. Native field identity, focus, state and display checks still run before each later key.
+- Tap a named CheckBox row at its unique native child control, with fresh parent/child and point-hit checks.
+- Omit duplicate `totalSteps`, `rolledBack: false`, per-step request IDs, receipt kinds that equal the step action, receipt `replayed: false` and superseded `batchInProgress` caches only from complete successful compact batches with a usable fresh final capture. Full and failure output retain these fields.
+- Start agent reference swipes on an eligible current text descendant inside the selected area when the standard start lacks one. The requested stroke and fresh native target, point, hierarchy and context checks remain.
+- Check each reference batch tap against one fresh tree owned by the native operation, replacing the extra controller read and two-tree fingerprint comparison. Original plan, layout, PID, context and capability checks and native input guards remain.
+
+- Allow reference batches to continue when standalone result text changes its glyph bounds. Button, container and control-child geometry stays bound to the original layout; fresh native admission still applies before each action.
+
+- Allow focused TextFields to share an accessibility ID with non-text containers and controls. The ID must still identify exactly one TextField before focus, process and state checks; per-key native validation remains required. This needs the matching rebuilt native framework.
+
+- Bound compact top-level and batch-step agent error messages to 1024 Unicode scalars, preserving their prefix/suffix and explicit truncation metadata. Typed codes, cleanup, quarantine, context and recovery fields are unchanged; full view retains complete messages.
+
+- Use measured selected-display bounds for agent viewport visibility, including pre-input path and slider checks, so a stale portrait Application root cannot hide in-bounds inner-landscape controls. Raw builder callers keep their existing inferred viewport.
+- Remove repeated device context and native-proven redundant Button child labels from compact agent output. Full native text, selector matching, fingerprints, input safety and exact readback remain in the broker.
 
 - Fixed one exact accessibility focus-read disconnect by allowing one fresh guarded read within the existing deadline. No key or action is replayed; PID, focus, context and target checks remain.
 

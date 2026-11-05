@@ -80,7 +80,7 @@ enum SelectedHIDBroker {
     }
     static func printResponse(_ response: SelectedHIDResponse) throws {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        print(String(decoding: try encoder.encode(response), as: UTF8.self))
+        try CLIOutput.writeJSONData(encoder.encode(response))
         if response.error != nil { throw CLIError(errorDescription: "Selected input failed; inspect the JSON receipt. No input was replayed.") }
     }
     private static func offMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {

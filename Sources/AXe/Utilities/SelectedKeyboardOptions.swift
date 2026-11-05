@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedKeyboardOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Selected keyboard: require this foreground process before each key down.")
+    @Option(name: .customLong("expected-pid"), help: "Required for selected keyboard; optional with --agent to assert the snapshot owner PID.")
     var expectedPID: Int32?
     @Option(name: .customLong("focus-id"), help: "Selected keyboard: exact ID of an already focused TextField. No focus action or fallback.")
     var focusID: String?

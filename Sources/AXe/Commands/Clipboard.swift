@@ -45,7 +45,7 @@ private struct ClipboardCopy: AsyncParsableCommand {
         guard let output = String(data: try encoder.encode(receipt), encoding: .utf8) else {
             throw CLIError(errorDescription: "Could not encode the clipboard copy receipt.")
         }
-        print(output)
+        try CLIOutput.writeJSONText(output)
     }
 }
 

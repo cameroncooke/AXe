@@ -61,7 +61,7 @@ The sections below retain earlier evidence and tracked runner instructions. Thei
 
 ## Earlier acceptance
 
-The earlier full plan was **693 case executions across 90 suite runs and 66 Swift sources**: iPhone 165, iPad 23 and Duo 505. These figures describe that earlier plan; **there is no full-suite pass**. The current source has five native-state cases instead of four and one typing-to-drag case on both iPhone and Duo. This gives 697 planned matrix cases by calculation only. The new raw long-text case below adds one planned Duo case, for a calculated total of 698. This is not a test result. The extra direct checks below are separate from that matrix.
+The earlier full plan was **693 case executions across 90 suite runs and 66 Swift sources**: iPhone 165, iPad 23 and Duo 505. These figures describe that earlier plan; **there is no full-suite pass**. With six native-state cases, the current configured profiles total **699 planned case executions**: iPhone 168, iPad 23 and Duo 508. This count comes from `scripts/playground-acceptance.json` and `scripts/playground-suite-counts.json`; it includes the raw long-text case. These figures are calculations, not test results. The extra direct checks below are separate from that matrix.
 
 **D38 is proved within scope and integrated.** Eight distinct input/signal combinations passed across two controlled runs: held Space, delayed key sequence, held touch and moving pinch, each under SIGINT and SIGTERM. Seven passed in the earlier run; the separately named moving-pinch SIGINT case now passed. The earlier whole eight-case run remains failed because its later fresh AX action disconnected. Both records are retained. The full named eight-case suite and current 693-case matrix remain pending. [Named pinch result](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v5-result.json), [earlier seven passes/one failure](../build_products/verification/duo-complete-20261024/selected-client-exit-native-v4-result.json), [source integration](../build_products/verification/duo-complete-20261024/client-exit-integration-plan-v1/integration-result.json). The named run took 95.66 seconds, peak combined memory 14.068 GiB, without a resource stop or crash.
 
@@ -217,6 +217,28 @@ If that helper is missing, the direct runner exits before simulator work.
 
 The direct Duo-only path validates an explicit available Duo UUID before simulator work. Each suite's helper requirements are in the shared configuration. The direct filter uses the same structured result reader. It does not replace full acceptance.
 
+### Physical tap timing and release
+
+Use `scripts/verify-physical-taps.py` for the repeatable physical-tap check. First build the normal Playground from the tracked XcodeGen setup and install it on the existing warm target. The installed app must include the `duo-controls` page and its version-6 Documents readback. Supply the complete matched AXe runtime, including its frameworks, helper and resources. This script does not build, install or boot a simulator.
+
+Run one device at a time, with no other UI job on that device:
+
+```sh
+DEVELOPER_DIR=/absolute/path/to/Xcode.app/Contents/Developer \
+/usr/bin/python3 scripts/verify-physical-taps.py \
+  --runtime /absolute/path/to/matched-runtime/axe \
+  --udid IPHONE_UUID \
+  --output /absolute/path/to/NEW_PHYSICAL_TAP_RESULT
+```
+
+Keep the normal Playground running on its Duo Controls page before each run. The launch command reuses that warm app process; it does not terminate it. An app on another page fails the existing target checks without test input. Navigate to Duo Controls through the normal UI before starting a new run.
+
+Then run the same command with the warm Duo UUID and a different new result directory. The script can use the normal Show pad button once if the controls are clipped. It does not fold or rotate the device, change app data or replay failed input.
+
+The check compares fresh native frames with the app's window coordinates and visible scroll area before each no-flag coordinate tap. It requires one pad tap and one button callback, one released contact per action, no long-press callback and no change to other controls. It records actual guest DOWN-to-UP time and requires it to stay below the fixture's 0.5-second long-press threshold. It does not promise an exact 100 ms guest interval.
+
+Each result contains the actual CLI, native framework, app and script hashes; command arguments, output and process results; display context; broker executable observations; and before/after app state. Failed runs retain their output and final state when it can be read. These are current-pose checks only. A Duo outer-screen result does not prove inner-screen, other-rotation or fold-interruption coverage, and these two actions do not replace the matrix.
+
 ## Reference and raw-input follow-up checks
 
 These checks use the full AXe Swift package through `test-runner.sh`. The four new direct-suite sources are registered separately from the matrix source list. The raw suites import AXe internals and must not be copied into the matrix standalone package.
@@ -227,7 +249,7 @@ These checks use the full AXe Swift package through `test-runner.sh`. The four n
 | `PlaygroundAgentBrokerRestartTests` | 1 | iPhone or Duo |
 | `PlaygroundRawKeyboardBrokerTests` | 1 | Ordinary iPhone |
 | `PlaygroundRawInputAdmissionTests` | 6 | Ordinary iPhone |
-| `PlaygroundAgentNativeStateTests` | 5 | iPhone or Duo |
+| `PlaygroundAgentNativeStateTests` | 6 | iPhone or Duo |
 
 Use an existing warm simulator with the normal Playground installed. First build the full-package test host from the same source and matching native frameworks. `--tests-only` does not build that host. Set `AXE_BIN_PATH` to the actual matched CLI executable, not an installation wrapper. The broker-restart case checks that executable, simulator, user and process start time before it stops its own idle worker.
 
@@ -256,6 +278,33 @@ export AXE_DUO_E2E=1
 ```
 
 The direct runner writes a separate result directory and rejects failed, missing or skipped cases using the registered count. Keep failed output. Do not combine these commands or earlier focused results into a full-suite pass. Check CPU and memory between jobs as described below.
+
+## Focus a field and type
+
+The focus-and-type suites use the normal UIKit Agent Examples field and the normal SwiftUI Text Input field. They run two cases on an ordinary iPhone and four on Duo: both fields on the outer portrait screen and inner landscape screen. They use the existing public CLI and normal Playground navigation. No extra fixture, injected state or external helper is required.
+
+These six proof cases use `--view full`, as the prior direct checks did. The saved argument list includes that option and matches the actual command. They do not check the default compact focus-and-type response.
+
+Each case first verifies an empty, unfocused field. Text Input focuses on entry, so setup sends one normal Return key before this check. UIKit uses a fresh normal page. The case then sends unsupported £ text and requires a structured rejection with no action/batch receipt and unchanged native field state. It obtains a new reference and sends one valid `type --agent --focus` command. Both phase receipts must complete: a two-event focus tap and typing events. Independent native readback must show exact text and actual focus. UIKit must report the exact editing-callback increase; SwiftUI must show the exact character count. Other field values must remain unchanged.
+
+Use an existing warm ordinary iPhone first:
+
+```sh
+export AXE_BIN_PATH=/absolute/path/to/matched-runtime/axe
+export SIMULATOR_UDID=IPHONE_UUID
+export AXE_DUO_E2E=0
+./test-runner.sh --tests-only PlaygroundAgentFocusAndTypeTests
+```
+
+Then use the existing warm Duo:
+
+```sh
+export SIMULATOR_UDID=DUO_UUID
+export AXE_DUO_E2E=1
+./test-runner.sh --tests-only PlaygroundDuoAgentFocusAndTypeTests
+```
+
+Run these jobs serially. The runner supplies a new artifact directory and checks the registered case counts: two and four, with no skipped or missing cases. The normal matrix and agent-controls/keyboard-hardware groups also register the suites. Keep the prior 17 host focus tests; these six cases add real simulator evidence. Earlier direct-helper/manual results do not count as runs of these Git tests. Preserve failed outputs and do not replay input. Public accessibility output still does not prove exact native UID continuity. Shared-ID and anonymous fields remain separate checks.
 
 ## Resources, delivery and boundaries
 

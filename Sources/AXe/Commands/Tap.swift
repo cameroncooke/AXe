@@ -44,7 +44,7 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after tapping in seconds.")
     var postDelay: Double?
 
-    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input; physical holds for 0.1 seconds and simulator inserts no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
+    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input. Physical taps hold for 0.25 seconds on ordinary legacy input, and 0.1 seconds on selected, agent and Duo input; simulator taps insert no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
     var tapStyle: TapStyle?
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting. Selected ordinary taps accept finite values up to 30 seconds; only a missing target is retried before input.")
@@ -191,9 +191,9 @@ struct Tap: AsyncParsableCommand {
         else { point = nil }
         let style: SelectedTapStyle
         switch tapStyle {
-        case .physical: style = .physical
+        case .physical, nil: style = .physical
         case .simulator: style = .simulator
-        case .automatic, nil: style = .automatic
+        case .automatic: style = .automatic
         }
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .tap,
             expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
@@ -337,7 +337,7 @@ struct Tap: AsyncParsableCommand {
         }
 
         logger.info().log("Tap completed successfully")
-        print("✓ Tap at \(resolvedDescription) completed successfully")
+        CLIOutput.message("✓ Tap at \(resolvedDescription) completed successfully")
     }
 
     private func requireSemanticReadback(_ response: SelectedHIDResponse, request: SelectedHIDRequest) throws {

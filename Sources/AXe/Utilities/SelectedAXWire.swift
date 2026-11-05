@@ -35,6 +35,11 @@ enum SelectedAXWire {
     static func boundedResponse(_ response: SelectedHIDResponse, maximumBytes: Int) throws -> Data {
         do { return try encodeResponse(response, maximumBytes: maximumBytes) }
         catch {
+            if response.readingContinuation != nil {
+                var original = response
+                original.readingContinuation = nil
+                if let bytes = try? encodeResponse(original, maximumBytes: maximumBytes) { return bytes }
+            }
             if let agent = response.agent {
                 let failure = AgentModeFailure("responseTooLarge",
                     "The agent response exceeds its size bound. Capture and error details were omitted. Inspect the action receipt before continuing.")

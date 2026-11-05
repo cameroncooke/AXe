@@ -12,7 +12,7 @@ private final class SliderPickupReadReporter: NSObject, FBEventReporter {
     func report(_ event: FBEventReporterSubject) {}
     func addMetadata(_ metadata: [String: String]) {}
 }
-private enum SliderPickupReadError: Error { case rejected(String) }
+enum SliderPickupReadError: Error { case rejected(String) }
 struct SliderPickupReadRect: Codable, Equatable {
     let x: Double, y: Double, width: Double, height: Double
     init(_ frame: CGRect) { x = frame.minX; y = frame.minY; width = frame.width; height = frame.height }
@@ -65,7 +65,7 @@ struct SliderPickupReadEvidence: Codable {
     var finalNativeToken: SliderPickupReadToken?
     var inputEvents = 0
     var valueWrites = 0
-    let geometryUnits = "raw search candidates only; pickup requires exact current native parent identity"
+    let geometryUnits = "raw search candidates only; pickup requires exact current native Slider or parent identity"
     var point: SliderPickupReadPoint?
     var nativePoint: SliderPickupReadPoint?
     var pointToken: SliderPickupReadToken?
@@ -74,6 +74,10 @@ struct SliderPickupReadEvidence: Codable {
     var pointElementEqualsTarget: Bool?
     var parentWalk: SliderPickupParentWalk?
     var parentVerified = false
+    var directSliderVerified = false
+    var pointKind: String?
+    var nativeAXRole: String?
+    var axpOwnerClosed = false
     var status = "FAILED"
     var phase = "arguments"
     var error: String?
@@ -99,53 +103,22 @@ struct SliderPickupReadEvidence: Codable {
     var nativeSessionClosed = false
 }
 
-/// Only the existing source-verified Objective-C calls are used. No action selector exists here.
-@MainActor private enum SliderPickupReadNative {
-    typealias Factory = @convention(c) (AnyClass, Selector, NSObject) -> Unmanaged<NSObject>?
-    typealias PIDFactory = @convention(c) (AnyClass, Selector, Int32) -> Unmanaged<NSObject>?
-    typealias BoolFactory = @convention(c) (AnyClass, Selector, Bool) -> Unmanaged<NSObject>?
-    typealias ObjectGet = @convention(c) (NSObject, Selector) -> Unmanaged<NSObject>?
-    typealias UIntGet = @convention(c) (NSObject, Selector) -> UInt64
-    typealias PIDGet = @convention(c) (NSObject, Selector) -> Int32
-    typealias SnapshotCall = @convention(c) (NSObject, Selector, NSObject, NSArray, NSObject, AutoreleasingUnsafeMutablePointer<NSError?>) -> Unmanaged<NSObject>?
-    typealias AttributeCall = @convention(c) (NSObject, Selector, NSObject, NSArray, AutoreleasingUnsafeMutablePointer<NSError?>) -> Unmanaged<NSObject>?
+/// Declared AXP reads only. No independent automation client or session is constructed.
+@MainActor enum SliderPickupReadNative {
     typealias AXPAttributeCall = @convention(c) (NSObject, Selector, NSString) -> Unmanaged<NSObject>?
-    typealias VoidCall = @convention(c) (NSObject, Selector) -> Void
-    typealias Allocate = @convention(c) (AnyClass, Selector) -> Unmanaged<NSObject>
-    typealias ElementInit = @convention(c) (NSObject, Selector, NSObject?, UInt64, UInt64, Int32, UInt64, UInt64) -> Unmanaged<NSObject>?
-    static func method(_ cls: AnyClass, _ name: String, _ abi: String, factory: Bool = false) throws -> IMP {
-        let sel = NSSelectorFromString(name)
-        let item = factory ? class_getClassMethod(cls, sel) : class_getInstanceMethod(cls, sel)
-        guard let item, method_getTypeEncoding(item).map({ String(cString: $0) }) == abi else {
-            throw SliderPickupReadError.rejected("Unavailable verified selector/ABI: " + name)
-        }
-        return method_getImplementation(item)
-    }
+    typealias WindowCall = @convention(c) (NSObject, Selector) -> UInt32
     static func method(_ receiver: NSObject, _ name: String, _ abi: String) throws -> IMP {
-        try method(type(of: receiver), name, abi)
+        guard let method = class_getInstanceMethod(type(of: receiver), NSSelectorFromString(name)),
+              method_getTypeEncoding(method).map({ String(cString: $0) }) == abi else {
+            throw SliderPickupReadError.rejected("Declared native getter ABI unavailable: " + name)
+        }
+        return method_getImplementation(method)
     }
-    static func object(_ receiver: NSObject, _ name: String) throws -> NSObject {
-        let call = unsafeBitCast(try method(receiver, name, "@16@0:8"), to: ObjectGet.self)
-        guard let value = call(receiver, NSSelectorFromString(name))?.takeUnretainedValue() else { throw SliderPickupReadError.rejected("Nil native object: " + name) }
-        return value
-    }
-    static func number(_ receiver: NSObject, _ name: String) throws -> UInt64 {
-        unsafeBitCast(try method(receiver, name, "Q16@0:8"), to: UIntGet.self)(receiver, NSSelectorFromString(name))
-    }
-    static func pid(_ receiver: NSObject) throws -> Int32 {
-        unsafeBitCast(try method(receiver, "processIdentifier", "i16@0:8"), to: PIDGet.self)(receiver, NSSelectorFromString("processIdentifier"))
-    }
-    static func constant(_ symbol: String) throws -> NSString {
-        guard let address = dlsym(UnsafeMutableRawPointer(bitPattern: -2), symbol),
-              let value = address.assumingMemoryBound(to: NSString?.self).pointee else { throw SliderPickupReadError.rejected("Export unavailable: " + symbol) }
-        return value
-    }
-    static func attributes(_ client: NSObject, _ element: NSObject, _ names: [NSString]) throws -> NSDictionary {
-        var error: NSError?
-        let call = unsafeBitCast(try method(client, "attributesForElement:attributes:error:", "@40@0:8@16@24^@32"), to: AttributeCall.self)
-        guard let value = call(client, NSSelectorFromString("attributesForElement:attributes:error:"), element, names as NSArray, &error)?.takeUnretainedValue() as? NSDictionary,
-              error == nil else { throw SliderPickupReadError.rejected("SliderPickupReadNative attribute read failed: " + String(describing: error)) }
-        return value
+    static func window(_ target: AXPMacPlatformElement) throws -> UInt64 {
+        let call = unsafeBitCast(try method(target, "_windowContextId", "I16@0:8"), to: WindowCall.self)
+        let value = call(target, NSSelectorFromString("_windowContextId"))
+        guard value > 0 else { throw SliderPickupReadError.rejected("Native window context unavailable") }
+        return UInt64(value)
     }
     static func generic(_ target: AXPMacPlatformElement, _ name: String) throws -> NSObject? {
         let call = unsafeBitCast(try method(target, "accessibilityAttributeValue:", "@24@0:8@16"), to: AXPAttributeCall.self)
@@ -165,41 +138,8 @@ struct SliderPickupReadEvidence: Codable {
             return .init(source: source, name: name, symbol: symbol, state: "unsupportedRepresentation", objectType: String(describing: type(of: value)), rawJSON: nil, error: String(describing: error), objectiveCType: objectiveCType, rawDescription: rawDescription)
         }
     }
-    static func validate(_ values: NSDictionary, names: [NSString], id: String?, frame: CGRect, display: UInt32, window: UInt64?) throws -> UInt64 {
-        guard values[names[0]] as? String == id,
-              let rect = values[names[1]] as? [String: NSNumber],
-              let x = rect["X"], let y = rect["Y"], let w = rect["Width"], let h = rect["Height"],
-              CGRect(x: x.doubleValue, y: y.doubleValue, width: w.doubleValue, height: h.doubleValue) == frame,
-              (values[names[2]] as? NSNumber)?.uint32Value == display,
-              let context = values[names[3]] as? NSNumber, context.uint64Value > 0,
-              window == nil || context.uint64Value == window else { throw SliderPickupReadError.rejected("SliderPickupReadNative identifier/frame/display/window differs") }
-        return context.uint64Value
-    }
-    static func close(_ session: NSObject) throws {
-        let call = unsafeBitCast(try method(session, "invalidate", "v16@0:8"), to: VoidCall.self)
-        call(session, NSSelectorFromString("invalidate"))
-    }
 }
 
-
-@MainActor private final class SliderPickupReadOwner {
-    private let device: NSObject
-    private let session: NSObject
-    private var objects: [NSObject] = []
-    private(set) var closed = false
-
-    init(device: NSObject, session: NSObject) {
-        self.device = device
-        self.session = session
-    }
-    func keep(_ object: NSObject) { objects.append(object) }
-    func close() throws {
-        guard !closed else { return }
-        try SliderPickupReadNative.close(session)
-        closed = true
-        withExtendedLifetime((device, objects)) {}
-    }
-}
 private struct SliderPickupGenericRead {
     let root: AXPMacPlatformElement
     let target: AXPMacPlatformElement
@@ -215,7 +155,6 @@ enum SliderPickupReadPhase {
         var output: URL?
         var ownedOutput = false
         var root: FBAccessibilityElement?
-        var nativeOwner: SliderPickupReadOwner?
         do {
             let required: Set<String> = ["--phase", "--read-id", "--remaining-budget-seconds", "--udid", "--boot", "--screen-id", "--screen-uuid", "--pid", "--selector-kind", "--selector-value", "--point-x", "--point-y", "--helper", "--out"]
             let optional: Set<String> = ["--binding", "--binding-sha256"]
@@ -337,9 +276,8 @@ enum SliderPickupReadPhase {
                 }
                 hitTranslation.bridgeDelegateToken = generic.bridge
                 guard let hit = translator.macPlatformElement(fromTranslation: hitTranslation) as? AXPMacPlatformElement,
-                      hit.accessibilityRole()?.rawValue == NSAccessibility.Role.group.rawValue,
-                      let hitToken = try simulatorToken(hit, pid: pid), hitToken != generic.token else {
-                    throw SliderPickupReadError.rejected("Fresh point is not a distinct native Group token")
+                      let hitToken = try simulatorToken(hit, pid: pid) else {
+                    throw SliderPickupReadError.rejected("Fresh point native identity unavailable")
                 }
                 let hitFrame = hit.accessibilityFrame()
                 guard [hitFrame.minX, hitFrame.minY, hitFrame.width, hitFrame.height].allSatisfy(\.isFinite),
@@ -349,8 +287,17 @@ enum SliderPickupReadPhase {
                 result.pointToken = hitToken; result.pointFrame = SliderPickupReadRect(hitFrame)
                 result.pointRole = hit.accessibilityRole()?.rawValue
                 result.pointElementEqualsTarget = hit.isEqual(generic.target)
-                guard result.pointElementEqualsTarget == false,
-                      translator.frontmostApplication(withDisplayId: observation.axDisplayID,
+                if result.pointRole == NSAccessibility.Role.slider.rawValue {
+                    guard hitToken == generic.token, result.pointElementEqualsTarget == true, hitFrame == generic.frame else {
+                        throw SliderPickupReadError.rejected("Direct Slider point identity or frame differs")
+                    }
+                    result.pointKind = "directSlider"
+                } else {
+                    guard result.pointRole == NSAccessibility.Role.group.rawValue, hitToken != generic.token,
+                          result.pointElementEqualsTarget == false else { throw SliderPickupReadError.rejected("Point is neither selected Slider nor distinct Group") }
+                    result.pointKind = "distinctGroup"
+                }
+                guard translator.frontmostApplication(withDisplayId: observation.axDisplayID,
                         bridgeDelegateToken: generic.bridge)?.pid == pid else {
                     throw SliderPickupReadError.rejected("Fresh point identity or frontmost PID changed")
                 }
@@ -367,113 +314,91 @@ enum SliderPickupReadPhase {
                 result.initialRootClosed = true
                 try mark("after-AXP-root-close")
             } else {
-                // This process never acquires an AXP root, before or after native invalidate.
                 guard let binding, binding.source == result.source,
                       binding.readPhase == (phase == "geometry" ? "target" : "point"),
                       binding.status == (phase == "geometry" ? "TARGET_PHASE_COMPLETE" : "POINT_PHASE_COMPLETE"),
                       binding.initialRootClosed, binding.inputEvents == 0, binding.valueWrites == 0,
                       let saved = binding.selectedFrame, let token = binding.selectedToken,
                       binding.finalSelectedFrame == saved, binding.finalSelectedToken == token else {
-                    throw SliderPickupReadError.rejected("Native phase requires the sealed AXP target")
+                    throw SliderPickupReadError.rejected("Read phase requires a sealed current target binding")
                 }
-                if phase == "native" {
-                    guard binding.point == result.point, binding.nativePoint == result.nativePoint,
-                          binding.pointRole == NSAccessibility.Role.group.rawValue,
-                          binding.pointElementEqualsTarget == false,
-                          let hitToken = binding.pointToken, hitToken != token, hitToken.pid == pid,
-                          binding.pointFrame != nil else {
-                        throw SliderPickupReadError.rejected("Native parent phase requires a fresh Group token")
+                let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
+                let app = try await commands.accessibilityElementForFrontmostApplication(displayID: observation.axDisplayID, displayContext: observation.displayContext)
+                root = app
+                let generic = try readGeneric(app, pid: pid, selectorKind: selectorKind, selectorValue: selectorValue,
+                    prefix: "current-native-AXP", includeValues: true, check: check, mark: mark)
+                guard generic.token == token, SliderPickupReadRect(generic.frame) == saved,
+                      generic.target.accessibilityIdentifier() == binding.actualIdentifier,
+                      try attributeValues(generic.values) == attributeValues(binding.genericAttributes) else {
+                    throw SliderPickupReadError.rejected("Fresh AXP target differs from sealed binding")
+                }
+                let translator = unsafeBitCast(AXPTranslator.sharedInstance() as AnyObject, to: AXPTranslator.self)
+                func current() throws {
+                    try check()
+                    guard translator.frontmostApplication(withDisplayId: observation.axDisplayID,
+                        bridgeDelegateToken: generic.bridge)?.pid == pid else {
+                        throw SliderPickupReadError.rejected("Frontmost PID changed during native read")
                     }
                 }
-                let frame = CGRect(x: saved.x, y: saved.y, width: saved.width, height: saved.height)
+                try current()
+                let window = try SliderPickupReadNative.window(generic.target)
                 result.actualIdentifier = binding.actualIdentifier
                 result.selectedFrame = saved; result.selectedToken = token
-                result.finalSelectedFrame = binding.finalSelectedFrame; result.finalSelectedToken = binding.finalSelectedToken
-                result.pointToken = binding.pointToken; result.pointFrame = binding.pointFrame
-                result.pointRole = binding.pointRole; result.pointElementEqualsTarget = binding.pointElementEqualsTarget
-                result.genericAttributes = binding.genericAttributes // Prior AXP measurements, not new native reads.
-                try check(); try mark("before-native-framework-load")
-                try FBSimulatorControlFrameworkLoader.accessibilityAutomationFrameworks.loadPrivateFrameworks(logger)
-                try check(); try mark("after-native-framework-load")
-                guard let deviceClass = NSClassFromString("XCUIDevice"), let elementClass = NSClassFromString("XCAccessibilityElement"),
-                      let snapshotClass = NSClassFromString("XCElementSnapshot") else {
-                    throw SliderPickupReadError.rejected("Verified native classes unavailable")
-                }
-                let makeDevice = unsafeBitCast(try SliderPickupReadNative.method(deviceClass, "iOSDeviceForSimulatorDevice:", "@24@0:8@16", factory: true), to: SliderPickupReadNative.Factory.self)
-                guard let device = makeDevice(deviceClass, NSSelectorFromString("iOSDeviceForSimulatorDevice:"), simulator.device)?.takeUnretainedValue(),
-                      try SliderPickupReadNative.object(device, "uniqueIdentifier").description.uppercased() == udid.uuidString else {
-                    throw SliderPickupReadError.rejected("SliderPickupReadNative simulator identity differs")
-                }
-                try mark("before-native-session")
-                let session = try SliderPickupReadNative.object(device, "remoteAutomationSession")
-                let owner = SliderPickupReadOwner(device: device, session: session); nativeOwner = owner
-                let client = try SliderPickupReadNative.object(device, "accessibilityInterface"); owner.keep(client)
-                let makeApp = unsafeBitCast(try SliderPickupReadNative.method(elementClass, "elementWithProcessIdentifier:", "@20@0:8i16", factory: true), to: SliderPickupReadNative.PIDFactory.self)
-                let makeAttributes = unsafeBitCast(try SliderPickupReadNative.method(snapshotClass, "requiredAXAttributesForElementSnapshotHierarchyOnMacOS:", "@20@0:8B16", factory: true), to: SliderPickupReadNative.BoolFactory.self)
-                guard let application = makeApp(elementClass, NSSelectorFromString("elementWithProcessIdentifier:"), pid)?.takeUnretainedValue(),
-                      let attributes = makeAttributes(snapshotClass, NSSelectorFromString("requiredAXAttributesForElementSnapshotHierarchyOnMacOS:"), false)?.takeUnretainedValue() as? NSSet else {
-                    throw SliderPickupReadError.rejected("SliderPickupReadNative application/snapshot attributes unavailable")
-                }
-                owner.keep(application)
-                var snapshotError: NSError?
-                let snapshotCall = unsafeBitCast(try SliderPickupReadNative.method(client, "requestSnapshotForElement:attributes:parameters:error:", "@48@0:8@16@24@32^@40"), to: SliderPickupReadNative.SnapshotCall.self)
-                let parameters = try SliderPickupReadNative.object(client, "defaultParameters")
-                try check(); try mark("before-native-snapshot")
-                guard let snapshot = snapshotCall(client, NSSelectorFromString("requestSnapshotForElement:attributes:parameters:error:"), application, attributes.allObjects as NSArray, parameters, &snapshotError)?.takeUnretainedValue(), snapshotError == nil,
-                      try SliderPickupReadNative.number(SliderPickupReadNative.object(snapshot, "runtimeIssues"), "count") == 0 else {
-                    throw SliderPickupReadError.rejected("SliderPickupReadNative snapshot failed: " + String(describing: snapshotError))
-                }
-                owner.keep(snapshot)
-                var found: [NSObject] = []; var visited = 0
-                func walk(_ node: NSObject, depth: Int) throws {
-                    try check()
-                    guard depth <= 32, visited < 512 else { throw SliderPickupReadError.rejected("SliderPickupReadNative tree bound exceeded") }
-                    visited += 1
-                    if try SliderPickupReadNative.number(node, "elementType") == 33 {
-                        let element = try SliderPickupReadNative.object(node, "accessibilityElement")
-                        if try nativeToken(element) == token { found.append(element) }
-                    }
-                    guard let children = try SliderPickupReadNative.object(node, "children") as? [NSObject] else { throw SliderPickupReadError.rejected("SliderPickupReadNative children unavailable") }
-                    for child in children { try walk(child, depth: depth + 1) }
-                }
-                try walk(SliderPickupReadNative.object(snapshot, "rootElementSnapshot"), depth: 0)
-                guard found.count == 1, let selected = found.first, try nativeToken(selected) == token else {
-                    throw SliderPickupReadError.rejected("Independent native slider token differs")
-                }
-                owner.keep(selected); result.nativeRole = 33; result.nativeToken = token
-                let symbols = ["XC_kAXXCAttributeIdentifier", "XC_kAXXCAttributeFrame", "XC_kAXXCAttributeWindowDisplayId", "XC_kAXXCAttributeWindowContextId"]
-                let names = try symbols.map(SliderPickupReadNative.constant)
-                let window = try SliderPickupReadNative.validate(SliderPickupReadNative.attributes(client, selected, names), names: names, id: binding.actualIdentifier, frame: frame, display: observation.axDisplayID, window: nil)
-                result.windowContextID = window
-                try check(); try mark("before-native-parent-walk")
+                result.nativeToken = token; result.nativeAXRole = generic.target.accessibilityRole()?.rawValue
+                result.windowContextID = window; result.genericAttributes = generic.values
                 if phase == "geometry" {
-                    for symbol in ["XC_kAXXCAttributeAbsoluteValue", "XC_kAXXCAttributeMinScrubberPosition", "XC_kAXXCAttributeMaxScrubberPosition"] {
-                        try check()
-                        let key = try SliderPickupReadNative.constant(symbol)
-                        let value = try SliderPickupReadNative.attributes(client, selected, [key])[key] as? NSObject
-                        result.attributes.append(SliderPickupReadNative.capture(source: "native read-only attribute", name: String(key), symbol: symbol, value: value))
-                        try mark("geometry-" + symbol)
-                    }
+                    result.attributes = try SliderPickupRawAttributes.read(simulator: simulator, target: generic.target,
+                        frame: generic.frame, deadline: deadline, check: current)
                 } else {
-                    guard let hitToken = binding.pointToken, let hitFrame = binding.pointFrame else {
-                        throw SliderPickupReadError.rejected("Fresh native point binding is missing")
+                    guard binding.point == result.point, binding.nativePoint == result.nativePoint,
+                          let expectedHit = binding.pointToken, let expectedFrame = binding.pointFrame,
+                          let translation = translator.object(at: nativePoint, displayId: observation.axDisplayID,
+                              bridgeDelegateToken: generic.bridge), translation.pid == pid else {
+                        throw SliderPickupReadError.rejected("Fresh native point unavailable")
                     }
-                    result.parentWalk = try readNativeParents(client: client, selected: selected, elementClass: elementClass,
-                        hitToken: hitToken, hitFrame: hitFrame, point: point, expectedPID: pid, identifier: binding.actualIdentifier,
-                        selectedFrame: frame, display: observation.axDisplayID, window: window, owner: owner, check: check)
-                    result.parentVerified = result.parentWalk?.state == "matchedExactSliderNativeToken"
+                    translation.bridgeDelegateToken = generic.bridge
+                    guard let hit = translator.macPlatformElement(fromTranslation: translation) as? AXPMacPlatformElement else {
+                        throw SliderPickupReadError.rejected("Fresh native point object unavailable")
+                    }
+                    guard try simulatorToken(hit, pid: pid) == expectedHit,
+                          SliderPickupReadRect(hit.accessibilityFrame()) == expectedFrame,
+                          hit.accessibilityRole()?.rawValue == binding.pointRole,
+                          hit.isEqual(generic.target) == binding.pointElementEqualsTarget else {
+                        throw SliderPickupReadError.rejected("Fresh native point differs from sealed point")
+                    }
+                    result.pointToken = expectedHit; result.pointFrame = expectedFrame
+                    result.pointRole = binding.pointRole; result.pointElementEqualsTarget = binding.pointElementEqualsTarget
+                    result.pointKind = binding.pointKind
+                    if binding.pointKind == "directSlider" {
+                        guard expectedHit == token, expectedFrame == saved, hit.isEqual(generic.target),
+                              hit.accessibilityRole()?.rawValue == NSAccessibility.Role.slider.rawValue,
+                              try SliderPickupReadNative.window(hit) == window else {
+                            throw SliderPickupReadError.rejected("Native direct Slider identity/window differs")
+                        }
+                        result.directSliderVerified = true
+                    } else {
+                        guard binding.pointKind == "distinctGroup", expectedHit != token,
+                              hit.accessibilityRole()?.rawValue == NSAccessibility.Role.group.rawValue else {
+                            throw SliderPickupReadError.rejected("Native parent read requires a distinct Group")
+                        }
+                        result.parentWalk = try readAXPParents(hit: hit, selected: generic.target, bridge: generic.bridge,
+                            expectedHit: expectedHit, hitFrame: expectedFrame, point: point, pid: pid,
+                            selectedToken: token, selectedFrame: generic.frame, display: observation.axDisplayID,
+                            window: window, check: current)
+                        result.parentVerified = result.parentWalk?.state == "matchedExactSliderNativeToken"
+                    }
                 }
-                try mark("after-native-parent-walk")
-                try check(); try mark("before-final-native-identity")
-                _ = try SliderPickupReadNative.validate(SliderPickupReadNative.attributes(client, selected, names), names: names, id: binding.actualIdentifier, frame: frame, display: observation.axDisplayID, window: window)
-                let finalToken = try nativeToken(selected)
-                guard finalToken == token else { throw SliderPickupReadError.rejected("Final native token changed") }
-                result.finalNativeToken = finalToken
-                try mark("after-final-native-identity")
-                try mark("before-native-local-close"); try owner.close()
-                result.nativeSessionClosed = true
-                try mark("after-native-local-close")
-                // Return through sealing below. There is deliberately no legacy AXP rebootstrap here.
+                try current()
+                let final = try readGeneric(app, pid: pid, selectorKind: selectorKind, selectorValue: selectorValue,
+                    prefix: "final-native-AXP", includeValues: true, check: check, mark: mark)
+                guard final.token == token, final.frame == generic.frame,
+                      try attributeValues(final.values) == attributeValues(generic.values),
+                      try SliderPickupReadNative.window(final.target) == window else {
+                    throw SliderPickupReadError.rejected("Native target/frame/value/window changed during phase")
+                }
+                result.finalSelectedFrame = SliderPickupReadRect(final.frame); result.finalSelectedToken = final.token
+                result.finalNativeToken = final.token
+                app.close(); root = nil; result.initialRootClosed = true; result.axpOwnerClosed = true
             }
             try check(); try mark("before-final-context")
             let after = try await reader.read(); result.finalContext = after
@@ -483,15 +408,12 @@ enum SliderPickupReadPhase {
             case "target": result.status = "TARGET_PHASE_COMPLETE"
             case "geometry": result.status = "GEOMETRY_PHASE_COMPLETE"
             case "point": result.status = "POINT_PHASE_COMPLETE"
-            default: result.status = result.parentVerified ? "NATIVE_PARENT_PHASE_COMPLETE_MATCHED" : "NATIVE_PARENT_PHASE_COMPLETE_UNKNOWN"
+            default: result.status = result.directSliderVerified ? "NATIVE_DIRECT_SLIDER_PHASE_COMPLETE_MATCHED" : (result.parentVerified ? "NATIVE_PARENT_PHASE_COMPLETE_MATCHED" : "NATIVE_PARENT_PHASE_COMPLETE_UNKNOWN")
             }
             result.phase = "complete"
         } catch { result.error = String(describing: error) }
-        if let owner = nativeOwner, !owner.closed {
-            do { try owner.close(); result.nativeSessionClosed = true }
-            catch { result.error = result.error ?? String(describing: error) }
-        }
         if let handle = root { handle.close(); result.initialRootClosed = true; root = nil }
+        if result.initialRootClosed { result.axpOwnerClosed = true }
         let finished = ProcessInfo.processInfo.systemUptime
         result.finishedUptime = finished
         result.elapsedSeconds = finished - result.startedUptime
@@ -500,7 +422,7 @@ enum SliderPickupReadPhase {
         } ?? false
         if !withinBudget { result.error = result.error ?? "Local relative read budget expired" }
         let complete = result.verifiedAfterRead && result.error == nil && withinBudget &&
-            (["target", "point"].contains(result.readPhase) ? result.initialRootClosed : result.nativeSessionClosed)
+            result.axpOwnerClosed
         if !complete { result.status = "FAILED" }
         result.sealed = complete
         do {
@@ -518,84 +440,46 @@ enum SliderPickupReadPhase {
         return try SliderPickupReadToken(data, pid: pid)
     }
 
-    /// Read-only adaptation of the existing native CheckBox parent transport.
-    /// The selected target is independently proved Slider role33; the CheckBox client is unchanged.
-    @MainActor private static func readNativeParents(client: NSObject, selected: NSObject, elementClass: AnyClass,
-        hitToken: SliderPickupReadToken, hitFrame: SliderPickupReadRect, point: CGPoint, expectedPID: Int32, identifier: String?,
-        selectedFrame: CGRect, display: UInt32, window: UInt64, owner: SliderPickupReadOwner,
-        check: () throws -> Void) throws -> SliderPickupParentWalk {
-        let selectedToken = try nativeToken(selected)
-        guard selectedToken.pid == expectedPID, hitToken.pid == expectedPID, hitToken != selectedToken,
-              selectedFrame.contains(point) else { throw SliderPickupReadError.rejected("SliderPickupReadNative point or Slider token differs") }
-        // Exact initializer/ABI and metadata reads used by the accepted native Switch client.
-        let identityKind = try SliderPickupReadNative.number(selected, "elementType")
-        let origin = try SliderPickupReadNative.number(selected, "originPlatform")
-        let allocate = unsafeBitCast(try SliderPickupReadNative.method(elementClass, "alloc", "@16@0:8", factory: true), to: SliderPickupReadNative.Allocate.self)
-        let initialize = unsafeBitCast(try SliderPickupReadNative.method(elementClass,
-            "initWithToken:elementOrHash:elementID:pid:elementType:originPlatform:", "@60@0:8@16Q24Q32i40Q44Q52"), to: SliderPickupReadNative.ElementInit.self)
-        let allocated = allocate(elementClass, NSSelectorFromString("alloc"))
-        guard let hit = initialize(allocated.takeUnretainedValue(),
-            NSSelectorFromString("initWithToken:elementOrHash:elementID:pid:elementType:originPlatform:"), nil,
-            hitToken.element, hitToken.elementID, hitToken.pid, identityKind, origin)?.takeRetainedValue() else {
-            throw SliderPickupReadError.rejected("SliderPickupReadNative point identity unavailable")
-        }
-        owner.keep(hit)
-        guard try nativeToken(hit) == hitToken else { throw SliderPickupReadError.rejected("Constructed native point token differs") }
-        let symbols = ["XC_kAXXCAttributeIdentifier", "XC_kAXXCAttributeFrame", "XC_kAXXCAttributeWindowDisplayId",
-                       "XC_kAXXCAttributeWindowContextId", "XC_kAXXCAttributeParent"]
-        let names = try symbols.map(SliderPickupReadNative.constant)
-        var current: NSObject? = hit
-        var kept: [NSObject] = []
-        var seenTokens = Set<SliderPickupReadToken>()
-        var rows: [SliderPickupParentNode] = []
+    /// Fresh AXP parent reads prove the exact selected native token; no SDK object is synthesized.
+    @MainActor private static func readAXPParents(hit: AXPMacPlatformElement, selected: AXPMacPlatformElement,
+        bridge: String, expectedHit: SliderPickupReadToken, hitFrame: SliderPickupReadRect, point: CGPoint,
+        pid: Int32, selectedToken: SliderPickupReadToken, selectedFrame: CGRect, display: UInt32,
+        window: UInt64, check: () throws -> Void) throws -> SliderPickupParentWalk {
+        var current: AXPMacPlatformElement? = hit
+        var kept: [AXPMacPlatformElement] = [], tokens = Set<SliderPickupReadToken>(), rows: [SliderPickupParentNode] = []
         for index in 0..<12 {
             try check()
-            guard let element = current else { return SliderPickupParentWalk(state: "unknown", reason: "SliderPickupReadNative parent returned nil", nodes: rows) }
-            let token = try nativeToken(element)
-            guard token.pid == expectedPID else { throw SliderPickupReadError.rejected("SliderPickupReadNative ancestry PID differs") }
-            guard seenTokens.insert(token).inserted, !kept.contains(where: { $0.isEqual(element) }) else {
-                return SliderPickupParentWalk(state: "unknown", reason: "SliderPickupReadNative parent cycle detected", nodes: rows)
+            guard let node = current, let translation = node.translation, translation.pid == pid else {
+                throw SliderPickupReadError.rejected("Native AXP parent unavailable or foreign")
             }
-            kept.append(element); owner.keep(element)
-            let values = try SliderPickupReadNative.attributes(client, element, names)
-            try check()
-            guard (values[names[2]] as? NSNumber)?.uint32Value == display,
-                  (values[names[3]] as? NSNumber)?.uint64Value == window,
-                  let fields = values[names[1]] as? [String: NSNumber],
-                  let x = fields["X"], let y = fields["Y"], let width = fields["Width"], let height = fields["Height"] else {
-                throw SliderPickupReadError.rejected("SliderPickupReadNative parent frame, window or display differs")
-            }
-            let frame = CGRect(x: x.doubleValue, y: y.doubleValue, width: width.doubleValue, height: height.doubleValue)
+            translation.bridgeDelegateToken = bridge
+            guard let token = try simulatorToken(node, pid: pid), tokens.insert(token).inserted,
+                  !kept.contains(where: { $0.isEqual(node) }) else { throw SliderPickupReadError.rejected("Native AXP parent identity missing or cyclic") }
+            kept.append(node)
+            let frame = node.accessibilityFrame(), equalsSelected = node.isEqual(selected)
             guard [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-                  frame.width > 0, frame.height > 0, frame.contains(point) else {
-                throw SliderPickupReadError.rejected("SliderPickupReadNative parent has no finite positive frame at the explicit point")
+                  frame.width > 0, frame.height > 0, frame.contains(point),
+                  try SliderPickupReadNative.window(node) == window else {
+                throw SliderPickupReadError.rejected("Native AXP parent frame/window differs")
             }
-            if index == 0, SliderPickupReadRect(frame) != hitFrame { throw SliderPickupReadError.rejected("SliderPickupReadNative Group frame differs from the fresh point read") }
-            let equalsSelected = element.isEqual(selected)
-            rows.append(SliderPickupParentNode(token: token, identifier: values[names[0]] as? String, frame: SliderPickupReadRect(frame),
-                displayID: display, windowContextID: window, equalsSelectedTarget: equalsSelected))
+            if index == 0, token != expectedHit || SliderPickupReadRect(frame) != hitFrame {
+                throw SliderPickupReadError.rejected("Native AXP hit binding differs")
+            }
+            rows.append(SliderPickupParentNode(token: token, identifier: node.accessibilityIdentifier(),
+                frame: SliderPickupReadRect(frame), displayID: display, windowContextID: window, equalsSelectedTarget: equalsSelected))
             if token == selectedToken || equalsSelected {
-                guard token == selectedToken, equalsSelected, index > 0,
-                      values[names[0]] as? String == identifier, frame == selectedFrame else {
-                    throw SliderPickupReadError.rejected("SliderPickupReadNative target equality conflicts with exact Slider token or signature")
+                guard index > 0, token == selectedToken, equalsSelected, frame == selectedFrame,
+                      node.accessibilityIdentifier() == selected.accessibilityIdentifier() else {
+                    throw SliderPickupReadError.rejected("Native AXP parent conflicts with exact selected Slider")
                 }
-                return SliderPickupParentWalk(state: "matchedExactSliderNativeToken", reason: "Current Group reaches the exact independent native Slider", nodes: rows)
+                withExtendedLifetime(kept) {}
+                return SliderPickupParentWalk(state: "matchedExactSliderNativeToken", reason: "Fresh selected-display AXP Group reaches exact Slider token/window", nodes: rows)
             }
-            let value = values[names[4]]
-            guard value != nil, !(value is NSNull) else {
-                return SliderPickupParentWalk(state: "unknown", reason: "SliderPickupReadNative parent returned nil", nodes: rows)
-            }
-            guard let parent = value as? NSObject else {
-                return SliderPickupParentWalk(state: "unknown", reason: "SliderPickupReadNative parent did not return an object", nodes: rows)
-            }
-            current = parent
+            current = node.accessibilityParent() as? AXPMacPlatformElement
         }
-        return SliderPickupParentWalk(state: "unknown", reason: "SliderPickupReadNative parent depth bound reached", nodes: rows)
+        throw SliderPickupReadError.rejected("Native AXP parent depth exceeds bound")
     }
 
-    @MainActor private static func nativeToken(_ target: NSObject) throws -> SliderPickupReadToken {
-        try SliderPickupReadToken(pid: SliderPickupReadNative.pid(target), element: SliderPickupReadNative.number(target, "elementOrHash"), elementID: SliderPickupReadNative.number(target, "elementID"))
-    }
     private static func attributeValues(_ values: [SliderPickupReadAttribute]) throws -> [String: String] {
         var result: [String: String] = [:]
         for value in values {

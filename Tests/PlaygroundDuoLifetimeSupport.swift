@@ -18,7 +18,8 @@ func prepareDuoControls(_ position: DuoControlsPosition) async throws -> Playgro
     return try await DuoPlaygroundLaunchTarget.$current.withValue(target) { try await PlaygroundControlsSession() }
 }
 
-func changeDuoControls(_ app: PlaygroundControlsSession, change: PlaygroundDuoChange) async throws -> DuoCatalogue {
+func changeDuoControls(_ app: PlaygroundControlsSession, change: PlaygroundDuoChange,
+                       afterInputRelease: (() async throws -> Void)? = nil) async throws -> DuoCatalogue {
     let executable = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
     let cli = try TestHelpers.getAxePath()
     let panel = app.catalogue.activePanel.identity
@@ -35,17 +36,29 @@ func changeDuoControls(_ app: PlaygroundControlsSession, change: PlaygroundDuoCh
         try #require(operation.exitCode == 0, "External state change failed: \(diagnostics)")
         let receipt = try JSONDecoder().decode(PlaygroundControlsStateChange.self, from: Data(try operation.output().utf8))
         try #require(receipt.mode == mode && receipt.finishedUptime >= receipt.startedUptime)
-        let after = try await DuoPlaygroundSession().catalogue(boot: app.catalogue.bootIdentity)
+        if change != .rotate {
+            let hinge = try #require(receipt.hinge)
+            let expected = change == .open ? 180.0 : 0.0
+            try #require(hinge.outcome == "observedMechanicalTarget" && hinge.requestedDegrees == expected && !hinge.wasAlreadyWithinTolerance)
+            try #require(hinge.matchingSamples.count == 2 && hinge.matchingSamples.allSatisfy { abs($0.mechanicalDegrees - expected) <= 0.5 })
+        }
+        let after: DuoCatalogue
+        if let afterInputRelease {
+            try #require(change == .fold, "Deferred display readiness is only used after a fold and verified input release.")
+            try await afterInputRelease()
+            let wait = try DuoStateReadWait(phase: "raw-motion-fold-after-input-release", artifacts: app.artifacts)
+            after = try await DuoStateReadWait.$current.withValue(wait) {
+                try await DuoPlaygroundSession().stableCatalogue(boot: app.catalogue.bootIdentity, expectedScreenID: 1)
+            }
+        } else {
+            after = try await DuoPlaygroundSession().catalogue(boot: app.catalogue.bootIdentity)
+        }
         if change == .rotate {
             let rotated = try #require(receipt.rotation)
             let degrees = try after.activePanel.rotationDegrees()
             try #require(rotated.vendorEventCount == 1 && rotated.matchingObservationCount == 2 && rotated.before.rotation != rotated.after.rotation)
             try #require(after.activePanel.identity == panel && degrees == rotated.after.rotation)
         } else {
-            let hinge = try #require(receipt.hinge)
-            let expected = change == .open ? 180.0 : 0.0
-            try #require(hinge.outcome == "observedMechanicalTarget" && hinge.requestedDegrees == expected && !hinge.wasAlreadyWithinTolerance)
-            try #require(hinge.matchingSamples.count == 2 && hinge.matchingSamples.allSatisfy { abs($0.mechanicalDegrees - expected) <= 0.5 })
             try #require(after.activePanel.identity != panel)
         }
         await operation.finish()

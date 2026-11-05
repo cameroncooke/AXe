@@ -25,11 +25,23 @@ struct DescribeUI: AsyncParsableCommand {
     @Option(name: .customLong("since-screen-hash"), help: "Agent only: return an unchanged capture when a fresh screen hash matches.")
     var sinceScreenHash: String?
 
-    @Option(name: .customLong("row-offset"), help: "Agent only: first row in the snapshot table, in 0...4096. Reuse --snapshot-id for the next page.")
+    @Option(name: .customLong("row-offset"), help: "Agent only: first global row in the snapshot table, in 0...12288. Reuse --snapshot-id for the next page.")
     var rowOffset: Int?
 
-    @Option(name: .customLong("row-limit"), help: "Agent only: maximum rows in this page, in 1...64 (default 64).")
+    @Option(name: .customLong("row-limit"), help: "Agent only: maximum total rows in this page, in 1...64 (default 64).")
     var rowLimit: Int?
+
+    @Option(name: .customLong("read-ref"), help: "Agent only: read one field from an exact snapshot reference without input. Requires --snapshot-id.")
+    var readRef: String?
+
+    @Option(name: .customLong("text-field"), help: "Read-ref field: label (default), value, id, or custom-actions (JSON array text).")
+    var textField: AgentModeTextQuery.Field?
+
+    @Option(name: .customLong("text-offset"), help: "Read-ref starting Unicode scalar offset (default 0).")
+    var textOffset: Int?
+
+    @Option(name: .customLong("text-limit"), help: "Read-ref Unicode scalars per chunk, in 1...4096 (default 1024).")
+    var textLimit: Int?
 
     func validate() throws {
         try agentMode.validate()
@@ -41,16 +53,27 @@ struct DescribeUI: AsyncParsableCommand {
             if let sinceScreenHash, sinceScreenHash.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 throw ValidationError("--since-screen-hash must not be empty.")
             }
-            guard (0...4096).contains(rowOffset ?? 0), (1...64).contains(rowLimit ?? 64) else {
-                throw ValidationError("Agent rows require --row-offset in 0...4096 and --row-limit in 1...64.")
+            guard (0...AgentModeRequest.maximumRows).contains(rowOffset ?? 0), (1...64).contains(rowLimit ?? 64) else {
+                throw ValidationError("Agent rows require --row-offset in 0...12288 and --row-limit in 1...64.")
             }
             guard agentMode.snapshotID == nil || sinceScreenHash == nil else {
                 throw ValidationError("Choose --snapshot-id for a current snapshot page or --since-screen-hash for a fresh capture.")
             }
+            if let readRef {
+                try agentMode.requireSnapshot()
+                guard !readRef.isEmpty, sinceScreenHash == nil, rowOffset == nil, rowLimit == nil else {
+                    throw ValidationError("--read-ref requires one snapshot reference, without hash polling or row paging.")
+                }
+                try AgentModeTextQuery(field: textField ?? .label, offset: textOffset ?? 0,
+                    limit: textLimit ?? 1024).validate()
+            } else if textField != nil || textOffset != nil || textLimit != nil {
+                throw ValidationError("--text-field, --text-offset and --text-limit require --read-ref.")
+            }
             return
         }
-        guard sinceScreenHash == nil, rowOffset == nil, rowLimit == nil else {
-            throw ValidationError("--since-screen-hash, --row-offset and --row-limit require --agent.")
+        guard sinceScreenHash == nil, rowOffset == nil, rowLimit == nil, readRef == nil,
+              textField == nil, textOffset == nil, textLimit == nil else {
+            throw ValidationError("Agent hash, row and reference-read options require --agent.")
         }
         try selectedInput.validate()
         try selectedAX.validate(required: selectedInput.mode == .selected)
@@ -78,13 +101,15 @@ struct DescribeUI: AsyncParsableCommand {
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.")
         }
-        print(jsonString)
+        try CLIOutput.writeJSONText(jsonString)
     }
 
     func agentRequest() throws -> SelectedHIDRequest {
-        try AgentModeCommandAdapter.request(AgentModeRequest(kind: .describe,
+        try AgentModeCommandAdapter.request(AgentModeRequest(kind: readRef == nil ? .describe : .read,
             expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, sinceScreenHash: sinceScreenHash,
-            rowOffset: rowOffset ?? 0, rowLimit: rowLimit ?? 64), input: selectedInput)
+            rowOffset: rowOffset ?? 0, rowLimit: rowLimit ?? 64,
+            readReference: readRef, textQuery: readRef.map { _ in AgentModeTextQuery(
+                field: textField ?? .label, offset: textOffset ?? 0, limit: textLimit ?? 1024) }), input: selectedInput)
     }
 
     func selectedRequest() throws -> SelectedHIDRequest {

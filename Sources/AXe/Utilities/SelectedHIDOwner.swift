@@ -37,9 +37,14 @@ final class SelectedHIDOwner {
         lastActivity = self.dependencies.now()
     }
 
-    func perform(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
+    func perform(_ request: SelectedHIDRequest, batchTap: AgentBatchTapAdmission? = nil) async -> SelectedHIDResponse {
         do {
             guard !shouldStop, !quarantined, !maintainingRetainedInput, !batchRunning else { throw SelectedHIDFailure.busy }
+            if batchTap != nil {
+                guard request.ax?.kind == .tap, request.agentAdmission == nil else {
+                    throw SelectedHIDFailure.invalid("Owned batch admission requires a reference tap")
+                }
+            }
             try admission.enter(request)
             lastRequest = request
         }
@@ -74,7 +79,7 @@ final class SelectedHIDOwner {
                     result = await SelectedAXOperation.perform(request, simulatorUDID: simulatorUDID,
                         brokerID: brokerID, logger: logger, helperURL: helperURL, valueOwner: sliderValueOwner, transportOwner: transportOwner)
                 } else {
-                    result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL)
+                    result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL, batchTap)
                 }
                 let rotationNeedsInputQuarantine = result.rotation?.failure?.delivery == .uncertain
                     && !isStateOnlyRotationFailure(result, request: request)

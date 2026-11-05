@@ -84,7 +84,7 @@ struct PlaygroundAgentFeatureSession {
         let document = try await PlaygroundDocumentReader<PlaygroundControlsDocument>(
             udid: agent.udid, pid: pid, fileName: "state.json")
         _ = try await document.waitFor("released normal controls") { $0.activeWindowTouches == 0 }
-        let contextReply = try await core.command(["describe-ui", "--agent", "--expected-pid", String(pid)])
+        let contextReply = try await core.command(canonicalAgentArguments(["describe-ui", "--agent", "--expected-pid", String(pid)]))
         let context = try Self.context(from: contextReply.output)
         let selectedFlags = ["--input-mode", "selected", "--screen-id", String(context.screenID),
             "--screen-uuid", context.screenUUID.uuidString]
@@ -125,6 +125,7 @@ struct PlaygroundAgentFeatureSession {
     }
 
     func command(_ arguments: [String], allowFailure: Bool = false) async throws -> CommandOutput {
+        let arguments = canonicalAgentArguments(arguments)
         let identifier = UUID().uuidString
         let start = ProcessInfo.processInfo.systemUptime
         let before = try Data(contentsOf: document.url)

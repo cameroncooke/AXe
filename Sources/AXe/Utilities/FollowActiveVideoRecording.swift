@@ -95,7 +95,7 @@ enum FollowActiveVideoRecording {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(receipt)
         try SelectedVideoRecording.publish(temporary: temporary, destination: destination)
-        print(String(decoding: bytes, as: UTF8.self))
+        try CLIOutput.writeJSONData(bytes)
     }
 
     private struct Receipt: Encodable {

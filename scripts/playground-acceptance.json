@@ -19,6 +19,7 @@
     "PlaygroundAgentTests.swift",
     "PlaygroundAgentTouchTests.swift",
     "PlaygroundAgentTypeTests.swift",
+    "PlaygroundAgentFocusAndTypeTests.swift",
     "PlaygroundClipboardTests.swift",
     "PlaygroundColdInputHandoverTests.swift",
     "PlaygroundCoreTests.swift",
@@ -97,7 +98,8 @@
       "PlaygroundSemanticSwitchTests",
       "PlaygroundAgentTypeTests",
       "PlaygroundKeyboardTests",
-      "PlaygroundWindowTests"
+      "PlaygroundWindowTests",
+      "PlaygroundAgentFocusAndTypeTests"
     ],
     "ipad": [
       "PlaygroundCoreTests",
@@ -167,7 +169,8 @@
       "PlaygroundDuoMediaSafetyTests",
       "PlaygroundDuoTests",
       "PlaygroundDuoInterruptionTests",
-      "PlaygroundDuoHingeWindowTests"
+      "PlaygroundDuoHingeWindowTests",
+      "PlaygroundDuoAgentFocusAndTypeTests"
     ]
   },
   "runLast": [
@@ -265,6 +268,7 @@
       "AXE_DUO_STATE_CHANGE_PATH"
     ],
     "PlaygroundDuoTypingInterruptionTests": [
+      "AXE_VERIFY_DUO_CONTROLS_PATH",
       "AXE_DUO_STATE_CHANGE_PATH"
     ],
     "PlaygroundDuoManualBoundaryTests": [
@@ -286,7 +290,9 @@
     ],
     "PhotosButtonLeafE2ETests": [
       "AXE_MEDIA_PROCESS_OBSERVER_PATH"
-    ]
+    ],
+    "PlaygroundAgentFocusAndTypeTests": [],
+    "PlaygroundDuoAgentFocusAndTypeTests": []
   },
   "agentProfiles": {
     "iphone": [
@@ -309,7 +315,8 @@
       "PlaygroundClipboardTests",
       "PlaygroundIndependentPairTests",
       "PlaygroundSemanticSwitchTests",
-      "PlaygroundAgentTypeTests"
+      "PlaygroundAgentTypeTests",
+      "PlaygroundAgentFocusAndTypeTests"
     ],
     "ipad": [
       "PlaygroundAgentTests"
@@ -337,7 +344,8 @@
       "PlaygroundAgentTypeTests",
       "PlaygroundDuoSemanticSwitchTests",
       "PlaygroundDuoInteriorSliderTests",
-      "PlaygroundDuoAgentInterruptionTests"
+      "PlaygroundDuoAgentInterruptionTests",
+      "PlaygroundDuoAgentFocusAndTypeTests"
     ]
   },
   "groups": {
@@ -398,7 +406,8 @@
         "PlaygroundClipboardTests",
         "PlaygroundIndependentPairTests",
         "PlaygroundSemanticSwitchTests",
-        "PlaygroundAgentTypeTests"
+        "PlaygroundAgentTypeTests",
+        "PlaygroundAgentFocusAndTypeTests"
       ],
       "ipad": [
         "PlaygroundAgentTests"
@@ -426,12 +435,14 @@
         "PlaygroundAgentTypeTests",
         "PlaygroundDuoSemanticSwitchTests",
         "PlaygroundDuoInteriorSliderTests",
-        "PlaygroundDuoAgentInterruptionTests"
+        "PlaygroundDuoAgentInterruptionTests",
+        "PlaygroundDuoAgentFocusAndTypeTests"
       ]
     },
     "keyboard-hardware": {
       "iphone": [
-        "PlaygroundKeyboardTests"
+        "PlaygroundKeyboardTests",
+        "PlaygroundAgentFocusAndTypeTests"
       ],
       "ipad": [
         "PlaygroundKeyboardTests"
@@ -447,7 +458,8 @@
         "PlaygroundDuoHardwareTests",
         "PlaygroundDuoHardwareInterruptionTests",
         "PlaygroundDuoSelectedHomeBatchTests",
-        "PlaygroundDuoKeyboardDelayTests"
+        "PlaygroundDuoKeyboardDelayTests",
+        "PlaygroundDuoAgentFocusAndTypeTests"
       ]
     },
     "media": {
@@ -543,16 +555,23 @@
     "PlaygroundColdInputHandoverTests": "PlaygroundColdInputHandoverTests.swift",
     "PhotosButtonLeafE2ETests": "PhotosButtonLeafE2ETests.swift",
     "PlaygroundAgentTransportTests": "PlaygroundAgentTransportTests.swift",
-    "PlaygroundDuoRawLongTextTests": "PlaygroundDuoRawLongTextTests.swift"
+    "PlaygroundDuoRawLongTextTests": "PlaygroundDuoRawLongTextTests.swift",
+    "PlaygroundAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift",
+    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift"
   },
   "directSuiteSources": {
+    "PlaygroundAgentAdaptiveOutputTests": "PlaygroundAgentAdaptiveOutputTests.swift",
     "PlaygroundAgentLifecycleTests": "PlaygroundAgentLifecycleTests.swift",
     "PlaygroundAgentBrokerRestartTests": "PlaygroundAgentBrokerRestartTests.swift",
     "PlaygroundRawKeyboardBrokerTests": "PlaygroundRawKeyboardBrokerTests.swift",
-    "PlaygroundRawInputAdmissionTests": "PlaygroundRawInputAdmissionTests.swift"
+    "PlaygroundRawInputAdmissionTests": "PlaygroundRawInputAdmissionTests.swift",
+    "PlaygroundAutomaticPIDTests": "PlaygroundAutomaticPIDTests.swift",
+    "PlaygroundAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift",
+    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift"
   },
   "ordinaryOnlyDirectSuites": [
     "PlaygroundRawKeyboardBrokerTests",
-    "PlaygroundRawInputAdmissionTests"
+    "PlaygroundRawInputAdmissionTests",
+    "PlaygroundAgentFocusAndTypeTests"
   ]
 }

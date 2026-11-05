@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 36
+    static let version = 83
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -22,6 +22,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var rotation: SelectedRotationRequest? = nil
     var agent: AgentModeRequest? = nil
     var agentBatch: AgentBatchRequest? = nil
+    var includeReadingContinuation: Bool? = nil
     var agentAdmission: AgentModeAdmission? = nil
     var expectedContext: SelectedHIDContext? = nil
     var legacyPath: LegacyDuoPath? = nil
@@ -30,6 +31,9 @@ struct SelectedHIDRequest: Codable, Sendable {
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if includeReadingContinuation == true, agentBatch == nil, agent?.rowLimit != 64 {
+            throw AgentModeFailure("invalidReadingContinuation", "A reading continuation requires a default-size agent capture.")
+        }
         if let agentBatch {
             try agentBatch.validate()
             guard operation == .complete, token == nil, screenID == nil, screenUUID == nil,
@@ -283,6 +287,7 @@ struct SelectedHIDResponse: Codable, Sendable {
     var button: SelectedButtonResult? = nil
     var rotation: SelectedRotationResult? = nil
     var agent: AgentModeResult? = nil
+    var readingContinuation: AgentModeCapture? = nil
 }
 
 struct SelectedHIDContext: Codable, Sendable, Equatable {

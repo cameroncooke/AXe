@@ -9,13 +9,13 @@ struct KeySequence: AsyncParsableCommand {
         discussion: """
         Press multiple keys in sequence using their HID keycode values.
         Each key will be pressed and released before the next key is pressed.
-        Agent mode requires a current focused TextField snapshot/ref and --expected-pid.
+        Agent mode requires a current focused TextField snapshot/ref; --expected-pid is optional.
         It checks focus before each key down; input is never replayed automatically.
         
         Examples:
           axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
           axe key-sequence --keycodes 40,40,40 --udid SIMULATOR_UDID        # Press Enter 3 times
-          axe key-sequence --keycodes 42,42 --agent --snapshot-id SNAPSHOT_ID --ref e1 --expected-pid APP_PID --udid SIMULATOR_UDID
+          axe key-sequence --keycodes 42,42 --agent --snapshot-id SNAPSHOT_ID --ref e1 --udid SIMULATOR_UDID
         """
     )
     

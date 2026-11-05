@@ -14,6 +14,7 @@ struct Type: AsyncParsableCommand {
         
         Examples:
         • Simple text: axe type "Hello World" --udid UDID
+        • Agent focus and type: axe type "Hello" --agent --focus --snapshot-id UUID --ref e2 --udid UDID
         • With spaces: axe type "Hello, how are you?" --udid UDID
         • Special characters: axe type 'Hello!' --udid UDID
         
@@ -44,12 +45,21 @@ struct Type: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
     var simulatorUDID: String
 
+    @Flag(name: .customLong("focus"), help: "Agent only: physically tap the referenced TextField, verify its focus, then type. Returns two phase receipts; input is never replayed.")
+    var focusBeforeTyping = false
+
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
     @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
         try agentMode.validate()
+        if focusBeforeTyping {
+            guard agentMode.enabled, agentMode.snapshotID != nil, agentMode.elementRef != nil,
+                  selectedKeyboard.focusID == nil else {
+                throw ValidationError("--focus requires --agent, --snapshot-id and --ref, without --focus-id.")
+            }
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
             let focusID = selectedKeyboard.focusID
@@ -78,7 +88,7 @@ struct Type: AsyncParsableCommand {
     func agentRequest(standardInput: FileHandle = .standardInput) throws -> SelectedHIDRequest {
         let input = try AgentModeCommandAdapter.readText(text, useStdin: useStdin,
             inputFile: inputFile, standardInput: standardInput)
-        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .typeText,
+        return try AgentModeCommandAdapter.request(AgentModeRequest(kind: focusBeforeTyping ? .focusAndType : .typeText,
             expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
             selectorKind: selectedKeyboard.focusID == nil ? nil : .id,
             selectorValue: selectedKeyboard.focusID, text: input), input: selectedInput)

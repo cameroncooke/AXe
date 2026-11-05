@@ -64,9 +64,9 @@ struct SelectedAXDoubleTapTiming: Codable, Sendable {
 
 struct SelectedAXRequest: Codable, Sendable {
     enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, sliderPercentage, semanticPress }
-    enum SelectorKind: String, Codable, Sendable { case id, label, value }
+    enum SelectorKind: String, Codable, Sendable, Equatable { case id, label, value }
     let kind: Kind
-    let expectedPID: Int32
+    let expectedPID: Int32?
     let endpoint: FBSimulatorSliderEndpoint?
     let selectorKind: SelectorKind?
     let selectorValue: String?
@@ -79,6 +79,8 @@ struct SelectedAXRequest: Codable, Sendable {
     var holdDuration: Double? = nil
     var doubleTapTiming: SelectedAXDoubleTapTiming? = nil
     var percentage: Double? = nil
+    var nativeTarget: SelectedNativeTarget? = nil
+    var includeNativeIdentity: Bool? = nil
 
     static func endpoint(forPercentage value: Double) -> FBSimulatorSliderEndpoint? {
         if value == 0 { return .minimum }
@@ -87,7 +89,11 @@ struct SelectedAXRequest: Codable, Sendable {
     }
 
     func validate() throws {
-        guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
+        if let expectedPID {
+            guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
+        } else if kind != .describe {
+            throw SelectedHIDFailure.invalid("Selected AX input and point reads require a positive expected PID")
+        }
         guard preDelay.isFinite, postDelay.isFinite, (0...10).contains(preDelay), (0...10).contains(postDelay) else {
             throw SelectedHIDFailure.invalid("Selected AX delays must be finite and in 0...10 seconds")
         }
@@ -117,6 +123,22 @@ struct SelectedAXRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Only a selected tap, reference hold, double-tap or slider accepts a nonempty element type")
             }
         }
+        if includeNativeIdentity != nil, kind != .describe && kind != .describePoint {
+            throw SelectedHIDFailure.invalid("Identity metadata is a private read option only")
+        }
+        if let nativeTarget {
+            try nativeTarget.validate()
+            guard selectorKind == nil, selectorValue == nil,
+                  elementType == nil || elementType == nativeTarget.elementType,
+                  kind == .tap || kind == .hold || kind == .doubleTap,
+                  nativeTarget.nativeIdentity?.pid == nil || nativeTarget.nativeIdentity?.pid == expectedPID else {
+                throw SelectedHIDFailure.invalid("The chosen native target cannot be mixed with another selector or operation")
+            }
+        }
+        if case let .semantic(kind, _, _)? = nativeTarget, kind == .value, self.kind != .tap {
+            throw SelectedHIDFailure.invalid("A value selector does not authorize reference holds or double-taps")
+        }
+        let hasChosenTarget = nativeTarget != nil
         switch kind {
         case .describe:
             guard endpoint == nil, selectorKind == nil, selectorValue == nil, preDelay == 0, postDelay == 0 else {
@@ -129,20 +151,20 @@ struct SelectedAXRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Point description requires one finite non-negative point and no selectors or delays")
             }
         case .tap:
-            guard endpoint == nil, selectorKind != nil, let selectorValue,
-                  !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            guard endpoint == nil, hasChosenTarget || (selectorKind != nil
+                && selectorValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false) else {
                 throw SelectedHIDFailure.invalid("Selected tap requires exactly one nonempty ID, label or value")
             }
         case .hold:
-            guard endpoint == nil, selectorKind == .id || selectorKind == .label,
-                  let selectorValue, !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            guard endpoint == nil, hasChosenTarget || selectorKind == .id || selectorKind == .label,
+                  hasChosenTarget || selectorValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   let holdDuration, holdDuration.isFinite, holdDuration > 0, holdDuration <= 10,
                   preDelay == 0, postDelay == 0 else {
                 throw SelectedHIDFailure.invalid("A reference hold requires an exact ID or label, a duration in (0,10] and no other delays")
             }
         case .doubleTap:
-            guard endpoint == nil, selectorKind == .id || selectorKind == .label,
-                  let selectorValue, !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+            guard endpoint == nil, hasChosenTarget || selectorKind == .id || selectorKind == .label,
+                  hasChosenTarget || selectorValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   let doubleTapTiming else {
                 throw SelectedHIDFailure.invalid("A reference double-tap requires an exact ID or label and complete timing")
             }
@@ -187,6 +209,7 @@ struct SelectedAXRequest: Codable, Sendable {
     }
 
     var selector: FBSimulatorAXSelector? {
+        if let nativeTarget { return try? nativeTarget.nativeSelector() }
         guard let selectorKind, let selectorValue else { return nil }
         switch selectorKind {
         case .id:
@@ -271,13 +294,14 @@ struct SelectedAXRejectedHit: Codable, Sendable {
 struct SelectedAXResult: Codable, Sendable {
     let schemaVersion = 1
     let kind: SelectedAXRequest.Kind
-    let expectedPID: Int32
+    var expectedPID: Int32?
     var failure: SelectedAXFailure?
     var slider: SelectedSliderResult?
     var sliderValue: SelectedSliderValueResult?
     var press: FBSimulatorAXPressReceipt?
     var acquisition: SelectedAXAcquisition?
     var roots: [FBSimulatorAXNode]?
+    var nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata?
     var target: FBSimulatorAXNode?
     var point: SelectedAXPoint?
     var validation: SelectedAXValidation?
