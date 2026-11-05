@@ -1,0 +1,44 @@
+{
+  "entry": {
+    "metrics": {
+      "elapsedSeconds": 252.729057083,
+      "errorCalls": 2,
+      "helpCalls": 1,
+      "imageBytes": 2078087,
+      "imageCount": 9,
+      "returnedTextBytes": 14087,
+      "returnedTextTokens": 4364,
+      "setupCalls": 1,
+      "tokenStatus": "measured",
+      "tokenizer": "o200k_base",
+      "tokenizerVersion": "0.12.0",
+      "totalCalls": 41,
+      "uiCalls": 30
+    },
+    "report": "axe-bench-contacts-flowdeck-198f7e076234/report.json",
+    "reportSHA256": "72171dcd888c3c7eb917a4b969dd3ecfb2736f0ed71695023b6544e7c851eb27",
+    "runId": "axe-bench-contacts-flowdeck-198f7e076234",
+    "scenario": "contacts",
+    "status": "unverified",
+    "tool": {
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "build": "815522",
+      "mode": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
+      "name": "flowdeck",
+      "version": "1.34.0"
+    }
+  },
+  "provenance": {
+    "evidenceArchiveSHA256": "079866f96817d2abbceb9a1e9d74e524998085ccc52e709557aa84e0bd9769c3",
+    "evidenceDirectory": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/contacts-final/axe-bench-contacts-flowdeck-198f7e076234/evidence",
+    "note": "Raw transcripts, screenshots and builds remain external. Git history contains reports only.",
+    "rawEvidenceIncluded": false,
+    "sourceReport": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/contacts-final/axe-bench-contacts-flowdeck-198f7e076234/report.json",
+    "sourceReportSHA256": "72171dcd888c3c7eb917a4b969dd3ecfb2736f0ed71695023b6544e7c851eb27",
+    "transcriptSHA256": "19a4403aae70e72f3970d574277303e89506a45c8d8919bde233d07dc5c10de9",
+    "verification": "Provenance only; raw evidence was not revalidated during import."
+  },
+  "recordedAt": "2026-11-05T15:55:22.963748+00:00",
+  "schema": "axe.agent-benchmark.history-entry",
+  "schemaVersion": 1
+}

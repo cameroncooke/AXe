@@ -45,6 +45,43 @@ For local Duo work on Apple silicon, use `AXE_BUILD_ARCHS=arm64`. After the fina
 
 For release signing, `scripts/build.sh sign-executable` signs and strictly verifies the copied `AXe_AXe.bundle` before signing `axe`. The bundle uses the configured signing identity and timestamp, without executable entitlements; the CLI signing options and separate simulator-helper signing stay unchanged.
 
+## Benchmarks
+
+The complete benchmark application is in [benchmarks/](benchmarks/README.md):
+runner, grading logic, task rules, tool adapters, bundled model runner, Weather
+app, baseline selection and versioned result history. It compares AXe with its
+best passing baseline and with FlowDeck and RocketSim on the original Weather,
+Contacts and Reminders tasks. Each result records tool versions and hashes,
+task checks, calls, elapsed time, returned text tokens and images.
+
+Run from this repository:
+
+```sh
+./benchmarks/run setup
+# Set explicit CLI paths, Xcode and a warm simulator in benchmarks/config.local.json.
+./benchmarks/run doctor
+./benchmarks/run
+./benchmarks/run history
+```
+
+For a smaller run or the benchmark application's checks:
+
+```sh
+./benchmarks/run --tools axe --scenarios weather
+./benchmarks/run test
+```
+
+Reports are retained under [benchmarks/history/](benchmarks/history/).
+[benchmarks/baselines.json](benchmarks/baselines.json) keeps accepted AXe baselines;
+acceptance is explicit. Failed or unverified runs cannot replace a baseline.
+Code, task definitions, grading rules and report history belong in Git. Local
+settings, dependencies and large raw artifacts are ignored. The suite does not
+replace the installed AXe CLI or require a separate XcodeBuildMCP checkout.
+
+See [benchmark setup and commands](benchmarks/README.md) for configuration,
+comparison, acceptance and measurement rules, and [verification](benchmarks/verification.json)
+for the latest application checks and live packaging proof.
+
 ## Basic usage
 
 ```bash

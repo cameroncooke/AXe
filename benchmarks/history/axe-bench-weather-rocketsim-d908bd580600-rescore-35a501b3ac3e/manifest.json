@@ -1,0 +1,49 @@
+{
+  "entry": {
+    "metrics": {
+      "elapsedSeconds": 197.231015875,
+      "errorCalls": 2,
+      "helpCalls": 0,
+      "imageBytes": 0,
+      "imageCount": 0,
+      "returnedTextBytes": 50409,
+      "returnedTextTokens": 17122,
+      "setupCalls": 3,
+      "tokenStatus": "measured",
+      "tokenizer": "o200k_base",
+      "tokenizerVersion": "0.12.0",
+      "totalCalls": 37,
+      "uiCalls": 34
+    },
+    "report": "axe-bench-weather-rocketsim-d908bd580600-rescore-35a501b3ac3e/report.json",
+    "reportSHA256": "9aec524eb9102201411c9d71865e0fa5ed7e66d1cc0932af4093f482a38154e8",
+    "runId": "axe-bench-weather-rocketsim-d908bd580600-rescore-35a501b3ac3e",
+    "scenario": "weather",
+    "status": "passed",
+    "tool": {
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "build": "339",
+      "companionApp": {
+        "binarySHA256": "3360882fa262d3205b7c6b2a4e1edd1d90890f1e954fbfe2fb45962b2ff25cc9",
+        "build": "339",
+        "version": "16.8.0"
+      },
+      "mode": "elements --agent --agent-mode act; nav for navigation; debug for missing semantics",
+      "name": "rocketsim",
+      "version": "16.8.0"
+    }
+  },
+  "provenance": {
+    "evidenceArchiveSHA256": "94e6eb75369dd04bd7fd8ce8978da101ac23f353f65a69b4f45dcc26786f82dc",
+    "evidenceDirectory": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/release-suite/axe-bench-weather-rocketsim-d908bd580600/evidence",
+    "note": "Raw transcripts, screenshots and builds remain external. Git history contains reports only.",
+    "rawEvidenceIncluded": false,
+    "sourceReport": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/rescored-uniform-final/axe-bench-weather-rocketsim-d908bd580600.json",
+    "sourceReportSHA256": "9aec524eb9102201411c9d71865e0fa5ed7e66d1cc0932af4093f482a38154e8",
+    "transcriptSHA256": "870491fc6eb618ded0a1fe51bcd721f0e1c609467716573fe7d8cfc72201115e",
+    "verification": "Provenance only; raw evidence was not revalidated during import."
+  },
+  "recordedAt": "2026-11-05T15:55:23.023433+00:00",
+  "schema": "axe.agent-benchmark.history-entry",
+  "schemaVersion": 1
+}

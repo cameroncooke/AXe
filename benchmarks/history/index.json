@@ -1,0 +1,481 @@
+{
+  "runs": [
+    {
+      "metrics": {
+        "elapsedSeconds": 144.105210417,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 24709,
+        "returnedTextTokens": 8431,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 11,
+        "uiCalls": 10
+      },
+      "report": "axe-bench-contacts-axe-3b4584bbf4da/report.json",
+      "reportSHA256": "1240143cbc263a8ed661e76162a195664330fb509babc7e4885c3f7a5de0b072",
+      "runId": "axe-bench-contacts-axe-3b4584bbf4da",
+      "scenario": "contacts",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 167.786454833,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 26442,
+        "returnedTextTokens": 8954,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 12,
+        "uiCalls": 11
+      },
+      "report": "axe-bench-contacts-axe-e40990981ae6/report.json",
+      "reportSHA256": "ab69e15b288b84ec6a83b6dec3eff78682a2a6d6c61ce6e2886150c704a05d93",
+      "runId": "axe-bench-contacts-axe-e40990981ae6",
+      "scenario": "contacts",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 252.729057083,
+        "errorCalls": 2,
+        "helpCalls": 1,
+        "imageBytes": 2078087,
+        "imageCount": 9,
+        "returnedTextBytes": 14087,
+        "returnedTextTokens": 4364,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 41,
+        "uiCalls": 30
+      },
+      "report": "axe-bench-contacts-flowdeck-198f7e076234/report.json",
+      "reportSHA256": "72171dcd888c3c7eb917a4b969dd3ecfb2736f0ed71695023b6544e7c851eb27",
+      "runId": "axe-bench-contacts-flowdeck-198f7e076234",
+      "scenario": "contacts",
+      "status": "unverified",
+      "tool": {
+        "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+        "build": "815522",
+        "mode": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
+        "name": "flowdeck",
+        "version": "1.34.0"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 513.372478333,
+        "errorCalls": 23,
+        "helpCalls": 10,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 50623,
+        "returnedTextTokens": 14873,
+        "setupCalls": 5,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 78,
+        "uiCalls": 53
+      },
+      "report": "axe-bench-contacts-rocketsim-7745ce35e144-rescore-35a501b3ac3e/report.json",
+      "reportSHA256": "b8af6bfe52d7deedc6f6f3e64e2110e20161441544494c4826cb5fc577985777",
+      "runId": "axe-bench-contacts-rocketsim-7745ce35e144-rescore-35a501b3ac3e",
+      "scenario": "contacts",
+      "status": "unverified",
+      "tool": {
+        "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+        "build": "339",
+        "companionApp": {
+          "binarySHA256": "3360882fa262d3205b7c6b2a4e1edd1d90890f1e954fbfe2fb45962b2ff25cc9",
+          "build": "339",
+          "version": "16.8.0"
+        },
+        "mode": "elements --agent --agent-mode act; nav for navigation; debug for missing semantics",
+        "name": "rocketsim",
+        "version": "16.8.0"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 210.562153667,
+        "errorCalls": 6,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 31488,
+        "returnedTextTokens": 10289,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 25,
+        "uiCalls": 22
+      },
+      "report": "axe-bench-reminders-axe-9de2a0341c69-rescore-6c60d0e113b4/report.json",
+      "reportSHA256": "5c5ef109767b7b77e8418b8732e33d2120a4b60a38342d71b7bd91f986f84469",
+      "runId": "axe-bench-reminders-axe-9de2a0341c69-rescore-6c60d0e113b4",
+      "scenario": "reminders",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 312.091443459,
+        "errorCalls": 5,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 30504,
+        "returnedTextTokens": 10018,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 23,
+        "uiCalls": 22
+      },
+      "report": "axe-bench-reminders-axe-b159e97eee3d/report.json",
+      "reportSHA256": "fe4ac5927391b2fa357b1ce7137f52d9215842f1fbb59cf631daa5ee32edde13",
+      "runId": "axe-bench-reminders-axe-b159e97eee3d",
+      "scenario": "reminders",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 195.360896709,
+        "errorCalls": 1,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 25512,
+        "returnedTextTokens": 8591,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 20,
+        "uiCalls": 19
+      },
+      "report": "axe-bench-reminders-axe-d40475c55915/report.json",
+      "reportSHA256": "4a4eeb9a92a257a98f500a3e44789611dad84c58d3a489e9c6eab108eb13f5de",
+      "runId": "axe-bench-reminders-axe-d40475c55915",
+      "scenario": "reminders",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 420.134049458,
+        "errorCalls": 4,
+        "helpCalls": 2,
+        "imageBytes": 2936389,
+        "imageCount": 17,
+        "returnedTextBytes": 21643,
+        "returnedTextTokens": 6662,
+        "setupCalls": 1,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 65,
+        "uiCalls": 45
+      },
+      "report": "axe-bench-reminders-flowdeck-e7a17fba2404/report.json",
+      "reportSHA256": "ef246301df4f78b9f96029166110803005c6c50f40ea8f067fe848efb96b374f",
+      "runId": "axe-bench-reminders-flowdeck-e7a17fba2404",
+      "scenario": "reminders",
+      "status": "unverified",
+      "tool": {
+        "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+        "build": "815522",
+        "mode": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
+        "name": "flowdeck",
+        "version": "1.34.0"
+      }
+    },
+    {
+      "metrics": {},
+      "report": "axe-bench-reminders-rocketsim-f7647c153a85/report.json",
+      "reportSHA256": "b0f4fa59698f7e1a0e80898ac11cb4ec0d59fc28fa3d6c1ef7f2b1a62f571ae3",
+      "runId": "axe-bench-reminders-rocketsim-f7647c153a85",
+      "scenario": "reminders",
+      "status": "blocked",
+      "tool": {
+        "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+        "build": "339",
+        "companionApp": {
+          "binarySHA256": "3360882fa262d3205b7c6b2a4e1edd1d90890f1e954fbfe2fb45962b2ff25cc9",
+          "build": "339",
+          "version": "16.8.0"
+        },
+        "mode": "elements --agent --agent-mode act; nav for navigation; debug for missing semantics",
+        "name": "rocketsim",
+        "version": "16.8.0"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 205.87320425,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 20332,
+        "returnedTextTokens": 7182,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 16,
+        "uiCalls": 13
+      },
+      "report": "axe-bench-weather-axe-1c02788fb92f/report.json",
+      "reportSHA256": "561512b75addc31a99af23f5db1f05b0d76470a2fab2b8978da57670d6c2d678",
+      "runId": "axe-bench-weather-axe-1c02788fb92f",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 205.87320425,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 20332,
+        "returnedTextTokens": 7182,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 16,
+        "uiCalls": 13
+      },
+      "report": "axe-bench-weather-axe-1c02788fb92f-rescore-35a501b3ac3e/report.json",
+      "reportSHA256": "88f13a9f5d3406474629362cb8931ccc16c5f27149b8d85cbdb1e4074eca3323",
+      "runId": "axe-bench-weather-axe-1c02788fb92f-rescore-35a501b3ac3e",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 226.681127667,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 21827,
+        "returnedTextTokens": 7668,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 19,
+        "uiCalls": 16
+      },
+      "report": "axe-bench-weather-axe-402988b378f6/report.json",
+      "reportSHA256": "03aee75bc3eb0372e8ad80dbbbd68e58ae77a4103e32245224e3875abd094711",
+      "runId": "axe-bench-weather-axe-402988b378f6",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 212.0845465,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 20222,
+        "returnedTextTokens": 7006,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 17,
+        "uiCalls": 14
+      },
+      "report": "axe-bench-weather-axe-a7d3b6298d30/report.json",
+      "reportSHA256": "405844d93c40a7446ec487841f992374dd90765b03508f4fa0186aaae7f1bcfe",
+      "runId": "axe-bench-weather-axe-a7d3b6298d30",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 212.0845465,
+        "errorCalls": 0,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 20222,
+        "returnedTextTokens": 7006,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 17,
+        "uiCalls": 14
+      },
+      "report": "axe-bench-weather-axe-a7d3b6298d30-rescore-6c60d0e113b4/report.json",
+      "reportSHA256": "4da9895d1e946cfa59f4f28c544eb4ac16fe1fa95b9c434f3084edb3887b4352",
+      "runId": "axe-bench-weather-axe-a7d3b6298d30-rescore-6c60d0e113b4",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+        "build": null,
+        "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+        "name": "axe",
+        "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+        "version": "v1.8.0-185-g76e83a4b-dirty"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 772.025517375,
+        "errorCalls": 13,
+        "helpCalls": 11,
+        "imageBytes": 1465055,
+        "imageCount": 9,
+        "returnedTextBytes": 157066,
+        "returnedTextTokens": 47705,
+        "setupCalls": 5,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 98,
+        "uiCalls": 55
+      },
+      "report": "axe-bench-weather-flowdeck-90afc13466e2-rescore-35a501b3ac3e/report.json",
+      "reportSHA256": "400401f66e882899d13497542756fa3815ea1aafe314083dde9544d0a6f5b111",
+      "runId": "axe-bench-weather-flowdeck-90afc13466e2-rescore-35a501b3ac3e",
+      "scenario": "weather",
+      "status": "unverified",
+      "tool": {
+        "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+        "build": "815522",
+        "mode": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
+        "name": "flowdeck",
+        "version": "1.34.0"
+      }
+    },
+    {
+      "metrics": {
+        "elapsedSeconds": 197.231015875,
+        "errorCalls": 2,
+        "helpCalls": 0,
+        "imageBytes": 0,
+        "imageCount": 0,
+        "returnedTextBytes": 50409,
+        "returnedTextTokens": 17122,
+        "setupCalls": 3,
+        "tokenStatus": "measured",
+        "tokenizer": "o200k_base",
+        "tokenizerVersion": "0.12.0",
+        "totalCalls": 37,
+        "uiCalls": 34
+      },
+      "report": "axe-bench-weather-rocketsim-d908bd580600-rescore-35a501b3ac3e/report.json",
+      "reportSHA256": "9aec524eb9102201411c9d71865e0fa5ed7e66d1cc0932af4093f482a38154e8",
+      "runId": "axe-bench-weather-rocketsim-d908bd580600-rescore-35a501b3ac3e",
+      "scenario": "weather",
+      "status": "passed",
+      "tool": {
+        "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+        "build": "339",
+        "companionApp": {
+          "binarySHA256": "3360882fa262d3205b7c6b2a4e1edd1d90890f1e954fbfe2fb45962b2ff25cc9",
+          "build": "339",
+          "version": "16.8.0"
+        },
+        "mode": "elements --agent --agent-mode act; nav for navigation; debug for missing semantics",
+        "name": "rocketsim",
+        "version": "16.8.0"
+      }
+    }
+  ],
+  "schema": "axe.agent-benchmark.history",
+  "schemaVersion": 1
+}

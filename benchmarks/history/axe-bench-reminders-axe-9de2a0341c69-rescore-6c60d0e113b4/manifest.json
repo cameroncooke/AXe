@@ -1,0 +1,45 @@
+{
+  "entry": {
+    "metrics": {
+      "elapsedSeconds": 210.562153667,
+      "errorCalls": 6,
+      "helpCalls": 0,
+      "imageBytes": 0,
+      "imageCount": 0,
+      "returnedTextBytes": 31488,
+      "returnedTextTokens": 10289,
+      "setupCalls": 1,
+      "tokenStatus": "measured",
+      "tokenizer": "o200k_base",
+      "tokenizerVersion": "0.12.0",
+      "totalCalls": 25,
+      "uiCalls": 22
+    },
+    "report": "axe-bench-reminders-axe-9de2a0341c69-rescore-6c60d0e113b4/report.json",
+    "reportSHA256": "5c5ef109767b7b77e8418b8732e33d2120a4b60a38342d71b7bd91f986f84469",
+    "runId": "axe-bench-reminders-axe-9de2a0341c69-rescore-6c60d0e113b4",
+    "scenario": "reminders",
+    "status": "passed",
+    "tool": {
+      "binarySHA256": "eead5e0172c289657bb9fa7891c8505cfdc367af5300390521be88a577ab51a0",
+      "build": null,
+      "mode": "--agent --view navigation; --view reading for visible text; --view full for base schema",
+      "name": "axe",
+      "runtimeSHA256": "5e541457a9d0a2e474f89766ca731c306decb9baeef1c292760bad3f4c1273a0",
+      "version": "v1.8.0-185-g76e83a4b-dirty"
+    }
+  },
+  "provenance": {
+    "evidenceArchiveSHA256": "e63b7960279ac6278619d19b0c9bd5faf0ffe04e7834ec3756921308ec95a356",
+    "evidenceDirectory": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/verified-matrix/axe-bench-reminders-axe-9de2a0341c69/evidence",
+    "note": "Raw transcripts, screenshots and builds remain external. Git history contains reports only.",
+    "rawEvidenceIncluded": false,
+    "sourceReport": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/rescored-v2/axe-bench-reminders-axe-9de2a0341c69.json",
+    "sourceReportSHA256": "5c5ef109767b7b77e8418b8732e33d2120a4b60a38342d71b7bd91f986f84469",
+    "transcriptSHA256": "ccf808d5499f02bc3d0bfff85919ca02df7cf3f3a64190de565cbd047ae9df3c",
+    "verification": "Provenance only; raw evidence was not revalidated during import."
+  },
+  "recordedAt": "2026-11-05T15:55:23.032948+00:00",
+  "schema": "axe.agent-benchmark.history-entry",
+  "schemaVersion": 1
+}

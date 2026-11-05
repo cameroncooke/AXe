@@ -1,0 +1,2 @@
+# Preload o200k_base before a run. Scoring does not download tokenizer data.
+tiktoken==0.12.0

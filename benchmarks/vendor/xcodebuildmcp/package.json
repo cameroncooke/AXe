@@ -1,0 +1,22 @@
+{
+  "name": "axe-benchmark-model-runner",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "scripts": {
+    "runner": "node --import tsx benchmarks/claude-ui/run.ts",
+    "check": "node verify-provenance.mjs && node --import tsx benchmarks/claude-ui/run.ts --help"
+  },
+  "dependencies": {
+    "tsx": "4.20.4",
+    "yargs": "17.7.2",
+    "yaml": "2.8.3",
+    "zod": "4.3.2",
+    "@sentry/node": "10.58.0"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "developerDir": "/Applications/Xcode.app/Contents/Developer",
+  "simulator": "00000000-0000-0000-0000-000000000000",
+  "model": "claude-opus-4-7",
+  "tools": {
+    "axe": {
+      "executable": "/absolute/path/to/tested-candidate/axe"
+    },
+    "flowdeck": {
+      "executable": "/absolute/path/to/flowdeck"
+    },
+    "rocketsim": {
+      "executable": "/Applications/RocketSim.app/Contents/Resources/CLI/rocketsim",
+      "app": "/Applications/RocketSim.app"
+    }
+  },
+  "setupAxe": "/absolute/path/to/tested-candidate/axe",
+  "allowTestRecordCleanup": false,
+  "preparationProfiles": {
+    "contacts": {
+      "applicationLabel": "Contacts",
+      "expectedScreen": [
+        402,
+        874
+      ],
+      "approvedRecord": "MCP Contact Benchmark",
+      "rowLabel": "MCP Contact Benchmark, XcodeBuildMCP Benchmark",
+      "fields": {
+        "firstName": "MCP",
+        "lastName": "Contact Benchmark",
+        "organization": "XcodeBuildMCP Benchmark",
+        "phoneDigits": "5550104242",
+        "email": "mcp.contact.benchmark@example.com"
+      },
+      "baselineRows": [
+        "REPLACE WITH THE EXACT EXISTING CONTACT ROW LABELS"
+      ],
+      "maximumScrolls": 4
+    },
+    "reminders": {
+      "applicationLabel": "Reminders",
+      "expectedScreen": [
+        402,
+        874
+      ],
+      "homeMarker": "REPLACE WITH THE OBSERVED LIST OVERVIEW LABEL",
+      "baselineListRows": [
+        "REPLACE WITH THE EXACT EXISTING LIST ROW LABELS"
+      ],
+      "ownedListRow": "MCP Benchmark List, 1 reminder",
+      "ownedReminderRows": [
+        "File report benchmark, Incomplete",
+        "Buy milk benchmark, Completed",
+        "Call team benchmark, Completed"
+      ]
+    }
+  }
+}

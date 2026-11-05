@@ -1,0 +1,44 @@
+{
+  "entry": {
+    "metrics": {
+      "elapsedSeconds": 772.025517375,
+      "errorCalls": 13,
+      "helpCalls": 11,
+      "imageBytes": 1465055,
+      "imageCount": 9,
+      "returnedTextBytes": 157066,
+      "returnedTextTokens": 47705,
+      "setupCalls": 5,
+      "tokenStatus": "measured",
+      "tokenizer": "o200k_base",
+      "tokenizerVersion": "0.12.0",
+      "totalCalls": 98,
+      "uiCalls": 55
+    },
+    "report": "axe-bench-weather-flowdeck-90afc13466e2-rescore-35a501b3ac3e/report.json",
+    "reportSHA256": "400401f66e882899d13497542756fa3815ea1aafe314083dde9544d0a6f5b111",
+    "runId": "axe-bench-weather-flowdeck-90afc13466e2-rescore-35a501b3ac3e",
+    "scenario": "weather",
+    "status": "unverified",
+    "tool": {
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "build": "815522",
+      "mode": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
+      "name": "flowdeck",
+      "version": "1.34.0"
+    }
+  },
+  "provenance": {
+    "evidenceArchiveSHA256": "56781160305bb8d91b6a5d7a7b229bc8b1bde775be86efe601c160b7443f4a71",
+    "evidenceDirectory": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/release-suite/axe-bench-weather-flowdeck-90afc13466e2/evidence",
+    "note": "Raw transcripts, screenshots and builds remain external. Git history contains reports only.",
+    "rawEvidenceIncluded": false,
+    "sourceReport": "/Volumes/Developer/AXe/build_products/verification/repeatable-agent-benchmark-20261105/rescored-uniform-final/axe-bench-weather-flowdeck-90afc13466e2.json",
+    "sourceReportSHA256": "400401f66e882899d13497542756fa3815ea1aafe314083dde9544d0a6f5b111",
+    "transcriptSHA256": "e3da08fb58340d7e611077a38af715e21280aedf721ec02c94355c31cdd18f1c",
+    "verification": "Provenance only; raw evidence was not revalidated during import."
+  },
+  "recordedAt": "2026-11-05T15:55:23.014859+00:00",
+  "schema": "axe.agent-benchmark.history-entry",
+  "schemaVersion": 1
+}

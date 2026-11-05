@@ -1,0 +1,13 @@
+schemaVersion: 1
+enabledWorkflows:
+  - simulator
+  - ui-automation
+debug: false
+sentryDisabled: false
+sessionDefaults:
+  projectPath: Weather.xcodeproj
+  scheme: Weather
+  simulatorName: iPhone 17 Pro Max
+setupPreferences:
+  platforms:
+    - iOS

@@ -1,0 +1,17 @@
+__pycache__/
+baselines.json.lock
+.venv/
+.cache/
+artifacts/
+config.local.json
+
+# Installed dependencies and large model/build artifacts
+vendor/**/node_modules/
+vendor/**/out.nosync/
+
+# Keep the original Weather build definition in source control
+!apps/Weather/Weather.xcodeproj/
+!apps/Weather/Weather.xcodeproj/project.pbxproj
+!apps/Weather/Weather.xcodeproj/xcshareddata/
+!apps/Weather/Weather.xcodeproj/xcshareddata/xcschemes/
+!apps/Weather/Weather.xcodeproj/xcshareddata/xcschemes/Weather.xcscheme

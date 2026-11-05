@@ -1,5 +1,25 @@
 # iPhone Duo implementation checklist
 
+## Current goal: agent mode and app benchmarks — 5 November 2026
+
+Complete the original app tasks through agent mode. Keep exact app data, relevant controls and facts, existing commands and coordinate input. Use generic fixes. The dated Duo audit below is retained history, outside this goal.
+
+### Repeatable comparison suite — 5 November 2026
+
+- [x] Prove the permanent application: 171 checks passed; one real Weather run through `./benchmarks/run` passed and saved history automatically. Portable acceptance/comparison passed. [Verification](../benchmarks/verification.json). Earlier results keep their original test conditions.
+
+- [x] Keep the complete benchmark application under `benchmarks/`: runner, grading, tool adapters, task rules, bundled model-runner source and unchanged Weather app. Use `./benchmarks/run` and `./benchmarks/run history`. Retain reports and baseline history in Git; keep dependencies and large raw artifacts ignored.
+
+- [x] Add one serial command for the original Weather, Reminders and Contacts tasks with AXe, FlowDeck and RocketSim. Record versions, binary/runtime hashes, task proof, calls, time, returned text tokens and images. [Run instructions](../benchmarks/README.md).
+- [x] Save the best successful AXe baseline for each matching set of conditions. Keep acceptance explicit and retain prior results. Changed tools can be compared; changed tasks, runner, scorer, model or environment create separate groups.
+- [x] Verify the suite: all 139 checks passed, including the optional local process cleanup check. Separate live cancellation and PNG capture/read checks passed. Resource and process cleanup receipts are saved.
+- [x] Verify preparation through normal UI. Remove only the exact approved benchmark contact/list after its fields match. Preserve other records. Restore Contacts list navigation with Back and Home before relaunch; no ordinary contact data changed.
+- [x] Pass all three original tasks on the private accepted wire-83 AXe build with the final runner: Weather 16 calls / 205.87 s / 7,182 text tokens; Contacts 12 / 167.79 / 8,954; Reminders 23 / 312.09 / 10,018. Save these as current baselines. Earlier valid passes remain recorded with their original conditions.
+- [x] Compare a matching successful Weather pair: RocketSim 37 calls / 197.23 s / 17,122 text tokens. AXe used fewer calls and tokens but took 8.64 s longer in this single pair. No stable speed claim.
+- [x] Record competitor limits separately from AXe failures. FlowDeck Weather supplied all facts but broke command rules. FlowDeck Reminders showed the correct final screenshot; automatic task proof remains incomplete. RocketSim reached its agent quota during Contacts, so its Contacts/Reminders comparison is incomplete. [Suite audit](audits/2026-11-05-repeatable-agent-benchmarks.md).
+- [x] Record FlowDeck Contacts: 41 calls / 252.73 s / 4,364 text tokens and nine images. Manual review confirmed the saved fields; the automatic result remains unverified because structured output was empty.
+- [ ] Repeat RocketSim Contacts and Reminders when its agent quota permits. This does not block use of the suite or the three AXe baselines.
+
 ## Current status — 30 October 2026
 
 ### Duo simulator support

@@ -1,0 +1,362 @@
+import { spawn } from 'child_process';
+import { createWriteStream, existsSync } from 'fs';
+import * as fsPromises from 'fs/promises';
+import { tmpdir as osTmpdir } from 'os';
+import { log } from './logger.ts';
+import { transcriptEmitterStorage } from './transcript-context.ts';
+import { shellEscapeArg } from './shell-escape.ts';
+import type { FileSystemExecutor } from './FileSystemExecutor.ts';
+import type { CommandExecutor, CommandResponse, CommandExecOptions } from './CommandExecutor.ts';
+
+export type { CommandExecutor, CommandResponse, CommandExecOptions } from './CommandExecutor.ts';
+export type { FileSystemExecutor } from './FileSystemExecutor.ts';
+
+async function defaultExecutor(
+  command: string[],
+  logPrefix?: string,
+  useShell: boolean = false,
+  opts?: CommandExecOptions,
+  detached: boolean = false,
+): Promise<CommandResponse> {
+  let executable = command[0];
+  let args = command.slice(1);
+
+  if (useShell) {
+    executable = '/usr/bin/env';
+    args = ['--', ...command];
+  }
+
+  return new Promise((resolve, reject) => {
+    if (!useShell && executable === 'xcodebuild') {
+      const xcrunPath = '/usr/bin/xcrun';
+      if (existsSync(xcrunPath)) {
+        executable = xcrunPath;
+        args = ['xcodebuild', ...args];
+      }
+    }
+
+    const displayCommand = useShell
+      ? command.map((arg) => shellEscapeArg(arg)).join(' ')
+      : [executable, ...args].join(' ');
+    log('debug', `Executing ${logPrefix ?? ''} command: ${displayCommand}`);
+
+    const emitTranscript = transcriptEmitterStorage.getStore();
+    if (emitTranscript) {
+      emitTranscript({ kind: 'transcript', fragment: 'process-command', displayCommand });
+    }
+
+    const spawnOpts: Parameters<typeof spawn>[2] = {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: opts?.env ? { ...process.env, ...opts.env } : process.env,
+      cwd: opts?.cwd,
+    };
+
+    log('debug', `defaultExecutor PATH: ${process.env.PATH ?? ''}`);
+
+    const logSpawnError = (err: Error): void => {
+      const errnoErr = err as NodeJS.ErrnoException & { spawnargs?: string[] };
+      const errorDetails = {
+        code: errnoErr.code,
+        errno: errnoErr.errno,
+        syscall: errnoErr.syscall,
+        path: errnoErr.path,
+        spawnargs: errnoErr.spawnargs,
+        stack: errnoErr.stack,
+      };
+      log('error', `Spawn error details: ${JSON.stringify(errorDetails, null, 2)}`);
+    };
+
+    const childProcess = spawn(executable, args, spawnOpts);
+
+    let stdout = '';
+    let stderr = '';
+
+    const streamClosers: Array<() => void> = [];
+    const streamDetachers: Array<() => void> = [];
+    let openStreamCount = 0;
+    let settled = false;
+    let exitObserved = false;
+    let exitCode: number | null = null;
+    let exitSettleTimer: NodeJS.Timeout | null = null;
+    let timeoutTimer: NodeJS.Timeout | null = null;
+
+    const clearExitSettleTimer = (): void => {
+      if (exitSettleTimer) {
+        clearTimeout(exitSettleTimer);
+        exitSettleTimer = null;
+      }
+    };
+
+    const clearTimeoutTimer = (): void => {
+      if (timeoutTimer) {
+        clearTimeout(timeoutTimer);
+        timeoutTimer = null;
+      }
+    };
+
+    const detachStreamListeners = (): void => {
+      for (const detachStream of streamDetachers) {
+        detachStream();
+      }
+      streamDetachers.length = 0;
+    };
+
+    const handleError = (err: Error): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearExitSettleTimer();
+      clearTimeoutTimer();
+      detachStreamListeners();
+      logSpawnError(err);
+      reject(err);
+    };
+
+    const settleWithResponse = (response: CommandResponse): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearExitSettleTimer();
+      clearTimeoutTimer();
+      detachStreamListeners();
+
+      resolve(response);
+    };
+
+    const settle = (code: number | null): void => {
+      const success = code === 0;
+      settleWithResponse({
+        success,
+        output: stdout,
+        error: success ? undefined : stderr,
+        process: childProcess,
+        exitCode: code ?? undefined,
+      });
+    };
+
+    const settleTimedOut = (timeoutMs: number): void => {
+      if (settled) {
+        return;
+      }
+      childProcess.kill('SIGKILL');
+      settleWithResponse({
+        success: false,
+        output: stdout,
+        error: `Command timed out after ${timeoutMs}ms`,
+        process: childProcess,
+      });
+    };
+
+    const maybeSettleAfterExit = (): void => {
+      if (!exitObserved || settled || openStreamCount > 0) {
+        return;
+      }
+      settle(exitCode);
+    };
+
+    const scheduleExitSettle = (): void => {
+      if (settled || exitSettleTimer) {
+        return;
+      }
+      exitSettleTimer = setTimeout(() => {
+        settle(exitCode);
+      }, 100);
+    };
+
+    const attachStream = (
+      stream: NodeJS.ReadableStream | null | undefined,
+      onChunk: (chunk: string) => void,
+    ): void => {
+      if (!stream) {
+        return;
+      }
+
+      openStreamCount += 1;
+      let streamClosed = false;
+
+      const markClosed = (): void => {
+        if (streamClosed) {
+          return;
+        }
+        streamClosed = true;
+        openStreamCount = Math.max(0, openStreamCount - 1);
+        maybeSettleAfterExit();
+      };
+
+      const handleData = (data: Buffer | string): void => {
+        if (settled) {
+          return;
+        }
+        const chunk = data.toString();
+        onChunk(chunk);
+      };
+
+      stream.on('data', handleData);
+      stream.once('end', markClosed);
+      stream.once('close', markClosed);
+      streamClosers.push(markClosed);
+      streamDetachers.push(() => {
+        stream.off('data', handleData);
+      });
+    };
+
+    if (detached) {
+      let resolved = false;
+
+      childProcess.on('error', (err) => {
+        if (!resolved) {
+          resolved = true;
+          logSpawnError(err);
+          reject(err);
+        }
+      });
+
+      setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          if (childProcess.pid) {
+            resolve({
+              success: true,
+              output: '',
+              process: childProcess,
+            });
+          } else {
+            resolve({
+              success: false,
+              output: '',
+              error: 'Failed to start detached process',
+              process: childProcess,
+            });
+          }
+        }
+      }, 100);
+      return;
+    }
+
+    attachStream(childProcess.stdout, (chunk) => {
+      stdout += chunk;
+      opts?.onStdout?.(chunk);
+      emitTranscript?.({
+        kind: 'transcript',
+        fragment: 'process-line',
+        stream: 'stdout',
+        line: chunk,
+      });
+    });
+
+    attachStream(childProcess.stderr, (chunk) => {
+      stderr += chunk;
+      opts?.onStderr?.(chunk);
+      emitTranscript?.({
+        kind: 'transcript',
+        fragment: 'process-line',
+        stream: 'stderr',
+        line: chunk,
+      });
+    });
+
+    childProcess.once('error', handleError);
+    childProcess.once('exit', (code) => {
+      exitObserved = true;
+      exitCode = code;
+      maybeSettleAfterExit();
+      scheduleExitSettle();
+    });
+    childProcess.once('close', (code) => {
+      clearExitSettleTimer();
+      for (const closeStream of streamClosers) {
+        closeStream();
+      }
+      settle(code ?? exitCode);
+    });
+
+    const timeoutMs = opts?.timeout;
+    if (timeoutMs !== undefined) {
+      timeoutTimer = setTimeout(() => {
+        timeoutTimer = null;
+        log('warn', `Command ${logPrefix ?? ''} timed out after ${timeoutMs}ms: ${displayCommand}`);
+        settleTimedOut(timeoutMs);
+      }, timeoutMs);
+    }
+  });
+}
+
+const defaultFileSystemExecutor: FileSystemExecutor = {
+  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+    await fsPromises.mkdir(path, options);
+  },
+
+  readFile(path: string, encoding: BufferEncoding = 'utf8'): Promise<string> {
+    return fsPromises.readFile(path, encoding);
+  },
+
+  writeFile(path: string, content: string, encoding: BufferEncoding = 'utf8'): Promise<void> {
+    return fsPromises.writeFile(path, content, encoding);
+  },
+
+  createWriteStream(path: string, options?: { flags?: string }) {
+    return createWriteStream(path, options);
+  },
+
+  cp(source: string, destination: string, options?: { recursive?: boolean }): Promise<void> {
+    return fsPromises.cp(source, destination, options);
+  },
+
+  readdir(path: string, options?: { withFileTypes?: boolean }): Promise<unknown[]> {
+    return fsPromises.readdir(path, options as Record<string, unknown>);
+  },
+
+  rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+    return fsPromises.rm(path, options);
+  },
+
+  existsSync(path: string): boolean {
+    return existsSync(path);
+  },
+
+  stat(path: string): Promise<{ isDirectory(): boolean; mtimeMs: number }> {
+    return fsPromises.stat(path);
+  },
+
+  mkdtemp(prefix: string): Promise<string> {
+    return fsPromises.mkdtemp(prefix);
+  },
+
+  tmpdir(): string {
+    return osTmpdir();
+  },
+};
+
+let _testCommandExecutorOverride: CommandExecutor | null = null;
+let _testFileSystemExecutorOverride: FileSystemExecutor | null = null;
+
+export function __setTestCommandExecutorOverride(executor: CommandExecutor | null): void {
+  _testCommandExecutorOverride = executor;
+}
+
+export function __setTestFileSystemExecutorOverride(executor: FileSystemExecutor | null): void {
+  _testFileSystemExecutorOverride = executor;
+}
+
+export function __clearTestExecutorOverrides(): void {
+  _testCommandExecutorOverride = null;
+  _testFileSystemExecutorOverride = null;
+}
+
+export function __getRealCommandExecutor(): CommandExecutor {
+  return defaultExecutor;
+}
+
+export function __getRealFileSystemExecutor(): FileSystemExecutor {
+  return defaultFileSystemExecutor;
+}
+
+export function getDefaultCommandExecutor(): CommandExecutor {
+  return _testCommandExecutorOverride ?? defaultExecutor;
+}
+
+export function getDefaultFileSystemExecutor(): FileSystemExecutor {
+  return _testFileSystemExecutorOverride ?? defaultFileSystemExecutor;
+}
