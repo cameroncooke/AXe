@@ -15,6 +15,10 @@ idb_checkout/
 /build_products
 /build_derived_data
 
+# Local audits and Python bytecode
+/docs/audits/
+__pycache__/
+
 # Generated version file
 Sources/AXe/Version.swift
 
