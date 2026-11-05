@@ -20,7 +20,327 @@ Complete the original app tasks through agent mode. Keep exact app data, relevan
 - [x] Record FlowDeck Contacts: 41 calls / 252.73 s / 4,364 text tokens and nine images. Manual review confirmed the saved fields; the automatic result remains unverified because structured output was empty.
 - [ ] Repeat RocketSim Contacts and Reminders when its agent quota permits. This does not block use of the suite or the three AXe baselines.
 
-## Current status — 30 October 2026
+### Completed and proved
+
+- [x] Return compact RS/1 reading/navigation output with relevant controls, continuation pages and exact full-value reads. Keep exact spaces in values and labels; whitespace-only changes replace stale references and cached state.
+- [x] Scroll above a verified numeric keyboard, then find, tap and type into the revealed field through agent references. Keep the existing target, context and input guards. [Input proof](../build_products/verification/agent-benchmark-parity-20261102/tools/numeric-keyboard-current79-live-evidence-v1/report.json).
+- [x] Include the six visible labelled images and retain the prior controls and facts in the saved-contact comparison. Reading used 428 text tokens against RocketSim act 429: near parity, not an image-activation proof. [Coverage audit](../build_products/verification/agent-benchmark-parity-20261102/tools/agent-observation-keyboard-live-v79/same-screen-coverage-cost.json).
+- [x] Pass the original Contacts and Reminders tasks through agent controls, with correct fields/list name/states and save rules. These model trials used the earlier 79 candidate; they have not been repeated on 80. [Task audits](../build_products/verification/agent-benchmark-parity-20261102/tools/agent-wire79-original-three-model-audit-v1/index.json).
+- [x] Complete the fresh controlled Weather comparison with the same original task, model, shared rules, warm simulator and 402×874-point screen. Build/install/launch remain measured work. AXe baseline 837 and XcodeBuildMCP passed all 17 facts and original rules. [Controlled pair](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-clean-pair-20261104-r2/paired-business-cost-comparison.json).
+- [x] Keep agent references safe after scrolling in the updated 80 candidate. It returns ready references only after matching observations; otherwise it requires a fresh read. The strict direct ready-reference proof did not pass: the swipe completed without a published capture. The separate safe-refresh proof passed with one explicit read, one fresh-reference tap and no replay. The exact cause of that direct postActionRefreshFailed result remains unproved.
+- [x] Pass the original Weather task on 80 with all 17 facts and no errors, images, help calls or coordinate fallback. Both swipes returned references used by the next successful taps. This trial used 17 calls / 182.0719 seconds / 11,477 returned text tokens, versus baseline 837's 19 / 191.6104 / 12,325. The main CLI segment was not faster; two model recovery calls were absent. [Model audit](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-post-swipe-wire80-safe-refresh-model-v1/weather-model-business-cost-audit.json).
+- [x] Pass 80's applicable checks: 1,282 host case instances across 660 functions; 5 compact/cache, 6 reference and 2 coordinate cases; 22 output-format assertions separately. The 344 UI-function / 94 suite host skips are not UI passes. Exact runtime ownership and four loaded frameworks were proved for every live group. [Live acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/agent-post-swipe-v80-live-acceptance-v1/receipt.json).
+- [x] Apply the 11 reviewed code, test and document files to Root. Verify the documentation-only resource update separately: two Markdown files and their bundle signature changed; CLI and native executable bytes did not. Model and simulator results remain attributed to the original tested runtime; the resource update had signature and skill-entrypoint checks, not a new model/UI run. [Application](../build_products/verification/agent-benchmark-parity-20261102/tools/accepted-agent-post-swipe-root80-v1/application-receipt.json), [resource update](../build_products/verification/agent-benchmark-parity-20261102/tools/agent-post-swipe-resource-docs-v1/receipt.json).
+- [x] Audit the Weather call sequence and compare three guide revisions. Record avoidable reads, the safe rejection of an old reference, and the required final detail page. [Transcript audit](audits/2026-11-05-agent-transcript-audit.md).
+
+- [x] Remove the extra native read from automatic compact page fill. Two matched pairs kept the same rows and cursor with one fewer broker request and one fewer native accessibility acquisition. Explicit later pages still check the current screen. [Native timing audit](audits/2026-11-05-agent-native-timing.md).
+
+### Verification complete
+
+- [x] Save the accepted AXe source and matching native patch in `7c03c742` on 5 November 2026. Source hashes match the wire 83 candidate apart from the README and changelog benchmark additions. At this checkpoint, `swiftc -frontend -parse` passed for all 123 changed Swift files, the native patch applied to the pinned IDB base with all 88 source hashes matching, and `python3 -B -m unittest discover -s scripts/tests` passed 16 tests. Existing simulator results below still refer to the previously tested candidate.
+
+Untracked audits and raw evidence remain on disk under `docs/audits/`. Links to those files and to `build_products/` require the original workspace.
+
+- [x] Confirm the earlier Root 80 source/runtime binding: the tested code and verified documentation-only resource update are accepted. Original model/UI runtime attribution and resource differences remain recorded separately. [Accepted binding](../build_products/verification/agent-benchmark-parity-20261102/tools/accepted-agent-post-swipe-root80-v1/accepted-runtime.json), [verification](../build_products/verification/agent-benchmark-parity-20261102/tools/accepted-agent-post-swipe-root80-v1/verification.json).
+
+- [x] Apply the final guide to four production Markdown files and verify the updated package and source binding. The AXe and native binaries have the same bytes as the tested runtime. [Accepted guide V3 binding](../build_products/verification/agent-benchmark-parity-20261102/tools/accepted-agent-post-swipe-root80-guide-v3/accepted-runtime.json).
+
+- [x] Verify and apply the clean page-fill build. The common native framework handles the measured display schema 6 and iPhone profile 407, and passed 142 native tests. The clean build passed 1,283 host case instances, 14 ordinary iPhone cases, and 22 format assertions. The local package matches the accepted source binding. [Accepted wire 83 binding](../build_products/verification/agent-benchmark-parity-20261102/tools/clean-wire83-root-integration-map-v1/accepted-runtime.json).
+
+### Current Weather results
+
+| Trial | Total calls | Task time | All returned text tokens | Image Reads |
+| --- | ---: | ---: | ---: | ---: |
+| AXe 80 baseline guide | 17 | 182.07 s | 11,477 | 0 |
+| AXe 80 with guide V1 | 17 | 181.17 s | 6,805 | 0 |
+| AXe 80 with guide V2 | 23 | 263.91 s | 9,129 | 1 |
+| AXe 80 with final guide V3 | 19 | 196.79 s | 8,165 | 0 |
+| AXe baseline 837 R2 | 19 | 191.61 s | 12,325 | 0 |
+| XcodeBuildMCP R2 | 48 | 450.63 s | 37,486 | 4 |
+
+The AXe 80 baseline guide used 14 UI calls, final guide V3 used 15, and AXe 837 used 16. XcodeBuildMCP used 41 UI-domain calls including two help calls; its existing matcher counts 40 because it excludes group help. All failures and recovery work remain counted. Counts use o200k for exact returned text; image payloads, provider/cache/thinking tokens and unread full files are separate. The four XcodeBuildMCP JPEG Reads total 165,834 bytes. Task times exclude skill activation (AXe 80 baseline guide 3.02 s, AXe 837 2.73 s, XcodeBuildMCP 3.01 s) and approved setup/cleanup outside the task clock. These are single trials, not timing distributions. All observed five-second host samples were unlocked; this is not continuous host-state proof. The copied fixed-count text-scope description is corrected by this [erratum](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-clean-pair-20261104-r2/text-scope-description-erratum.json); token totals did not change.
+
+All three guide trials passed the original 17 Weather checks on the same AXe 80 executable. V1 had the best observed result among the guide trials. It skipped the unneeded Settings page and used 17 calls, 181.17 seconds and 6,805 text tokens. V2 used reading on the closing tap, but an earlier read replaced the active snapshot. AXe rejected the old reference before input. The model then refreshed and read a screenshot. The audit did not establish that the screenshot was needed. V3 kept the snapshot when it changed views, then applied all seven settings in one batch. It still read two unneeded Settings pages and made a separate read for the main temperature. Its 19 calls include 15 UI calls, 3 setup calls and 1 denied directory listing. The last detail page supplied two required facts in each run. [V1 audit](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-root80-explicit-view-guide-v1/weather-model-business-cost-audit.json), [V2 audit](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-root80-explicit-view-guide-v2/weather-model-business-cost-audit.json), [V3 audit](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-root80-explicit-view-guide-v3/weather-model-business-cost-audit.json).
+
+Final guide V3 returned 28.9% less text than the AXe 80 baseline guide. It used more calls and took longer in its single trial. The measurements do not isolate native input or capture time. V1, V2 and V3 returned 6,149, 8,465 and 7,366 UI text tokens. V2's JPEG Read returned 126,835 bytes separately. Skill activation took 3.50, 3.61 and 2.96 seconds, outside the task time. All sampled host states were unlocked. The historical 14-call and approximately 100-second result remains a reference. Its original raw run and screen size remain unavailable.
+
+The clean wire 83 Weather run with the updated native framework passed all 17 checks. It used 19 calls, 221.44 seconds, and 7,143 returned text tokens. Both instrumented runs used the same native framework for their comparison. The matched reads saved about 1.6 seconds each. The full task did not show a speed gain. [Timing and clean-build evidence](audits/2026-11-05-agent-native-timing.md).
+
+Earlier app trials retain their original candidate attribution:
+
+| Task | AXe candidate | Total calls | Task time | All returned text tokens |
+| --- | --- | ---: | ---: | ---: |
+| Contacts | Earlier 79 | 17 | 176.66 s | 13,106 |
+| Reminders | Earlier 79 | 19 | 147.23 s | 11,951 |
+
+### Remaining improvements
+
+- [ ] Reduce extra model reads in Weather. The model sometimes read Settings again or requested reading output after the preceding action had returned navigation output. It also guessed an offset after a terminal page in two runs. A separate test could check whether an explicit end-of-page signal prevents that choice. Keep the final detail continuation that supplies required facts.
+- [ ] Measure the stages inside native target opening before changing it. A standalone reference tap reads the tree in the controller and again when the native owner opens the target. Any combined path must keep the saved-reference checks and the final native hit validation. [Native target follow-up](../build_products/verification/agent-benchmark-parity-20261102/tools/clean-wire83-root-integration-map-v1/native-target-open-follow-up.md).
+- [ ] Reduce unnecessary rejected taps in forms. The earlier Contacts run needed recovery. This Weather work did not retest or resolve that issue; it remains separate from the completed Weather comparison.
+
+The strict direct failure, safe-refresh pass and successful model trial are separate evidence. The earlier 91-frame diagnosis does not establish a later run's changed field. No complete UI-suite, failure-rate or whole-tool parity claim is made. Root 837's accepted passes remain recorded. Frozen Native16 evidence is preserved. Accepted wire 83 uses the corrected native framework. The installed CLI is unchanged. The security scan remains unverified as Cam requested. Historical accepted Duo checks remain unchanged; slider, hinge-angle, Intel and delivery work are outside this goal. Do not push, publish, deploy or update the global CLI.
+
+---
+
+## Latest progress: 4 November 2026 (V35)
+
+**Current Root core checks passed. The isolated Source54 Resource-R2 candidate also passed compact/control checks and expanded output formats on both devices. Weather and Reminders tasks passed. Contacts has all five final fields, but failed its no-edit-after-save rule. Root integration, precise sliders, the hinge-angle failure and delivery remain open. The installed CLI is unchanged.** Each result names its candidate; separate jobs are not an all-suite pass.
+
+### Duo simulator support
+
+- [x] **Select the outer or inner screen.** Current Root refused inactive-screen input; a fresh active-screen tap changed the app. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Set closed, partly open and fully open positions.** Current Root used a real Button at each position. Exact intermediate-angle coverage is a separate open item. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Tap after rotation.** Current Root used a Button in all four supported inner rotations and three outer rotations. Old references were refused; new references worked. Outer upside-down portrait is not applicable. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Find, tap, type, scroll, swipe, drag and use switches.** Current Root passed eight ordinary-iPhone non-Slider cases and eighteen Duo non-Slider cases across closed portrait and open landscape. Slider remains a separate defect. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Use controls after the app changes its layout at the hinge.** Partial opening moved the real field while screen identity, size and rotation stayed the same. Fresh lookup, physical taps, typing and document scrolling worked in all four inner rotations. Opening fully kept the text and Button count. [Four layout cases](../build_products/verification/agent-benchmark-parity-20261102/root49-hinge-window-duo-live-r2/verified-results.json).
+- [x] **Use a smaller app window.** Coordinate taps, agent-reference taps, typing and closing the window passed on current Root: ordinary iPhone, Duo outer portrait and Duo inner landscape. [Ordinary iPhone](../build_products/verification/agent-benchmark-parity-20261102/root49-hinge-window-iphone-live-r2/verified-results.json); [Duo](../build_products/verification/agent-benchmark-parity-20261102/root49-hinge-window-duo-live-r2/verified-results.json).
+- [x] **Stop a held touch or moving pinch after a fold or turn, then tap again.** Current Root released the held touch and both pinch contacts. Fresh lookup and tap worked. Six retained-single and three held/moving-pinch cases passed. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Scroll nested lists, the outer page and a canvas.** Eleven current Root cases passed: the inner list moved without moving its page; the page moved without changing its list; the canvas moved in four directions. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Release held Home and side buttons after a fold or turn.** All six current Root cases passed, including the public commands. The earlier helper-path and release-parser failures remain saved. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Stop raw drag, swipe and two-finger input after a screen change, then use a fresh control.** All ten current Root cases passed. The earlier fold assertion failure remains saved. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Keep retained two-finger input safe while idle and on exit.** The separate Source48 retained-pair, idle and exit cases passed. [Source48 results](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json).
+- [x] **Release keyboard keys and modifiers after a fold or turn.** Four held-key and two modifier cases passed on Source48. [Source48 results](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json).
+- [x] **Stop agent input and ongoing typing after the screen changes.** Seven other agent-interruption cases and the corrected raw-typing fold case passed on Source48, including fresh control use afterward. Earlier failed attempts remain saved. [Source48 results](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json).
+
+### Agent and SimUse improvements
+
+- [x] **Scroll a form with the keyboard open.** One Source48 swipe moved the form by 181 points and kept all four rendered empty field values. This does not prove populated-text preservation. [Source48 result](../build_products/verification/agent-benchmark-parity-20261102/source48-form-scroll-live-v1/result.json).
+- [x] **Tap repeated form controls.** One Source48 reference tap added exactly one Phone field and kept the earlier empty fields. [Source48 result](../build_products/verification/agent-benchmark-parity-20261102/source48-form-alias-live-v1/result.json).
+- [x] **Keep useful controls and text in compact output.** Four current Root cases passed on each device: control coverage, saved references, unchanged replies, bounded long text and full-value recovery. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Reject old or covered targets safely.** Six current Root reference-safety cases passed on each device. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Focus a normal field and type in one call.** All six current Root Git cases passed: UIKit and SwiftUI on ordinary iPhone, Duo outer portrait and inner landscape. Unsupported £ text left focus and value unchanged; a valid call entered the exact text. Opaque native UID continuity is not proved. [Six Root cases](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-focus-git-offline-v1.json).
+- [x] **Focus and type in Weather with repeated public identifiers.** The ordinary-iPhone Root benchmark entered London with one focus/type call and found the actual London result. This is not Reminders or Duo real-app coverage. [Weather evidence](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-axe-root49-model-replay-v1-audit/business-audit.json).
+- [x] **Use controls after Home, app switch, app relaunch or AXe service restart.** Both devices passed separate Source48 owner, relaunch/layout and service-restart groups. Old references were refused; fresh controls worked. [Source48 results](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json).
+- [x] **Use legacy and agent commands in sequence.** Three Source48 input-handover cases passed on each device. [Source48 results](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json).
+- [x] **Select text or JSON for UI reads and errors.** Nine read-only Source48 checks in sixteen calls passed on each device. [Ordinary iPhone](../build_products/verification/agent-benchmark-parity-20261102/source48-output-formats-iphone-v1/result.json); [Duo](../build_products/verification/agent-benchmark-parity-20261102/source48-output-formats-duo-v1/result.json).
+- [x] **Select text or JSON for taps and batches.** Nine current Root checks passed on each device: agent default JSON, explicit JSON/text, legacy output and zero-input malformed-batch errors. Duo used inner screen 3 at 180 degrees. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+- [x] **Replay the core Root regression matrix.** All nine replay groups passed: adaptive output four per device; reference safety six per device; Duo screens six; Duo non-Slider Core eighteen; retained single six; held/moving pinch three; nested scrolling eleven. These 64 cases are a defined matrix, not a whole-suite total. Ordinary Core eight, focus six, layout seven and hardware/raw groups are separate jobs. [Current Root acceptance](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json).
+
+- [x] **Use typing, key, partial-batch and selected-screenshot formats on Duo.** All 22 current Root checks passed in one run with actual app/PNG readback, no input retry and no replay. Scope: active inner screen 3, fully open at 90 degrees. Cancellation and uncertain cleanup are not included. [Duo result](../build_products/verification/agent-benchmark-parity-20261102/root49-expanded-input-formats-duo-v3/result.json).
+
+- [x] **Verify compact controls and expanded formats on both devices after the isolated changes.** Source54 Resource-R2 passed four adaptive cases per device and 22 complete output-format checks per device. Exact candidate/ownership/event/XML/PNG evidence is separate from current Root. Cancellation and uncertain cleanup are excluded. [Candidate acceptance index](../build_products/verification/agent-benchmark-parity-20261102/tools/source54-resource-r2-acceptance-index-v1/report.json).
+- [x] **Complete the Reminders task with agent references.** The final visible test list has exactly two requested completed reminders and one requested incomplete reminder. A partial batch stopped its later tap with zero input; fresh lookup completed the remaining item. [Actual Reminders audit](../build_products/verification/agent-benchmark-parity-20261102/tools/reminders-axe-source54-resource-r2-model-replay-v1-audit/business-audit.json).
+
+### Capabilities and defects still open
+
+- [ ] **Fix precise slider values.** Source48, Source50 and Source51 failed the unchanged Slider case on both devices. The trace recorded a value change after touch release; it does not prove an Apple defect. Source50/51 are excluded from Root. Separate Source52D also failed the default 25-to-75 trial and is not merged. [Trace and limits](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-guest-slider-release-analysis-v1/observed-inferred-proposed.json). A new ordinary-iPhone fixed-path diagnostic read 0.75 from a 0.25 start after touch release and one quiet second. Separate offline revalidation confirmed the saved native/guest values and zero remaining contacts without new input. The original helper-path failure remains saved; this is one diagnostic, not feature acceptance. [New diagnostic](../build_products/verification/agent-benchmark-parity-20261102/slider-no-ax-held-control-live-r3-v1/native-result.json). [Offline revalidation](../build_products/verification/agent-benchmark-parity-20261102/slider-no-ax-r3-offline-revalidated-v1/result.json). A later raw control ended at 77.87% with all contacts released and no held AX reads; this also remains diagnostic evidence. [Later control](../build_products/verification/agent-benchmark-parity-20261102/slider-no-ax-r3bis-readback-v1/result.json).
+- [ ] **Complete precise hinge-angle control.** Root completed 1, 5, 10, 20, 45, 90 and 105 degrees with fresh taps. Setting 113 degrees timed out with uncertain delivery and no HID input. The 18-target case failed. Owned-device recovery passed; the cause remains open. [Actual failure](../build_products/verification/agent-benchmark-parity-20261102/root49-hinge-window-numeric-results-r2/existing-hinge-window-tests.stdout).
+- [ ] **Deliver clean explicitly formatted screenshot output.** Root still writes a plain stderr success line for explicit JSON/text. The isolated Source54 code fix passed all three real unselected PNG formats with zero input: default output kept its legacy line; JSON/text stderr was empty. Root rollout is pending. [Code proof](../build_products/verification/agent-benchmark-parity-20261102/source54-unselected-screenshot-code-proof-v1-results/verified-results.json).
+- [ ] **Integrate the compact-page and screenshot fixes into Root.** Isolated Source54 Resource-R2 passed host/code, skill/resource and live acceptance. Root still has the earlier code. Review and apply the nine-file change plus the two skill postimages before final Root verification. [Live candidate index](../build_products/verification/agent-benchmark-parity-20261102/tools/source54-resource-r2-acceptance-index-v1/report.json).
+- [ ] **Reach the Weather call/time/token target.** Source54 Resource-R2 passed all 17 business checks in 18 total tools: fourteen UI, three setup and one denied listing. Task time was 172.55 seconds; returned UI text used 11,162 o200k proxy tokens. This improves Root49 but does not meet a fourteen-total-call target. The historical target has different setup/geometry limits. [Actual audit](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-axe-source54-resource-r2-model-replay-v1-audit/business-audit.json).
+
+### Existing features that still need testing
+
+- [ ] **Finish the remaining real-app and Duo focus checks.** Contacts used five successful focus/type calls; Reminders typed four already-focused fields. Unfocused anonymous Reminders focus/type and Duo real-app fields remain unproved. Opaque native UID observation remains unavailable in public output.
+- [ ] **Replay the remaining form, app-lifecycle and legacy checks on current Root.** Their Source48 passes remain valid for Source48. The completed Root matrix above does not transfer those results to Root.
+- [ ] **Verify formatted cancellation and uncertain cleanup.** These output cases are outside the completed 22-check runs; their format handling remains unproved.
+- [ ] **Complete the benchmark tasks under their original rules.** Weather and Reminders passed actual UI review. Contacts ended with all five correct fields but saved before email, entered Edit and changed the saved record, which the original task forbids. A separate generic guidance variant is prepared; it changes no app route, prompt, permission, library or resource. [Contacts audit](../build_products/verification/agent-benchmark-parity-20261102/tools/contacts-axe-source54-resource-r2-model-replay-v1-audit/business-audit.json).
+- [ ] **Verify the local release package and installed CLI.** Root Release and eleven signing/version steps passed. Package/install acceptance remains required before changing the installed CLI. Do not push, publish or deploy.
+
+The current Root index contains eighteen separate accepted jobs, with exact runtime, test, helper, ownership, event/XML and guard receipts where applicable. No whole-suite total is claimed. The historical Source48 extra matrix stays fourteen passed groups, fifty-six passed cases and three failed cases from fifty-nine executed cases; its later Root reruns do not erase those failures. [Root index](../build_products/verification/agent-benchmark-parity-20261102/tools/root49-acceptance-index-v1/report-v3.json); [Source48 history](../build_products/verification/agent-benchmark-parity-20261102/tools/source48-extra16-offline-reconciliation-v1.json). The latest host run declared 969 tests in 176 suites with UI checks disabled; that is not 969 UI passes. Passing jobs recorded no resource stop or crash.
+
+Apple Pay tests are excluded. Intel hardware testing is not required. Security scanning remains unverified. The installed CLI is unchanged. Earlier candidate details remain in the [audit](audits/2026-11-02-agent-benchmark-parity.md) and saved evidence.
+
+## Current work: 3 November 2026
+
+The installed CLI is unchanged. Open items identify a missing capability, an efficiency goal or remaining verification. All fixes must be generic; no app-specific workaround or fixture change may make a benchmark pass.
+
+### Duo simulator support
+
+- [x] **Hinge control:** read/set commands work; a saved AXe command opened the inner screen with display readback. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/duo-hinge-source-saved-proof-v20.json).
+- [x] **Rotation control:** a saved AXe command turned the active inner screen left and confirmed its new orientation. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/duo-rotation-source-saved-proof-v20.json).
+- [x] **Text and taps on both screens:** complete text entry and a fresh button tap passed on outer, inner and turned-inner layouts. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/duo-text-tap-saved-proof-v20.json).
+- [x] **Held-key recovery:** fold and rotation interrupted Space, drained its release and allowed a fresh button callback. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/duo-held-key-saved-proof-v20.json).
+
+### Agent and SimUse capabilities
+
+- [x] **Fresh UI references:** reading, typing and tapping across CLI calls passed Reminders without caller-supplied PID or coordinates. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/reminders-axe-source31-refresh-v1-audit/business-audit.json).
+- [x] **Ordinary physical taps:** the default agent tap changed only the selected Circle item; the native owner and real effect were checked. [Proof](../build_products/verification/agent-benchmark-parity-20261102/source31-circle-default-proof-v1/result.json).
+- [x] **Safe batches:** a changed layout stopped the second action, kept the first completion and allowed a fresh reference action without replay. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/reminders-axe-source31-refresh-v1-audit/business-audit.json).
+- [x] **Basic controls on both devices:** all nine core cases ran on each device. Eight passed on each, covering tap, typing, scrolling, swipe, drag and switches. The precise slider failed. [Proof](../build_products/verification/agent-benchmark-parity-20261102/root-combined-source35-physical-tap-native11-plan-v1/actual-root-business-verification.json).
+- [ ] **Bug — scroll forms with the keyboard open:** reference scrolling refused input. A geometry candidate is still unproved. [Evidence](../build_products/verification/agent-benchmark-parity-20261102/form-swipe-readonly-source37-contacts-v1/diagnostic.json).
+- [ ] **Bug — tap repeated form controls:** the form lists the same control twice, and reference taps are unavailable. [Evidence](../build_products/verification/agent-benchmark-parity-20261102/form-swipe-readonly-contacts-v2/diagnostic.json).
+- [x] **Legacy physical taps fixed:** both switch controls now pass on and off on ordinary iPhone and Duo. A normal button also changed state without opening a menu. [Proof](../build_products/verification/agent-benchmark-parity-20261102/root-combined-source35-physical-tap-native11-plan-v1/actual-root-business-verification.json).
+- [ ] **Bug — precise slider values:** Root still fails the precise slider check. An isolated candidate passed two manual values but failed the full core slider case. It is not integrated. [Evidence](../build_products/verification/agent-benchmark-parity-20261102/tools/slider-source36-bounded-scope-v25.json).
+- [ ] **Efficiency goal:** the fourteen-call Weather target remains open; the current trial used twenty calls. [Evidence](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-axe-source31-refresh-v1-audit/business-audit.json).
+- [x] **Weather task verification:** all seventeen business checks and agent-only input passed; the screen-change refusal and build-log pipe remain recorded. [Proof](../build_products/verification/agent-benchmark-parity-20261102/tools/weather-axe-source31-refresh-v1-audit/business-audit.json).
+- [x] **Current root build and package:** build, focused host checks, owned framework loads on both devices and private ZIP checks passed. The installed CLI is unchanged. [Proof](../build_products/verification/agent-benchmark-parity-20261102/root35-private-zip-roundtrip-v1/receipt.json).
+
+<details>
+<summary>Detailed checks and limits</summary>
+
+Current root remains Root35 with the generic legacy tap fix. Source31 model trials remain separate measurements. No app-specific condition or fixture change was used.
+
+The [full benchmark audit](audits/2026-11-02-agent-benchmark-parity.md) retains the current run records, source and runtime pins, errors, cost/token limits and earlier candidate results. The original twelve-trial comparison remains eleven task passes and one procedure failure. New refresh trials are separate measurements.
+
+The later Root35 Contacts trial saved all five final fields and used agent-only input, but failed the required procedure with three Saves and two later Edits. It is a completed failed task measurement. The separate Source31 save-procedure pass is retained in the audit.
+
+The hinge/rotation and held-key links include their saved runtime limits. Source31's new Duo tap proof covers outer portrait only. Exact key-UP time and OS pressed-key inventory remain unverified. The private ZIP passed its extraction, signature, inventory and version checks; this is not a global install or full deployed UI proof. Security scanning remains unverified.
+
+</details>
+
+## Agent benchmark checkpoint: 2 November 2026
+
+**Calculator batches, Weather switches, complete search entry and stopping after a layout change passed. AXe-only offscreen scrolling also passed. The complete original Weather UI task passed all 52 checks from default app state. Safari switching and safe final-read failure recovery also passed. Settings icon routing and the model cost comparison remain open; fresh-start reading remains a recorded limit.** This work improves general agent control. It adds no new Duo acceptance result. [Current report](audits/2026-11-02-agent-benchmark-parity.md).
+
+| Bug or feature | Current state |
+| --- | --- |
+| Use current comparison tools | [x] FlowDeck 1.34.0 and RocketSim 16.8.0 are installed and verified. Current command help and isolated benchmark configurations are saved. |
+| Recheck the earlier Calculator reference failure | [x] The exact faster plan passed 17 checks in 12 calls, in 93.64 seconds. The earlier refusal did not recur. Its cause is not proved and no fix or weaker guard is claimed. |
+| Type a complete search term | [x] The V6 helper proved an empty focused field, entered London once with 14 input events and read the real London result. Eleven calls include normal app setup, with no retries. |
+| Run several Calculator actions in one agent call | [x] V6 passed six public checks in 15 calls, including 5 + 3 = 8 in one four-action batch. One native-ID form was skipped because Clear has no native ID. |
+| Change Weather switches correctly | [x] V5 changed both switches from 1 to 0 in one two-step batch and read both final values. Three calls, no retries. |
+| Find and use an offscreen setting | [x] V6 opened normal Settings, used one AXe swipe to expose Reduce transparency, read 1, tapped it, read 0 and closed the sheet. Ten checks, nine calls; no FlowDeck setup or replay. |
+| Change all seven Weather settings correctly | [x] The full V6 task changed all seven settings from defaults and read each requested final value. The earlier 18-check prepared-state run remains separate evidence. |
+| Read complex Weather screens reliably and quickly | [ ] Fresh Weather first returned zero rows through RocketSim and notReady through AXe. Later FlowDeck returned 76 elements and AXe read it in 1.43 seconds. The cause remains open. The slower prefetch idea was not added. |
+| Complete the original Weather app task | [x] V6 passed 52 checks in 54 CLI calls from normal app defaults: all settings, exact London entry/selection, 11°, 78%, 9.7 km and every detail value. No retries or FlowDeck preparation. |
+| Compare the four tools on the same complete task | [ ] Configurations use the same model, app and warm simulator. The first model start failed because Claude authentication expired; no UI task ran. Report UI calls separately from the three common build/install/launch calls. |
+| Open an app from Home through its reference | [ ] The Settings tap was refused before input: the correct point was sent, but the native point query returned the adjacent Siri element. FlowDeck and RocketSim both opened Settings. This AXe Home routing gap remains unresolved; no Apple cause is proved. |
+| Keep grouped actions safe when the app changes | [x] Invalid targets, stale requests and the Weather layout stop passed. The Safari tap remained completed after its final read detected the new app; a fresh capture found Safari without a caller PID or replay. Two checks, three calls. |
+
+The historical Weather reference is **14 total calls and 100.03 seconds, including 11 UI calls**. It is a target, not a current result. The current four-CLI comparison uses three separate Apple build/install/launch calls; the old XcodeBuildMCP run used one build/run tool plus session and discovery calls.
+
+V3 passed six public Calculator checks in 15 calls without input retries; one ID-based case was skipped. The exact text-glyph frame issue found in V2 is fixed for this checked batch. Controls, containers and device checks remain bound. The two-call arithmetic segment returned 2,900 bytes / 1,053 o200k_base tokens; this is not a complete model benchmark.
+
+V6 passed 83 host tests in 13 suites and seven strict signature checks. Its unchanged native V3b candidate passed 15 tests in two suites. The canonical native patch and hash list now match 70 verified source hashes; all 63 unrelated patch sections are unchanged. The V5 partial seven-setting run stopped before its swipe sent input; a separate FlowDeck-expanded six-check tail passed. These are not a combined pass. V6 now proves the normal AXe-only swipe. The earlier V4 negative-frame test failure passed after correction on V5. Its earlier switch refusal did not recur in the final automated check; no cause or extra fix is claimed.
+
+Heavy jobs ran one at a time on existing warm simulators with CPU and memory checks. No simulator was created, booted or erased. No installed CLI update, commit, push or publication occurred. Full model comparison remains open because Claude authentication failed before the task began. Earlier dated records below retain their original candidates and scope.
+
+The full functional Weather run used conservative fresh reads and paging; its 54 CLI calls are not a model result or a match to the historical 14-call target. The initial fresh read failed before input; the unchanged warm plan later passed. No startup fix is claimed. All 54 saved calls were reaped with no guard stop or recorded crash.
+
+The final saved resource summary covers 119 named guards and 318 samples, with no recorded guard stop or crash; largest observed individual Codex memory was 1.032 GiB. This excludes later RocketSim Home checks and is not a whole-machine peak. [Final verification and scope](../build_products/verification/agent-benchmark-parity-20261102/tools/final-v6-verification.json).
+
+## XcodeBuildMCP example-app checks: 2 November 2026
+
+**Partially passing.** These are ordinary-iPhone checks of broader agent behavior from the XcodeBuildMCP/SimUse comparison, not new Duo-specific failures. The tested AXe CLI remains V5; no library fix was made. [Full app report](audits/2026-11-02-xcodebuildmcp-app-parity.md).
+
+### Broader agent improvements
+
+| Bug or feature | State and evidence |
+| --- | --- |
+| Find and use Calculator controls | [x] All 19 buttons were found. The final saved helper passed 17 checks in 22 calls with explicit refresh, including real tap, touch and hold effects. The faster returned-reference case remains open below. |
+| Perform and verify arithmetic | [x] AXe passed nine checks in ten calls; XcodeBuildMCP passed the same arithmetic task in six calls. AXe response cost was 3,516 tokens versus 3,693. This is one observed task, not universal efficiency parity. |
+| Scroll an app page | [x] The existing Calculator scroll fixture passed. A separate readback proved one row moved up 52 points in the same container, app and screen. |
+| Return Home and reject old app controls | [x] Home was confirmed after a read-only refresh and screenshot. The old Calculator reference was refused with zero input. The first read after Home reported processChanged and remains recorded. |
+| Refuse unsupported input safely | [x] All twelve original refusal scenarios were checked: ten missing-device cases and typing/swiping against a button. The two wrong-target cases sent no input and left display 8 unchanged. |
+| Navigate the Weather example | [x] All three native UI paths worked through AXe: Settings, Locations and precipitation details. The final reusable precipitation plan passed four checks in seven calls, including one actual swipe. The earlier helper-label error and first notReady read remain recorded. This does not complete the full London task. |
+| Keep Weather detail controls and text in compact output | [x] On one unchanged detail snapshot, reading retained all seven canonical controls and all 61 distinct text refs across two pages. Navigation retained all seven controls and intentionally omitted static text. The six calls sent no input. [Coverage](../build_products/verification/xcodebuildmcp-app-parity-20261102/weather-detail-coverage/result.json). |
+| Compare token cost with needed app information | [x] Calculator and Weather comparisons include actual reading content and complete arithmetic calls. AXe is smaller than XcodeBuildMCP JSON, but larger than RocketSim act on Calculator. XcodeBuildMCP minimal text omits the Calculator display. |
+| Use references returned after an action for the next valid action | [ ] Reproduce and resolve the Calculator screenChanged refusal. Its cause is not established. Explicit refresh works but adds calls; it is not a library fix. |
+| Make complex Weather screen reads reliable | [ ] The eight-second keyboard acquisition stopped at 112 partial nodes. The same native API completed 192 nodes in 19.10 seconds with a twenty-second diagnostic budget. Optimize and prove a bounded design; the larger budget is not a production fix. |
+| Type in fields with inherited IDs | [ ] The actual focused Weather TextField shares its ID with six other nodes; it is the only TextField. AXe's global-ID uniqueness rule suppresses typing. Prove support on the unchanged app, without adding app IDs to conceal the gap. |
+| Complete the original Weather manual task | [ ] Seven settings, London selection, the required main values and all precipitation values remain incomplete through AXe. Passing the three simpler UI paths does not close this task. |
+
+AXe has no dedicated wait command; the helper observed the required Calculator C condition. New input remains gated by fresh app/display checks. No further input or library change is included in these records.
+
+### Repeatable checks and cleanup
+
+- [x] The final 437-line helper and archived copies match SHA-256 ca05382ee2218ac27cd44efbfc00fa0315a96fa4b2974c7545436e8132fb5622. Its Calculator and Weather precipitation plans passed. Earlier passes keep their own helper identity.
+- [x] All fourteen production source hashes and the installed wrapper, CLI and FBSimulatorControl match V5. No production fix, commit or push was made.
+- [x] Resource records cover 68 guarded serial jobs and 263 samples: no recorded guard stop, crash or unreaped command child; peak tracked aggregate 16.406 GiB, largest reported process Codex 1.04 GiB, peak sampled combined CPU 304.6%. These are not whole-machine or unobserved-peak claims.
+- [x] The owned private XcodeBuildMCP daemon stopped and its socket was removed. No simulator was created, booted, erased or stopped. Other sessions were left untouched. [Final identity](../build_products/verification/xcodebuildmcp-app-parity-20261102/final-source-check.json), [resources](../build_products/verification/xcodebuildmcp-app-parity-20261102/resource-summary.json), [cleanup](../build_products/verification/xcodebuildmcp-app-parity-20261102/xbm-private-daemon-stop/result.json).
+
+### Duo scope
+
+This comparison ran on an ordinary iPhone. It adds no new Duo acceptance result and does not establish a Duo-specific regression. The prior screen, hinge and rotation evidence below retains its original candidate and scope. All earlier checklist content is preserved.
+
+
+## Current agent output work — 2 November 2026
+
+The approved output changes are implemented, checked and installed locally. Default reading uses **27–30% fewer tokens than RocketSim act on three matched screens**, with relevant canonical controls retained. Navigation and unchanged replies remain larger than RocketSim's reduced modes; that disparity is recorded, not marked as parity. The [final focused report](audits/2026-11-02-agent-output-improvements.md) gives exact candidates, evidence, retained failures and limits. No commit, push, publication or deployment occurred.
+
+### Duo simulator support
+
+| Bug or feature | State and evidence |
+| --- | --- |
+| Find the missing inner-landscape controls | [x] Measured selected-display bounds replace the stale portrait root for agent visibility. V4 retained all 20 canonical interactive refs; final V5 found and physically used the restored switch and Waits controls. This is bounded Playground evidence, not every app. |
+| Use restored controls and reject old layout references | [x] Final V5 switch false→true and Waits scroll 0→1287.67 each had two physical events, normal callbacks and zero held touches. V3 fold/rotation checks separately refused old refs with zero input, then used fresh refs on the correct panel. [Final controls](../build_products/verification/agent-output-improvements-20261102/check-restored-controls-v5/result.json), [fold](../build_products/verification/agent-output-improvements-20261102/duo-fold-stale-proof.json), [rotation](../build_products/verification/agent-output-improvements-20261102/duo-rotation-stale-proof.json). |
+| Keep outer and keyboard controls accessible | [x] Final V5 outer reading/navigation retained all 19 canonical interactive refs. Inner keyboard reading/navigation retained all 60 across two global pages with no omissions. [Outer](../build_products/verification/agent-output-improvements-20261102/check-duo-outer-coverage-v5-warm/result.json), [keyboard](../build_products/verification/agent-output-improvements-20261102/check-keyboard-coverage-v5/result.json). |
+| Type and dismiss the real keyboard through compact refs | [x] Final V5 physically focused the field, typed `axe\|42` once, read back the exact pipe-containing value and dismissed the keyboard. Actual app focus became false; zero held touches. [Proof](../build_products/verification/agent-output-improvements-20261102/check-keyboard-input-v5/result.json). |
+
+### SimUse improvements: optional agent mode and output
+
+| Bug or feature | State and evidence |
+| --- | --- |
+| Reduce default screen-read tokens | [x] V5 reading JSON: iPhone 577 vs Rocket act 794; Duo outer 506 vs 723; Duo inner Controls 531 vs 733 (o200k_base). All three app-state logs matched before/after capture. Navigation/poll remain above Rocket's reduced modes. [Final counts](../build_products/verification/agent-output-improvements-20261102/token-final-v5-findings.json). |
+| Return small unchanged-screen results | [x] V5 retained the same snapshot UUID, advanced sequence and decreased original expiry without returning rows or changing app state. Measured replies used 80–82 tokens. |
+| Keep complete controls, text and IDs accessible | [x] Final V5 checks on both devices retained canonical control capabilities and distinct text through explicit pages. The 900,000-scalar fixture stayed bounded; first/last exact chunks and normal Reset ID/frame readback passed. |
+| Use references across separate calls safely | [x] Final V5 on both devices made two real Target taps through replacement refs, then refused the old snapshot read with zero input. Full schema 1 and compact schema 2 were checked. Complete AXe read→tap→usable-state costs were 1,183 on iPhone and 1,058 on Duo tokens in two calls each. |
+| Preserve ordinary interfaces | [x] Final V5 ordinary iPhone and Duo outer each returned native raw hierarchy output and made one no-flag coordinate Target callback with zero held touches. Original public builder entry point is preserved. [iPhone](../build_products/verification/agent-output-improvements-20261102/check-legacy-iphone-v5-exact/result.json), [Duo](../build_products/verification/agent-output-improvements-20261102/check-legacy-duo-outer-v5/result.json). |
+
+### Current verification and local delivery
+
+- [x] Final Release V5 built and passed all seven strict signatures. CLI SHA-256 `1ca9609a42b7f35f1a2cc7ad39bd4c6744b7d63bce5ea18a5ef85c74d64198cc`; unchanged FBSimulatorControl `b409f6e62e94e658593d595977cd7d3d4f42101a12d210e212d841f5a44501c1`. Matched wire 38 is required.
+- [x] [32 host checks](../build_products/verification/agent-output-improvements-20261102/check-host-v5/tests-swift-testing.xml), [4 ordinary-iPhone cases](../build_products/verification/agent-output-improvements-20261102/check-adaptive-iphone-v8/tests-swift-testing.xml) and [4 Duo cases](../build_products/verification/agent-output-improvements-20261102/check-adaptive-duo-v8/tests-swift-testing.xml) passed with zero issues or skips. [Actual execution ledger](../build_products/verification/agent-output-improvements-20261102/execution-ledger-final-v5.json). Wider historical suites are not relabelled as V5 runs.
+- [x] Both skill trees passed local quick validation and strict cached skill-check with zero errors or warnings. External security scanning remains unverified as Cam requested. [Receipt](../build_products/verification/agent-output-improvements-20261102/docs-error-message-validation.json).
+- [x] CPU and memory checks recorded 454 samples from 136 files: largest reported individual process 0.935 GiB; aggregate peak 16.109 GiB; sampled CPU peak 651.1%; no recorded crashes. This scope excludes source/build/cache directories and unobserved peaks. [Resource record](../build_products/verification/agent-output-improvements-20261102/resource-summary-v5.json).
+- [x] Exact V5 payload installed at `/Users/cameron/.local/share/axe/tested-builds/1ca9609a-b409f6e6`; wrapper `/opt/homebrew/bin/axe` uses it. All 151 payload files and seven strict signatures were verified; the old prefix and wrapper backup were retained. The installed CLI returned schema 2 reading output on the Duo outer screen. [Installation](../build_products/verification/agent-output-improvements-20261102/local-install-v5/result.json), [installed check](../build_products/verification/agent-output-improvements-20261102/check-installed-default-v5/result.json).
+
+The focused changes are complete. Known limits: navigation/poll token parity is not reached; cold-start readiness and every-app/device/rotation coverage are not claimed. Failed earlier attempts remain in the report. The sections below retain earlier candidates and are not new V5 results.
+
+## Previous output change — 1 November 2026
+
+### SimUse improvements: optional agent mode and output
+
+| Bug or feature | State |
+| --- | --- |
+| Select text or JSON | [x] `--output text|json` selects one result. Agent mode defaults to JSON; text includes RS/1 references and the saved screen, keyboard and cache data. |
+| Return one error result | [x] The reported empty UUID, missing arguments and other checked failures return one JSON object, an error code and a nonzero exit. No duplicate plain final error is printed. |
+| Keep released command output | [x] No-format raw hierarchy output, quiet/error output, literal arguments and existing `--json` stay available. Screenshot and movie destination options are preserved. Binary streaming refuses response-format options before capture. |
+| Use references across output formats | [x] A text capture supplied a reference for a JSON physical tap. Its JSON replacement supplied a reference for a text physical tap. Exactly two callbacks and zero held touches were observed. |
+| Return one formatted selected-batch result | [x] Two native step receipts were returned in one JSON result. Exactly two callbacks and zero held touches were observed. Earlier input is not undone if the final output write fails. |
+
+### Duo simulator support
+
+- [x] Existing automatic-app checks passed on the ordinary iPhone (6) and Duo inner screen (6). The real system-prompt check passed on each device (1 each).
+- [x] The cross-format reference and selected-batch checks passed on the Duo outer screen. This change does not change hinge, screen or rotation control.
+
+### Current verification and local delivery
+
+- [x] [21 output cases](../build_products/verification/output-contract-20261101/manual-cases-v1/acceptance.json): complete JSON parsing, text errors, help/version, media path options and skill output.
+- [x] [Three literal-argument comparisons](../build_products/verification/output-contract-20261101/manual-cases-v1/literal-compatibility.json): old and new stdout/stderr were byte-identical.
+- [x] [Real JSON inventory and hierarchy plus legacy hierarchy](../build_products/verification/output-contract-20261101/manual-live-v1/read-acceptance.json) passed.
+- [x] [Cross-format reference input](../build_products/verification/output-contract-20261101/manual-live-v1/acceptance.json) and [formatted selected batch](../build_products/verification/output-contract-20261101/manual-live-v1/batch-acceptance.json) passed.
+- [x] [Host PID/reference 9](../build_products/verification/output-contract-20261101/check-host-unit/acceptance.json), [iPhone 6](../build_products/verification/output-contract-20261101/check-iphone-auto/acceptance.json), [Duo 6](../build_products/verification/output-contract-20261101/check-duo-auto/acceptance.json), and system prompt [iPhone 1](../build_products/verification/output-contract-20261101/check-iphone-system-owner/acceptance.json) / [Duo 1](../build_products/verification/output-contract-20261101/check-duo-system-owner/acceptance.json) all passed with zero issues or skips.
+- [x] The installed formatted screenshot command returned one stdout JSON object and created a valid PNG. Its existing capture-success diagnostic stayed on stderr.
+- [x] Nine console cases preserved exact integer values and finite floating-point extremes. Both skill trees passed local validation without warnings. External security scanning remains unverified as requested.
+- [x] Release and test builds passed. The exact signed payload was [installed locally](../build_products/verification/output-contract-20261101/local-install-v1/run/result.json); the [installed JSON error and text capture](../build_products/verification/output-contract-20261101/installed-output-acceptance.json) passed. The previous build is retained.
+
+Candidate CLI `be6a4f92`, native `b409f6e6`, source `cd262d92`, host `2a36b7b0`, wire 37. Heavy jobs ran one at a time. Resource records show no runaway, forced stop or recorded owned guest crash. These are focused checks, not a new complete 133-case run. The source changes are not committed. No push, publication or deployment occurred. The dated verification here replaces the pending proof notes in the frozen skill resources.
+
+## Previous automatic-PID change — 1 November 2026
+
+### SimUse improvements: optional agent mode
+
+| Bug or feature | State |
+| --- | --- |
+| Use agent mode without finding a PID first | [x] New captures find the active app or Home screen. A supplied PID remains an optional check. |
+| Use saved references across CLI calls | [x] Captures, cache validation, unchanged-screen reuse and replacement worked across separate calls. Old references refused input after Home, app changes and replacement. |
+| Tap, type and run a batch without a caller PID | [x] Real button callbacks, exact text and two ordered batch steps passed on the ordinary iPhone and Duo. All touches were released. |
+| Preserve existing commands and app checks | [x] Raw hierarchy output and raw keyboard input passed. Correct explicit PIDs worked; wrong, zero and negative PIDs refused input. |
+
+### Duo simulator support
+
+- [x] The six automatic-app checks passed on the partly open inner screen. The system-prompt check passed on the outer screen.
+- This change adds automatic app selection. It does not change hinge, screen or rotation controls. The earlier complete Duo results remain below with their original build.
+
+### Current verification and local delivery
+
+| Check | Result | Evidence |
+| --- | --- | --- |
+| PID and reference rules | 9/9 passed | [Host checks](../build_products/verification/agent-auto-pid-20261031/candidate-v1/check-host-unit/acceptance.json) |
+| Ordinary iPhone: capture, references, taps, typing, batch and raw commands | 6/6 passed | [iPhone checks](../build_products/verification/agent-auto-pid-20261031/candidate-v1/check-iphone-auto/acceptance.json) |
+| Duo: the same controls on the inner screen | 6/6 passed | [Duo checks](../build_products/verification/agent-auto-pid-20261031/candidate-v1/check-duo-auto/acceptance.json) |
+| System prompt: discover its app, refuse the previous app and return to the app | 1/1 passed on each device | [iPhone](../build_products/verification/agent-auto-pid-20261031/candidate-v1/check-iphone-system-owner/acceptance.json), [Duo](../build_products/verification/agent-auto-pid-20261031/candidate-v1/check-duo-system-owner/acceptance.json) |
+| Existing selected-input protocol rules | 169/169 cases in 51 test functions passed | [Protocol checks](../build_products/verification/agent-auto-pid-20261031/host-protocol-regressions-v1/acceptance.json) |
+| Local delivery | Release and test builds passed; seven strict signatures passed; exact tested payload installed; normal installed `describe-ui --agent` succeeded without a PID | [Installation](../build_products/verification/agent-auto-pid-20261031/local-install-v1/run/result.json), [installed capture](../build_products/verification/agent-auto-pid-20261031/guard-installed-capture-v1/result.json) |
+
+All checks above had zero issues or skips. Candidate CLI `feba117c`, native `b409f6e6`, source `d70ef4fb`, host `710b7ee8`, wire 37. Heavy jobs ran one at a time. No monitored process exceeded 1.364 GiB; no resource limit, forced stop or owned guest crash was recorded.
+
+These focused checks are not a new 133-case run. The earlier full runs below used a different build. The source changes are not committed. Fourteen unrelated work files and both Git indexes are unchanged. The seven skill files still match the tested CLI resources; their pending proof notes describe the state before these checks and are superseded by this dated record. External skill security scanning remains unverified, as Cam requested. No push, publication or deployment occurred.
+
+## Previous accepted build — 30 October 2026
 
 ### Duo simulator support
 
