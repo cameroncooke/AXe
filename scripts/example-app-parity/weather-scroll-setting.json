@@ -1,0 +1,67 @@
+{
+  "name": "Find and use the offscreen Weather setting from the normal half-height sheet",
+  "provenance": "Start on the London main screen, Reduce transparency on. Use only current public controls. This checks the reference swipe start fix without FlowDeck setup.",
+  "steps": [
+    {
+      "op": "text_is",
+      "text": "London"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Settings"
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "°C",
+      "equals": "selected"
+    },
+    {
+      "op": "scroll_until",
+      "target": {
+        "role": "switch",
+        "label": "Reduce transparency"
+      },
+      "scroll": {
+        "role": "scroll-view",
+        "label": "weather.settingsSheet"
+      },
+      "max_swipes": 3,
+      "direction": "up",
+      "distance": 0.5,
+      "duration": 0.5
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "1"
+    },
+    {
+      "op": "tap",
+      "role": "switch",
+      "label": "Reduce transparency"
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "0"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Close",
+      "refresh": true
+    },
+    {
+      "op": "text_is",
+      "text": "London"
+    },
+    {
+      "op": "text_is",
+      "text": "11"
+    }
+  ]
+}

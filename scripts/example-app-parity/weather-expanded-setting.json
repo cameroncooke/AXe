@@ -1,0 +1,37 @@
+{
+  "name": "Verify the seventh Weather setting on its expanded sheet",
+  "provenance": "Start on the normal expanded Weather Settings sheet with Reduce transparency off and London selected. Change only visible controls. This is a functional UI check, not a timed model benchmark.",
+  "steps": [
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "0"
+    },
+    {
+      "op": "tap",
+      "role": "switch",
+      "label": "Reduce transparency"
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "1"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Close",
+      "refresh": true
+    },
+    {
+      "op": "text_is",
+      "text": "London"
+    },
+    {
+      "op": "text_is",
+      "text": "11"
+    }
+  ]
+}

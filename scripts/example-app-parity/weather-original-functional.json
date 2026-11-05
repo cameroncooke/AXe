@@ -1,0 +1,356 @@
+{
+  "name": "Original Weather task through public AXe controls (functional verification)",
+  "provenance": "Frozen XcodeBuildMCP benchmarks/claude-ui/prompts/weather.md steps2...6. Build/install/normal fresh launch occur outside this replay. This is functional coverage, not model or minimal-call comparison.",
+  "preconditions": [
+    "Existing warm ordinary portrait iPhone at 402 × 874 logical points, normal Weather main screen at the top.",
+    "New normal app process from the unchanged frozen Weather app: San Francisco/current location, °F/mph/mb/mi, animations and alerts on, Reduce transparency off, empty Locations query.",
+    "Do not run against the already modified London session. Relaunch normally; app state is SwiftUI @State and no disk fixture writes are required."
+  ],
+  "steps": [
+    {
+      "op": "expect",
+      "role": "text",
+      "contains": [
+        "San Francisco",
+        "Current Location"
+      ],
+      "timeout": 5
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Settings",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "°F",
+      "equals": "selected"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "°C",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "°C",
+      "equals": "selected"
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "mph",
+      "equals": "selected"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "m/s",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "m/s",
+      "equals": "selected"
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "mb",
+      "equals": "selected"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "inHg",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "inHg",
+      "equals": "selected"
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "mi",
+      "equals": "selected"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "km",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "button",
+      "label": "km",
+      "equals": "selected"
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Atmospheric animations",
+      "equals": "1"
+    },
+    {
+      "op": "tap",
+      "role": "switch",
+      "label": "Atmospheric animations",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Atmospheric animations",
+      "equals": "0"
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Severe weather alerts",
+      "equals": "1"
+    },
+    {
+      "op": "tap",
+      "role": "switch",
+      "label": "Severe weather alerts",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Severe weather alerts",
+      "equals": "0"
+    },
+    {
+      "op": "scroll_until",
+      "target": {
+        "role": "switch",
+        "label": "Reduce transparency"
+      },
+      "scroll": {
+        "role": "scroll-view",
+        "label": "weather.settingsSheet"
+      },
+      "max_swipes": 3,
+      "direction": "up",
+      "distance": 0.5,
+      "duration": 0.5
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "0"
+    },
+    {
+      "op": "tap",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "switch",
+      "label": "Reduce transparency",
+      "equals": "1"
+    },
+    {
+      "op": "swipe",
+      "role": "scroll-view",
+      "label": "weather.settingsSheet",
+      "direction": "down",
+      "distance": 0.8,
+      "duration": 0.5,
+      "refresh": true,
+      "scan_all": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Close",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "San Francisco",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "text-field",
+      "label": "weather.locationsSheet",
+      "equals": "Search for a city, airport, or country"
+    },
+    {
+      "op": "tap",
+      "role": "text-field",
+      "label": "weather.locationsSheet",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "value",
+      "role": "text-field",
+      "label": "weather.locationsSheet",
+      "equals": "Search for a city, airport, or country",
+      "timeout": 5
+    },
+    {
+      "op": "type",
+      "role": "text-field",
+      "label": "weather.locationsSheet",
+      "text": "London",
+      "refresh": true,
+      "scan_all": true
+    },
+    {
+      "op": "value",
+      "role": "text-field",
+      "label": "weather.locationsSheet",
+      "equals": "London"
+    },
+    {
+      "op": "expect",
+      "role": "button",
+      "label_prefix": "London, England, United Kingdom,",
+      "contains": [
+        "London",
+        "England, United Kingdom"
+      ],
+      "timeout": 5
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label_prefix": "London, England, United Kingdom,",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "Close",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "expect",
+      "role": "text",
+      "contains": [
+        "London",
+        "England, United Kingdom",
+        "Light Rain"
+      ],
+      "timeout": 5
+    },
+    {
+      "op": "text_is",
+      "text": "11"
+    },
+    {
+      "op": "text_is",
+      "text": "°"
+    },
+    {
+      "op": "scroll_until",
+      "target": {
+        "role": "button",
+        "label_prefix": "PRECIP."
+      },
+      "scroll": {
+        "role": "scroll-view",
+        "label": "weather.mainScrollView"
+      },
+      "max_swipes": 5,
+      "direction": "up",
+      "distance": 0.65,
+      "duration": 0.5
+    },
+    {
+      "op": "expect",
+      "role": "button",
+      "label_prefix": "PRECIP.",
+      "contains": [
+        "78%",
+        "Next 24 hours"
+      ]
+    },
+    {
+      "op": "text_is",
+      "text": "VISIBILITY"
+    },
+    {
+      "op": "text_is",
+      "text": "9.7 km"
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label_prefix": "PRECIP.",
+      "scan_all": true,
+      "refresh": true
+    },
+    {
+      "op": "expect",
+      "role": "text",
+      "contains": [
+        "PRECIPITATION",
+        "78%",
+        "chance over the next 24 hours"
+      ],
+      "timeout": 5
+    },
+    {
+      "op": "text_is",
+      "text": "TOTAL EXPECTED"
+    },
+    {
+      "op": "text_is",
+      "text": "10.7 mm"
+    },
+    {
+      "op": "text_is",
+      "text": "HOURS OF RAIN"
+    },
+    {
+      "op": "text_is",
+      "text": "6 hrs"
+    },
+    {
+      "op": "text_is",
+      "text": "STORM DISTANCE"
+    },
+    {
+      "op": "text_is",
+      "text": "14 km"
+    },
+    {
+      "op": "text_is",
+      "text": "LIGHTNING"
+    },
+    {
+      "op": "text_is",
+      "text": "None"
+    }
+  ]
+}

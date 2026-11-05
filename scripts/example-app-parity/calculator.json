@@ -1,0 +1,120 @@
+{
+  "name": "Calculator native controls and arithmetic",
+  "provenance": "Later XcodeBuildMCP live UI contracts for snapshot, tap, touch and long press, with additional visible display and arithmetic assertions. Keep the ordinary Calculator in the foreground. The first normal Clear-button tap resets its display through the UI; no process restart is required.",
+  "steps": [
+    {
+      "op": "tap",
+      "label": "C",
+      "role": "button",
+      "physical": true
+    },
+    {
+      "op": "text_is",
+      "text": "0",
+      "timeout": 5
+    },
+    {
+      "op": "buttons",
+      "labels": [
+        "C",
+        "±",
+        "%",
+        "÷",
+        "7",
+        "8",
+        "9",
+        "×",
+        "4",
+        "5",
+        "6",
+        "-",
+        "1",
+        "2",
+        "3",
+        "+",
+        "0",
+        ".",
+        "="
+      ]
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "7",
+      "physical": true
+    },
+    {
+      "op": "text_is",
+      "text": "7",
+      "timeout": 5
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "C",
+      "physical": true
+    },
+    {
+      "op": "touch",
+      "role": "button",
+      "label": "7"
+    },
+    {
+      "op": "text_is",
+      "text": "7",
+      "timeout": 5
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "C",
+      "physical": true
+    },
+    {
+      "op": "hold",
+      "role": "button",
+      "label": "7",
+      "delay": 0.5
+    },
+    {
+      "op": "text_is",
+      "text": "7",
+      "timeout": 5
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "C",
+      "physical": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "5",
+      "physical": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "+",
+      "physical": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "3",
+      "physical": true
+    },
+    {
+      "op": "tap",
+      "role": "button",
+      "label": "=",
+      "physical": true
+    },
+    {
+      "op": "text_is",
+      "text": "8",
+      "timeout": 5
+    }
+  ]
+}
