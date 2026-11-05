@@ -21,6 +21,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check released changelog sections are unchanged
+        run: |
+          base="${GITHUB_BASE_REF:-main}"
+          git fetch --no-tags --depth=1 origin "$base"
+          python3 -I scripts/check-changelog-released.py FETCH_HEAD
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
