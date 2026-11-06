@@ -12,7 +12,7 @@ enum VendorKeyboardVariant: String, CaseIterable, Sendable {
        .enabled(if: isE2EEnabled && ProcessInfo.processInfo.environment["AXE_VENDOR_KEYBOARD_E2E"] == "1"))
 struct VendorKeyboardComparisonTests {
     private let udid = "419D3218-79E5-46DE-80C0-E58126A88252"
-    private let simuse = "/Volumes/Developer/AXe/build_products/verification/duo-vendor-failures-20261026/simuse-research-v1/candidate/sim-use"
+    private let simuse = "/Volumes/Developer/AXe-verification/duo-vendor-failures-20261026/simuse-research-v1/candidate/sim-use"
     private let simuseSHA256 = "2c58fc06dbc8615aaf5869e2fa5054915210a8bff4fe82b12d64807229b11d02"
 
     @Test("Compare Shift+C followed by the ordinary lowercase D key", arguments: VendorKeyboardVariant.allCases)

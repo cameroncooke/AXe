@@ -193,8 +193,10 @@ benchmarks/.venv/bin/python benchmarks/rescore.py /path/to/report.json \
 ```
 
 Rescoring requires original raw evidence, verifies its hashes and preserves
-original measurements. It creates a new report and comparison group. It cannot
-repair incomplete execution. Import the new report into history explicitly.
+original measurements. If the evidence has moved since the run, pass its new
+directory with `--evidence /path/to/evidence`; the same hash checks apply. It
+creates a new report and comparison group. It cannot repair incomplete
+execution. Import the new report into history explicitly.
 
 See [the measured comparison](../docs/audits/2026-11-05-repeatable-agent-benchmarks.md)
 for exact results and current competitor limits.

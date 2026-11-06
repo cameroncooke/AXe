@@ -43,8 +43,11 @@ def verify_evidence(root, transcript_sha):
     return archive, digest(manifest)
 
 
-def rescore(source_report, output):
-    """Write one new deterministic report exclusively. Original evidence stays intact."""
+def rescore(source_report, output, evidence_directory=None):
+    """Write one new deterministic report exclusively. Original evidence stays intact.
+
+    evidence_directory replaces the recorded location for evidence that was moved.
+    The archive must still match the original report's transcript hash."""
     source = Path(source_report).expanduser().resolve(strict=True)
     destination = Path(output).expanduser().absolute()
     if destination.exists() or destination.is_symlink() or destination.resolve() == source:
@@ -52,7 +55,10 @@ def rescore(source_report, output):
     original_bytes = source.read_bytes()
     original_sha = hashlib.sha256(original_bytes).hexdigest()
     original = read_result(source)
-    evidence = Path(original.get('evidenceDirectory', source.parent / 'evidence'))
+    if evidence_directory is not None:
+        evidence = Path(evidence_directory).expanduser().absolute()
+    else:
+        evidence = Path(original.get('evidenceDirectory', source.parent / 'evidence'))
     if not evidence.is_absolute():
         evidence = source.parent / evidence
     evidence = evidence.resolve(strict=True)
@@ -130,8 +136,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('source_report')
     parser.add_argument('--output', required=True)
+    parser.add_argument('--evidence', help='Evidence directory, when it has moved since the run')
     args = parser.parse_args()
-    result = rescore(args.source_report, args.output)
+    result = rescore(args.source_report, args.output, args.evidence)
     print(json.dumps({'status': result['status'], 'runId': result['runId'], 'output': str(Path(args.output).absolute())}))
     return 0 if result['status'] == 'passed' else 1
 

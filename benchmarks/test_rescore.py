@@ -117,6 +117,20 @@ class RescoreTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'original report'):
             self.run_rescore()
 
+    def test_moved_evidence_is_verified_at_the_given_location(self):
+        moved = self.root / 'moved-evidence'
+        self.evidence.rename(moved)
+        with self.assertRaises(FileNotFoundError):
+            self.run_rescore('missing.json')
+        with patch('rescore.score_run', return_value=copy.deepcopy(self.score)) as score:
+            value = rescore(self.source, self.root / 'moved.json', moved)
+        self.assertEqual(value['status'], 'passed')
+        self.assertEqual(value['evidenceDirectory'], str(moved.resolve()))
+        self.assertEqual(score.call_args.args[0], moved.resolve())
+        (moved / 'claude.jsonl').write_text('changed')
+        with self.assertRaisesRegex(ValueError, 'hash mismatch'):
+            rescore(self.source, self.root / 'tampered.json', moved)
+
     def test_existing_output_and_source_cannot_be_overwritten(self):
         output = self.root / 'rescored.json'
         output.write_text('preserved')
