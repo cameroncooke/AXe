@@ -28,6 +28,8 @@ struct SelectedHIDRequest: Codable, Sendable {
     var legacyPath: LegacyDuoPath? = nil
     var legacyTouch: LegacyDuoTouch? = nil
     var legacyKeyboard: LegacyDuoKeyboard? = nil
+    /// Diagnostic only. Asks the broker to return its phase timings with the response.
+    var timing: Bool? = nil
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
@@ -288,6 +290,8 @@ struct SelectedHIDResponse: Codable, Sendable {
     var rotation: SelectedRotationResult? = nil
     var agent: AgentModeResult? = nil
     var readingContinuation: AgentModeCapture? = nil
+    /// Present only when the request set `timing`. Dropped first when a response is too large.
+    var timing: PhaseTimingPayload? = nil
 }
 
 struct SelectedHIDContext: Codable, Sendable, Equatable {

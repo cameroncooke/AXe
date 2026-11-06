@@ -5,7 +5,7 @@ import FBSimulatorControl
 /// The original published plan is checked against the operation's latest native tree.
 /// It replaces the controller pre-description and its two-tree fingerprint equality;
 /// it does not replace native temporal target, point, PID or live-context validation.
-struct AgentBatchTapAdmission: Sendable {
+struct AgentBatchTapAdmission: AgentOwnedTapAdmission {
     let plan: AgentBatchReferencePlan
     let index: Int
 

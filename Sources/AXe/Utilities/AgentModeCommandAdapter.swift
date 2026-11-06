@@ -32,7 +32,7 @@ enum AgentModeCommandAdapter {
         if view == .reading, request.agentBatch != nil || request.agent?.rowLimit == 64 {
             request.includeReadingContinuation = true
         }
-        let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        let response = try sendTimed(request, simulatorUDID: simulatorUDID)
         guard let result = response.agent else {
             throw CLIError(errorDescription: "Agent mode returned no agent result. Inspect the broker state before retrying.")
         }
@@ -45,6 +45,27 @@ enum AgentModeCommandAdapter {
         let page = try JSONDecoder().decode(CLIOutputValue.self, from: JSONEncoder().encode(continuation))
         try CLIOutput.writeJSON(AgentPageEnrichment.enrich(original, continuation: page))
         if result.didError { throw ExitCode.failure }
+    }
+
+    /// Records client and broker phases only when AXE_TIMING is set. Standard output is unchanged.
+    /// Phases are reported even when the exchange fails, so a slow connect or broker start is visible.
+    private static func sendTimed(_ original: SelectedHIDRequest, simulatorUDID: String) throws -> SelectedHIDResponse {
+        guard let destination = PhaseTimingOutput.destination() else {
+            return try SelectedHIDBroker.send(original, simulatorUDID: simulatorUDID)
+        }
+        var request = original
+        request.timing = true
+        let timer = PhaseTimer()
+        var response: SelectedHIDResponse?
+        defer {
+            PhaseTimingOutput.emit(PhaseTimingOutput.record(command: PhaseTimingOutput.commandName,
+                requestID: request.requestID, client: timer, broker: response?.timing), to: destination)
+        }
+        let result = try PhaseTimer.$current.withValue(timer) {
+            try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        }
+        response = result
+        return result
     }
 
     static func validateDelay(_ value: Double?, name: String) throws {

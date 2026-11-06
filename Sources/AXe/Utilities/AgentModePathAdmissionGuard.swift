@@ -68,9 +68,11 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             try validateFirstEvent(firstEvent)
             var initialHits: [FBSimulatorAXNode] = []
             for start in starts { initialHits.append(try await pointHit(at: start, observation: observation)) }
-            let tree = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-                observation: observation, freshnessProvider: feed, policy: try policy(),
-                includeNativeIdentity: nativeTarget.nativeIdentity != nil)
+            let tree = try await PhaseTimer.measure("native.pathGuard.tree") {
+                try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
+                    observation: observation, freshnessProvider: feed, policy: try policy(),
+                    includeNativeIdentity: nativeTarget.nativeIdentity != nil)
+            }
             guard tree.outcome == .ready, let snapshot = tree.snapshot else {
                 throw AgentModeFailure("\(kind.rawValue)TreeReadFailed", "The \(kind.rawValue) target could not be confirmed before input. Refresh the snapshot.")
             }
@@ -119,9 +121,11 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     }
 
     private func pointHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
-        let result = try await FBSimulatorAXSnapshot.acquire(at: start, for: simulator,
-            expectedPID: admission.expectedPID, observation: observation, freshnessProvider: feed,
-            policy: try policy(), includeNativeIdentity: nativeTarget.nativeIdentity != nil)
+        let result = try await PhaseTimer.measure("native.pathGuard.pointHit") {
+            try await FBSimulatorAXSnapshot.acquire(at: start, for: simulator,
+                expectedPID: admission.expectedPID, observation: observation, freshnessProvider: feed,
+                policy: try policy(), includeNativeIdentity: nativeTarget.nativeIdentity != nil)
+        }
         guard result.outcome == .ready, let snapshot = result.snapshot, snapshot.roots.count == 1,
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
               hit.type?.isEmpty == false, hit.hidden != true, hit.enabled != false,

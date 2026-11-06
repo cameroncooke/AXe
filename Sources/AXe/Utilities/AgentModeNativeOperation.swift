@@ -19,13 +19,18 @@ enum AgentModeNativeOperation {
             guard let admission = request.agentAdmission else {
                 throw AgentModeFailure("missingAdmission", "The agent input admission is missing.")
             }
-            try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-            let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-            guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                  simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+            let simulator = try await PhaseTimer.measure("native.simulatorSet") { () async throws -> FBSimulator in
+                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
+                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
+                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+                return simulator
+            }
             let display = try request.selectedDisplay()
-            let live = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
-                screenID: display.id, screenUniqueID: display.uuid)
+            let live = try await PhaseTimer.measure("native.liveContextStart") {
+                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
+                    screenID: display.id, screenUniqueID: display.uuid)
+            }
             feed = live; observation = live.initialObservation
             try admission.validateContext(live.initialObservation)
             let event = try request.completeEvent(observation: live.initialObservation)
@@ -46,20 +51,21 @@ enum AgentModeNativeOperation {
             } else {
                 guardOwner = AgentModeFreshScreenGuard(simulator: simulator, feed: live, admission: admission)
             }
-            let hid: FBSimulatorHIDSession
-            if let transportOwner {
-                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
-                    liveFreshnessProvider: live, transportOwner: transportOwner)
-            } else {
-                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+            let hid = try await PhaseTimer.measure("native.hidOpen") { () async throws -> FBSimulatorHIDSession in
+                if let transportOwner {
+                    return try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                        liveFreshnessProvider: live, transportOwner: transportOwner)
+                }
+                return try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
                     liveFreshnessProvider: live)
             }
             session = hid
-            let receipt = try await hid.execute(event, admissionGuard: guardOwner)
+            // Includes the admission guard's screen read before the first event and the event drain.
+            let receipt = try await PhaseTimer.measure("native.hidExecute") { try await hid.execute(event, admissionGuard: guardOwner) }
             count = await hid.status().enqueuedEventCount
-            cleanup = try await hid.close().cleanup.rawValue
+            cleanup = try await PhaseTimer.measure("native.hidClose") { try await hid.close().cleanup.rawValue }
             guard cleanup != "uncertain" else { throw AgentModeFailure("cleanupUncertain", "Native input cleanup is uncertain.") }
-            await live.closeAndWait()
+            await PhaseTimer.measure("native.liveContextClose") { await live.closeAndWait() }
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: receipt.outcome.rawValue, token: nil,
                 enqueuedEventCount: count, cleanup: cleanup, error: nil,
@@ -91,10 +97,17 @@ enum AgentModeNativeOperation {
             } else {
                 message = "Native input did not complete. It was not repeated. Refresh the snapshot."
             }
-            return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
+            var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: released.0 == 0 && released.1 == "notNeeded" ? "failedBeforeInput" : "failedNoReplay",
                 token: nil, enqueuedEventCount: released.0, cleanup: released.1,
                 error: message, context: observation.map(SelectedHIDContext.init))
+            // A policy rejection before input keeps its typed code for the agent reply.
+            if response.outcome == "failedBeforeInput", let policyFailure = pathGuard?.failure ?? (error as? AgentModeFailure) {
+                response.agent = AgentModeResult(error: policyFailure,
+                    cache: AgentModeCacheState(status: "invalidated", reason: policyFailure.code, requiresRefresh: true),
+                    context: response.context)
+            }
+            return response
         }
     }
 }
@@ -113,8 +126,10 @@ private final class AgentModeFreshScreenGuard: FBSimulatorHIDInputAdmissionGuard
         try Task.checkCancellation()
         try admission.validateContext(observation)
         let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 1)
-        let acquisition = try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-            observation: observation, freshnessProvider: feed, policy: policy)
+        let acquisition = try await PhaseTimer.measure("native.admissionRead") {
+            try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
+                observation: observation, freshnessProvider: feed, policy: policy)
+        }
         guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
             throw AgentModeFailure("admissionReadFailed", "The native screen could not be confirmed before input.")
         }

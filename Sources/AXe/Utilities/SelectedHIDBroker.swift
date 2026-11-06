@@ -14,11 +14,16 @@ enum SelectedHIDBroker {
             throw SelectedHIDFailure.invalid("Legacy keyboard requires the cancellable owned exchange")
         }
         let data = try encoded(request)
-        let descriptor = try readyDescriptor(simulatorUDID: simulatorUDID)
+        // Includes starting a broker when none is ready.
+        let descriptor = try PhaseTimer.measureSync("client.connect") {
+            try readyDescriptor(simulatorUDID: simulatorUDID)
+        }
         defer { Darwin.close(descriptor) }
         try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
-        return try exchange(data, requestID: request.requestID, descriptor: descriptor,
-            maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
+        return try PhaseTimer.measureSync("client.exchange") {
+            try exchange(data, requestID: request.requestID, descriptor: descriptor,
+                maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)
+        }
     }
 
     /// Raw keyboard has no whole-command deadline. Cancellation closes this owned exchange, never replays it.
@@ -148,26 +153,35 @@ enum SelectedHIDBroker {
                             guard bytes.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
                             return try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
                         }
-                        let response: SelectedHIDResponse
+                        var response: SelectedHIDResponse
+                        let timer = request.timing == true ? PhaseTimer() : nil
                         if rejectedWhileBusy || agentController.isBusy {
                             response = request.agent == nil && request.agentBatch == nil ? owner.rejectBusy(request) : agentController.reject(request)
                         } else if request.agentBatch != nil {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
-                                await agentController.performBatch(request)
+                                await PhaseTimer.$current.withValue(timer) {
+                                    await PhaseTimer.measure("broker.batch") { await agentController.performBatch(request) }
+                                }
                             }
                         } else if request.agent != nil {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
-                                await agentController.perform(request)
+                                await PhaseTimer.$current.withValue(timer) {
+                                    await PhaseTimer.measure("broker.agent") { await agentController.perform(request) }
+                                }
                             }
                         } else {
                             agentController.invalidate()
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {
-                                await owner.perform(request)
+                                await PhaseTimer.$current.withValue(timer) {
+                                    await PhaseTimer.measure("broker.selected") { await owner.perform(request) }
+                                }
                             }
                         }
+                        response.timing = timer?.payload
+                        let reply = response
                         try await offMain {
                             let maximumBytes = request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes
-                            let bytes = try SelectedAXWire.boundedResponse(response, maximumBytes: maximumBytes)
+                            let bytes = try SelectedAXWire.boundedResponse(reply, maximumBytes: maximumBytes)
                             try HIDBroker.writeAll(bytes, to: client)
                         }
                     } catch { logger.error().log("Selected broker exchange failed; no replay: \(error)") }

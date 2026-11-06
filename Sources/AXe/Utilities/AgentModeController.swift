@@ -15,15 +15,20 @@ final class AgentModeController {
         let context: SelectedHIDContext
         let snapshot: AgentModeSnapshot
     }
+    /// Measures the active panel. The request's explicit display is checked by the caller.
+    typealias DisplayDiscovery = @MainActor (SelectedHIDRequest) async throws -> ActivePanelIdentity
     private let simulatorUDID: String
     private let logger: AxeLogger
     private let owner: SelectedHIDOwner
+    private let discoverDisplay: DisplayDiscovery
     private var record: Record?
     private var sequence = 0
     private(set) var isBusy = false
 
-    init(simulatorUDID: String, logger: AxeLogger, owner: SelectedHIDOwner) {
+    init(simulatorUDID: String, logger: AxeLogger, owner: SelectedHIDOwner,
+         discoverDisplay: DisplayDiscovery? = nil) {
         self.simulatorUDID = simulatorUDID; self.logger = logger; self.owner = owner
+        self.discoverDisplay = discoverDisplay ?? Self.liveDiscovery(simulatorUDID: simulatorUDID, logger: logger)
     }
 
     func invalidate() { record = nil }
@@ -96,20 +101,64 @@ final class AgentModeController {
             } else { referenceRecord = nil }
             let expectedPID = try AgentModePIDPolicy.expectedPID(
                 assertion: mode.expectedPID, snapshot: referenceRecord?.expectedPID)
-            let display = try await discover(request)
-            // A stale display can be refused before a disconnected AX channel hides it.
-            if let referenceRecord {
-                guard referenceRecord.context.screenID == display.displayID,
-                      UUID(uuidString: referenceRecord.context.screenUUID) == display.uniqueID else {
-                    throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
+            // A published reference tap is admitted on the operation's own owned tree. The table
+            // supplies the target, display and context; the owned full context read and tree
+            // replace the separate pre-description and its two-tree equality.
+            if mode.kind == .tap, mode.ref != nil, focusPlan == nil, let referenceRecord, let pid = expectedPID {
+                try requireRequestedDisplay(request, matches: referenceRecord.context)
+                let admission = try AgentReferenceTapAdmission(published: referenceRecord.snapshot,
+                    context: referenceRecord.context, pid: pid, mode: mode)
+                let native = try admission.request(requestID: request.requestID)
+                // Invalidate before input, including partial or uncertain native delivery.
+                record = nil
+                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native, batchTap: admission) }
+                let actionReceipt = receipt(mode.kind, result)
+                action = actionReceipt
+                guard result.error == nil, result.cleanup != "uncertain" else {
+                    return failure(request, result.agent?.error
+                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        native: result, action: actionReceipt)
                 }
+                return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
+                    context: referenceRecord.context, pid: pid, afterSwipe: false)
+            }
+            // These native operations read the complete owned tree and require the admission's
+            // fingerprint, target and context on it before the first event, so the table can
+            // supply the plan. Typing reads only its focused field and keeps its pre-description.
+            if let referenceRecord, focusPlan == nil, let pid = expectedPID, Self.admitsOnOwnedTree(mode.kind) {
+                try requireRequestedDisplay(request, matches: referenceRecord.context)
+                let native = try nativeRequest(request, mode: mode, pid: pid, context: referenceRecord.context,
+                    snapshot: referenceRecord.snapshot, cached: referenceRecord)
+                // Invalidate before input, including partial or uncertain native delivery.
+                record = nil
+                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
+                let actionReceipt = receipt(mode.kind, result)
+                action = actionReceipt
+                guard result.error == nil, result.cleanup != "uncertain" else {
+                    return failure(request, result.agent?.error
+                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        native: result, action: actionReceipt)
+                }
+                return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
+                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+            }
+            // A table names its display; the full context read admits that panel again.
+            // Without a table the active panel must be measured first.
+            let display: ActivePanelIdentity
+            if let referenceRecord {
+                try requireRequestedDisplay(request, matches: referenceRecord.context)
+                display = try Self.display(of: referenceRecord.context)
+            } else {
+                display = try await discover(request)
             }
             let fresh = try await observe(display: display, pid: expectedPID)
             guard let context = fresh.context, let roots = fresh.ax?.roots,
                   let pid = fresh.ax?.expectedPID else {
                 throw AgentModeFailure("missingObservation", "The native observation has no selected context or hierarchy.")
             }
-            let snapshot = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
+            let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
+            }
             if let focusPlan {
                 if mode.kind == .tap {
                     try focusPlan.validateBeforeTap(snapshot: snapshot, context: context, pid: pid)
@@ -169,80 +218,16 @@ final class AgentModeController {
                 context: context, snapshot: snapshot, cached: cached)
             // Invalidate before input, including partial or uncertain native delivery.
             record = nil
-            let result = await owner.perform(native)
-            action = AgentModeActionReceipt(kind: mode.kind, outcome: result.outcome,
-                enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
-                quarantine: result.quarantine, slider: result.ax?.slider, sliderValue: result.ax?.sliderValue)
+            let result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
+            let actionReceipt = receipt(mode.kind, result)
+            action = actionReceipt
             guard result.error == nil, result.cleanup != "uncertain" else {
-                return failure(request, AgentModeFailure("nativeActionFailed", "The native action failed."),
-                               native: result, action: action)
+                return failure(request, result.agent?.error
+                    ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                    native: result, action: actionReceipt)
             }
-            // A fresh replacement is useful, but its failure must not suggest replaying the action.
-            do {
-                let afterContext: SelectedHIDContext
-                let afterSnapshot: AgentModeSnapshot
-                if native.path?.kind == .swipe {
-                    guard let inputContext = result.context, inputContext == context,
-                          result.brokerID == owner.brokerID else {
-                        throw AgentModeFailure("postSwipeContextChanged", "The completed swipe has no matching native owner and context.")
-                    }
-                    let settled = try await AgentPostSwipePublication.capture(
-                        context: inputContext, pid: pid, brokerID: owner.brokerID,
-                        startedAt: now, now: { self.now },
-                        pause: { try await Task.sleep(for: .milliseconds(300)) },
-                        sample: { deadline in
-                            try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
-                            if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
-                            let display = try await self.discover(request)
-                            try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
-                            if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
-                            let observed = try await self.observe(display: display, pid: pid)
-                            guard let observedContext = observed.context, let roots = observed.ax?.roots,
-                                  let observedPID = observed.ax?.expectedPID else {
-                                throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
-                            }
-                            return AgentPostSwipePublication.Sample(
-                                snapshot: try AgentModeSnapshot(roots: roots,
-                                    nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata, context: observedContext),
-                                context: observedContext, pid: observedPID, brokerID: observed.brokerID)
-                        })
-                    afterContext = settled.context
-                    afterSnapshot = settled.snapshot
-                } else {
-                    try await Task.sleep(for: .milliseconds(300))
-                    let afterDisplay = try await discover(request)
-                    let after = try await observe(display: afterDisplay, pid: pid)
-                    guard let observedContext = after.context, let afterRoots = after.ax?.roots else {
-                        throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
-                    }
-                    afterContext = observedContext
-                    afterSnapshot = try AgentModeSnapshot(roots: afterRoots,
-                        nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: afterContext)
-                }
-                let stored = store(afterSnapshot, context: afterContext, pid: pid)
-                let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence,
-                    udid: simulatorUDID, request: mode, applicationPID: stored.expectedPID, context: stored.context,
-                    unchanged: false, expiresIn: Self.timeToLive)
-                return success(request, native: result, capture: capture, action: action,
-                    cache: AgentModeCacheState(status: "refreshed", reason: "inputCompleted", requiresRefresh: false))
-            } catch {
-                let nativeFailure = error as? AgentModeNativeFailure
-                if let nativeFailure, nativeFailure.response.quarantine != nil {
-                    return failure(request,
-                        AgentModeFailure("postActionRefreshQuarantined", "The action completed, but input recovery is required after its refresh failed."),
-                        native: nativeFailure.response, action: action)
-                }
-                let observation = AgentModeObservationEvidence(nativeFailure?.response)
-                let nextSteps: [String]
-                if let instruction = observation?.captureInstruction(udid: simulatorUDID) {
-                    nextSteps = ["The action completed. Do not replay this action.", instruction]
-                } else {
-                    nextSteps = ["The action completed. Run describe-ui --agent before another reference action. Do not replay this action."]
-                }
-                return success(request, native: result, action: action,
-                    cache: AgentModeCacheState(status: "invalidated", reason: "postActionRefreshFailed", requiresRefresh: true),
-                    observation: observation, nextSteps: nextSteps)
-            }
+            return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
+                context: context, pid: pid, afterSwipe: native.path?.kind == .swipe)
         } catch let error as AgentModeFailure where error.code == "snapshotMissing"
             && request.agent?.snapshotID != nil && record != nil
             && request.agent?.snapshotID != record?.id {
@@ -254,6 +239,135 @@ final class AgentModeController {
             let reason = error as? AgentModeFailure
                 ?? AgentModeFailure("observationFailed", "The simulator observation failed.")
             return failure(request, reason, native: nativeFailure?.response, action: action)
+        }
+    }
+
+    /// Path guards and the AX size guard compare the complete owned tree with the admission
+    /// fingerprint and target before input. Keyboard and slider guards read only their field.
+    static func admitsOnOwnedTree(_ kind: AgentModeRequest.Kind) -> Bool {
+        switch kind {
+        case .swipe, .drag, .pinch, .hold, .doubleTap, .complete: return true
+        case .describe, .read, .tap, .typeText, .focusAndType, .keyPress, .keyCombo, .keySequence,
+             .sliderEndpoint, .sliderPercentage: return false
+        }
+    }
+
+    private func receipt(_ kind: AgentModeRequest.Kind, _ result: SelectedHIDResponse) -> AgentModeActionReceipt {
+        AgentModeActionReceipt(kind: kind, outcome: result.outcome,
+            enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
+            quarantine: result.quarantine, slider: result.ax?.slider, sliderValue: result.ax?.sliderValue)
+    }
+
+    /// A fresh replacement is useful, but its failure must not suggest replaying the action.
+    private func publishReplacement(_ request: SelectedHIDRequest, mode: AgentModeRequest,
+                                    result: SelectedHIDResponse, action: AgentModeActionReceipt,
+                                    context: SelectedHIDContext, pid: Int32,
+                                    afterSwipe: Bool) async -> SelectedHIDResponse {
+        do {
+            let afterContext: SelectedHIDContext
+            let afterSnapshot: AgentModeSnapshot
+            if afterSwipe {
+                guard let inputContext = result.context, inputContext == context,
+                      result.brokerID == owner.brokerID else {
+                    throw AgentModeFailure("postSwipeContextChanged", "The completed swipe has no matching native owner and context.")
+                }
+                // A settled table must keep the swipe's context, so only that panel is read.
+                let display = try Self.display(of: inputContext)
+                let settled = try await PhaseTimer.measure("agent.postSwipeSettle") {
+                    try await AgentPostSwipePublication.capture(
+                        context: inputContext, pid: pid, brokerID: owner.brokerID,
+                        startedAt: now, now: { self.now },
+                        pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) } },
+                        sample: { deadline in
+                            try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
+                            if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
+                            let observed = try await self.observe(display: display, pid: pid)
+                            guard let observedContext = observed.context, let roots = observed.ax?.roots,
+                                  let observedPID = observed.ax?.expectedPID else {
+                                throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
+                            }
+                            let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                                try AgentModeSnapshot(roots: roots,
+                                    nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata, context: observedContext)
+                            }
+                            return AgentPostSwipePublication.Sample(snapshot: snapshot,
+                                context: observedContext, pid: observedPID, brokerID: observed.brokerID)
+                        })
+                }
+                afterContext = settled.context
+                afterSnapshot = settled.snapshot
+            } else {
+                let refreshed = try await PhaseTimer.measure("agent.refresh") {
+                    () async throws -> (SelectedHIDContext, AgentModeSnapshot) in
+                    try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) }
+                    let after = try await observeReplacement(request, context: context, pid: pid)
+                    guard let observedContext = after.context, let afterRoots = after.ax?.roots else {
+                        throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
+                    }
+                    let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                        try AgentModeSnapshot(roots: afterRoots,
+                            nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: observedContext)
+                    }
+                    return (observedContext, snapshot)
+                }
+                afterContext = refreshed.0
+                afterSnapshot = refreshed.1
+            }
+            let stored = store(afterSnapshot, context: afterContext, pid: pid)
+            let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence,
+                udid: simulatorUDID, request: mode, applicationPID: stored.expectedPID, context: stored.context,
+                unchanged: false, expiresIn: Self.timeToLive)
+            return success(request, native: result, capture: capture, action: action,
+                cache: AgentModeCacheState(status: "refreshed", reason: "inputCompleted", requiresRefresh: false))
+        } catch {
+            let nativeFailure = error as? AgentModeNativeFailure
+            if let nativeFailure, nativeFailure.response.quarantine != nil {
+                return failure(request,
+                    AgentModeFailure("postActionRefreshQuarantined", "The action completed, but input recovery is required after its refresh failed."),
+                    native: nativeFailure.response, action: action)
+            }
+            let observation = AgentModeObservationEvidence(nativeFailure?.response)
+            let nextSteps: [String]
+            if let instruction = observation?.captureInstruction(udid: simulatorUDID) {
+                nextSteps = ["The action completed. Do not replay this action.", instruction]
+            } else {
+                nextSteps = ["The action completed. Run describe-ui --agent before another reference action. Do not replay this action."]
+            }
+            return success(request, native: result, action: action,
+                cache: AgentModeCacheState(status: "invalidated", reason: "postActionRefreshFailed", requiresRefresh: true),
+                observation: observation, nextSteps: nextSteps)
+        }
+    }
+
+    /// The admitted panel is read first; its full context read admits it again. Only a
+    /// replaced active panel justifies a second discovery and read. The same panel repeats
+    /// the first failure, and a quarantine is never followed by another read.
+    private func observeReplacement(_ request: SelectedHIDRequest, context: SelectedHIDContext,
+                                    pid: Int32) async throws -> SelectedHIDResponse {
+        let known = try Self.display(of: context)
+        do { return try await observe(display: known, pid: pid) }
+        catch {
+            if let native = error as? AgentModeNativeFailure, native.response.quarantine != nil { throw error }
+            try Task.checkCancellation()
+            let panel = try await discover(request)
+            guard panel != known else { throw error }
+            return try await observe(display: panel, pid: pid)
+        }
+    }
+
+    private static func display(of context: SelectedHIDContext) throws -> ActivePanelIdentity {
+        guard let uuid = UUID(uuidString: context.screenUUID) else {
+            throw AgentModeFailure("missingContext", "The selected runtime context is incomplete.")
+        }
+        return ActivePanelIdentity(displayID: context.screenID, uniqueID: uuid)
+    }
+
+    /// An explicit display option must name the table's display. No display is measured here;
+    /// the table's panel is admitted by the full context read that follows.
+    private func requireRequestedDisplay(_ request: SelectedHIDRequest, matches context: SelectedHIDContext) throws {
+        guard let requestedID = request.screenID, let requestedUUID = request.screenUUID else { return }
+        guard requestedID == context.screenID, requestedUUID == UUID(uuidString: context.screenUUID) else {
+            throw AgentModeFailure("inactiveDisplay", "The selected display is not the snapshot's display. Refresh display selection.")
         }
     }
 
@@ -274,7 +388,7 @@ final class AgentModeController {
             var tap = request
             tap.agent = AgentModeRequest(kind: .tap, expectedPID: initial.expectedPID,
                 snapshotID: initial.id, ref: ref, tapStyle: .physical)
-            let tapResult = await performReserved(tap, focusPlan: plan)
+            let tapResult = await PhaseTimer.measure("agent.focusTap") { await performReserved(tap, focusPlan: plan) }
             last = tapResult
             try progress.append(tapResult, action: .tap)
             try Task.checkCancellation()
@@ -290,7 +404,7 @@ final class AgentModeController {
                 operation: .complete, token: nil, primitives: [])
             type.agent = AgentModeRequest(kind: .typeText, expectedPID: initial.expectedPID,
                 snapshotID: focused.id, ref: focusedRef, text: mode.text)
-            let typeResult = await performReserved(type, focusPlan: baseline)
+            let typeResult = await PhaseTimer.measure("agent.typeText") { await performReserved(type, focusPlan: baseline) }
             last = typeResult
             try progress.append(typeResult, action: .type)
             guard record != nil, last?.agent?.data.cache.requiresRefresh == false else {
@@ -377,7 +491,7 @@ final class AgentModeController {
                 var initial = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                     screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
                 initial.agent = AgentModeRequest(kind: .describe, expectedPID: batch.expectedPID)
-                last = await performReserved(initial)
+                last = await PhaseTimer.measure("batch.initialDescribe") { await performReserved(initial) }
                 guard let initialResult = last?.agent, !initialResult.didError, let current = record else {
                     throw last?.agent?.error ?? AgentModeFailure("batchObservationFailed", "The initial batch observation failed.")
                 }
@@ -393,11 +507,12 @@ final class AgentModeController {
                 var action = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: currentRequestID,
                     screenID: baseline.screenID, screenUUID: UUID(uuidString: baseline.screenUUID),
                     operation: .complete, token: nil, primitives: [])
-                let response: SelectedHIDResponse
-                if let referencePlan {
-                    response = await performReferenceBatchStep(action, step: step, index: offset,
-                        plan: referencePlan, pid: batchPID)
-                } else {
+                let response = try await PhaseTimer.measure("batch.step \(offset + 1) \(step.action)") {
+                    () async throws -> SelectedHIDResponse in
+                    if let referencePlan {
+                        return await performReferenceBatchStep(action, step: step, index: offset,
+                            plan: referencePlan, pid: batchPID)
+                    }
                     guard let current = record, current.context == baseline else {
                         throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Later steps were stopped.")
                     }
@@ -408,7 +523,7 @@ final class AgentModeController {
                         action: step.action == .tap ? .tap : .typeText)
                     action.agent = AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
                         expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text)
-                    response = await performReserved(action)
+                    return await performReserved(action)
                 }
                 last = response
                 guard let result = response.agent else {
@@ -440,7 +555,7 @@ final class AgentModeController {
                     screenID: baseline.screenID, screenUUID: UUID(uuidString: baseline.screenUUID),
                     operation: .complete, token: nil, primitives: [])
                 final.agent = AgentModeRequest(kind: .describe, expectedPID: batchPID)
-                last = await performReserved(final)
+                last = await PhaseTimer.measure("batch.finalDescribe") { await performReserved(final) }
                 guard let finalResult = last?.agent, !finalResult.didError, record != nil else {
                     throw last?.agent?.error ?? AgentModeFailure("batchRefreshFailed", "Completed input has no usable replacement snapshot. Do not replay the batch.")
                 }
@@ -487,16 +602,21 @@ final class AgentModeController {
                 let admission = AgentBatchTapAdmission(plan: plan, index: index)
                 let native = try admission.request(requestID: request.requestID)
                 record = nil
-                result = await owner.perform(native, batchTap: admission)
+                result = await PhaseTimer.measure("agent.input") { await owner.perform(native, batchTap: admission) }
                 kind = .tap
             } else {
                 // Typing retains its existing independent description and focused-field path.
-                let display = try await discover(request)
-                let fresh = try await observe(display: display, pid: pid)
+                // The step request carries the plan's display; its full context read admits it.
+                guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
+                    throw AgentModeFailure("missingContext", "The batch step has no selected display.")
+                }
+                let fresh = try await observe(display: ActivePanelIdentity(displayID: screenID, uniqueID: screenUUID), pid: pid)
                 guard let context = fresh.context, let roots = fresh.ax?.roots else {
                     throw AgentModeFailure("missingObservation", "The batch step has no fresh native context or hierarchy.")
                 }
-                let snapshot = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
+                let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                    try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
+                }
                 let target = try plan.resolve(index: index, snapshot: snapshot, context: context, pid: pid)
                 // The complete batch document and target plan were validated before step one.
                 // Carry that chosen authority directly; no opaque ID becomes selector text.
@@ -504,7 +624,7 @@ final class AgentModeController {
                 let native = try nativeRequest(request, mode: mode, pid: pid,
                     context: context, snapshot: snapshot, cached: nil, binding: target)
                 record = nil
-                result = await owner.perform(native)
+                result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
                 kind = mode.kind
             }
             let action = AgentModeActionReceipt(kind: kind, outcome: result.outcome,
@@ -566,19 +686,33 @@ final class AgentModeController {
     }
 
     private func discover(_ request: SelectedHIDRequest) async throws -> ActivePanelIdentity {
-        try Task.checkCancellation()
-        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-              simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-        let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
-        let panel = discovery.readback.snapshot.activePanel.identity
-        if let requestedID = request.screenID, let requestedUUID = request.screenUUID {
-            guard requestedID == panel.displayID, requestedUUID == panel.uniqueID else {
-                throw AgentModeFailure("inactiveDisplay", "The selected display is not the measured active panel. Refresh display selection.")
+        try await PhaseTimer.measure("agent.discover") {
+            try Task.checkCancellation()
+            let panel = try await discoverDisplay(request)
+            if let requestedID = request.screenID, let requestedUUID = request.screenUUID {
+                guard requestedID == panel.displayID, requestedUUID == panel.uniqueID else {
+                    throw AgentModeFailure("inactiveDisplay", "The selected display is not the measured active panel. Refresh display selection.")
+                }
             }
+            return panel
         }
-        return panel
+    }
+
+    private static func liveDiscovery(simulatorUDID: String, logger: AxeLogger) -> DisplayDiscovery {
+        { _ in
+            let simulator = try await PhaseTimer.measure("simulatorSet") { () async throws -> FBSimulator in
+                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
+                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
+                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+                return simulator
+            }
+            // Display catalogue, boot identity and the devicectl active-panel read.
+            let discovery = try await PhaseTimer.measure("activePanel.discover") {
+                try await ActivePanelReader.discoverWithMetadata(for: simulator)
+            }
+            return discovery.readback.snapshot.activePanel.identity
+        }
     }
 
     private func observe(display: ActivePanelIdentity, pid: Int32?) async throws -> SelectedHIDResponse {
@@ -586,7 +720,7 @@ final class AgentModeController {
             screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil, primitives: [])
         request.ax = SelectedAXRequest(kind: .describe, expectedPID: pid,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0, includeNativeIdentity: true)
-        let result = await owner.perform(request)
+        let result = await PhaseTimer.measure("agent.observe") { await owner.perform(request) }
         guard result.error == nil, result.cleanup != "uncertain" else {
             throw AgentModeNativeFailure(response: result)
         }

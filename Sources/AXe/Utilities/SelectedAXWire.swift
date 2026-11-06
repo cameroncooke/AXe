@@ -35,6 +35,12 @@ enum SelectedAXWire {
     static func boundedResponse(_ response: SelectedHIDResponse, maximumBytes: Int) throws -> Data {
         do { return try encodeResponse(response, maximumBytes: maximumBytes) }
         catch {
+            // Diagnostic timing never changes whether the real response fits.
+            if response.timing != nil {
+                var untimed = response
+                untimed.timing = nil
+                return try boundedResponse(untimed, maximumBytes: maximumBytes)
+            }
             if response.readingContinuation != nil {
                 var original = response
                 original.readingContinuation = nil

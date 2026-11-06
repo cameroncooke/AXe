@@ -37,7 +37,7 @@ final class SelectedHIDOwner {
         lastActivity = self.dependencies.now()
     }
 
-    func perform(_ request: SelectedHIDRequest, batchTap: AgentBatchTapAdmission? = nil) async -> SelectedHIDResponse {
+    func perform(_ request: SelectedHIDRequest, batchTap: (any AgentOwnedTapAdmission)? = nil) async -> SelectedHIDResponse {
         do {
             guard !shouldStop, !quarantined, !maintainingRetainedInput, !batchRunning else { throw SelectedHIDFailure.busy }
             if batchTap != nil {
@@ -306,11 +306,13 @@ final class SelectedHIDOwner {
     }
 
     private func acquireLease() throws {
-        // Older raw brokers can retain input without the common lease. Keep their process guard.
-        // Protocol 3 brokers release the common lease after a complete contact pair.
-        let legacyEndpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID, version: 2)
-        guard try !HIDBroker.isBrokerProcessAlive(endpoint: legacyEndpoint) else { throw SelectedHIDFailure.busy }
-        lease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
+        try PhaseTimer.measureSync("owner.lease") {
+            // Older raw brokers can retain input without the common lease. Keep their process guard.
+            // Protocol 3 brokers release the common lease after a complete contact pair.
+            let legacyEndpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID, version: 2)
+            guard try !HIDBroker.isBrokerProcessAlive(endpoint: legacyEndpoint) else { throw SelectedHIDFailure.busy }
+            lease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
+        }
     }
 
     private func open(_ request: SelectedHIDRequest) async throws {

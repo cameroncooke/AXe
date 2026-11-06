@@ -19,13 +19,18 @@ enum SelectedKeyboardOperation {
             try request.validate()
             guard let keyboard = request.keyboard else { throw SelectedHIDFailure.invalid("Missing keyboard payload") }
             try Task.checkCancellation()
-            try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-            let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-            guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                  simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+            let simulator = try await PhaseTimer.measure("keyboard.simulatorSet") { () async throws -> FBSimulator in
+                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
+                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
+                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+                return simulator
+            }
             let display = try request.selectedDisplay()
-            let live = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
-                screenID: display.id, screenUniqueID: display.uuid)
+            let live = try await PhaseTimer.measure("keyboard.liveContextStart") {
+                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
+                    screenID: display.id, screenUniqueID: display.uuid)
+            }
             feed = live
             observation = live.initialObservation
             try request.agentAdmission?.validateContext(live.initialObservation)
@@ -33,21 +38,24 @@ enum SelectedKeyboardOperation {
             let focus = SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard, agentAdmission: request.agentAdmission)
             guardOwner = focus
             try await focus.prepare()
-            let hid: FBSimulatorHIDSession
-            if let transportOwner {
-                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
-                    liveFreshnessProvider: live, transportOwner: transportOwner)
-            } else {
-                hid = try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+            let hid = try await PhaseTimer.measure("keyboard.hidOpen") { () async throws -> FBSimulatorHIDSession in
+                if let transportOwner {
+                    return try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
+                        liveFreshnessProvider: live, transportOwner: transportOwner)
+                }
+                return try await FBSimulatorHIDSession.open(for: simulator, observation: live.initialObservation,
                     liveFreshnessProvider: live)
             }
             session = hid
-            let receipt = try await hid.execute(keyboard.event, keyboardAdmissionGuard: focus)
+            // Includes one focused-field read before every key down.
+            let receipt = try await PhaseTimer.measure("keyboard.hidExecute") {
+                try await hid.execute(keyboard.event, keyboardAdmissionGuard: focus)
+            }
             result = focus.result
             count = await hid.status().enqueuedEventCount
-            cleanup = try await hid.close().cleanup.rawValue
+            cleanup = try await PhaseTimer.measure("keyboard.hidClose") { try await hid.close().cleanup.rawValue }
             guard cleanup != "uncertain" else { throw SelectedHIDFailure.invalid("Keyboard release is uncertain") }
-            await live.closeAndWait()
+            await PhaseTimer.measure("keyboard.liveContextClose") { await live.closeAndWait() }
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: receipt.outcome.rawValue, token: nil,
                 enqueuedEventCount: count, cleanup: cleanup, error: nil,
@@ -112,6 +120,10 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     }
 
     private func readFocusedField() async throws -> FBSimulatorAXNode {
+        try await PhaseTimer.measure("keyboard.focusRead") { try await readFocusedFieldUntimed() }
+    }
+
+    private func readFocusedFieldUntimed() async throws -> FBSimulatorAXNode {
         // Read a new root and exact field before every down; do not serialize the whole tree.
         let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: remainingSeconds) { remaining in
             if let identifier = request.fieldTarget.semanticID {

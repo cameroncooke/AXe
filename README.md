@@ -225,6 +225,15 @@ axe tap --agent --udid "$UDID" \
 
 The new queries allow 512 UTF-8 bytes, with regex patterns limited to 128 bytes and frame specifications to 256 bytes. Each candidate ID/label/value is limited to 4096 bytes; total candidate text is limited to 256 KiB under the existing 4096-node tree limit. Selection shares a 100 ms budget, with cooperative Foundation progress cancellation for regex matching. Pattern compilation has a byte cap and invalid-pattern rejection; Foundation does not expose compilation cancellation. A bound failure, no match or more than one match sends no input. Narrow the query instead of retrying unchanged. AXe resolves the fresh native tree, requires a unique exact native ID or label, then repeats the existing context, native-screen and target checks before input. A geometric match never authorizes cached-coordinate input. An older broker rejects a new selector payload instead of ignoring its filters.
 
+### Phase timing (diagnostic)
+
+Set `AXE_TIMING=1` to print a phase table to standard error after each agent command. It lists client connect and exchange time, then the broker's display discovery, accessibility reads, snapshot builds, input and post-action refresh, with start offsets and durations in milliseconds. Set `AXE_TIMING=/absolute/path.jsonl` to append one `axe.timing` JSON record per command instead. Standard output is unchanged in both modes. The broker records phases only for requests that ask for them. A broker started by an older build returns no phases; the table says so. Timing is dropped before it could make a response exceed its size bound.
+
+```bash
+AXE_TIMING=1 axe tap --agent --udid "$UDID" --snapshot-id "$SNAPSHOT_ID" --ref "$REF"
+AXE_TIMING=/tmp/axe-timing.jsonl axe describe-ui --agent --udid "$UDID"
+```
+
 ## Agent batches
 
 Use `axe batch --agent --udid "$UDID" --file steps.json` for 1...8 ordered tap/type steps addressed by exact native IDs. The JSON form is `{"steps":[{"action":"tap","id":"field"},{"action":"type","id":"field","text":"AB"}]}`. Without a PID assertion, the batch discovers its initial owner once and keeps it for all steps. AXe resolves each ID again, requires the field to be focused before typing, and stops after failed input/refresh or changed app/device context. Earlier effects remain; there is no rollback or replay. One agent-result contains compact step receipts and the final usable capture. Raw and selected batches remain unchanged. Read the [batch contract](Skills/CLI/axe/references/agent-reference.md#run-a-small-ordered-agent-batch) for bounds, ownership and failure handling.

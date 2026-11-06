@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added a repeatable serial Weather, Reminders and Contacts benchmark for AXe, FlowDeck and RocketSim. It records tool versions and hashes, task evidence, calls, time and returned tokens, with explicit acceptance of comparable successful AXe baselines. See [benchmark setup](benchmarks/README.md).
 
+- Added opt-in agent phase timing. `AXE_TIMING=1` prints client and broker phases (display discovery, accessibility reads, snapshot builds, input and refresh) to standard error; `AXE_TIMING=/path.jsonl` appends JSON records. Standard output and requests without timing are unchanged.
+
 - Show a bounded preview of cached scroll areas on compact first pages when their canonical rows are on a later page. Keep canonical rows/cursors, full/base and legacy output unchanged; perform no extra accessibility read. Requires a matched CLI and broker.
 
 - Added explicit `type --agent --focus --snapshot-id --ref` to validate all text, physically focus the same current TextField and type with two phase receipts. Existing focus, identity, context, cleanup and no-replay checks remain; raw typing, default agent typing and reference batches are unchanged. Requires a matched CLI and broker.
@@ -107,6 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Build IDB from a tracked patch against the exact fork base without discarding unexpected source changes. Builds accept `arm64`, `x86_64` or both.
 - Added `scripts/build.sh debug-helper` to stage the signed simulator helper beside the SwiftPM debug executable.
+- Admit reference taps, swipes, drags, pinches, holds and double-taps on the owned native operation's own complete tree, as reference batch taps already do, instead of a separate pre-description compared with it. The owned tree must still have the table's exact native fingerprint, target identity, frame and context; the native point, PID, live-context and hit checks before input are unchanged. Typing and sliders keep their pre-description. Reference actions and post-action replacement reads use the table's display, whose full context read admits that panel again; a replaced active panel is discovered only after that read fails. Owned admission rejections before input now return their typed code (for example `screenChanged`) instead of `nativeActionFailed`. A tap or swipe drops about 1.3 to 1.7 s of repeated reads. `AXE_TIMING` now lists each full context read inside an accessibility read and the path guard's reads.
 
 ### Fixed
 

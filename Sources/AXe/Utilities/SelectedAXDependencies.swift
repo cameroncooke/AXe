@@ -5,7 +5,7 @@ import FBSimulatorControl
 /// The owner retains one state machine and the same lock for every implementation.
 @MainActor
 struct SelectedAXDependencies {
-    typealias Execute = @MainActor (SelectedHIDRequest, String, UUID, AxeLogger, URL, AgentBatchTapAdmission?) async -> SelectedHIDResponse
+    typealias Execute = @MainActor (SelectedHIDRequest, String, UUID, AxeLogger, URL, (any AgentOwnedTapAdmission)?) async -> SelectedHIDResponse
     typealias Persist = @MainActor (String, SelectedHIDResponse, SelectedHIDRequest?) throws -> Void
     let execute: Execute
     let persist: Persist
