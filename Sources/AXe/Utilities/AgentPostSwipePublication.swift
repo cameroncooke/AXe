@@ -5,6 +5,10 @@ import Foundation
 enum AgentPostSwipePublication {
     static let maximumSampleStarts = 3
     static let startWindowSeconds = 3.0
+    /// Separates each compared pair of reads, after a swipe and after a screen transition. Each
+    /// read takes about 0.4 s, so equal reads still span about half a second. Agent swipes end at
+    /// rest, so no fling outlasts the pair.
+    static let pause = Duration.milliseconds(100)
 
     struct Sample {
         let snapshot: AgentModeSnapshot

@@ -132,9 +132,12 @@ struct Swipe: AsyncParsableCommand {
                 direction: agentDirection, distance: agentDistance ?? 1, duration: duration ?? 1,
                 preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
         }
+        // An agent swipe ends at rest so its replacement read can settle; raw swipes stay linear.
+        var path = selectedPath
+        path.endsAtRest = true
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .complete,
             expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID),
-            input: selectedInput, path: selectedPath)
+            input: selectedInput, path: path)
     }
 
     var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .swipe, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration ?? 1, delta: delta ?? 50, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }

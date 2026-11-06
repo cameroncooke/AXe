@@ -309,7 +309,7 @@ final class AgentModeController {
                     try await AgentPostSwipePublication.capture(
                         context: inputContext, pid: pid, brokerID: owner.brokerID,
                         startedAt: now, now: { self.now },
-                        pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) } },
+                        pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: AgentPostSwipePublication.pause) } },
                         sample: { deadline in
                             try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
                             if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
@@ -356,7 +356,7 @@ final class AgentModeController {
                         let settled = try await PhaseTimer.measure("agent.replacementSettle") {
                             try await AgentPostSwipePublication.capture(context: first.0, pid: pid,
                                 brokerID: owner.brokerID, startedAt: now, now: { self.now },
-                                pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) } },
+                                pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: AgentPostSwipePublication.pause) } },
                                 sample: { deadline in
                                     try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
                                     if !consumedFirst {
@@ -946,7 +946,7 @@ final class AgentModeController {
             let points = plan.points
             plannedPath = SelectedHIDPath(kind: .swipe, startX: points.from.x, startY: points.from.y,
                 endX: points.to.x, endY: points.to.y, duration: mode.duration, delta: 50,
-                preDelay: mode.preDelay, postDelay: mode.postDelay)
+                preDelay: mode.preDelay, postDelay: mode.postDelay, endsAtRest: true)
         case .drag:
             guard let node, let frame = node.frame, let destination = mode.destination,
                   [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),

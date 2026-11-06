@@ -17,8 +17,15 @@ struct SelectedHIDPath: Codable, Sendable {
     var expectedWidth: Double? = nil
     var expectedHeight: Double? = nil
     var edgeInset: Double? = nil
+    /// Agent swipes slow to rest before lift-off. A linear swipe releases at full speed and the
+    /// content keeps decelerating for about two seconds; at rest it stops with the finger, moves
+    /// the path distance, and the replacement read settles at once. Raw swipes stay linear.
+    var endsAtRest: Bool? = nil
 
     func validate() throws {
+        guard endsAtRest != true || kind == .swipe else {
+            throw SelectedHIDFailure.invalid("Only a swipe can end at rest")
+        }
         guard duration.isFinite, duration > 0, duration <= 10,
               preDelay.isFinite, (0...10).contains(preDelay),
               postDelay.isFinite, (0...10).contains(postDelay) else {
@@ -99,7 +106,9 @@ struct SelectedHIDPath: Codable, Sendable {
         if kind == .drag { result.append(.delay(0.05)) }
         for index in 1...count {
             result.append(.delay(duration / Double(count)))
-            let fraction = Double(index) / Double(count)
+            let linear = Double(index) / Double(count)
+            // Cubic ease-out: the last movements are small, so the release velocity is near zero.
+            let fraction = endsAtRest == true ? 1 - pow(1 - linear, 3) : linear
             let point = index == count ? end : CGPoint(
                 x: start.x + (end.x - start.x) * fraction,
                 y: start.y + (end.y - start.y) * fraction)
