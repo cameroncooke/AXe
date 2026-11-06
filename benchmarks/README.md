@@ -18,12 +18,20 @@ From the AXe repository:
 ./benchmarks/run history
 ```
 
-The default run tests all three tools against all three apps, one job at a time.
-For a smaller run or repeated measurements:
+The default run builds the current source, then tests the tools against all
+three apps, one job at a time. FlowDeck and RocketSim change only when their
+version changes, so a default run reuses their saved history when the current
+version already has a measured run for every selected app. It prints a
+`reuse-history` line with those run IDs and measures AXe. Name the tools with
+`--tools`, or add `--rerun-competitors`, to measure them again. Reports compare
+with the saved history and accepted baselines. For a smaller run or repeated
+measurements:
 
 ```sh
-./benchmarks/run --tools axe --scenarios weather
+./benchmarks/run --scenarios weather          # AXe; reuses competitors at the same version
+./benchmarks/run --rerun-competitors          # measure FlowDeck and RocketSim again
 ./benchmarks/run --tools axe flowdeck rocketsim --scenarios weather --repeat 3
+./benchmarks/run --axe /path/to/release/axe   # measure a specific build instead
 ./benchmarks/run history --json
 ./benchmarks/run compare benchmarks/history/RUN_ID/report.json
 ./benchmarks/run accept benchmarks/history/RUN_ID/report.json
@@ -51,9 +59,14 @@ Edit [config.local.json](config.local.json), created from
 [config.example.json](config.example.json):
 
 - Set the Xcode developer directory and exact simulator UUID.
-- Set explicit paths to the AXe candidate, FlowDeck and RocketSim. Keep AXe's
-  packaged frameworks beside its executable. There is no implicit PATH selection.
-- Set `setupAxe` for common preparation; it can use the same AXe candidate.
+- Set explicit paths to FlowDeck and RocketSim. There is no implicit PATH selection.
+- AXe needs no path. Each run builds the current source with `scripts/build.sh`
+  and uses that build for the AXe cases and for common preparation. The CLI is
+  always rebuilt; the frameworks only when `Packages/IDBKit`, Xcode or the
+  architectures changed since their last build, as for `make build`. The exact binary, frameworks and resources are copied to
+  `artifacts/RUN-axe/` beside the run's results, so a later build cannot change
+  what a report measured. `--axe PATH` measures a given executable instead; keep
+  its frameworks beside it. `doctor` checks the current build.
 - Record the observed screen size and existing Contacts/Reminders row inventory.
 - Enable `allowTestRecordCleanup` only when deletion of those exact benchmark
   records is authorized. The example defaults to false.

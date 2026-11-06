@@ -293,6 +293,19 @@ class ReminderPreparation(ContactPreparation):
         require(owned_present or not any('MCP Benchmark List' in label for label in labels),
                 'Benchmark list is still present.')
 
+    def await_home(self, attempts=10, pause=0.5):
+        """Read until the list overview is visible, within a bound.
+
+        After the delete confirmation the app pops its list detail to the overview with an
+        animation; a single read taken as soon as the tap returns can still show the detail.
+        Preparation runs outside the benchmark clock, so this wait costs nothing measured.
+        """
+        for attempt in range(attempts):
+            capture = self.run_agent(['describe-ui', '--agent', '--view', 'full'])
+            if self.has(capture, self.profile['homeMarker']) or attempt == attempts - 1:
+                return capture
+            time.sleep(pause)
+
     def run(self):
         # First establish the correct app and dimensions from its raw public hierarchy.
         self.read_initial()
@@ -327,7 +340,7 @@ class ReminderPreparation(ContactPreparation):
         capture = self.tap_label(capture, 'Delete List')
         require(self.has(capture, 'Delete list “MCP Benchmark List”?'), 'Expected list delete confirmation absent.')
         self.tap_label(capture, 'Delete')
-        capture = self.run_agent(['describe-ui', '--agent', '--view', 'full'])
+        capture = self.await_home()
         self.require_home(capture, False)
         self.checks.append('Owned list absent; expected other list rows preserved.')
 

@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
+import platform
 import shutil
 import signal
 import subprocess
@@ -15,6 +16,11 @@ import time
 import uuid
 
 HERE = Path(__file__).resolve().parent
+REPOSITORY = HERE.parent
+PAYLOAD = ('axe', 'Frameworks', 'AXe_AXe.bundle')
+TOOLS = ('axe', 'flowdeck', 'rocketsim')
+SCENARIOS = ('weather', 'reminders', 'contacts')
+COMPETITORS = ('flowdeck', 'rocketsim')
 
 
 class CleanupPending(RuntimeError):
@@ -75,11 +81,18 @@ def parser():
         command = commands.add_parser(name)
         command.add_argument('--config', default=str(HERE / 'config.local.json'))
         if name == 'run':
-            command.add_argument('--tools', nargs='+', choices=('axe', 'flowdeck', 'rocketsim'))
-            command.add_argument('--scenarios', nargs='+', choices=('weather', 'reminders', 'contacts'))
+            command.add_argument('--tools', nargs='+', choices=TOOLS)
+            command.add_argument('--scenarios', nargs='+', choices=SCENARIOS)
+            command.add_argument('--rerun-competitors', action='store_true',
+                                 help='Run FlowDeck and RocketSim even when history already has their '
+                                 'current version for every selected scenario')
             command.add_argument('--repeat', type=int, choices=range(1, 11), default=1)
             command.add_argument('--output', help='New artifact directory; must not exist')
             command.add_argument('--registry', default=str(HERE / 'baselines.json'))
+            command.add_argument('--axe', help='Benchmark this AXe executable instead of building the '
+                                 'current source; its frameworks must be beside it')
+        else:
+            command.add_argument('--axe', help='Check this AXe executable instead of the current build')
     for name in ('compare', 'accept'):
         command = commands.add_parser(name)
         command.add_argument('report')
@@ -111,16 +124,87 @@ def artifact_directory():
     return HERE / 'artifacts' / (stamp + '-' + uuid.uuid4().hex[:12])
 
 
-def resolved_config(source):
+def resolved_config(source, axe=None):
     value = json.loads(Path(source).read_text(encoding='utf-8'))
     if not isinstance(value, dict):
         raise ValueError('Benchmark config must be a JSON object')
     value.setdefault('xcodebuildmcp', str(HERE / 'vendor' / 'xcodebuildmcp'))
     value.setdefault('weatherProject', str(HERE / 'apps' / 'Weather' / 'Weather.xcodeproj'))
+    if axe is not None:
+        # The measured candidate and common preparation use the same AXe build.
+        tools = value.setdefault('tools', {})
+        if not isinstance(tools, dict):
+            raise ValueError('Benchmark config tools must be a JSON object')
+        tools.setdefault('axe', {})['executable'] = str(axe)
+        value['setupAxe'] = str(axe)
     return value
 
 
-def run_configured(command, config, env, artifacts=False):
+def build_current_axe(env, destination):
+    """Build the current source, then copy the exact payload this run measures.
+
+    scripts/build.sh rebuilds the frameworks only when Packages/IDBKit changed since their last
+    build, as make build does; the CLI is always rebuilt, for this Mac's architecture. The copy
+    keeps the measured binary after a later build replaces build_products, and the report records
+    its hashes.
+    """
+    executable_env = dict(env)
+    executable_env.setdefault('AXE_BUILD_ARCHS', platform.machine())
+    for step, step_env in (('frameworks-if-needed', env), ('executable', executable_env)):
+        print(json.dumps({'phase': 'build-axe', 'step': step}), file=sys.stderr, flush=True)
+        subprocess.run(['/bin/bash', str(REPOSITORY / 'scripts' / 'build.sh'), step], cwd=str(REPOSITORY),
+                       env=step_env, check=True, stdout=sys.stderr)
+    destination.mkdir(parents=True, exist_ok=False)
+    for name in PAYLOAD:
+        source = REPOSITORY / 'build_products' / name
+        if source.is_dir():
+            shutil.copytree(source, destination / name, symlinks=True)
+        else:
+            shutil.copy2(source, destination / name)
+    axe = destination / 'axe'
+    version = subprocess.run([str(axe), '--version'], capture_output=True, text=True, check=True).stdout.strip()
+    print(json.dumps({'phase': 'build-axe', 'status': 'ready', 'executable': str(axe), 'version': version}),
+          file=sys.stderr, flush=True)
+    return axe
+
+
+def recorded_competitors(config, scenarios, history_root):
+    """Competitors whose current version already has a measured run for every selected scenario.
+
+    A competitor changes only when its version changes, so a default run reuses those history
+    records instead of measuring the same version again. A tool whose version cannot be read is
+    not reused; the engine then reports it as usual.
+    """
+    from adapters import inspect_tool
+    from history import list_history
+    runs = list_history(history_root)['runs']
+    reused = {}
+    for name in COMPETITORS:
+        spec = config.get('tools', {}).get(name)
+        if not isinstance(spec, dict) or not isinstance(spec.get('executable'), str):
+            continue
+        try:
+            version = inspect_tool(name, spec['executable'], spec.get('app'))['version']
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        matches = {scenario: [row for row in runs
+                              if row['scenario'] == scenario and row['tool']['name'] == name
+                              and row['tool'].get('version') == version and row['status'] != 'blocked']
+                   for scenario in scenarios}
+        if all(matches.values()):
+            reused[name] = {'version': version,
+                            'runs': {scenario: [row['runId'] for row in rows] for scenario, rows in matches.items()}}
+    return reused
+
+
+def explicit_axe(value):
+    axe = Path(absolute(value))
+    if not axe.is_file() or not os.access(axe, os.X_OK):
+        raise ValueError('--axe must be an existing executable: ' + str(axe))
+    return axe
+
+
+def run_configured(command, config, env, artifacts=False, axe=None):
     directory = HERE / 'artifacts' if artifacts else None
     if directory:
         directory.mkdir(parents=True, exist_ok=True)
@@ -128,7 +212,7 @@ def run_configured(command, config, env, artifacts=False):
     remove = True
     try:
         resolved = folder / 'config.json'
-        resolved.write_text(json.dumps(resolved_config(config), indent=2) + '\n', encoding='utf-8')
+        resolved.write_text(json.dumps(resolved_config(config, axe), indent=2) + '\n', encoding='utf-8')
         return run_engine([*command, '--config', str(resolved)], env)
     except CleanupPending:
         remove = False
@@ -171,7 +255,7 @@ def setup_environment(python):
             stream.write((HERE / 'config.example.json').read_text(encoding='utf-8'))
     print(json.dumps({'status': 'ready', 'python': str(local_python),
                       'config': str(config), 'tokenizerCache': env['TIKTOKEN_CACHE_DIR'],
-                      'nextStep': 'Set explicit CLI, simulator and app paths in config.local.json; run doctor.'}))
+                      'nextStep': 'Set the simulator and the FlowDeck and RocketSim paths in config.local.json; run doctor.'}))
     return 0
 
 
@@ -218,15 +302,27 @@ def dispatch(args):
     if not config.is_file():
         raise ValueError('Config not found: ' + str(config) + '; run setup and edit config.local.json')
     if args.command == 'doctor':
-        return run_configured(command, config, env).returncode
+        current = REPOSITORY / 'build_products' / 'axe'
+        axe = explicit_axe(args.axe) if args.axe else (current if current.is_file() else None)
+        return run_configured(command, config, env, axe=axe).returncode
+    tools = args.tools
+    if tools is None and not args.rerun_competitors:
+        reused = recorded_competitors(json.loads(config.read_text(encoding='utf-8')),
+                                      args.scenarios or SCENARIOS, HERE / 'history')
+        for name, record in reused.items():
+            print(json.dumps({'phase': 'reuse-history', 'tool': name, **record}), file=sys.stderr, flush=True)
+        if reused:
+            tools = [name for name in TOOLS if name not in reused]
     output = Path(absolute(args.output)) if args.output else artifact_directory()
+    # A run measures the current source unless an explicit build is named.
+    axe = explicit_axe(args.axe) if args.axe else build_current_axe(env, output.with_name(output.name + '-axe'))
     command += ['--output', str(output), '--repeat', str(args.repeat),
                 '--registry', absolute(args.registry)]
-    if args.tools:
-        command += ['--tools', *args.tools]
+    if tools:
+        command += ['--tools', *tools]
     if args.scenarios:
         command += ['--scenarios', *args.scenarios]
-    result = run_configured(command, config, env, artifacts=True)
+    result = run_configured(command, config, env, artifacts=True, axe=axe)
     # Keep failed and interrupted runs as well as passes. History never accepts a baseline.
     if (output / 'summary.json').is_file():
         archive = subprocess.run([str(local_python), str(HERE / 'history.py'), 'import', str(output),

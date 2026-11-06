@@ -196,6 +196,22 @@ class PreparationTests(unittest.TestCase):
                   for call in worker.calls if '--label' in call['argv']]
         self.assertEqual(labels, ['More', 'Show Completed', 'More', 'Delete List', 'Delete'])
 
+    def test_overview_is_awaited_after_the_delete_confirmation(self):
+        # The delete confirmation returns before the detail pops; the overview arrives a read later.
+        detail = capture(['MCP Benchmark List'], ['More'], REMINDERS['ownedReminderRows'])
+        popping = capture(['2 Completed'], ['Back', 'New Reminder'])
+        home = capture(['My Lists'], ['Scheduled, 0 reminders', 'All, 0 reminders'],
+                       lists=['Reminders, 0 reminders'])
+        with patch('preparation.time.sleep') as sleep:
+            worker = self.run_reminders([detail, capture(buttons=['Delete List']),
+                                        capture(['Delete list “MCP Benchmark List”?'], ['Delete']),
+                                        popping, popping, home])
+        self.assertEqual(sleep.call_count, 1)
+        phases = [call['phase'] for call in worker.calls][-3:]
+        self.assertTrue(phases[0].startswith('tap-'), phases)
+        self.assertEqual(phases[1:], ['read', 'read'])
+        self.assertIn('Owned list absent; expected other list rows preserved.', worker.checks)
+
     def test_unexpected_reminder_is_not_deleted(self):
         with self.assertRaisesRegex(ValueError, 'Unexpected reminder'):
             self.run_reminders([capture(['MCP Benchmark List'], ['More'], ['Unrelated, Incomplete'])])

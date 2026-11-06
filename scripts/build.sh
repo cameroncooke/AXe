@@ -315,6 +315,38 @@ function generate_idbkit_project() {
   print_success "Generated the IDBKit project before framework compilation"
 }
 
+# Content fingerprint of every IDBKit source file, committed or not. Generated and
+# ignored files, such as the XcodeGen project, are excluded.
+function idbkit_source_digest() {
+  (
+    cd "$REPO_ROOT"
+    git ls-files -z --cached --others --exclude-standard -- Packages/IDBKit |
+      while IFS= read -r -d '' source_file; do
+        [[ -f "$source_file" ]] && printf '%s\0' "$source_file"
+      done |
+      xargs -0 shasum -a 256 | shasum -a 256 | awk '{print $1}'
+  )
+}
+
+# True when the built frameworks came from the current IDBKit sources and Xcode,
+# and contain every requested architecture.
+function idbkit_frameworks_current() {
+  local evidence_path="${BUILD_XCFRAMEWORK_DIR}/IDB_BUILD_EVIDENCE.txt"
+  local framework_name
+  for framework_name in FBControlCore FBSimulatorControl; do
+    [[ -d "${BUILD_XCFRAMEWORK_DIR}/${framework_name}.xcframework" &&
+       -d "${BUILD_OUTPUT_DIR}/Frameworks/${framework_name}.framework" ]] || return 1
+  done
+  [[ -f "$evidence_path" ]] || return 1
+  grep -qx "IDBKIT_SOURCE_SHA256=$(idbkit_source_digest)" "$evidence_path" || return 1
+  grep -qxF "XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')" "$evidence_path" || return 1
+  local built_archs requested_arch
+  built_archs=" $(sed -n 's/^AXE_BUILD_ARCHS=//p' "$evidence_path") "
+  for requested_arch in $AXE_BUILD_ARCHS; do
+    [[ "$built_archs" == *" ${requested_arch} "* ]] || return 1
+  done
+}
+
 # Records which IDBKit sources and toolchain produced the XCFrameworks.
 function write_idb_build_evidence() {
   local evidence_path="${BUILD_XCFRAMEWORK_DIR}/IDB_BUILD_EVIDENCE.txt"
@@ -329,6 +361,8 @@ function write_idb_build_evidence() {
   fi
   mkdir -p "$BUILD_XCFRAMEWORK_DIR"
   {
+    echo "IDBKIT_SOURCE_SHA256=$(idbkit_source_digest)"
+    echo "AXE_BUILD_ARCHS=${AXE_BUILD_ARCHS}"
     echo "IDBKIT_SOURCE_TREE=${source_tree}"
     echo "IDBKIT_SOURCE_STATE=${source_state}"
     echo "DEVELOPER_DIR=${DEVELOPER_DIR:-<not set>}"
@@ -1066,6 +1100,12 @@ Commands:
   frameworks
     Generate the IDBKit project, then build FBControlCore and FBSimulatorControl.
 
+  frameworks-if-needed
+    Rebuild the IDBKit frameworks and XCFrameworks only when Packages/IDBKit, the
+    selected Xcode or the requested architectures changed since they were built,
+    then clear SwiftPM's cache so Swift links them.
+    Used by make build, make test, make e2e and the benchmarks.
+
   generate
     Generate the IDBKit Xcode project from Packages/IDBKit/project.yml using XcodeGen.
 
@@ -1182,6 +1222,24 @@ function cmd_xcframeworks() {
   write_idb_build_evidence
 }
 
+function cmd_frameworks_if_needed() {
+  print_section "🔎" "Checking IDBKit Frameworks"
+  if idbkit_frameworks_current; then
+    print_success "IDBKit frameworks match the current sources; nothing to rebuild"
+    return 0
+  fi
+  print_info "IDBKit frameworks are missing or stale (sources, Xcode or architectures changed); rebuilding"
+  cmd_setup
+  cmd_clean
+  cmd_frameworks
+  cmd_install
+  cmd_strip
+  cmd_xcframeworks
+  # SwiftPM keeps modules built against the previous frameworks; rebuild them too.
+  (cd "$REPO_ROOT" && swift package clean)
+  print_success "IDBKit frameworks rebuilt from the current sources"
+}
+
 function cmd_generate() {
   print_section "🧬" "Generating the IDBKit Project"
   generate_idbkit_project
@@ -1290,6 +1348,8 @@ case $COMMAND in
     cmd_clean;;
   frameworks)
     cmd_frameworks;;
+  frameworks-if-needed)
+    cmd_frameworks_if_needed;;
   install)
     cmd_install;;
   strip)

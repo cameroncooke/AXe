@@ -25,6 +25,46 @@ class CommandTests(unittest.TestCase):
         python.parent.mkdir(parents=True)
         python.touch()
         (self.root / 'config.local.json').write_text('{}')
+        # Runs build the current source by default; command tests use a recorded build.
+        self.built = self.root / 'built/axe'
+        builder = patch.object(cli, 'build_current_axe', return_value=self.built)
+        self.build = builder.start()
+        self.addCleanup(builder.stop)
+
+    def resolved_run_config(self, arguments):
+        captured = {}
+        def engine(command, env):
+            captured.update(json.loads(Path(command[command.index('--config') + 1]).read_text()))
+            return subprocess.CompletedProcess(command, 0)
+        with patch.object(cli, 'run_engine', side_effect=engine):
+            self.assertEqual(cli.main(arguments), 0)
+        return captured
+
+    def test_default_run_builds_and_measures_the_current_source(self):
+        (self.root / 'config.local.json').write_text(json.dumps(
+            {'tools': {'axe': {'executable': '/stale/axe'}, 'flowdeck': {'executable': '/fd'}}, 'setupAxe': '/stale/axe'}))
+        config = self.resolved_run_config(['--output', str(self.root / 'run')])
+        self.build.assert_called_once()
+        self.assertEqual(self.build.call_args.args[1], self.root / 'run-axe')
+        self.assertEqual(config['tools']['axe']['executable'], str(self.built))
+        self.assertEqual(config['setupAxe'], str(self.built))
+        self.assertEqual(config['tools']['flowdeck']['executable'], '/fd')
+
+    def test_explicit_axe_skips_the_build(self):
+        candidate = self.root / 'release/axe'
+        candidate.parent.mkdir()
+        candidate.write_text('')
+        candidate.chmod(0o755)
+        config = self.resolved_run_config(['--axe', str(candidate)])
+        self.build.assert_not_called()
+        self.assertEqual(config['tools']['axe']['executable'], str(candidate))
+        self.assertEqual(config['setupAxe'], str(candidate))
+
+    def test_explicit_axe_must_be_executable(self):
+        with patch.object(cli, 'run_engine') as engine, contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(['--axe', str(self.root / 'missing/axe')]), 2)
+        engine.assert_not_called()
+        self.build.assert_not_called()
 
     def test_no_command_runs_with_local_defaults(self):
         with patch.object(cli, 'run_engine', return_value=subprocess.CompletedProcess([], 0)) as run:
@@ -43,6 +83,27 @@ class CommandTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual(command[command.index('--tools'):command.index('--tools') + 4],
                          ['--tools', 'axe', '--scenarios', 'weather'])
+
+    def test_default_run_reuses_recorded_competitors(self):
+        reused = {'flowdeck': {'version': '1.34.0', 'runs': {'weather': ['fd-1']}}}
+        with patch.object(cli, 'recorded_competitors', return_value=reused) as recorded, \
+                patch.object(cli, 'run_engine', return_value=subprocess.CompletedProcess([], 0)) as run, \
+                contextlib.redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(cli.main(['--scenarios', 'weather']), 0)
+        self.assertEqual(recorded.call_args.args[1:], (['weather'], self.root / 'history'))
+        command = run.call_args.args[0]
+        self.assertEqual(command[command.index('--tools'):command.index('--tools') + 3],
+                         ['--tools', 'axe', 'rocketsim'])
+        self.assertIn('"phase": "reuse-history"', stderr.getvalue())
+
+    def test_explicit_tools_and_rerun_flag_skip_history_reuse(self):
+        for arguments in (['--tools', 'flowdeck'], ['--rerun-competitors']):
+            with patch.object(cli, 'recorded_competitors') as recorded, \
+                    patch.object(cli, 'run_engine', return_value=subprocess.CompletedProcess([], 0)) as run:
+                self.assertEqual(cli.main(arguments), 0)
+            recorded.assert_not_called()
+            command = run.call_args.args[0]
+            self.assertEqual('--tools' in command, arguments[0] == '--tools')
 
     def test_missing_config_never_starts_job(self):
         (self.root / 'config.local.json').unlink()
@@ -194,6 +255,69 @@ class CommandTests(unittest.TestCase):
                 contextlib.redirect_stderr(io.StringIO()):
             self.assertEqual(cli.main(['accept', str(self.root / 'external.json')]), 2)
         self.assertEqual(run.call_count, 1)
+
+
+class RecordedCompetitorTests(unittest.TestCase):
+    RUNS = [
+        {'runId': 'fd-w', 'scenario': 'weather', 'status': 'unverified', 'tool': {'name': 'flowdeck', 'version': '1.34.0'}},
+        {'runId': 'fd-r', 'scenario': 'reminders', 'status': 'failed', 'tool': {'name': 'flowdeck', 'version': '1.34.0'}},
+        {'runId': 'fd-old', 'scenario': 'contacts', 'status': 'passed', 'tool': {'name': 'flowdeck', 'version': '1.33.0'}},
+        {'runId': 'rs-w', 'scenario': 'weather', 'status': 'blocked', 'tool': {'name': 'rocketsim', 'version': '16.8.0'}},
+    ]
+    CONFIG = {'tools': {'flowdeck': {'executable': '/fd'}, 'rocketsim': {'executable': '/rs', 'app': '/RS.app'}}}
+
+    def recorded(self, scenarios, versions):
+        def inspect(name, executable, app=None):
+            if name not in versions:
+                raise ValueError('missing')
+            return {'version': versions[name]}
+        with patch('adapters.inspect_tool', side_effect=inspect), \
+                patch('history.list_history', return_value={'runs': self.RUNS}):
+            return cli.recorded_competitors(self.CONFIG, scenarios, Path('/history'))
+
+    def test_current_version_with_every_scenario_is_reused(self):
+        reused = self.recorded(['weather', 'reminders'], {'flowdeck': '1.34.0', 'rocketsim': '16.8.0'})
+        self.assertEqual(reused, {'flowdeck': {'version': '1.34.0',
+                                               'runs': {'weather': ['fd-w'], 'reminders': ['fd-r']}}})
+
+    def test_missing_scenario_new_version_or_unreadable_tool_runs_again(self):
+        self.assertEqual(self.recorded(['contacts'], {'flowdeck': '1.34.0', 'rocketsim': '16.8.0'}), {})
+        self.assertEqual(self.recorded(['weather'], {'flowdeck': '1.35.0'}), {})
+
+
+class BuildTests(unittest.TestCase):
+    """The build step's commands and payload copy, with build.sh replaced by a fixture."""
+
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.repository = Path(temporary.name).resolve()
+        patcher = patch.object(cli, 'REPOSITORY', self.repository)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_build_uses_the_shared_framework_check_then_copies_the_payload(self):
+        products = self.repository / 'build_products'
+        (products / 'Frameworks' / 'FBControlCore.framework' / 'Versions').mkdir(parents=True)
+        (products / 'Frameworks' / 'FBControlCore.framework' / 'Current').symlink_to('Versions')
+        (products / 'AXe_AXe.bundle').mkdir()
+        (products / 'axe').write_text('#!/bin/sh\necho v1.2.3\n')
+        (products / 'axe').chmod(0o755)
+        calls = []
+        real_run = subprocess.run
+        def run(command, **kwargs):
+            if command[0] == '/bin/bash':
+                calls.append((command[2], kwargs['env'].get('AXE_BUILD_ARCHS')))
+                return subprocess.CompletedProcess(command, 0)
+            return real_run(command, **kwargs)
+        destination = self.repository / 'artifacts' / 'run-axe'
+        with patch.object(cli.subprocess, 'run', side_effect=run), contextlib.redirect_stderr(io.StringIO()):
+            axe = cli.build_current_axe({}, destination)
+        # Frameworks keep the default architectures, so make build and benchmarks share them.
+        self.assertEqual(calls, [('frameworks-if-needed', None), ('executable', cli.platform.machine())])
+        self.assertEqual(axe, destination / 'axe')
+        self.assertTrue((destination / 'AXe_AXe.bundle').is_dir())
+        self.assertTrue((destination / 'Frameworks/FBControlCore.framework/Current').is_symlink())
 
 
 if __name__ == '__main__':

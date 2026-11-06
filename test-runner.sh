@@ -337,13 +337,9 @@ build_idb_xcframeworks() {
         exit 1
     fi
 
-    local command
-    for command in setup clean frameworks install strip xcframeworks; do
-        scripts/build.sh "$command"
-    done
-
-    run_selected_swift package clean
-    print_success "IDB frameworks built with Xcode $SELECTED_XCODE_VERSION"
+    # Rebuilds the frameworks, and clears SwiftPM's cache, only when Packages/IDBKit changed.
+    scripts/build.sh frameworks-if-needed
+    print_success "IDB frameworks current for Xcode $SELECTED_XCODE_VERSION"
 }
 
 # Function to build AXe executable

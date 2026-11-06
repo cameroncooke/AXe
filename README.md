@@ -35,7 +35,7 @@ AXe keeps its own copy of the two IDB frameworks it uses, `FBControlCore` and `F
 
 ## E2E development
 
-`make e2e` rebuilds the IDBKit XCFrameworks, builds AXe, and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDBKit project. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
+`make build`, `make test` and `make e2e` rebuild the IDBKit XCFrameworks first when `Packages/IDBKit`, the selected Xcode or the requested architectures changed since their last build; otherwise they reuse them. `make e2e` then builds AXe and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDBKit project. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
 
 For repeated local Playground checks, reuse the requested warm simulator. Do not create a fresh simulator for each check. A warm-session pass does not prove cold-start readiness.
 
@@ -58,7 +58,8 @@ Run from this repository:
 
 ```sh
 ./benchmarks/run setup
-# Set explicit CLI paths, Xcode and a warm simulator in benchmarks/config.local.json.
+# Set Xcode, a warm simulator and the FlowDeck/RocketSim paths in benchmarks/config.local.json.
+# Each run builds and measures the current AXe source.
 ./benchmarks/run doctor
 ./benchmarks/run
 ./benchmarks/run history
