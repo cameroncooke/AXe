@@ -133,7 +133,7 @@ final class AgentModeController {
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
                 }
                 return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid, afterSwipe: false)
+                    context: referenceRecord.context, pid: pid)
             }
             // These native operations read the complete owned tree and require the admission's
             // fingerprint, target and context on it before the first event, so the table can
@@ -155,7 +155,7 @@ final class AgentModeController {
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
                 }
                 return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+                    context: referenceRecord.context, pid: pid)
             }
             // Coordinate input names no target. The native operation's own complete read before
             // the first event must have the table's fingerprint and context, as the separate
@@ -176,7 +176,7 @@ final class AgentModeController {
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
                 }
                 return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+                    context: referenceRecord.context, pid: pid)
             }
             // A table names its display; the full context read admits that panel again.
             // Without a table the active panel must be measured first.
@@ -286,7 +286,7 @@ final class AgentModeController {
                     original: referenceRecord?.snapshot, retryDepth: retryDepth)
             }
             return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                context: context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+                context: context, pid: pid)
         } catch let error as AgentModeFailure where error.code == "snapshotMissing"
             && request.agent?.snapshotID != nil && record != nil
             && request.agent?.snapshotID != record?.id {
@@ -432,43 +432,11 @@ final class AgentModeController {
     /// A fresh replacement is useful, but its failure must not suggest replaying the action.
     private func publishReplacement(_ request: SelectedHIDRequest, mode: AgentModeRequest,
                                     result: SelectedHIDResponse, action: AgentModeActionReceipt,
-                                    context: SelectedHIDContext, pid: Int32,
-                                    afterSwipe: Bool) async -> SelectedHIDResponse {
+                                    context: SelectedHIDContext, pid: Int32) async -> SelectedHIDResponse {
         do {
             let afterContext: SelectedHIDContext
             let afterSnapshot: AgentModeSnapshot
-            if afterSwipe {
-                guard let inputContext = result.context, inputContext == context,
-                      result.brokerID == owner.brokerID else {
-                    throw AgentModeFailure("postSwipeContextChanged", "The completed swipe has no matching native owner and context.")
-                }
-                // A settled table must keep the swipe's context, so only that panel is read.
-                let display = try Self.display(of: inputContext)
-                let settled = try await PhaseTimer.measure("agent.postSwipeSettle") {
-                    try await AgentPostSwipePublication.capture(
-                        context: inputContext, pid: pid, brokerID: owner.brokerID,
-                        startedAt: now, now: { self.now },
-                        maximumStarts: AgentPostSwipePublication.maximumSampleStarts,
-                        pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: AgentPostSwipePublication.pause) } },
-                        sample: { deadline in
-                            try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
-                            if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
-                            let observed = try await self.observe(display: display, pid: pid)
-                            guard let observedContext = observed.context, let roots = observed.ax?.roots,
-                                  let observedPID = observed.ax?.expectedPID else {
-                                throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
-                            }
-                            let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
-                                try AgentModeSnapshot(roots: roots,
-                                    nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata, context: observedContext)
-                            }
-                            return AgentPostSwipePublication.Sample(snapshot: snapshot,
-                                context: observedContext, pid: observedPID, brokerID: observed.brokerID)
-                        })
-                }
-                afterContext = settled.context
-                afterSnapshot = settled.snapshot
-            } else {
+            do {
                 let refreshed = try await PhaseTimer.measure("agent.refresh") {
                     () async throws -> (SelectedHIDContext, AgentModeSnapshot) in
                     func read() async throws -> (SelectedHIDContext, AgentModeSnapshot) {
@@ -482,8 +450,9 @@ final class AgentModeController {
                         }
                         return (observedContext, snapshot)
                     }
-                    // One read, published at once. A screen still in transition is caught by the
-                    // next action's admission, which re-reads and retries inside its own call.
+                    // One read, published at once, after every action including a swipe. A screen
+                    // still in transition, or content still decelerating, is caught by the next
+                    // action's admission, which re-reads and retries inside its own call.
                     let first = try await read()
                     return (first.0, first.1)
                 }
