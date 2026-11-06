@@ -108,7 +108,7 @@ struct AgentBatchReferencePlanTests {
         #expect(original.nativeFingerprint != fresh.nativeFingerprint)
 
         let admission = AgentModeAdmission(context: try context(), expectedPID: 1234,
-            screenHash: fresh.hash, nativeFingerprint: fresh.nativeFingerprint,
+            screenHash: fresh.hash, nativeFingerprint: fresh.nativeFingerprint, visibleFingerprint: fresh.visibleFingerprint,
             target: try AgentModeTarget(target.node))
         try admission.validateScreen([fresh.nodes[0]])
         #expect(throws: (any Error).self) { try admission.validateScreen([original.nodes[0]]) }

@@ -29,6 +29,7 @@ struct AgentBatchTapAdmission: AgentOwnedTapAdmission {
         // The target value is bound to this owned snapshot for the later native hit check.
         // No comparison of a snapshot fingerprint with itself is used as an input guard.
         return AgentModeAdmission(context: context, expectedPID: pid, screenHash: snapshot.hash,
-            nativeFingerprint: snapshot.nativeFingerprint, target: target, nativeTarget: resolved.nativeTarget)
+            nativeFingerprint: snapshot.nativeFingerprint, visibleFingerprint: snapshot.visibleFingerprint,
+            target: target, nativeTarget: resolved.nativeTarget)
     }
 }

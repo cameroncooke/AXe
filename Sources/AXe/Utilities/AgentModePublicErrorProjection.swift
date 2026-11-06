@@ -27,7 +27,8 @@ enum AgentModePublicErrorProjection {
             AgentModeActionReceipt(kind: value.kind, outcome: value.outcome,
                 enqueuedEventCount: value.enqueuedEventCount, cleanup: value.cleanup,
                 replayed: value.replayed, quarantine: quarantine(value.quarantine),
-                slider: slider(value.slider), sliderValue: sliderValue(value.sliderValue))
+                slider: slider(value.slider), sliderValue: sliderValue(value.sliderValue),
+                retried: value.retried)
         }
     }
 

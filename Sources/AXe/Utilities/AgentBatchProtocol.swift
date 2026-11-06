@@ -44,6 +44,13 @@ struct AgentBatchStep: Codable, Sendable {
         text = try container.decodeIfPresent(String.self, forKey: .text)
     }
 
+    /// The same step addressed on a new table.
+    func replacingReference(_ newRef: String) throws -> AgentBatchStep {
+        var object: [String: String] = ["action": action.rawValue, "ref": newRef]
+        if let text { object["text"] = text }
+        return try JSONDecoder().decode(AgentBatchStep.self, from: JSONSerialization.data(withJSONObject: object))
+    }
+
     func validate(expectedPID: Int32?) throws {
         _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
         guard (id != nil) != (ref != nil) else {

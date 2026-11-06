@@ -360,6 +360,9 @@ struct AgentModeActionReceipt: Codable, Sendable {
     let quarantine: SelectedHIDQuarantine?
     var slider: SelectedSliderResult? = nil
     var sliderValue: SelectedSliderValueResult? = nil
+    /// True when a refusal before any input was recovered inside this call: the screen was read
+    /// again and the same target was acted on from that newer table. Absent otherwise.
+    var retried: Bool? = nil
 }
 
 struct AgentModeCacheState: Codable, Sendable {
@@ -443,6 +446,8 @@ struct AgentModeAdmission: Codable, Sendable {
     let expectedPID: Int32
     let screenHash: String
     let nativeFingerprint: String
+    /// The admission comparison; `nativeFingerprint` identifies the exact native read.
+    let visibleFingerprint: String
     let target: AgentModeTarget?
     var selectorKind: SelectedAXRequest.SelectorKind? = nil
     var selectorValue: String? = nil
@@ -461,7 +466,7 @@ struct AgentModeAdmission: Codable, Sendable {
     }
 
     func validateScreen(_ snapshot: AgentModeSnapshot) throws {
-        guard snapshot.nativeFingerprint == nativeFingerprint else {
+        guard snapshot.visibleFingerprint == visibleFingerprint else {
             throw AgentModeFailure("screenChanged", "The screen changed before input. Refresh the snapshot.")
         }
         if let nativeTarget, nativeTarget.nativeIdentity != nil {

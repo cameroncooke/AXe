@@ -85,7 +85,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
                                nativeTarget: FBSimulatorAXNode) throws -> AgentModeAdmission {
         try validateContext(context, pid: pid)
         let fresh = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: nativeIdentityMetadata, context: context)
-        guard fresh.nativeFingerprint == published.nativeFingerprint else {
+        guard fresh.visibleFingerprint == published.visibleFingerprint else {
             throw AgentModeFailure("screenChanged", "The screen changed outside this reference table. Refresh the snapshot.")
         }
         try published.validateProtectedReference(ref, in: fresh)
@@ -99,7 +99,8 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         let target = try AgentModeTarget(current, nativeTarget: execution)
         try target.validate(nativeTarget)
         var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: fresh.hash,
-            nativeFingerprint: fresh.nativeFingerprint, target: target, nativeTarget: execution)
+            nativeFingerprint: fresh.nativeFingerprint, visibleFingerprint: fresh.visibleFingerprint,
+            target: target, nativeTarget: execution)
         if case let .semantic(kind, value, _) = execution {
             admission.selectorKind = kind
             admission.selectorValue = value

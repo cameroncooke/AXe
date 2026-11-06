@@ -253,7 +253,7 @@ struct AnonymousNativeSnapshotTests {
         let chosen = try before.target(ref: "e2")
         #expect(chosen.nativeIdentity?.objectID == 101)
         let admission = AgentModeAdmission(context: try context(), expectedPID: 1234,
-            screenHash: before.hash, nativeFingerprint: before.nativeFingerprint,
+            screenHash: before.hash, nativeFingerprint: before.nativeFingerprint, visibleFingerprint: before.visibleFingerprint,
             target: try AgentModeTarget(before.match(target: chosen), nativeTarget: chosen), nativeTarget: chosen)
         try admission.validateScreen(before)
         let incomplete = try make([Node(type: "ScrollArea", key: 101)], complete: false)
@@ -266,7 +266,7 @@ struct AnonymousNativeSnapshotTests {
         let semantic = try make([Node(type: "ScrollArea", id: "area", key: 101)], complete: false)
         let semanticTarget = try semantic.target(ref: "e2")
         let legacy = AgentModeAdmission(context: try context(), expectedPID: 1234,
-            screenHash: semantic.hash, nativeFingerprint: semantic.nativeFingerprint,
+            screenHash: semantic.hash, nativeFingerprint: semantic.nativeFingerprint, visibleFingerprint: semantic.visibleFingerprint,
             target: try AgentModeTarget(semantic.match(target: semanticTarget), nativeTarget: semanticTarget),
             nativeTarget: semanticTarget)
         try legacy.validateScreen(semantic)

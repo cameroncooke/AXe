@@ -93,22 +93,45 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.kinds == [.describe] && harness.state.discoveries == 1)
     }
 
-    @Test("A changed owned tree stops before input, invalidates the table and publishes no replacement")
-    func changedOwnedTreeRejects() async throws {
+    @Test("A changed screen with an unchanged target is refused before input, then retried on the new table")
+    func changedScreenRetriesUnchangedTarget() async throws {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var changed = harness.fixture.controls
         changed[1].label = "8"
         harness.state.ownedRoots = try harness.fixture.roots(changed)
+        harness.state.describeRoots = harness.state.ownedRoots
+        let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
+        let result = try #require(response.agent)
+        #expect(!result.didError)
+        #expect(result.data.action?.outcome == "enqueuedAndDrained" && result.data.action?.enqueuedEventCount == 2)
+        #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        #expect(result.data.capture?.snapshotID != nil && result.data.capture?.snapshotID != snapshot)
+        // The first owned tap refuses before input; one read replaces the table; the tap runs on it.
+        #expect(harness.state.kinds == [.describe, .tap, .describe, .tap, .describe])
+        #expect(harness.state.ownedTaps == 2 && harness.state.discoveries == 1)
+    }
+
+    @Test("A changed target stops before input and returns the current screen as a new table")
+    func changedTargetReturnsNewTable() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var changed = harness.fixture.controls
+        changed[0].label = "7"
+        harness.state.ownedRoots = try harness.fixture.roots(changed)
+        harness.state.describeRoots = harness.state.ownedRoots
         let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
         let result = try #require(response.agent)
         #expect(result.didError && result.error?.code == "screenChanged")
         #expect(result.data.action?.outcome == "failedBeforeInput" && result.data.action?.enqueuedEventCount == 0)
-        #expect(result.data.capture == nil && result.data.cache.requiresRefresh)
-        #expect(harness.state.kinds == [.describe, .tap] && harness.state.discoveries == 1)
+        let capture = try #require(result.data.capture)
+        #expect(capture.snapshotID != snapshot && capture.targets.contains { $0.contains("|tap|button|7|") })
+        #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        #expect(harness.state.kinds == [.describe, .tap, .describe] && harness.state.ownedTaps == 1)
+        // The refused table is replaced; its ID no longer admits input.
         let retry = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
         #expect(retry.agent?.error?.code == "snapshotMissing")
-        #expect(harness.state.kinds == [.describe, .tap])
+        #expect(harness.state.kinds == [.describe, .tap, .describe])
     }
 
     @Test("A failed replacement read discovers the panel once and repeats the failure when it is unchanged")

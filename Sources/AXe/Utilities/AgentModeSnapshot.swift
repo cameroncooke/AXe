@@ -14,6 +14,10 @@ struct AgentModeSnapshot: Sendable {
     private let opaqueActionCount: Int
     let hash: String
     let nativeFingerprint: String
+    /// Admission compares what can affect the agent's action. Hidden nodes, nodes wholly outside
+    /// the display and empty inert leaf groups contribute nothing; their descendants are still
+    /// inspected. Focus is excluded: typing checks its own field before every key.
+    let visibleFingerprint: String
     private let identityIndex: NativeIdentityIndex
     private let referenceIndices: [String: Int]
     let nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata?
@@ -37,7 +41,8 @@ struct AgentModeSnapshot: Sendable {
         var parents: [Int?] = []
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        func collect(_ node: FBSimulatorAXNode, depth: Int, parentHidden: Bool, parent: Int?) throws -> String {
+        let display = CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)
+        func collect(_ node: FBSimulatorAXNode, depth: Int, parentHidden: Bool, parent: Int?) throws -> (native: String, visible: [String]) {
             guard depth <= Self.maximumDepth, nodes.count < Self.maximumElements else {
                 throw AgentModeFailure("hierarchyTooLarge", "The accessibility hierarchy exceeds the agent query bound.")
             }
@@ -50,10 +55,14 @@ struct AgentModeSnapshot: Sendable {
                 keyboardButtons.append(button)
             }
             let children = try node.children.map { try collect($0, depth: depth + 1, parentHidden: hidden, parent: index) }
-            return Self.digest(try encoder.encode(NativeFingerprintNode(node, children: children.sorted())))
+            let native = Self.digest(try encoder.encode(NativeFingerprintNode(node, children: children.map(\.native).sorted())))
+            let visibleChildren = children.flatMap(\.visible).sorted()
+            guard Self.affectsAdmission(node, hidden: hidden, display: display) else { return (native, visibleChildren) }
+            return (native, [Self.digest(try encoder.encode(VisibleFingerprintNode(node, children: visibleChildren)))])
         }
         let rootFingerprints = try roots.map { try collect($0, depth: 0, parentHidden: false, parent: nil) }
-        nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.sorted()))
+        nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.map(\.native).sorted()))
+        visibleFingerprint = Self.digest(try encoder.encode(rootFingerprints.flatMap(\.visible).sorted()))
         self.nodes = nodes
         self.keyboardButtons = keyboardButtons
         let identities = NativeIdentityIndex(nodes: nodes, roots: roots)
@@ -626,6 +635,40 @@ struct AgentModeSnapshot: Sendable {
             identifier = node.identifier; label = node.label; value = node.value; pid = node.pid
             focused = node.focused; enabled = node.enabled; hidden = node.hidden
             customActionNames = node.customActionNames
+            frame = node.frame.map { AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height) }
+            self.children = children
+        }
+    }
+
+    /// Missing or invalid geometry is kept: it does not prove that a node is off-screen.
+    private static func affectsAdmission(_ node: FBSimulatorAXNode, hidden: Bool, display: CGRect) -> Bool {
+        if hidden { return false }
+        if let frame = node.frame, [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
+           frame.width > 0, frame.height > 0, !frame.intersects(display) { return false }
+        let empty: (String?) -> Bool = { $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
+        let inertGroup = node.type == "Group" && node.children.isEmpty && node.customActionNames.isEmpty
+            && node.focused != true && empty(node.identifier) && empty(node.label) && empty(text(node.value))
+        return !inertGroup
+    }
+
+    private struct VisibleFingerprintNode: Encodable {
+        let type: String?
+        let role: String?
+        let subrole: String?
+        let roleDescription: String?
+        let identifier: String?
+        let label: String?
+        let value: FBSimulatorAXValue?
+        let customActionNames: [String]
+        let frame: AgentFrame?
+        let pid: Int32?
+        let enabled: Bool?
+        let children: [String]
+
+        init(_ node: FBSimulatorAXNode, children: [String]) {
+            type = node.type; role = node.role; subrole = node.subrole; roleDescription = node.roleDescription
+            identifier = node.identifier; label = node.label; value = node.value; pid = node.pid
+            enabled = node.enabled; customActionNames = node.customActionNames
             frame = node.frame.map { AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height) }
             self.children = children
         }

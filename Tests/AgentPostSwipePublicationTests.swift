@@ -77,6 +77,15 @@ struct AgentPostSwipePublicationTests {
         #expect(!AgentModeController.canReuseSnapshot(a.snapshot, with: result.snapshot))
     }
 
+    @Test("A transition may confirm on a fourth sample")
+    func fourthSampleConfirmsTransition() async throws {
+        let a = try sample(x: 10), b = try sample(x: 20), c = try sample(x: 30)
+        let h = Harness([a, b, c, c])
+        h.maximumStarts = 4
+        let result = try await h.run()
+        #expect(h.starts == 4 && result.snapshot.nativeFingerprint == c.snapshot.nativeFingerprint)
+    }
+
     @Test("Three unmatched samples never publish a table", arguments: [[10.0, 20, 30], [10.0, 20, 10]])
     func noConsecutivePairDoesNotPublish(positions: [Double]) async throws {
         let h = Harness(try positions.map { try sample(x: $0) })
@@ -173,6 +182,7 @@ struct AgentPostSwipePublicationTests {
         var readSeconds: [Double] = []
         var failRead: Int?
         var cancelPause = false
+        var maximumStarts = AgentPostSwipePublication.maximumSampleStarts
 
         init(_ samples: [AgentPostSwipePublication.Sample]) {
             self.samples = samples
@@ -182,6 +192,7 @@ struct AgentPostSwipePublicationTests {
         func run() async throws -> AgentPostSwipePublication.Sample {
             try await AgentPostSwipePublication.capture(context: expected.context, pid: expected.pid,
                 brokerID: expected.brokerID, startedAt: 0, now: { self.time },
+                maximumStarts: maximumStarts,
                 pause: {
                     self.pauses += 1
                     if self.cancelPause { throw CancellationError() }

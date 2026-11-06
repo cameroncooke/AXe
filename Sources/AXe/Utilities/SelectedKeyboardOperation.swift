@@ -124,6 +124,26 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     }
 
     private func readFocusedFieldUntimed() async throws -> FBSimulatorAXNode {
+        // While a keyboard settles, a walk can meet an element without a native identity yet, or
+        // miss the field for one read. That is not a changed field: read again, at most three
+        // times 100 ms apart. No key is sent between the reads.
+        var attempt = 0
+        while true {
+            do { return try await readFocusedFieldOnce() }
+            catch let error as FBSimulatorAXSnapshotError {
+                switch error {
+                case .invalidSelection, .notFound:
+                    guard attempt < 3 else { throw error }
+                    attempt += 1
+                    try await Task.sleep(for: .milliseconds(100))
+                    _ = try remainingSeconds()
+                default: throw error
+                }
+            }
+        }
+    }
+
+    private func readFocusedFieldOnce() async throws -> FBSimulatorAXNode {
         // Read a new root and exact field before every down; do not serialize the whole tree.
         let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: remainingSeconds) { remaining in
             if let identifier = request.fieldTarget.semanticID {

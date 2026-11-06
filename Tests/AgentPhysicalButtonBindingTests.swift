@@ -101,7 +101,7 @@ struct AgentPhysicalButtonBindingTests {
         let replacement = try Fixture([Node(id: "save", label: "Action", key: 102)])
         #expect(throws: (any Error).self) { try target.validate(replacement.snapshot.nodes[1]) }
         let admission = AgentModeAdmission(context: fixture.context, expectedPID: 1234,
-            screenHash: fixture.snapshot.hash, nativeFingerprint: fixture.snapshot.nativeFingerprint,
+            screenHash: fixture.snapshot.hash, nativeFingerprint: fixture.snapshot.nativeFingerprint, visibleFingerprint: fixture.snapshot.visibleFingerprint,
             target: target, nativeTarget: execution)
         let changed = try FBSimulatorHIDSessionObservation(simulatorUDID: fixture.observation.simulatorUDID,
             bootIdentity: "other-boot", screenID: 1, screenUniqueID: fixture.context.screenUUID, axDisplayID: 1,
