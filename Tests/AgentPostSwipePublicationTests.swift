@@ -23,7 +23,8 @@ struct AgentPostSwipePublicationTests {
         let a = try sample(x: 10)
         let h = Harness([a, a])
         let result = try await h.run()
-        #expect(h.starts == 2 && h.observations == 2 && h.pauses == 2)
+        // The first sample is a baseline; only the compared pair is separated by a pause.
+        #expect(h.starts == 2 && h.observations == 2 && h.pauses == 1)
         #expect(result.snapshot.nativeFingerprint == a.snapshot.nativeFingerprint)
         #expect(result.context == a.context && result.pid == a.pid && result.brokerID == a.brokerID)
     }
@@ -108,15 +109,15 @@ struct AgentPostSwipePublicationTests {
         #expect(h.starts == 2 && h.observations == 2 && h.completedReads == 1)
     }
 
-    @Test("Cancellation during the cadence stops before the first read")
+    @Test("Cancellation during the cadence stops before the next read")
     func cancelledPauseStartsNoRead() async throws {
-        let h = Harness([try sample(x: 10)])
+        let h = Harness([try sample(x: 10), try sample(x: 10)])
         h.cancelPause = true
         do {
             _ = try await h.run()
-            Issue.record("Cancelled cadence started a native observation.")
+            Issue.record("Cancelled cadence started another native observation.")
         } catch is CancellationError { }
-        #expect(h.pauses == 1 && h.starts == 0 && h.observations == 0)
+        #expect(h.pauses == 1 && h.starts == 1 && h.observations == 1)
     }
 
     private enum Fault: Error { case read }

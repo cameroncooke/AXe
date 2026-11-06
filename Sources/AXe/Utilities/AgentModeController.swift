@@ -120,7 +120,7 @@ final class AgentModeController {
                         native: result, action: actionReceipt)
                 }
                 return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid, afterSwipe: false)
+                    context: referenceRecord.context, pid: pid, afterSwipe: false, before: referenceRecord.snapshot)
             }
             // These native operations read the complete owned tree and require the admission's
             // fingerprint, target and context on it before the first event, so the table can
@@ -140,7 +140,28 @@ final class AgentModeController {
                         native: result, action: actionReceipt)
                 }
                 return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe,
+                    before: referenceRecord.snapshot)
+            }
+            // Coordinate input names no target. The native operation's own complete read before
+            // the first event must have the table's fingerprint and context, as the separate
+            // pre-description had to, so that description is not repeated here.
+            if let referenceRecord, focusPlan == nil, let pid = expectedPID, Self.admitsCoordinatesOnOwnedTree(mode) {
+                try requireRequestedDisplay(request, matches: referenceRecord.context)
+                let native = try nativeRequest(request, mode: mode, pid: pid, context: referenceRecord.context,
+                    snapshot: referenceRecord.snapshot, cached: referenceRecord)
+                record = nil
+                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
+                let actionReceipt = receipt(mode.kind, result)
+                action = actionReceipt
+                guard result.error == nil, result.cleanup != "uncertain" else {
+                    return failure(request, result.agent?.error
+                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        native: result, action: actionReceipt)
+                }
+                return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
+                    context: referenceRecord.context, pid: pid, afterSwipe: native.path?.kind == .swipe,
+                    before: referenceRecord.snapshot)
             }
             // A table names its display; the full context read admits that panel again.
             // Without a table the active panel must be measured first.
@@ -227,7 +248,7 @@ final class AgentModeController {
                     native: result, action: actionReceipt)
             }
             return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                context: context, pid: pid, afterSwipe: native.path?.kind == .swipe)
+                context: context, pid: pid, afterSwipe: native.path?.kind == .swipe, before: snapshot)
         } catch let error as AgentModeFailure where error.code == "snapshotMissing"
             && request.agent?.snapshotID != nil && record != nil
             && request.agent?.snapshotID != record?.id {
@@ -252,6 +273,17 @@ final class AgentModeController {
         }
     }
 
+    /// Snapshot-bound coordinate taps and complete coordinate paths. Their admission guard reads
+    /// the complete owned tree and requires the table's fingerprint before the first event.
+    static func admitsCoordinatesOnOwnedTree(_ mode: AgentModeRequest) -> Bool {
+        guard mode.snapshotID != nil, mode.ref == nil, mode.selectorKind == nil, mode.tapSelector == nil else { return false }
+        switch mode.kind {
+        case .tap: return mode.point != nil
+        case .complete: return true
+        default: return false
+        }
+    }
+
     private func receipt(_ kind: AgentModeRequest.Kind, _ result: SelectedHIDResponse) -> AgentModeActionReceipt {
         AgentModeActionReceipt(kind: kind, outcome: result.outcome,
             enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
@@ -262,7 +294,7 @@ final class AgentModeController {
     private func publishReplacement(_ request: SelectedHIDRequest, mode: AgentModeRequest,
                                     result: SelectedHIDResponse, action: AgentModeActionReceipt,
                                     context: SelectedHIDContext, pid: Int32,
-                                    afterSwipe: Bool) async -> SelectedHIDResponse {
+                                    afterSwipe: Bool, before: AgentModeSnapshot? = nil) async -> SelectedHIDResponse {
         do {
             let afterContext: SelectedHIDContext
             let afterSnapshot: AgentModeSnapshot
@@ -299,16 +331,48 @@ final class AgentModeController {
             } else {
                 let refreshed = try await PhaseTimer.measure("agent.refresh") {
                     () async throws -> (SelectedHIDContext, AgentModeSnapshot) in
-                    try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) }
-                    let after = try await observeReplacement(request, context: context, pid: pid)
-                    guard let observedContext = after.context, let afterRoots = after.ax?.roots else {
-                        throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
+                    // No fixed pause: the guest barrier has confirmed the final event and the next
+                    // action revalidates this snapshot against the current screen before input.
+                    func read() async throws -> (SelectedHIDContext, AgentModeSnapshot, SelectedHIDResponse) {
+                        let after = try await observeReplacement(request, context: context, pid: pid)
+                        guard let observedContext = after.context, let afterRoots = after.ax?.roots else {
+                            throw AgentModeFailure("refreshFailed", "The action completed, but its replacement snapshot is unavailable.")
+                        }
+                        let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                            try AgentModeSnapshot(roots: afterRoots,
+                                nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: observedContext)
+                        }
+                        return (observedContext, snapshot, after)
                     }
-                    let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
-                        try AgentModeSnapshot(roots: afterRoots,
-                            nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: observedContext)
+                    let first = try await read()
+                    guard let before, AgentReplacementSettle.isLargeChange(from: before, to: first.1) else {
+                        return (first.0, first.1)
                     }
-                    return (observedContext, snapshot)
+                    // A screen transition can still be animating. Publish only after two equal
+                    // consecutive reads, as after a swipe; an unsettled screen keeps the last read.
+                    var latest = first
+                    var consumedFirst = false
+                    do {
+                        let settled = try await PhaseTimer.measure("agent.replacementSettle") {
+                            try await AgentPostSwipePublication.capture(context: first.0, pid: pid,
+                                brokerID: owner.brokerID, startedAt: now, now: { self.now },
+                                pause: { try await PhaseTimer.measure("agent.pause") { try await Task.sleep(for: .milliseconds(300)) } },
+                                sample: { deadline in
+                                    try AgentPostSwipePublication.requireMayStart(now: self.now, deadline: deadline)
+                                    if !consumedFirst {
+                                        consumedFirst = true
+                                    } else {
+                                        if self.owner.isBusy { throw AgentModeNativeFailure(response: self.owner.rejectBusy(request)) }
+                                        latest = try await read()
+                                    }
+                                    return AgentPostSwipePublication.Sample(snapshot: latest.1, context: latest.0,
+                                        pid: latest.2.ax?.expectedPID ?? pid, brokerID: latest.2.brokerID)
+                                })
+                        }
+                        return (settled.context, settled.snapshot)
+                    } catch let failure as AgentModeFailure where failure.code == "postSwipeSnapshotUnsettled" {
+                        return (latest.0, latest.1)
+                    }
                 }
                 afterContext = refreshed.0
                 afterSnapshot = refreshed.1

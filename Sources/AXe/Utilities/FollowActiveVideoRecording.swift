@@ -165,8 +165,10 @@ enum FollowActiveVideoRecording {
                case .interrupted(reason: .staleContext, cleanup: .notNeeded) = failure {
                 return true
             }
+            // The in-process display-info read launches no child; its receipt has no exit status.
             guard let error = error as? ActivePanelReadError, error.childFailure == nil,
-                  let receipt = error.receipt, receipt.exitConfirmed, receipt.terminationStatus == 0,
+                  let receipt = error.receipt, receipt.exitConfirmed,
+                  receipt.terminationStatus == 0 || !receipt.launchAttempted,
                   let validation = error.validationFailure else { return false }
             switch validation {
             case .inactiveSelection, .selectedRotationMismatch: return true

@@ -1358,10 +1358,10 @@ index 0ebd3bb257c0c90113674a23cc78f88ce0943c5e..4a317291131201bdab4ae492dcda43e2
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..a5f0bf84f8cd4982dd96ce6d11a89415a0093a7c
+index 000000000..536ef75ec
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
-@@ -0,0 +1,634 @@
+@@ -0,0 +1,658 @@
 +import FBControlCore
 +import Foundation
 +
@@ -1665,7 +1665,8 @@ index 0000000000000000000000000000000000000000..a5f0bf84f8cd4982dd96ce6d11a89415
 +extension FBSimulatorAXSnapshot {
 +  /// One read-only point query in oriented logical coordinates. The foreground
 +  /// application and the point result must both belong to expectedPID. No remote
-+  /// ownership inference, point retry, input, or preparation fallback is permitted.
++  /// ownership inference or input is permitted. The read is direct; runtime preparation
++  /// and one repeat of every check run only after a direct read fails for another reason.
 +  public static func acquire(
 +    at point: CGPoint, for simulator: FBSimulator, expectedPID: Int32,
 +    observation: FBSimulatorHIDSessionObservation,
@@ -1748,28 +1749,43 @@ index 0000000000000000000000000000000000000000..a5f0bf84f8cd4982dd96ce6d11a89415
 +      try budget.check(); try Task.checkCancellation()
 +      try commands.validateAccessibility(bootstrap: false)
 +      try budget.check()
-+      phase("point-preparation-start")
-+      try prepareAccessibility(for: simulator, budget: budget)
-+      phase("point-preparation-finished")
-+      rootPID = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
-+      try FBAXPointReadRules.frontmost(rootPID, expectedPID: expectedPID)
-+      phase("frontmost-before-matched")
-+      let request = FBAXTranslationRequest(kind: .point(native), pointDisplayID: observation.axDisplayID,
-+        displayContext: observation.displayContext)
-+      request.acquisitionBudget = budget
-+      try budget.check()
-+      try Task.checkCancellation()
-+      let handle = try await commands.accessibilityElementForAcquisition(request: request, worker: self)
-+      defer { handle.close() }
-+      try budget.check()
-+      let hitPID = handle.acquisitionPID
-+      guard hitPID == expectedPID else {
-+        throw FBSimulatorAXTargetError.wrongPID(expected: expectedPID, actual: hitPID)
++      // Direct first, as whole-tree reads are. Runtime preparation runs only after a direct
++      // read fails for a reason other than process, context, cancellation or deadline, and
++      // the one retry repeats every check below within the same budget.
++      func readHit() async throws -> FBSimulatorAXSnapshot {
++        rootPID = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
++        try FBAXPointReadRules.frontmost(rootPID, expectedPID: expectedPID)
++        phase("frontmost-before-matched")
++        let request = FBAXTranslationRequest(kind: .point(native), pointDisplayID: observation.axDisplayID,
++          displayContext: observation.displayContext)
++        request.acquisitionBudget = budget
++        try budget.check()
++        try Task.checkCancellation()
++        let handle = try await commands.accessibilityElementForAcquisition(request: request, worker: self)
++        defer { handle.close() }
++        try budget.check()
++        let hitPID = handle.acquisitionPID
++        guard hitPID == expectedPID else {
++          throw FBSimulatorAXTargetError.wrongPID(expected: expectedPID, actual: hitPID)
++        }
++        let candidate = try serialize(handle, observation: observation, remoteContentOptions: nil, includeNativeIdentity: includeNativeIdentity)
++        data = candidate.jsonData
++        try FBAXPointReadRules.directHit(candidate.roots, expectedPID: expectedPID, hitPID: hitPID)
++        return candidate
 +      }
-+      let candidate = try serialize(handle, observation: observation, remoteContentOptions: nil, includeNativeIdentity: includeNativeIdentity)
-+      data = candidate.jsonData
-+      try FBAXPointReadRules.directHit(candidate.roots, expectedPID: expectedPID, hitPID: hitPID)
-+      handle.close()
++      let candidate: FBSimulatorAXSnapshot
++      do {
++        phase("direct-point-read")
++        candidate = try await readHit()
++      } catch let error where Self.pointReadMayNeedPreparation(error) {
++        try budget.check()
++        try FBSimulatorAXSnapshot.requireSame(observation, try await provider.observation())
++        phase("point-preparation-start")
++        try prepareAccessibility(for: simulator, budget: budget)
++        phase("point-preparation-finished")
++        data = nil
++        candidate = try await readHit()
++      }
 +      phase("point-read-matched")
 +      try budget.check()
 +      let afterPID = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
@@ -1801,6 +1817,14 @@ index 0000000000000000000000000000000000000000..a5f0bf84f8cd4982dd96ce6d11a89415
 +      attempts: [.init(index: 1, startUptime: started, endUptime: ProcessInfo.processInfo.systemUptime,
 +        rootPID: rootPID, outcome: outcome, jsonData: data)],
 +      phases: phases, failureDescription: failure)
++  }
++
++  /// A changed process, wrong hit owner, changed context, cancellation or spent budget is final.
++  static func pointReadMayNeedPreparation(_ error: Error) -> Bool {
++    if error is CancellationError || error is FBAXAcquisitionStop { return false }
++    if let selection = error as? FBSimulatorAXSnapshotError, case .staleContext = selection { return false }
++    if let target = error as? FBSimulatorAXTargetError, case .wrongPID = target { return false }
++    return true
 +  }
 +
 +  /// Keep the existing runtime preparation and its five-second ceiling, but all
@@ -6458,7 +6482,7 @@ index 0000000000000000000000000000000000000000..3ba176adb8a3e56ebf39f19a937ee443
 +  }
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
-index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb1e80431d 100644
+index bfe23afea..2fa84c8ca 100644
 --- a/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
 +++ b/FBSimulatorControl/HID/FBSimulatorDTUHIDTransport.swift
 @@ -50,7 +50,10 @@ struct DigitizerContactTracker {
@@ -6473,7 +6497,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
  
    static let digitizerServiceName = "com.apple.coredevice.feature.remote.hid.digitizer"
  
-@@ -59,21 +62,20 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -59,21 +62,22 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
    private typealias ConnectionFromEndpointFn = @convention(c) (xpc_object_t) -> xpc_connection_t?
    private typealias EnableSim2HostFn = @convention(c) (xpc_connection_t) -> Void
  
@@ -6496,7 +6520,9 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
 +  /// a 200 ms pre-send wait did not. Keep event spacing unchanged and retain the connection for
 +  /// that measured total of 380 ms. UI outcome still requires independent readback. This is not
 +  /// a general delivery guarantee, and cancellation can still interrupt the existing sleep.
-+  private static let drainNanos: UInt64 = 380_000_000 // 380 ms
++  /// Every disconnect also defers the XPC cancel until this long after the last dispatch, so a
++  /// caller whose process stays alive need not wait in `flush()`.
++  static let drainNanos: UInt64 = 380_000_000 // 380 ms
 +
 +  private let connection: FBSimulatorDTUHIDConnection
 +  private let enqueueGate: FBSimulatorDTUHIDEnqueueGate
@@ -6507,7 +6533,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
    private var contact = DigitizerContactTracker()
    private var twoFingerContact = DigitizerContactTracker()
  
-@@ -81,7 +83,7 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -81,7 +85,7 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
  
    /// Builds a DTUHID transport for the provided Simulator, establishing the host XPC connection to
    /// `dtuhidd`. All setup is synchronous, so the returned transport is ready to send.
@@ -6516,7 +6542,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
      guard let handle = dlopen(nil, RTLD_NOW) else {
        throw FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable
      }
-@@ -108,19 +110,24 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -108,19 +112,25 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
  
      // The load-bearing step: without this the daemon observes the peer but never the payload.
      enableSim2Host(connection)
@@ -6536,7 +6562,8 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
 +  init(connection: xpc_connection_t, mainScreenSize: CGSize, mainScreenScale: Float, displayContext: FBSimulatorHIDDisplayContext? = nil, nativeEdge: FBSimulatorHIDNativeEdge = .none, ownedCleanup: Bool = false) {
 +    let handle = FBSimulatorDTUHIDConnection(connection)
 +    self.connection = handle
-+    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: ownedCleanup) { handle.disconnect() }
++    let gate = FBSimulatorDTUHIDEnqueueGate(retainForOwnedCleanup: ownedCleanup,
++      disconnectDrainSeconds: Double(Self.drainNanos) / 1_000_000_000) { handle.disconnect() }
 +    self.enqueueGate = gate
 +    handle.start(gate: gate)
      self.mainScreenSize = mainScreenSize
@@ -6546,7 +6573,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
    }
  
    private static func symbol<T>(_ handle: UnsafeMutableRawPointer, _ name: String, as type: T.Type) -> T? {
-@@ -133,28 +140,48 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -133,28 +143,48 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
    // MARK: FBSimulatorHIDTransport
  
    nonisolated func disconnect() {
@@ -6602,7 +6629,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
    func sendButton(direction: FBSimulatorHIDDirection, button: FBSimulatorHIDButton) async throws {
      guard let usage = button.dtuhidUsage else {
        throw FBSimulatorHIDError.notImplementedOnDTUHIDTransport(
-@@ -173,6 +200,39 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -173,6 +203,39 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
        payload: IndigoKeyboardButtonEvent(usageCode: UInt64(keyCode), state: state))
    }
  
@@ -6642,7 +6669,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
    // MARK: Sending
  
    /// Wraps `payload` in a `DTUHIDMessage` and serializes it to the `xpc_object_t` `dtuhidd` decodes.
-@@ -183,28 +243,182 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
+@@ -183,28 +246,198 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport {
      return try XPCEncoder().encode(message)
    }
  
@@ -6747,10 +6774,16 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
 +  private enum Admission { case open, ownedReleaseOnly, closed }
 +  private var admission = Admission.open
 +  private let retainForOwnedCleanup: Bool
++  private let disconnectDrainSeconds: TimeInterval
++  private var lastDispatchUptime: TimeInterval?
 +  private var pending: [UUID: FBSimulatorBoundedResult<Void>] = [:]
 +
-+  init(retainForOwnedCleanup: Bool = false, disconnect: @escaping @Sendable () -> Void) {
++  /// `disconnectDrainSeconds` keeps the XPC connection alive after the last dispatched message
++  /// before it is cancelled. Admission still closes at once; only the cancel waits.
++  init(retainForOwnedCleanup: Bool = false, disconnectDrainSeconds: TimeInterval = 0,
++       disconnect: @escaping @Sendable () -> Void) {
 +    self.retainForOwnedCleanup = retainForOwnedCleanup
++    self.disconnectDrainSeconds = disconnectDrainSeconds
 +    cancelConnection = disconnect
 +  }
 +
@@ -6790,6 +6823,7 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
 +          return
 +        }
 +        pending[identifier] = result
++        lastDispatchUptime = ProcessInfo.processInfo.systemUptime
 +        start(finish)
 +        lock.unlock()
 +      }
@@ -6822,14 +6856,23 @@ index bfe23afea68efcb5d95e1b89ce300e45210ee035..a789ca5733be07450fbf5cb9913f13eb
 +    for result in waiting { result.finish(.failure(FBSimulatorDTUHIDEnqueueError.connectionClosed)) }
 +  }
 +
++  /// Admission closes now. The connection is cancelled once `disconnectDrainSeconds` have passed
++  /// since the last dispatch, so the guest can consume input that has already been sent. The
++  /// scheduled cancel retains the connection until then.
 +  func disconnect() {
 +    lock.lock()
 +    guard admission != .closed else { lock.unlock(); return }
 +    admission = .closed
 +    let waiting = Array(pending.values)
 +    pending.removeAll()
++    let remaining = lastDispatchUptime.map { $0 + disconnectDrainSeconds - ProcessInfo.processInfo.systemUptime } ?? 0
 +    lock.unlock()
-+    cancelConnection()
++    if remaining > 0 {
++      let cancel = cancelConnection
++      DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + remaining) { cancel() }
++    } else {
++      cancelConnection()
++    }
 +    for result in waiting { result.finish(.failure(FBSimulatorDTUHIDEnqueueError.connectionClosed)) }
 +  }
 +}
@@ -7706,10 +7749,10 @@ index 0000000000000000000000000000000000000000..558e7e999fefd67ac02f12ce5996c630
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDSession.swift b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..8c0d936176d2527f95f6cb6e272af312666f1a1c
+index 000000000..2b9a55319
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDSession.swift
-@@ -0,0 +1,955 @@
+@@ -0,0 +1,973 @@
 +import CoreGraphics
 +@preconcurrency import FBControlCore
 +import Foundation
@@ -8321,6 +8364,13 @@ index 0000000000000000000000000000000000000000..8c0d936176d2527f95f6cb6e272af312
 +
 +  private func completeDrain() async throws {
 +    state = .draining
++    // A transport owner lives in a long-running broker. Its DTUHID connection either stays open
++    // for reuse or is cancelled only after the drain window following the last dispatch, so the
++    // keepalive needs no wait here. Callers without an owner may exit the process right away.
++    if transportLease != nil {
++      try Task.checkCancellation()
++      return
++    }
 +    // Unstructured task is not cancelled with the caller. Cancellation is checked after keepalive.
 +    let transport = self.transport
 +    try await Task { try await transport.flush() }.value
@@ -8354,9 +8404,20 @@ index 0000000000000000000000000000000000000000..8c0d936176d2527f95f6cb6e272af312
 +    case .cancelled, .invalidRetainedInput, .inputAdmissionRejected: changed = false
 +    }
 +    let cleanup = await cleanupContacts(uncertain: changed, trigger: String(describing: reason))
-+    // No reuse after interruption: close, then require a fresh observation and connection.
-+    transport.disconnect()
-+    await transportLease?.finish(reusable: false)
++    // An admission rejection before this session sent any event leaves its connection exactly as
++    // it was borrowed. Return it to the owner, which reuses it only for an identical observation;
++    // closing it would make the next action open a new guest connection. Any other interruption
++    // closes the connection and requires a fresh observation and connection.
++    var untouched = false
++    if case .inputAdmissionRejected = reason {
++      untouched = sentCount == 0 && cleanup == .notNeeded && !hasOwnedInput
++    }
++    if untouched, let transportLease, await transportLease.transport.acceptsInput() {
++      await transportLease.finish(reusable: true)
++    } else {
++      transport.disconnect()
++      await transportLease?.finish(reusable: false)
++    }
 +    liveProvider?.close()
 +    state = .invalidated
 +    return .interrupted(reason: reason, cleanup: cleanup)
@@ -9196,10 +9257,10 @@ index 0000000000000000000000000000000000000000..fd7cf8aa0a01cef1b200b630a0ac5366
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeNative.swift b/FBSimulatorControl/HID/FBSimulatorHingeNative.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..762642696bc88b8b43422f5fb28c5edc481b8780
+index 000000000..1605db651
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHingeNative.swift
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,291 @@
 +@preconcurrency import CoreSimulator
 +@preconcurrency import FBControlCore
 +import Foundation
@@ -9466,9 +9527,10 @@ index 0000000000000000000000000000000000000000..762642696bc88b8b43422f5fb28c5edc
 +  private static func target(direction: FBSimulatorRotationDirection,
 +                             readback: FBSimulatorContextReadback) throws -> (rotation: Int, vendor: String) {
 +    let capability = readback.capability
++    // The vendor mapping is a property of the Duo's two-panel layout, measured on profiles 405
++    // and 407. Panel IDs, not the profile version, select it.
 +    guard capability.deviceTypeIdentifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
-+          capability.modelIdentifier == "iPhone19,4", capability.profileVersion == "405",
-+          capability.integratedDigitizerIDs == [1, 3] else {
++          capability.hinge == .supported, capability.integratedDigitizerIDs == [1, 3] else {
 +      throw FBSimulatorContextError.unavailable("Rotation mapping is not verified for this device profile")
 +    }
 +    let outer = readback.observation.screenID == 1
@@ -10026,10 +10088,10 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
 new file mode 100644
-index 000000000..66fee30e3
+index 000000000..441ff2b28
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
-@@ -0,0 +1,333 @@
+@@ -0,0 +1,321 @@
 +@preconcurrency import CoreSimulator
 +@preconcurrency import FBControlCore
 +import Foundation
@@ -10229,40 +10291,28 @@ index 000000000..66fee30e3
 +    return classifyCapability(identifier: identifier, model: model, version: version, integratedDigitizerIDs: ids)
 +  }
 +
++  /// Classifies by the device type's declared built-in touch displays, not by profile version or
++  /// model. Every full read still validates the live display report, host catalogue and boot
++  /// identity; a two-panel device must also return native hinge samples, or input fails closed.
 +  static func classifyCapability(identifier: String, model: String, version: String,
 +                                 integratedDigitizerIDs: [UInt32]) -> FBSimulatorContextCapability {
 +    let ids = integratedDigitizerIDs.sorted()
-+    let uniqueIDs = Set(ids).count == ids.count
++    let validIDs = !ids.isEmpty && Set(ids).count == ids.count && ids.allSatisfy { $0 > 0 }
 +    let hinge: FBSimulatorHingeCapability
-+    let activePanelSchemaPolicy: ActivePanelSchemaPolicy
 +    let reason: String
-+    if version == "405", identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
-+       model == "iPhone19,4", uniqueIDs, ids.count == 2 {
++    if validIDs, ids.count == 1 {
++      hinge = .unsupported
++      reason = "One integrated digitizer (\(identifier) \(model) profile \(version)); no hinge request is made"
++    } else if validIDs, ids.count == 2 {
 +      hinge = .supported
-+      activePanelSchemaPolicy = .explicitActiveFlag
-+      reason = "Verified Duo profile 405; native hinge samples are required on every full read"
-+    } else if version == "405", identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
-+              model == "iPhone19,2", uniqueIDs, ids.count == 1 {
-+      hinge = .unsupported
-+      activePanelSchemaPolicy = .verifiedIPhone18ProProfile405
-+      reason = "Verified rigid iPhone 18 Pro profile 405; no hinge request is made"
-+    } else if version == "407", identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
-+              model == "iPhone19,2", ids == [1] {
-+      hinge = .unsupported
-+      activePanelSchemaPolicy = .explicitActiveFlag
-+      reason = "Verified rigid iPhone 18 Pro profile 407 with integrated digitizer 1; no hinge request is made"
-+    } else if version == "405", identifier == "com.apple.CoreSimulator.SimDeviceType.iPad-mini-A17-Pro",
-+              model == "iPad16,2", ids == [1] {
-+      hinge = .unsupported
-+      activePanelSchemaPolicy = .verifiedIPadMiniA17ProProfile405
-+      reason = "Verified rigid iPad mini A17 Pro profile 405 with integrated digitizer 1; no hinge request is made"
++      reason = "Two integrated digitizers (\(identifier) \(model) profile \(version)); native hinge samples are required on every full read"
 +    } else {
 +      hinge = .unverified
-+      activePanelSchemaPolicy = .explicitActiveFlag
-+      reason = "Device type, model or profile version has no verified hinge contract"
++      reason = "Device type declares \(ids.count) integrated digitizers with IDs \(ids); no input contract covers it"
 +    }
-+    return FBSimulatorContextCapability(hinge: hinge, activePanelSchemaPolicy: activePanelSchemaPolicy, deviceTypeIdentifier: identifier,
-+      modelIdentifier: model, profileVersion: version, integratedDigitizerIDs: ids, reason: reason)
++    return FBSimulatorContextCapability(hinge: hinge, activePanelSchemaPolicy: .explicitActiveFlag,
++      deviceTypeIdentifier: identifier, modelIdentifier: model, profileVersion: version,
++      integratedDigitizerIDs: ids, reason: reason)
 +  }
 +
 +  // The verified device profile defines the integrated set. Virtual CAD displays are not
@@ -13147,15 +13197,15 @@ index 000000000..eac4d736d
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift
 new file mode 100644
-index 0000000..ca882a7
+index 000000000..e3cb000da
 --- /dev/null
 +++ b/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift
-@@ -0,0 +1,226 @@
+@@ -0,0 +1,204 @@
 +import Foundation
 +import Testing
 +@testable import FBSimulatorControl
 +
-+@Suite("Exact iPad mini A17 Pro rigid profile")
++@Suite("Device classification and iPad mini A17 Pro rigid profile")
 +struct FBSimulatorIPadMiniProfileTests {
 +  private let simulatorID = UUID(uuidString: "B3A07F27-3F72-4023-925C-4E7512AFDEC9")!
 +  private let panelID = UUID(uuidString: "C7FF5832-A145-4221-BD6F-C19A7048EE7F")!
@@ -13213,72 +13263,50 @@ index 0000000..ca882a7
 +      version: version, integratedDigitizerIDs: ids)
 +  }
 +
-+  @Test func exactProfileHasNoHingeAndItsOwnSchemaPolicy() {
++  @Test func oneIntegratedDigitizerIsRigid() {
 +    let actual = capability()
 +    #expect(actual.hinge == .unsupported)
-+    #expect(actual.activePanelSchemaPolicy.rawValue == "verifiedIPadMiniA17ProProfile405")
++    #expect(actual.activePanelSchemaPolicy == .explicitActiveFlag)
 +    #expect(actual.integratedDigitizerIDs == [1])
 +  }
 +
-+  @Test(arguments: ["identifier", "model", "version", "empty", "wrongID", "duplicate", "multiple"])
-+  func unmeasuredProfilesRemainUnverified(change: String) {
++  /// Profile version, model and identifier do not decide support; the declared panels do.
++  @Test(arguments: ["identifier", "model", "older", "newer"])
++  func anyProfileVersionOrModelWithOnePanelIsRigid(change: String) {
 +    var identifier = "com.apple.CoreSimulator.SimDeviceType.iPad-mini-A17-Pro"
 +    var model = "iPad16,2"
 +    var version = "405"
-+    var ids: [UInt32] = [1]
 +    switch change {
-+    case "identifier": identifier += "-other"
++    case "identifier": identifier = "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro"
 +    case "model": model = "iPad16,1"
-+    case "version": version = "406"
-+    case "empty": ids = []
-+    case "wrongID": ids = [2]
-+    case "duplicate": ids = [1, 1]
-+    default: ids = [1, 2]
++    case "older": version = "404"
++    default: version = "407"
 +    }
-+    let actual = capability(identifier: identifier, model: model, version: version, ids: ids)
-+    #expect(actual.hinge == .unverified)
-+    #expect(actual.activePanelSchemaPolicy == .explicitActiveFlag)
++    let actual = capability(identifier: identifier, model: model, version: version, ids: [1])
++    #expect(actual.hinge == .unsupported)
++    #expect(actual.profileVersion == version)
 +  }
 +
-+  @Test func phoneAndDuoProfileRulesAreUnchanged() {
-+    let phone = capability(identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
-+      model: "iPhone19,2", ids: [1])
-+    #expect(phone.hinge == .unsupported)
-+    #expect(phone.activePanelSchemaPolicy == .verifiedIPhone18ProProfile405)
++  @Test(arguments: ["405", "407", "500"])
++  func twoIntegratedDigitizersRequireTheHinge(version: String) {
 +    let duo = capability(identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
-+      model: "iPhone19,4", ids: [1, 3])
++      model: "iPhone19,4", version: version, ids: [3, 1])
 +    #expect(duo.hinge == .supported)
++    #expect(duo.integratedDigitizerIDs == [1, 3])
 +    #expect(duo.activePanelSchemaPolicy == .explicitActiveFlag)
 +  }
 +
-+  @Test func measuredPhone407HasOneRigidIntegratedDisplay() {
-+    let phone = capability(identifier: "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
-+      model: "iPhone19,2", version: "407", ids: [1])
-+    #expect(phone.hinge == .unsupported)
-+    #expect(phone.activePanelSchemaPolicy == .explicitActiveFlag)
-+    #expect(phone.profileVersion == "407")
-+    #expect(phone.integratedDigitizerIDs == [1])
-+  }
-+
-+  @Test(arguments: ["identifier", "model", "older", "newer", "empty", "wrongID", "duplicate", "multiple"])
-+  func unmeasuredPhone407ProfilesRemainUnverified(change: String) {
-+    var identifier = "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro"
-+    var model = "iPhone19,2"
-+    var version = "407"
-+    var ids: [UInt32] = [1]
++  @Test(arguments: ["empty", "zeroID", "duplicate", "three"])
++  func unsupportedPanelSetsRemainUnverified(change: String) {
++    let ids: [UInt32]
 +    switch change {
-+    case "identifier": identifier += "-other"
-+    case "model": model = "iPhone19,3"
-+    case "older": version = "406"
-+    case "newer": version = "408"
 +    case "empty": ids = []
-+    case "wrongID": ids = [2]
++    case "zeroID": ids = [0]
 +    case "duplicate": ids = [1, 1]
-+    default: ids = [1, 2]
++    default: ids = [1, 2, 3]
 +    }
-+    let phone = capability(identifier: identifier, model: model, version: version, ids: ids)
-+    #expect(phone.hinge == .unverified)
-+    #expect(phone.activePanelSchemaPolicy == .explicitActiveFlag)
++    let actual = capability(ids: ids)
++    #expect(actual.hinge == .unverified)
 +  }
 +
 +  @Test func measuredOmittedActiveSchemaKeepsNilAndJoinsGeometry() throws {
@@ -18485,10 +18513,10 @@ index 0000000..1321625
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift b/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift
 new file mode 100644
-index 000000000..0f74dc744
+index 000000000..e5ba9068e
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,298 @@
 +@preconcurrency import CoreSimulator
 +import Darwin
 +import Foundation
@@ -18538,6 +18566,8 @@ index 000000000..0f74dc744
 +public enum FBSimulatorDisplayInfoReader {
 +  public static let service = "com.apple.coredevice.feature.getdisplayinfo"
 +  public static let action = "com.apple.coredevice.action.displayinfo"
++  /// Backlight states of an illuminated display, as dtdeviceinfod reports them.
++  static let litBacklightStates: Set<String> = ["activeOn", "activeDimmed"]
 +
 +  public static func read(for simulator: FBSimulator) async throws -> FBSimulatorDisplayInfoResponse {
 +    try Task.checkCancellation()
@@ -18642,13 +18672,19 @@ index 000000000..0f74dc744
 +    let basis: ActivePanelSelectionBasis
 +    if panels.allSatisfy({ $0.active == nil }) {
 +      // Rigid devices omit the flag. Only one lit primary integrated panel can be selected.
-+      guard panels.count == 1, let only = panels.first, only.primary, only.backlightState == "activeOn" else {
++      guard panels.count == 1, let only = panels.first, only.primary,
++            Self.litBacklightStates.contains(only.backlightState ?? "") else {
 +        throw ActivePanelValidationError.missingActiveFlag
 +      }
 +      panel = only
 +      basis = .verifiedSingleIntegratedPanel
 +    } else {
 +      guard panels.allSatisfy({ $0.active != nil }) else { throw ActivePanelValidationError.missingActiveFlag }
++      // During a fold the incoming panel becomes active while the outgoing one is still lit, or the
++      // reverse, for about 150-240 ms. Any lit inactive display means the configuration is changing.
++      if rows.contains(where: { $0.active == false && Self.litBacklightStates.contains($0.backlightState ?? "") }) {
++        throw FBSimulatorContextError.changedDuringRead
++      }
 +      let active = panels.filter { $0.active == true }
 +      guard active.count == 1, let only = active.first else {
 +        throw ActivePanelValidationError.activeStateUnavailable(active.count)
@@ -18781,10 +18817,10 @@ index 000000000..0f74dc744
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorDisplayInfoReaderTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorDisplayInfoReaderTests.swift
 new file mode 100644
-index 000000000..12f91b29c
+index 000000000..203201a7e
 --- /dev/null
 +++ b/FBSimulatorHIDEventTransportTests/FBSimulatorDisplayInfoReaderTests.swift
-@@ -0,0 +1,200 @@
+@@ -0,0 +1,219 @@
 +import FBSimulatorControl
 +import Foundation
 +import Testing
@@ -18854,6 +18890,25 @@ index 000000000..12f91b29c
 +      == .missingActiveFlag)
 +  }
 +
++  /// Measured fold and unfold reports: the incoming panel is active while the outgoing one is still lit.
++  @Test func litInactivePanelMeansTheFoldIsStillChanging() throws {
++    let transitions = [duoRows(coverActive: true, coverLight: "activeOn", innerLight: "activeOn"),
++                       duoRows(coverActive: false, coverLight: "activeOn", innerLight: "activeOn"),
++                       duoRows(coverActive: true, coverLight: "activeOn", innerLight: "activeDimmed")]
++    for rows in transitions {
++      let decoded = try FBSimulatorDisplayInfoReader.decode(reply(rows))
++      #expect(throws: FBSimulatorContextError.self) { _ = try discover(decoded, catalog: duoCatalog) }
++      #expect(throws: FBSimulatorContextError.self) {
++        _ = try FBSimulatorDisplayInfoReader.snapshot(response(decoded), simulatorUDID: simulator,
++          expectedPanels: duoCatalog.map(\.identity), selected: expectation(1, cover, 1398, 2034, .rot0))
++      }
++    }
++    let settled = try FBSimulatorDisplayInfoReader.decode(reply(duoRows(coverActive: true, coverLight: "activeDimmed", innerLight: "off")))
++    #expect(try discover(settled, catalog: duoCatalog).snapshot.activePanel.identity.displayID == 1)
++    let dimmedRigid = try FBSimulatorDisplayInfoReader.decode(reply([rigidRow(backlight: "activeDimmed")]))
++    #expect(try discover(dimmedRigid, catalog: [entry(1, rigid, 1206, 2622)]).snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
++  }
++
 +  @Test func nonIntegratedRowsCanNeverBeSelected() throws {
 +    for change in [{ (r: xpc_object_t) in xpc_dictionary_set_bool(r, "primary", true) },
 +                   { (r: xpc_object_t) in xpc_dictionary_set_bool(r, "active", true) }] {
@@ -18916,12 +18971,12 @@ index 000000000..12f91b29c
 +      size: (1206, 2622), backlight: backlight)
 +  }
 +
-+  private func duoRows(coverActive: Bool) -> [xpc_object_t] {
++  private func duoRows(coverActive: Bool, coverLight: String? = nil, innerLight: String? = nil) -> [xpc_object_t] {
 +    [display(id: 1, uuid: cover, kind: "integrated", primary: true, active: coverActive, rotation: "rot0",
-+             size: (1398, 2034), backlight: coverActive ? "activeOn" : "off"),
++             size: (1398, 2034), backlight: coverLight ?? (coverActive ? "activeOn" : "off")),
 +     display(id: 2, uuid: UUID(), kind: "external", primary: false, active: false, rotation: "rot0", size: (0, 0), backlight: "off"),
 +     display(id: 3, uuid: inner, kind: "integrated", primary: false, active: !coverActive, rotation: "rot90",
-+             size: (2007, 2853), backlight: coverActive ? "off" : "activeOn"),
++             size: (2007, 2853), backlight: innerLight ?? (coverActive ? "off" : "activeOn")),
 +     display(id: 4, uuid: UUID(), kind: "wireless", primary: false, active: false, rotation: "rot0", size: (0, 0), backlight: "off"),
 +     display(id: 5, uuid: UUID(), kind: "virtual", primary: false, active: false, rotation: "rot0", size: (0, 0), backlight: "off")]
 +  }

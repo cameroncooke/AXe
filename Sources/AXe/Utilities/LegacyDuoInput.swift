@@ -9,7 +9,8 @@ enum LegacyDuoInput {
         simulatorUDID: String,
         preDelay: Double?,
         logger: AxeLogger,
-        forKeyboard: Bool = false
+        forKeyboard: Bool = false,
+        includeVerifiedRigid: Bool = false
     ) async throws -> SelectedHIDContext? {
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
         let set = try await getSimulatorSet(
@@ -20,7 +21,8 @@ enum LegacyDuoInput {
         }), simulator.state == .booted else {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
-        if forKeyboard {
+        if forKeyboard || includeVerifiedRigid {
+            // Duo and verified DTUHID profiles share the broker's retained connection.
             guard try usesSharedKeyboardOwner(for: simulator) else { return nil }
         } else {
             // Older rigid-device input keeps its existing route.

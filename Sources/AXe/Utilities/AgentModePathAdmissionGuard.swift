@@ -70,7 +70,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             for start in starts { initialHits.append(try await pointHit(at: start, observation: observation)) }
             let tree = try await PhaseTimer.measure("native.pathGuard.tree") {
                 try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-                    observation: observation, freshnessProvider: feed, policy: try policy(),
+                    observation: observation, freshnessProvider: feed, policy: try policy(attempts: 2),
                     includeNativeIdentity: nativeTarget.nativeIdentity != nil)
             }
             guard tree.outcome == .ready, let snapshot = tree.snapshot else {
@@ -220,14 +220,16 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite) && frame.width > 0 && frame.height > 0
     }
 
-    private func policy() throws -> FBSimulatorAXAcquisitionPolicy {
+    /// Point reads keep one attempt. The tree read uses two: a direct first read, with runtime
+    /// preparation only after a verified empty tree, as ordinary descriptions do.
+    private func policy(attempts: Int = 1) throws -> FBSimulatorAXAcquisitionPolicy {
         try Task.checkCancellation()
         let now = DispatchTime.now()
         guard now < deadline else {
             throw AgentModeFailure("\(kind.rawValue)AdmissionTimeout", "The \(kind.rawValue) check timed out before input. Refresh the snapshot.")
         }
         let remaining = Double(deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000
-        return try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: remaining, maximumAttempts: 1)
+        return try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: remaining, maximumAttempts: attempts)
     }
 
     private func checkDeadline() throws {

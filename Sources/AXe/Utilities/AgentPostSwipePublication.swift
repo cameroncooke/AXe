@@ -22,7 +22,8 @@ enum AgentPostSwipePublication {
         var previous: Sample?
         for _ in 0..<maximumSampleStarts {
             try requireMayStart(now: now(), deadline: deadline)
-            try await pause()
+            // The first sample is only a baseline. Every compared pair keeps the pause between them.
+            if previous != nil { try await pause() }
             try requireMayStart(now: now(), deadline: deadline)
             let current = try await sample(deadline)
             try Task.checkCancellation()

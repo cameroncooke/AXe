@@ -60,7 +60,7 @@ final class SelectedHIDOwner {
                     await transportOwner.close()
                     return quarantine(result, request: request)
                 }
-                if result.error != nil { await transportOwner.invalidate() }
+                if result.error != nil, !Self.sentNothing(result) { await transportOwner.invalidate() }
                 clear()
                 return result
             } catch {
@@ -87,7 +87,7 @@ final class SelectedHIDOwner {
                     await transportOwner.close()
                     return quarantine(result, request: request)
                 }
-                if result.error != nil { await transportOwner.invalidate() }
+                if result.error != nil, !Self.sentNothing(result) { await transportOwner.invalidate() }
                 let retire = requiresRetirement(after: result, request: request)
                 clear()
                 if retire {
@@ -503,6 +503,13 @@ final class SelectedHIDOwner {
               ax.kind == requestedAX.kind, ax.expectedPID == requestedAX.expectedPID,
               ax.failure == .acquisitionFailed, ax.acquisition?.outcome == .failed else { return false }
         return true
+    }
+
+    /// A refusal before any event, with no cleanup, leaves the borrowed connection untouched. The
+    /// session already returned or closed it; the owner reuses it only for an identical context.
+    private static func sentNothing(_ result: SelectedHIDResponse) -> Bool {
+        result.outcome == "failedBeforeInput" && result.enqueuedEventCount == 0 && result.cleanup == "notNeeded"
+            && result.quarantine == nil
     }
 
     private func clear() {

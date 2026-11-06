@@ -44,7 +44,7 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after tapping in seconds.")
     var postDelay: Double?
 
-    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input. Physical taps hold for 0.25 seconds on ordinary legacy input, and 0.1 seconds on selected, agent and Duo input; simulator taps insert no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
+    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input. Physical taps hold for 0.1 seconds on broker input (selected, agent, Duo and other verified DTUHID devices) and 0.25 seconds on the direct legacy route; simulator taps insert no hold. Omitted style stays physical. Selected semantic press rejects explicit styles.")
     var tapStyle: TapStyle?
 
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting. Selected ordinary taps accept finite values up to 30 seconds; only a missing target is retried before input.")
@@ -287,8 +287,10 @@ struct Tap: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
+        // Verified DTUHID devices use the broker's retained connection, as the Duo does, so
+        // a plain tap neither opens a new guest connection nor waits to drain before exit.
         let duoContext = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )
         let resolution: TapResolution
         let resolvedDescription: String

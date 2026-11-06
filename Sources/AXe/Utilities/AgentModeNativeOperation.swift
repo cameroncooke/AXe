@@ -125,7 +125,9 @@ private final class AgentModeFreshScreenGuard: FBSimulatorHIDInputAdmissionGuard
     func validate(observation: FBSimulatorHIDSessionObservation, firstEvent: FBSimulatorHIDEvent) async throws {
         try Task.checkCancellation()
         try admission.validateContext(observation)
-        let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 1)
+        // Direct first read, as the snapshot's own description used. Runtime preparation runs
+        // only after a verified empty tree; an empty or failed result still sends no input.
+        let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 2)
         let acquisition = try await PhaseTimer.measure("native.admissionRead") {
             try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
                 observation: observation, freshnessProvider: feed, policy: policy)
