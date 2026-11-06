@@ -1,0 +1,6 @@
+module CoreSimDeviceIO {
+    umbrella "."
+    header "SimScreenRuntime-Protocol.h"
+    export *
+    module * { export * }
+}

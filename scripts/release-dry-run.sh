@@ -27,9 +27,7 @@ FORMULA_OUT="$OUT_DIR/${FORMULA_NAME}.rb"
 
 mkdir -p \
   "$PACKAGE_ROOT/Frameworks/FBControlCore.framework" \
-  "$PACKAGE_ROOT/Frameworks/XCTestBootstrap.framework" \
   "$PACKAGE_ROOT/Frameworks/FBSimulatorControl.framework" \
-  "$PACKAGE_ROOT/Frameworks/FBDeviceControl.framework" \
   "$PACKAGE_ROOT/AXe_AXe.bundle" \
   "$OUT_DIR"
 
@@ -46,9 +44,7 @@ lipo -info "$BIN_PATH" | grep -q "x86_64"
 
 cp "$BIN_PATH" "$PACKAGE_ROOT/axe"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBControlCore.framework/FBControlCore"
-cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/XCTestBootstrap.framework/XCTestBootstrap"
 cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBSimulatorControl.framework/FBSimulatorControl"
-cp "$BIN_PATH" "$PACKAGE_ROOT/Frameworks/FBDeviceControl.framework/FBDeviceControl"
 printf 'name: axe\n' > "$PACKAGE_ROOT/AXe_AXe.bundle/manifest.txt"
 
 PACKAGE_ZIP="$WORK_DIR/AXe-Final-dryrun.zip"

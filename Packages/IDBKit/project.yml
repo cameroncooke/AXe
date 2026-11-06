@@ -1,0 +1,124 @@
+name: FBSimulatorControl
+
+# AXe's copy of the IDB frameworks it uses. Generate with `xcodegen generate` from this
+# directory; scripts/build.sh does this before building the XCFrameworks.
+
+options:
+  deploymentTarget:
+    macOS: "12.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+  bundleIdPrefix: com.facebook
+
+configFiles:
+  Debug: Configuration/Shared.xcconfig
+  Release: Configuration/Shared.xcconfig
+
+settings:
+  base:
+    HEADER_SEARCH_PATHS: $(inherited) $(SRCROOT)/PrivateHeaders
+
+targets:
+  FBControlCore:
+    type: framework
+    platform: macOS
+    configFiles:
+      Debug: FBControlCore/FBControlCore.xcconfig
+      Release: FBControlCore/FBControlCore.xcconfig
+    sources:
+      - path: FBControlCore
+        excludes:
+          - "**/*-Info.plist"
+          - "**/*.xcconfig"
+    settings:
+      base:
+        INFOPLIST_FILE: $(SRCROOT)/FBControlCore/FBControlCore-Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.facebook.FBControlCore
+        PRODUCT_NAME: FBControlCore
+        DEFINES_MODULE: YES
+        # Mixed-language workaround: Xcode 26 omits the Swift module's emit
+        # directory from HEADER_SEARCH_PATHS, so `#import "FBControlCore-Swift.h"`
+        # in .m files fails to find the Swift-generated header. Add the per-arch
+        # Swift output dir explicitly.
+        HEADER_SEARCH_PATHS: $(inherited) $(SRCROOT)/PrivateHeaders $(OBJECT_FILE_DIR_normal)/$(CURRENT_ARCH)
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: Cocoa.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreMedia.framework
+      - sdk: Foundation.framework
+      - sdk: ServiceManagement.framework
+
+  FBSimulatorControl:
+    type: framework
+    platform: macOS
+    configFiles:
+      Debug: FBSimulatorControl/FBSimulatorControl.xcconfig
+      Release: FBSimulatorControl/FBSimulatorControl.xcconfig
+    sources:
+      - path: FBSimulatorControl
+        excludes:
+          - "**/*-Info.plist"
+          - "**/*.xcconfig"
+          - "Framebuffer/FBSimulatorVideoStream_Testing.h"
+      - path: FBSimulatorControl/Framebuffer/FBSimulatorVideoStream_Testing.h
+        headerVisibility: project
+    settings:
+      base:
+        INFOPLIST_FILE: $(SRCROOT)/FBSimulatorControl/FBSimulatorControl-Info.plist
+        PRODUCT_BUNDLE_IDENTIFIER: com.facebook.FBSimulatorControl
+        PRODUCT_NAME: FBSimulatorControl
+        DEFINES_MODULE: YES
+        # Mixed-language workaround: see FBControlCore for rationale.
+        HEADER_SEARCH_PATHS: $(inherited) $(SRCROOT)/PrivateHeaders $(OBJECT_FILE_DIR_normal)/$(CURRENT_ARCH)
+        # CoreSimulator and SimulatorKit are private Apple frameworks living in
+        # $(DEVELOPER_DIR)/Library/PrivateFrameworks; they're not on the public SDK search path.
+        FRAMEWORK_SEARCH_PATHS: $(inherited) $(DEVELOPER_DIR)/Library/PrivateFrameworks
+        # Wrap the reverse-engineered headers under PrivateHeaders/<Name>/ as Clang
+        # modules so Swift can `import CoreSimulator`, `import SimulatorKit`, etc.
+        OTHER_SWIFT_FLAGS: $(inherited) -Xcc -fmodule-map-file=$(SRCROOT)/PrivateHeaders/CoreSimulator/module.modulemap -Xcc -fmodule-map-file=$(SRCROOT)/PrivateHeaders/SimulatorApp/module.modulemap -Xcc -fmodule-map-file=$(SRCROOT)/PrivateHeaders/SimulatorKit/module.modulemap -Xcc -fmodule-map-file=$(SRCROOT)/PrivateHeaders/AXRuntime/module.modulemap -Xcc -fmodule-map-file=$(SRCROOT)/PrivateHeaders/AccessibilityPlatformTranslation/module.modulemap
+        # CoreSimulator and AccessibilityPlatformTranslation are loaded at
+        # runtime. Swift generates direct class references that must be satisfied
+        # at link time, so weak-link against the TBD stub. SimulatorKit is
+        # header-only — no symbols are referenced from compiled code.
+        OTHER_LDFLAGS: $(inherited) -weak_library $(SRCROOT)/PrivateHeaders/CoreSimulator/CoreSimulator.tbd -weak_library $(SRCROOT)/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd
+    dependencies:
+      - target: FBControlCore
+        embed: true
+      - sdk: AVFoundation.framework
+      - sdk: Accelerate.framework
+      - sdk: Cocoa.framework
+      - sdk: CoreGraphics.framework
+      - sdk: CoreImage.framework
+      - sdk: CoreMedia.framework
+      - sdk: CoreVideo.framework
+      - sdk: Foundation.framework
+      - sdk: IOSurface.framework
+      - sdk: Metal.framework
+      - sdk: UniformTypeIdentifiers.framework
+      - sdk: VideoToolbox.framework
+
+  FBSimulatorHIDEventTransportTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: FBSimulatorHIDEventTransportTests
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.facebook.FBSimulatorHIDEventTransportTests
+        PRODUCT_NAME: FBSimulatorHIDEventTransportTests
+        GENERATE_INFOPLIST_FILE: YES
+        # Typed semantic capture tests reference the same native classes as the library.
+        OTHER_LDFLAGS: $(inherited) -weak_library $(SRCROOT)/PrivateHeaders/AccessibilityPlatformTranslation/AccessibilityPlatformTranslation.tbd
+    dependencies:
+      - target: FBSimulatorControl
+      - sdk: XCTest.framework
+
+schemes:
+  FBSimulatorControl:
+    build:
+      targets:
+        FBSimulatorControl: all
+    test:
+      targets:
+        - FBSimulatorHIDEventTransportTests

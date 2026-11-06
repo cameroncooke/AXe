@@ -18,7 +18,7 @@ import subprocess
 import time
 
 ROOT = Path(__file__).resolve().parent.parent
-FRAMEWORKS = ['FBSimulatorControl', 'FBControlCore', 'FBDeviceControl', 'XCTestBootstrap']
+FRAMEWORKS = ['FBSimulatorControl', 'FBControlCore']
 HEADER_FOLDERS = ['', 'AccessibilityPlatformTranslation', 'AXRuntime', 'CoreSimDeviceIO',
                   'CoreSimulator', 'CoreSimulatorUtilities', 'SimulatorKit']
 INTERRUPTED_BY = None
@@ -147,8 +147,8 @@ class Builder:
         args = self.args
         inputs = self.manifest['inputs']
         inputs['runtime'] = dict(directory=str(args.runtime), files=tree_digest(args.runtime))
-        headers = args.idb_checkout / 'PrivateHeaders'
-        require(headers.is_dir(), 'PrivateHeaders is missing from the explicit IDB checkout')
+        headers = args.idb_source / 'PrivateHeaders'
+        require(headers.is_dir(), 'PrivateHeaders is missing from the IDB sources')
         inputs['privateHeaders'] = dict(directory=str(headers), files=tree_digest(headers))
         inputs['driver'] = dict(file=str(Path(__file__).resolve()), sha256=digest(Path(__file__)))
         inputs['hostTools'] = {name: digest(Path('/usr/bin') / name) for name in ['xcrun', 'codesign', 'otool']}
@@ -223,10 +223,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     for name in ['runtime', 'host-developer-dir', 'guest-developer-dir', 'out']:
         parser.add_argument('--' + name, type=Path, required=True)
-    parser.add_argument('--idb-checkout', type=Path, default=ROOT / 'idb_checkout',
-                        help='IDB checkout containing PrivateHeaders; default: repository idb_checkout.')
+    parser.add_argument('--idb-source', '--idb-checkout', dest='idb_source', type=Path,
+                        default=ROOT / 'Packages/IDBKit',
+                        help='IDB sources containing PrivateHeaders; default: Packages/IDBKit.')
     args = parser.parse_args()
-    for name in ['runtime', 'host_developer_dir', 'guest_developer_dir', 'idb_checkout']:
+    for name in ['runtime', 'host_developer_dir', 'guest_developer_dir', 'idb_source']:
         value = getattr(args, name).resolve(strict=True)
         require(value.is_dir(), name + ' must be a directory')
         setattr(args, name, value)
@@ -234,7 +235,7 @@ def main():
         require((args.runtime / file).is_file(), 'Runtime input is missing: ' + file)
     args.out = args.out.resolve()
     require(not args.out.is_relative_to(args.runtime)
-            and not args.out.is_relative_to(args.idb_checkout / 'PrivateHeaders'), 'Output cannot be inside an input directory')
+            and not args.out.is_relative_to(args.idb_source / 'PrivateHeaders'), 'Output cannot be inside an input directory')
     args.out.mkdir(parents=True, exist_ok=False)
     builder = Builder(args)
     signal.signal(signal.SIGINT, terminate)

@@ -31,11 +31,11 @@ AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hu
 
 Release artifacts are built once with the Xcode version selected by the release environment and run unchanged with either supported Xcode selected. Compatibility was validated with Xcode 26.5 (build `17F42`) and iOS 26.5 (`23F77`), and with Xcode 27 Beta 3 (build `27A5218g`) and iOS 27 (`24A5380g`).
 
-AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build applies the tracked Duo foundation patch and checks its complete source hashes. Unexpected checkout changes stop the build without discarding them. The default `AXE_BUILD_ARCHS="arm64 x86_64"` builds a universal CLI and IDB frameworks. Set `AXE_BUILD_ARCHS=arm64` or `AXE_BUILD_ARCHS=x86_64` for one architecture. Build checks require the requested slices.
+AXe keeps its own copy of the two IDB frameworks it uses, `FBControlCore` and `FBSimulatorControl`, in [Packages/IDBKit](Packages/IDBKit/README.md). Edit those sources directly; there is no IDB checkout or patch. `scripts/build.sh` generates their Xcode project with XcodeGen and builds the XCFrameworks AXe links. The default `AXE_BUILD_ARCHS="arm64 x86_64"` builds a universal CLI and IDB frameworks. Set `AXE_BUILD_ARCHS=arm64` or `AXE_BUILD_ARCHS=x86_64` for one architecture. Build checks require the requested slices.
 
 ## E2E development
 
-`make e2e` rebuilds the local IDB XCFrameworks, builds AXe, and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDB projects. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
+`make e2e` rebuilds the IDBKit XCFrameworks, builds AXe, and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDBKit project. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
 
 For repeated local Playground checks, reuse the requested warm simulator. Do not create a fresh simulator for each check. A warm-session pass does not prove cold-start readiness.
 

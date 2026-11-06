@@ -12,7 +12,7 @@ Supply the exact built AXe payload with its matching frameworks and resources. T
 
 The runner builds the normal Playground once, then copies and builds the exact current test sources once. `checks/source-pins.json` records Package.swift and copied source hashes. `checks/proposal-source-pins.json` records current source origins and the runner/config/count/parser hashes. These files are inputs, not build or test results.
 
-Native state and held-input probes compile against the supplied payload's `Frameworks` directory. The default compiler is the selected Xcode; the default private headers are `idb_checkout/PrivateHeaders`. Set `AXE_TEST_HOST_DEVELOPER_DIR` and `AXE_TEST_IDB_SOURCE` when the matching inputs are elsewhere. The runner records their paths and hashes. Missing inputs fail before the affected case. It does not choose another compiler or runtime.
+Native state and held-input probes compile against the supplied payload's `Frameworks` directory. The default compiler is the selected Xcode; the default private headers are `Packages/IDBKit/PrivateHeaders`. Set `AXE_TEST_HOST_DEVELOPER_DIR` and `AXE_TEST_IDB_SOURCE` when the matching inputs are elsewhere. The runner records their paths and hashes. Missing inputs fail before the affected case. It does not choose another compiler or runtime.
 
 ## Software keyboard prerequisite
 

@@ -386,9 +386,7 @@ ensure_test_framework_rpaths() {
 
     local framework_names=(
         "FBControlCore.framework"
-        "FBDeviceControl.framework"
         "FBSimulatorControl.framework"
-        "XCTestBootstrap.framework"
     )
 
     local framework

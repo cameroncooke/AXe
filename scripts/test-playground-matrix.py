@@ -372,12 +372,12 @@ def main():
         native_tools = [item for item in config['nativeTools'] if item['environment'] in required_tools]
         if native_tools:
             host = Path(host_override or developer).resolve(strict=True)
-            idb = Path(idb_override or ROOT / 'idb_checkout').resolve(strict=True)
+            idb = Path(idb_override or ROOT / 'Packages/IDBKit').resolve(strict=True)
             headers = idb / 'PrivateHeaders'
             frameworks = args.axe.parent / 'Frameworks'
             if not host.is_dir() or not headers.is_dir():
                 raise RuntimeError('The selected host Xcode or IDB PrivateHeaders directory is missing')
-            for name in ['FBSimulatorControl', 'FBControlCore', 'FBDeviceControl', 'XCTestBootstrap']:
+            for name in ['FBSimulatorControl', 'FBControlCore']:
                 if not (frameworks / (name + '.framework') / name).is_file():
                     raise RuntimeError('The supplied payload is missing Frameworks/' + name + '.framework/' + name)
             report['nativeTools'] = dict(hostDeveloperDirectory=str(host), idbSource=str(idb), frameworks=str(frameworks),

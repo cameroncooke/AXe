@@ -6,7 +6,7 @@ import Testing
 struct BuildArtifactVerificationTests {
     enum Variant: String, CaseIterable, Sendable {
         case current, swiftImport, swiftType, headerImport, headerType
-        case missingCompiledModule, missingHeader, missingInterface, missingForkReference
+        case missingCompiledModule, missingHeader, missingInterface, missingFeatureReference
 
         var expectedMessage: String? {
             switch self {
@@ -15,7 +15,7 @@ struct BuildArtifactVerificationTests {
                 return "leaks AccessibilityPlatformTranslation through its public interface"
             case .missingCompiledModule: return "compiled Swift module is missing"
             case .missingHeader, .missingInterface: return "public module artifact is missing"
-            case .missingForkReference: return "missing required fork feature evidence: setClientType:"
+            case .missingFeatureReference: return "missing required AXe feature evidence: setClientType:"
             }
         }
     }
@@ -33,7 +33,7 @@ struct BuildArtifactVerificationTests {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     }
 
-    private let products = ["FBControlCore", "FBDeviceControl", "FBSimulatorControl", "XCTestBootstrap"]
+    private let products = ["FBControlCore", "FBSimulatorControl"]
 
     // Keep these public-command cases serial. They never compile, launch a simulator,
     // or change an original framework. Other products are read-only verification inputs.
@@ -84,7 +84,7 @@ struct BuildArtifactVerificationTests {
                 try manager.removeItem(at: header.resolvingSymlinksInPath())
             case .missingInterface:
                 try manager.removeItem(at: interface)
-            case .missingForkReference:
+            case .missingFeatureReference:
                 let binary = try copiedFile(framework.appendingPathComponent("FBSimulatorControl"), root: copied)
                 var bytes = try Data(contentsOf: binary)
                 let needle = Data("setClientType:".utf8)

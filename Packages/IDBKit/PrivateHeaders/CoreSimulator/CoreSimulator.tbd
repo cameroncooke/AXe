@@ -1,0 +1,24 @@
+--- !tapi-tbd
+tbd-version: 4
+targets: [ arm64-macos, x86_64-macos ]
+install-name: '/Library/Developer/PrivateFrameworks/CoreSimulator.framework/Versions/A/CoreSimulator'
+current-version: 0
+compatibility-version: 0
+exports:
+  - targets: [ arm64-macos, x86_64-macos ]
+    objc-classes:
+      - SimDevice
+      - SimDeviceBootInfo
+      - SimDeviceIO
+      - SimDeviceIOClient
+      - SimDeviceIOLoadedBundle
+      - SimDeviceIOServer
+      - SimDeviceNotificationManager
+      - SimDevicePair
+      - SimDeviceSet
+      - SimDeviceType
+      - SimLocalThrowable
+      - SimProfilesPathMonitor
+      - SimRuntime
+      - SimServiceContext
+...

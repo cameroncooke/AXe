@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the required IDB Frameworks for the AXe project.
+# Builds AXe's IDB frameworks (Packages/IDBKit) and the AXe executable.
 
 set -e
 set -o pipefail
@@ -52,22 +52,13 @@ function load_env_file() {
 load_env_file "${ENV_FILE}"
 
 # Environment and Configuration
-DEFAULT_IDB_CHECKOUT_DIR="${REPO_ROOT}/idb_checkout"
-IDB_CHECKOUT_DIR="${IDB_CHECKOUT_DIR:-${DEFAULT_IDB_CHECKOUT_DIR}}"
-IDB_CHECKOUT_DIR="$(cd "$(dirname "$IDB_CHECKOUT_DIR")" && pwd)/$(basename "$IDB_CHECKOUT_DIR")"
-IDB_GIT_URL="${IDB_GIT_URL:-https://github.com/cameroncooke/idb.git}"
-DEFAULT_IDB_GIT_REF="604c51013438f0c3603b720a05a44b7c5b8f286d"
-IDB_GIT_REF="${IDB_GIT_REF:-${DEFAULT_IDB_GIT_REF}}"
-IDB_PATCH_BASE_REF="604c51013438f0c3603b720a05a44b7c5b8f286d"
-IDB_FOUNDATION_PATCH="${REPO_ROOT}/patches/idb-duo-foundation.patch"
-IDB_FOUNDATION_HASHES="${REPO_ROOT}/patches/idb-duo-foundation.sha256"
-IDB_UPSTREAM_BASE_REF="${IDB_UPSTREAM_BASE_REF:-e682506725e9efefb9c43b8b917c0b12eb2a5939}"
+# AXe's own copy of the IDB frameworks it uses. Edit these sources directly.
+IDBKIT_DIR="${REPO_ROOT}/Packages/IDBKit"
 BUILD_OUTPUT_DIR="${BUILD_OUTPUT_DIR:-./build_products}"
 DERIVED_DATA_PATH="${DERIVED_DATA_PATH:-./build_derived_data}"
 BUILD_XCFRAMEWORK_DIR="${BUILD_XCFRAMEWORK_DIR:-${BUILD_OUTPUT_DIR}/XCFrameworks}"
-FBSIMCONTROL_PROJECT="${IDB_CHECKOUT_DIR}/FBSimulatorControl.xcodeproj"
+FBSIMCONTROL_PROJECT="${IDBKIT_DIR}/FBSimulatorControl.xcodeproj"
 TEMP_DIR="${TEMP_DIR:-$(mktemp -d)}"
-IDB_REPLACEMENT_ROOT=""
 
 # Shared payload helper
 # shellcheck source=./release-payload.sh
@@ -144,45 +135,6 @@ function print_warning() {
   echo "⚠️  ${message}"
 }
 
-function remove_idb_replacement() {
-  local replacement_root="$1"
-  local checkout_parent
-  checkout_parent="$(dirname "$IDB_CHECKOUT_DIR")"
-
-  if [[ -L "$replacement_root" || ! -d "$replacement_root" ||
-        "$(dirname "$replacement_root")" != "$checkout_parent" ||
-        "$(basename "$replacement_root")" != .axe-idb-replacement.* ]]; then
-    print_warning "Refusing unsafe IDB replacement cleanup: $replacement_root"
-    return 0
-  fi
-
-  rm -r "$replacement_root"
-}
-
-function cleanup_current_idb_replacement() {
-  [[ -n "$IDB_REPLACEMENT_ROOT" ]] || return 0
-  remove_idb_replacement "$IDB_REPLACEMENT_ROOT"
-  IDB_REPLACEMENT_ROOT=""
-}
-
-function cleanup_stale_idb_replacements() {
-  local checkout_parent candidate owner_pid
-  checkout_parent="$(dirname "$IDB_CHECKOUT_DIR")"
-
-  for candidate in "$checkout_parent"/.axe-idb-replacement.*; do
-    [[ ! -L "$candidate" && -d "$candidate" ]] || continue
-    [[ ! -L "$candidate/.axe-owner-pid" && -f "$candidate/.axe-owner-pid" ]] || continue
-    owner_pid="$(< "$candidate/.axe-owner-pid")"
-    if [[ "$owner_pid" =~ ^[0-9]+$ ]] && kill -0 "$owner_pid" 2>/dev/null; then
-      continue
-    fi
-    print_info "Removing stale managed IDB replacement directory: $candidate"
-    remove_idb_replacement "$candidate"
-  done
-}
-
-trap cleanup_current_idb_replacement EXIT
-
 function codesign_with_retry() {
   local max_attempts=5
   local delay=10
@@ -221,11 +173,11 @@ function verify_macho_has_arch() {
   fi
 }
 
-function verify_fbsimulatorcontrol_fork_features() {
+function verify_fbsimulatorcontrol_features() {
   local binary_path="$1"
 
   if [[ ! -f "$binary_path" ]]; then
-    echo "❌ Error: FBSimulatorControl binary not found for fork feature verification: $binary_path"
+    echo "❌ Error: FBSimulatorControl binary not found for feature verification: $binary_path"
     exit 1
   fi
 
@@ -239,10 +191,9 @@ function verify_fbsimulatorcontrol_fork_features() {
   local reference
   for reference in "${required_references[@]}"; do
     if ! strings -a "$binary_path" | grep -F "$reference" >/dev/null; then
-      echo "❌ Error: FBSimulatorControl is missing required fork feature evidence: ${reference}"
+      echo "❌ Error: FBSimulatorControl is missing required AXe feature evidence: ${reference}"
       echo "   Checked binary: $binary_path"
-      echo "   Expected fork revision: ${IDB_GIT_URL}@${IDB_GIT_REF}"
-      echo "   Re-run setup, generation, and the framework build."
+      echo "   Rebuild the frameworks from Packages/IDBKit."
       exit 1
     fi
   done
@@ -275,7 +226,7 @@ function verify_fbsimulatorcontrol_fork_features() {
     if grep -E '(^|[^[:alnum:]_])(AccessibilityPlatformTranslation|AXP[[:alnum:]_]*)([^[:alnum:]_]|$)' "$artifact" >/dev/null; then
       echo "❌ Error: FBSimulatorControl leaks AccessibilityPlatformTranslation through its public interface"
       echo "   Leaking artifact: ${artifact}"
-      echo "   Rebuild from the pinned AXe IDB fork revision."
+      echo "   Keep AccessibilityPlatformTranslation types internal in Packages/IDBKit."
       exit 1
     fi
   done
@@ -288,7 +239,7 @@ function verify_fbsimulatorcontrol_fork_features() {
     exit 1
   fi
 
-  print_success "FBSimulatorControl contains required fork features without leaking private accessibility framework types"
+  print_success "FBSimulatorControl contains required AXe features without leaking private accessibility framework types"
 }
 
 # Function to invoke xcodebuild, optionally with xcpretty
@@ -341,182 +292,51 @@ function copy_resource_bundle() {
   print_success "AXe resource bundle installed to ${bundle_dest}"
 }
 
-function fresh_clone_idb_repo() {
-  if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
-    echo "Error: Refusing to replace an existing IDB checkout: $IDB_CHECKOUT_DIR" >&2
-    return 1
-  fi
-
-  IDB_REPLACEMENT_ROOT="$(mktemp -d "$(dirname "$IDB_CHECKOUT_DIR")/.axe-idb-replacement.XXXXXX")"
-  printf '%s\n' "$$" > "$IDB_REPLACEMENT_ROOT/.axe-owner-pid"
-  local replacement_checkout
-  replacement_checkout="${IDB_REPLACEMENT_ROOT}/checkout"
-  print_info "Cloning AXe's IDB fork into $IDB_CHECKOUT_DIR..."
-  if ! git clone --no-checkout "$IDB_GIT_URL" "$replacement_checkout" ||
-     ! git -C "$replacement_checkout" checkout --detach "$IDB_GIT_REF"; then
-    cleanup_current_idb_replacement
-    return 1
-  fi
-  touch "$replacement_checkout/.git/axe-managed-checkout"
-  if [[ -e "$IDB_CHECKOUT_DIR" ]]; then
-    echo "Error: IDB checkout appeared during clone; preserving it." >&2
-    return 1
-  fi
-  mv "$replacement_checkout" "$IDB_CHECKOUT_DIR"
-  cleanup_current_idb_replacement
-  print_success "IDB fork cloned at $IDB_GIT_REF."
-}
-
-function clone_idb_repo() {
-  # Never repair, reset or replace a caller's existing source tree. The tracked
-  # foundation patch is an expected worktree change, not disposable dirt.
-  if [[ ! -e "$IDB_CHECKOUT_DIR" ]]; then
-    fresh_clone_idb_repo
-  elif [[ ! -d "$IDB_CHECKOUT_DIR/.git" ]]; then
-    echo "Error: IDB path exists but is not a supported Git checkout: $IDB_CHECKOUT_DIR" >&2
-    return 1
-  fi
-  prepare_idb_foundation
-}
-
-function verify_idb_base_state() {
-  if [[ "$IDB_GIT_REF" != "$IDB_PATCH_BASE_REF" ]]; then
-    echo "Error: The Duo foundation patch requires IDB $IDB_PATCH_BASE_REF." >&2
-    return 1
-  fi
-  local actual_ref
-  actual_ref=$(git -C "$IDB_CHECKOUT_DIR" rev-parse HEAD)
-  if [[ "$actual_ref" != "$IDB_GIT_REF" ]]; then
-    echo "❌ Error: IDB checkout SHA mismatch"
-    echo "   Expected: $IDB_GIT_REF"
-    echo "   Actual:   $actual_ref"
+function require_idbkit_sources() {
+  if [[ ! -f "${IDBKIT_DIR}/project.yml" ]]; then
+    echo "❌ Error: IDBKit sources not found at ${IDBKIT_DIR}"
     exit 1
   fi
-
-  local actual_remote
-  actual_remote=$(git -C "$IDB_CHECKOUT_DIR" remote get-url origin)
-  if [[ "$actual_remote" != "$IDB_GIT_URL" ]]; then
-    echo "❌ Error: IDB checkout remote mismatch"
-    echo "   Expected: $IDB_GIT_URL"
-    echo "   Actual:   $actual_remote"
-    exit 1
-  fi
-  if ! git -C "$IDB_CHECKOUT_DIR" merge-base --is-ancestor "$IDB_UPSTREAM_BASE_REF" "$actual_ref"; then
-    echo "❌ Error: Pinned IDB fork revision is not based on $IDB_UPSTREAM_BASE_REF"
-    exit 1
-  fi
-
-}
-
-function verify_idb_source_markers() {
-  local source_checks=(
-    "FBControlCore/Utility/FBXcodeDirectory.swift|environment[\"DEVELOPER_DIR\"]"
-    "FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift|clientType = 2"
-    "FBSimulatorControl/Commands/FBAXTranslationRequest.swift|@_implementationOnly import AccessibilityPlatformTranslation"
-    "FBSimulatorControl/HID/FBSimulatorHID.swift|public let transportType"
-    "FBSimulatorControl/HID/FBSimulatorHIDSession.swift|admissionGuard: any FBSimulatorHIDInputAdmissionGuard"
-    "FBSimulatorControl/Commands/FBSimulatorSlider.swift|public func beginPhysicalValueFeedback"
-    "FBSimulatorControl/HID/FBSimulatorHIDEvent.swift|event.event(for: transportType)"
-    "FBSimulatorControl/Utility/FBSimulatorControlFrameworkLoader.m|XCUIDeviceRemoteAutomationSession"
-  )
-  local check source_file source_marker
-  for check in "${source_checks[@]}"; do
-    source_file="${check%%|*}"
-    source_marker="${check#*|}"
-    if ! grep -Fq "$source_marker" "${IDB_CHECKOUT_DIR}/${source_file}"; then
-      echo "❌ Error: Pinned IDB fork verification failed"
-      echo "   Missing '${source_marker}' in ${source_file}"
-      echo "   Fork revision: ${IDB_GIT_URL}@${IDB_GIT_REF}"
-      exit 1
-    fi
-  done
-
-}
-
-function verify_idb_source_state() {
-  verify_idb_base_state
-  verify_idb_source_markers
-  if ! git -C "$IDB_CHECKOUT_DIR" diff --cached --quiet; then
-    echo "Error: IDB has staged changes; leave them intact and use a separate checkout." >&2
-    return 1
-  fi
-  if [[ -n "$(git -C "$IDB_CHECKOUT_DIR" diff --summary HEAD)" ]]; then
-    echo "Error: IDB has unexpected file mode or deletion changes." >&2
-    return 1
-  fi
-
-  local changed_files untracked_files source_file expected_hash
-  changed_files="$(git -C "$IDB_CHECKOUT_DIR" diff --name-only HEAD)"
-  untracked_files="$(git -C "$IDB_CHECKOUT_DIR" ls-files --others --exclude-standard)"
-  while IFS= read -r source_file; do
-    [[ -n "$source_file" ]] || continue
-    if ! awk '{print $2}' "$IDB_FOUNDATION_HASHES" | grep -Fqx -- "$source_file"; then
-      echo "Error: Unexpected IDB change preserved: $source_file" >&2
-      return 1
-    fi
-  done <<< "$changed_files
-$untracked_files"
-
-  while read -r expected_hash source_file; do
-    if [[ ! -f "$IDB_CHECKOUT_DIR/$source_file" || -L "$IDB_CHECKOUT_DIR/$source_file" ||
-          -x "$IDB_CHECKOUT_DIR/$source_file" ]]; then
-      echo "Error: IDB foundation source must be a regular non-executable file: $source_file" >&2
-      return 1
-    fi
-  done < "$IDB_FOUNDATION_HASHES"
-  (cd "$IDB_CHECKOUT_DIR" && shasum -a 256 -c "$IDB_FOUNDATION_HASHES")
-  git -C "$IDB_CHECKOUT_DIR" apply --reverse --check "$IDB_FOUNDATION_PATCH"
-  git -C "$IDB_CHECKOUT_DIR" diff --check
-  print_success "Verified pinned IDB base and exact tracked Duo foundation patch"
-}
-
-function prepare_idb_foundation() {
-  verify_idb_base_state
-  if [[ -z "$(git -C "$IDB_CHECKOUT_DIR" status --porcelain --untracked-files=all)" ]]; then
-    git -C "$IDB_CHECKOUT_DIR" apply --check "$IDB_FOUNDATION_PATCH"
-    git -C "$IDB_CHECKOUT_DIR" apply "$IDB_FOUNDATION_PATCH"
-  fi
-  # A previously applied exact patch is reusable. Any other edit stops here;
-  # there is no reset, clean, fallback checkout or partial-patch repair.
-  verify_idb_source_state
-}
-
-function generate_idb_projects() {
   if ! command -v xcodegen >/dev/null 2>&1; then
-    echo "❌ Error: XcodeGen is required to generate the pinned IDB fork projects."
+    echo "❌ Error: XcodeGen is required to generate the IDBKit project."
     echo "   Install XcodeGen or make an existing installation available in PATH."
     exit 1
   fi
-
-  prepare_idb_foundation
-  print_info "Generating pinned IDB fork projects with $(xcodegen --version)..."
-  (cd "$IDB_CHECKOUT_DIR" && ./build.sh generate)
-  if [[ ! -f "${FBSIMCONTROL_PROJECT}/project.pbxproj" ]]; then
-    echo "❌ Error: IDB project generation did not produce ${FBSIMCONTROL_PROJECT}/project.pbxproj"
-    exit 1
-  fi
-  print_success "Generated pinned IDB fork projects before framework compilation"
 }
 
+function generate_idbkit_project() {
+  require_idbkit_sources
+  print_info "Generating the IDBKit project with $(xcodegen --version)..."
+  (cd "$IDBKIT_DIR" && xcodegen generate)
+  if [[ ! -f "${FBSIMCONTROL_PROJECT}/project.pbxproj" ]]; then
+    echo "❌ Error: IDBKit project generation did not produce ${FBSIMCONTROL_PROJECT}/project.pbxproj"
+    exit 1
+  fi
+  print_success "Generated the IDBKit project before framework compilation"
+}
+
+# Records which IDBKit sources and toolchain produced the XCFrameworks.
 function write_idb_build_evidence() {
-  verify_idb_source_state
   local evidence_path="${BUILD_XCFRAMEWORK_DIR}/IDB_BUILD_EVIDENCE.txt"
+  local source_tree="unknown" source_state="unknown"
+  if git -C "$REPO_ROOT" rev-parse --git-dir >/dev/null 2>&1; then
+    source_tree="$(git -C "$REPO_ROOT" rev-parse --verify --quiet HEAD:Packages/IDBKit || echo uncommitted)"
+    if [[ -z "$(git -C "$REPO_ROOT" status --porcelain -- Packages/IDBKit)" ]]; then
+      source_state="committed"
+    else
+      source_state="modified"
+    fi
+  fi
   mkdir -p "$BUILD_XCFRAMEWORK_DIR"
   {
-    echo "IDB_SHA=${IDB_GIT_REF}"
-    echo "IDB_FOUNDATION_PATCH_SHA256=$(shasum -a 256 "$IDB_FOUNDATION_PATCH" | awk '{print $1}')"
-    echo "IDB_FOUNDATION_FILES_SHA256=$(shasum -a 256 "$IDB_FOUNDATION_HASHES" | awk '{print $1}')"
-    echo "IDB_GIT_URL=${IDB_GIT_URL}"
-    echo "IDB_UPSTREAM_BASE_SHA=${IDB_UPSTREAM_BASE_REF}"
+    echo "IDBKIT_SOURCE_TREE=${source_tree}"
+    echo "IDBKIT_SOURCE_STATE=${source_state}"
     echo "DEVELOPER_DIR=${DEVELOPER_DIR:-<not set>}"
     echo "XCODE_VERSION=$(xcodebuild -version | tr '\n' ' ')"
     echo "SWIFT_VERSION=$(swiftc --version 2>&1 | head -1)"
     echo "XCODEGEN_VERSION=$(xcodegen --version)"
-    git -C "$IDB_CHECKOUT_DIR" log --reverse \
-      --format='IDB_DOWNSTREAM_COMMIT=%H %s' \
-      "${IDB_UPSTREAM_BASE_REF}..${IDB_GIT_REF}"
   } > "$evidence_path"
-  print_success "Recorded pinned IDB fork build evidence at ${evidence_path}"
+  print_success "Recorded IDBKit build evidence at ${evidence_path}"
 }
 
 function require_build_architectures() {
@@ -879,7 +699,7 @@ function build_axe_executable() {
 function verify_xcframework_inputs() {
   local output_base_dir="$1"
   local xcframeworks_dir="${output_base_dir}/XCFrameworks"
-  local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
+  local expected_frameworks=("FBControlCore" "FBSimulatorControl")
 
   print_subsection "🧪" "Validating XCFramework inputs"
 
@@ -905,7 +725,7 @@ function verify_xcframework_inputs() {
       verify_macho_has_arch "${framework_binary}" "$expected_arch"
     done
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_fork_features "${framework_binary}"
+      verify_fbsimulatorcontrol_features "${framework_binary}"
     fi
   done
 
@@ -916,7 +736,7 @@ function verify_release_architectures() {
   local output_base_dir="$1"
   local frameworks_dir="${output_base_dir}/Frameworks"
   local executable_path="${output_base_dir}/axe"
-  local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
+  local expected_frameworks=("FBControlCore" "FBSimulatorControl")
 
   print_subsection "🧪" "Validating release artifact architectures"
   local expected_arch
@@ -946,7 +766,7 @@ function verify_release_architectures() {
       verify_macho_has_arch "${framework_binary}" "$expected_arch"
     done
     if [[ "${framework_name}" == "FBSimulatorControl" ]]; then
-      verify_fbsimulatorcontrol_fork_features "${framework_binary}"
+      verify_fbsimulatorcontrol_features "${framework_binary}"
     fi
   done
 
@@ -1238,16 +1058,16 @@ Commands:
     Print this usage information.
 
   setup
-    Verify the pinned IDB base and apply the tracked Duo patch without discarding edits.
+    Check that the IDBKit sources and XcodeGen are available.
 
   clean
     Clean previous build products and derived data.
 
   frameworks
-    Generate the pinned fork project, then build all IDB frameworks (FBControlCore, XCTestBootstrap, FBSimulatorControl, FBDeviceControl).
+    Generate the IDBKit project, then build FBControlCore and FBSimulatorControl.
 
   generate
-    Verify the pinned AXe IDB fork revision, then regenerate projects using XcodeGen.
+    Generate the IDBKit Xcode project from Packages/IDBKit/project.yml using XcodeGen.
 
   install
     Install built frameworks to the Frameworks directory.
@@ -1288,11 +1108,7 @@ Commands:
 Environment Variables (set inline, exported, or via a git-ignored .env file):
   AXE_ENV_FILE           Path to the .env file to load (default: <repo-root>/.env)
   AXE_CODESIGN_IDENTITY  Code-signing identity (required for signing; no default)
-  IDB_CHECKOUT_DIR       Directory for IDB repository (default: ./idb_checkout)
-  IDB_GIT_URL            AXe IDB fork URL (default: https://github.com/cameroncooke/idb.git)
-  IDB_GIT_REF            Exact fork revision (must match the tracked foundation base)
   AXE_BUILD_ARCHS        Architectures: arm64, x86_64, or both (default: arm64 x86_64)
-  IDB_UPSTREAM_BASE_REF  Verified upstream base (default: e682506725e9efefb9c43b8b917c0b12eb2a5939)
   BUILD_OUTPUT_DIR       Directory for build outputs (default: ./build_products)
   DERIVED_DATA_PATH      Directory for derived data (default: ./build_derived_data)
   TEMP_DIR               Temporary directory for final packages (default: system temp)
@@ -1314,8 +1130,9 @@ EOF
 
 # Individual command functions
 function cmd_setup() {
-  print_section "📥" "Repository Setup"
-  clone_idb_repo
+  print_section "📥" "Checking Build Prerequisites"
+  require_idbkit_sources
+  print_success "IDBKit sources and XcodeGen are available"
 }
 
 function cmd_clean() {
@@ -1332,28 +1149,20 @@ function cmd_clean() {
 function cmd_frameworks() {
   require_build_architectures
   print_section "🔧" "Building Frameworks"
-  generate_idb_projects
+  generate_idbkit_project
   framework_build "FBControlCore" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
-  framework_build "XCTestBootstrap" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
   framework_build "FBSimulatorControl" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
-  framework_build "FBDeviceControl" "${FBSIMCONTROL_PROJECT}" "${BUILD_OUTPUT_DIR}"
 }
 
 function cmd_install() {
   print_section "📦" "Installing Frameworks"
   install_framework "FBControlCore" "${BUILD_OUTPUT_DIR}"
-  install_framework "XCTestBootstrap" "${BUILD_OUTPUT_DIR}"
   install_framework "FBSimulatorControl" "${BUILD_OUTPUT_DIR}"
-  install_framework "FBDeviceControl" "${BUILD_OUTPUT_DIR}"
 }
 
 function cmd_strip() {
   print_section "✂️" "Stripping Nested Frameworks"
-  strip_framework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.framework/Versions/Current/Frameworks/XCTestBootstrap.framework"
   strip_framework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.framework/Versions/Current/Frameworks/FBControlCore.framework"
-  strip_framework "${BUILD_OUTPUT_DIR}" "FBDeviceControl.framework/Versions/Current/Frameworks/XCTestBootstrap.framework"
-  strip_framework "${BUILD_OUTPUT_DIR}" "FBDeviceControl.framework/Versions/Current/Frameworks/FBControlCore.framework"
-  strip_framework "${BUILD_OUTPUT_DIR}" "XCTestBootstrap.framework/Versions/Current/Frameworks/FBControlCore.framework"
 }
 
 function cmd_sign_frameworks() {
@@ -1362,8 +1171,6 @@ function cmd_sign_frameworks() {
   print_info "Resigning frameworks..."
   sanitize_framework_rpaths "${BUILD_OUTPUT_DIR}/Frameworks"
   resign_framework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.framework"
-  resign_framework "${BUILD_OUTPUT_DIR}" "FBDeviceControl.framework"
-  resign_framework "${BUILD_OUTPUT_DIR}" "XCTestBootstrap.framework"
   resign_framework "${BUILD_OUTPUT_DIR}" "FBControlCore.framework"
   print_success "Frameworks resigned successfully"
 }
@@ -1371,15 +1178,13 @@ function cmd_sign_frameworks() {
 function cmd_xcframeworks() {
   print_section "📦" "Creating XCFrameworks"
   create_xcframework "FBControlCore" "${BUILD_OUTPUT_DIR}"
-  create_xcframework "XCTestBootstrap" "${BUILD_OUTPUT_DIR}"
   create_xcframework "FBSimulatorControl" "${BUILD_OUTPUT_DIR}"
-  create_xcframework "FBDeviceControl" "${BUILD_OUTPUT_DIR}"
   write_idb_build_evidence
 }
 
 function cmd_generate() {
-  print_section "🧬" "Generating Candidate IDB Projects"
-  generate_idb_projects
+  print_section "🧬" "Generating the IDBKit Project"
+  generate_idbkit_project
 }
 
 function cmd_sign_xcframeworks() {
@@ -1387,9 +1192,7 @@ function cmd_sign_xcframeworks() {
   require_config "AXE_CODESIGN_IDENTITY" "${CODESIGN_IDENTITY}"
   print_info "Resigning XCFrameworks with Developer ID..."
   resign_xcframework "${BUILD_OUTPUT_DIR}" "FBControlCore.xcframework"
-  resign_xcframework "${BUILD_OUTPUT_DIR}" "XCTestBootstrap.xcframework"
   resign_xcframework "${BUILD_OUTPUT_DIR}" "FBSimulatorControl.xcframework"
-  resign_xcframework "${BUILD_OUTPUT_DIR}" "FBDeviceControl.xcframework"
   print_success "XCFrameworks resigned successfully"
 }
 
@@ -1439,7 +1242,7 @@ function cmd_build() {
   require_build_architectures
   print_section "🚀" "IDB Framework Builder for AXe Project"
 
-  print_info "IDB Checkout Directory: ${IDB_CHECKOUT_DIR}"
+  print_info "IDBKit Directory: ${IDBKIT_DIR}"
   print_info "Build Output Directory: ${BUILD_OUTPUT_DIR}"
   print_info "Derived Data Path: ${DERIVED_DATA_PATH}"
   print_info "XCFramework Output Directory: ${BUILD_XCFRAMEWORK_DIR}"

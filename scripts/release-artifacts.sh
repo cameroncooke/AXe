@@ -8,9 +8,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/release-payload.sh"
 
 EXPECTED_FRAMEWORKS=(
   "FBControlCore"
-  "XCTestBootstrap"
   "FBSimulatorControl"
-  "FBDeviceControl"
 )
 
 usage() {
@@ -160,7 +158,8 @@ smoke_test_stage() {
 
   verify_stage "$stage_dir"
   "$stage_dir/axe" --version >/dev/null
-  "$stage_dir/axe" init --print | grep -q "name: axe"
+  # Read all output: an early grep exit sends SIGPIPE to axe under pipefail.
+  "$stage_dir/axe" init --print | grep "name: axe" >/dev/null
   echo "✅ Smoke-tested staged payload"
 }
 

@@ -197,7 +197,7 @@ class Check:
                             ('fixture-source', ROOT / 'scripts/fixtures/DuoTapWaitProbe.m'),
                             ('operator-source', ROOT / 'scripts/fixtures/DuoExternalStateChange.swift')]:
             self.pin(label, file)
-        for name in ['FBSimulatorControl', 'FBControlCore', 'FBDeviceControl', 'XCTestBootstrap']:
+        for name in ['FBSimulatorControl', 'FBControlCore']:
             self.pin(name, self.args.cli.parent / (name + '.framework') / name)
         for label, binary in [('cli', self.args.cli), ('operator', self.args.operator)]:
             self.run(label + '-linkage', ['/usr/bin/otool', '-L', binary], as_json=False)

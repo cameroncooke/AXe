@@ -61,48 +61,15 @@ jobs:
             --run-number "${{ github.run_number }}" \
             >> "$GITHUB_OUTPUT"
 
-      - name: Resolve IDB cache inputs
+      - name: Resolve IDBKit cache inputs
         id: idb_inputs
         run: |
           set -euo pipefail
-          PINNED_IDB_URL=$(grep '^IDB_GIT_URL=' scripts/build.sh | sed -E 's/^IDB_GIT_URL="\$\{IDB_GIT_URL:-([^}]*)\}"$/\1/')
-          PINNED_IDB_COMMIT=$(grep '^DEFAULT_IDB_GIT_REF=' scripts/build.sh | sed -E 's/^DEFAULT_IDB_GIT_REF="([^"]+)"$/\1/')
-          PINNED_IDB_UPSTREAM_BASE=$(grep '^IDB_UPSTREAM_BASE_REF=' scripts/build.sh | sed -E 's/^IDB_UPSTREAM_BASE_REF="\$\{IDB_UPSTREAM_BASE_REF:-([^}]*)\}"$/\1/')
-          SOURCE_IDENTITY=$(printf '%s\n%s\n%s\n' "$PINNED_IDB_URL" "$PINNED_IDB_COMMIT" "$PINNED_IDB_UPSTREAM_BASE" | shasum -a 256 | awk '{print $1}')
+          # The committed IDBKit source tree identifies the framework sources.
+          SOURCE_IDENTITY=$(git rev-parse HEAD:Packages/IDBKit)
           BUILD_PIPELINE_HASH=$(printf '%s\n%s\n' "$(shasum -a 256 scripts/build.sh Package.swift)" "$(xcodegen --version)" | shasum -a 256 | awk '{print $1}')
-          echo "idb_url=$PINNED_IDB_URL" >> "$GITHUB_OUTPUT"
-          echo "idb_commit=$PINNED_IDB_COMMIT" >> "$GITHUB_OUTPUT"
-          echo "idb_upstream_base=$PINNED_IDB_UPSTREAM_BASE" >> "$GITHUB_OUTPUT"
           echo "source_identity=$SOURCE_IDENTITY" >> "$GITHUB_OUTPUT"
           echo "build_pipeline_hash=$BUILD_PIPELINE_HASH" >> "$GITHUB_OUTPUT"
-
-      - name: Restore IDB repository cache
-        uses: actions/cache/restore@v4
-        with:
-          path: idb_checkout
-          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.source_identity }}
-
-      - name: Check IDB repository freshness
-        id: idb_check
-        run: |
-          set -euo pipefail
-          PINNED_IDB_URL="${{ steps.idb_inputs.outputs.idb_url }}"
-          PINNED_IDB_COMMIT="${{ steps.idb_inputs.outputs.idb_commit }}"
-          PINNED_IDB_UPSTREAM_BASE="${{ steps.idb_inputs.outputs.idb_upstream_base }}"
-
-          if [ -d "idb_checkout/.git" ]; then
-            LOCAL_COMMIT=$(git -C idb_checkout rev-parse HEAD)
-            LOCAL_REMOTE=$(git -C idb_checkout remote get-url origin)
-            if [ "$LOCAL_COMMIT" = "$PINNED_IDB_COMMIT" ] \
-              && [ "$LOCAL_REMOTE" = "$PINNED_IDB_URL" ] \
-              && git -C idb_checkout merge-base --is-ancestor "$PINNED_IDB_UPSTREAM_BASE" "$LOCAL_COMMIT" \
-              && [ -z "$(git -C idb_checkout status --porcelain)" ]; then
-              echo "needs_setup=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
-          fi
-
-          echo "needs_setup=true" >> "$GITHUB_OUTPUT"
 
       - name: Restore runtime Frameworks cache
         uses: actions/cache/restore@v4
@@ -122,13 +89,9 @@ jobs:
           set -euo pipefail
           REQUIRED=(
             "build_products/Frameworks/FBControlCore.framework"
-            "build_products/Frameworks/XCTestBootstrap.framework"
             "build_products/Frameworks/FBSimulatorControl.framework"
-            "build_products/Frameworks/FBDeviceControl.framework"
             "build_products/XCFrameworks/FBControlCore.xcframework"
-            "build_products/XCFrameworks/XCTestBootstrap.xcframework"
             "build_products/XCFrameworks/FBSimulatorControl.xcframework"
-            "build_products/XCFrameworks/FBDeviceControl.xcframework"
           )
 
           for path in "${REQUIRED[@]}"; do
@@ -145,24 +108,24 @@ jobs:
             echo "needs_build=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup - Clone IDB repository
-        if: steps.idb_check.outputs.needs_setup == 'true'
+      - name: Setup - Check IDBKit build prerequisites
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh setup
 
       - name: Clean - Remove previous build artifacts
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh clean
 
-      - name: Build - IDB Frameworks
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+      - name: Build - IDBKit frameworks
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh frameworks
 
       - name: Install - Copy frameworks to build directory
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh install
 
       - name: Strip - Remove nested frameworks
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh strip
 
       - name: Setup - Import code signing certificate
@@ -228,29 +191,22 @@ jobs:
         run: scripts/build.sh sign-frameworks
 
       - name: Create - XCFrameworks
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         run: scripts/build.sh xcframeworks
 
       - name: Sign - XCFramework bundles
         if: steps.signing.outputs.has_certificate == 'true'
         run: scripts/build.sh sign-xcframeworks
 
-      - name: Save IDB repository cache
-        if: steps.idb_check.outputs.needs_setup == 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: idb_checkout
-          key: idb-repo-${{ runner.os }}-${{ steps.idb_inputs.outputs.source_identity }}
-
       - name: Save runtime Frameworks cache
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/Frameworks
           key: frameworks-${{ runner.os }}-${{ steps.xcode_identity.outputs.cache_identity }}-${{ steps.idb_inputs.outputs.source_identity }}-${{ steps.idb_inputs.outputs.build_pipeline_hash }}
 
       - name: Save XCFramework cache
-        if: steps.idb_check.outputs.needs_setup == 'true' || steps.xcframework_check.outputs.needs_build == 'true'
+        if: steps.xcframework_check.outputs.needs_build == 'true'
         uses: actions/cache/save@v4
         with:
           path: build_products/XCFrameworks
@@ -387,7 +343,7 @@ jobs:
 
           BREW_AXE_PREFIX=$(brew --prefix "$TAP_NAME/axe")
           "$BREW_AXE_PREFIX/bin/axe" --version
-          "$BREW_AXE_PREFIX/bin/axe" init --print | grep -q "name: axe"
+          "$BREW_AXE_PREFIX/bin/axe" init --print | grep "name: axe" >/dev/null
           ! otool -l "$BREW_AXE_PREFIX/libexec/axe" | grep -q "/Applications/Xcode"
 
       - name: Generate release notes

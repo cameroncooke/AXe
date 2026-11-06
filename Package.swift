@@ -3,10 +3,9 @@ import Foundation
 import PackageDescription
 
 let packageRoot = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-let idbCheckoutDirectory = ProcessInfo.processInfo.environment["IDB_CHECKOUT_DIR"]
-    .map { URL(fileURLWithPath: $0) }
-    ?? packageRoot.appendingPathComponent("idb_checkout", isDirectory: true)
-let idbPrivateHeadersDirectory = idbCheckoutDirectory.appendingPathComponent(
+// AXe's own copy of the IDB frameworks it uses; scripts/build.sh builds their XCFrameworks.
+let idbKitDirectory = packageRoot.appendingPathComponent("Packages/IDBKit", isDirectory: true)
+let idbPrivateHeadersDirectory = idbKitDirectory.appendingPathComponent(
     "PrivateHeaders",
     isDirectory: true
 )
@@ -52,9 +51,7 @@ let package = Package(
                 "AXeCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 "FBSimulatorControl",
-                "FBDeviceControl",
-                "FBControlCore",
-                "XCTestBootstrap"
+                "FBControlCore"
             ],
             path: "Sources/AXe",
             resources: [
@@ -97,19 +94,11 @@ let package = Package(
         ),
         .binaryTarget(
             name: "FBControlCore",
-            path: "build_products/XCFrameworks/FBControlCore.xcframework" // Updated path
-        ),
-        .binaryTarget(
-            name: "FBDeviceControl",
-            path: "build_products/XCFrameworks/FBDeviceControl.xcframework" // Updated path
+            path: "build_products/XCFrameworks/FBControlCore.xcframework"
         ),
         .binaryTarget(
             name: "FBSimulatorControl",
-            path: "build_products/XCFrameworks/FBSimulatorControl.xcframework" // Updated path
-        ),
-        .binaryTarget(
-            name: "XCTestBootstrap",
-            path: "build_products/XCFrameworks/XCTestBootstrap.xcframework" // Updated path
+            path: "build_products/XCFrameworks/FBSimulatorControl.xcframework"
         ),
     ]
 )
