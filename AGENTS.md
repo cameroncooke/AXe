@@ -23,6 +23,11 @@ When reading issues:
 ## Build and test
 - `scripts/build.sh` (default, `dev`, `clean`) and the `./test-runner.sh` modes that build frameworks (including `--unit-tests`) run `rm -rf build_products build_derived_data`. Never keep anything that must survive under `build_products/`.
 
+## Performance
+- An ordinary simulator interaction must be as fast as in the current release (the latest release tag). This applies to every input route, including selected and agent modes.
+- An iPhone Duo interaction must be as fast as the same interaction on an ordinary simulator.
+- Any slower result is a regression. Compare against the release binary, run on the same machine and simulator.
+
 ## Style
 - Keep answers short and concise
 - No emojis in commits, issues, PR comments, or code
