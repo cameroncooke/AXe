@@ -9,7 +9,6 @@ final class SelectedHIDOwner {
     let brokerID = UUID()
     private let simulatorUDID: String
     private let logger: AxeLogger
-    private let helperURL: URL
     private let dependencies: SelectedAXDependencies
     private let transportOwner: FBSimulatorHIDTransportOwner
     private let sliderValueOwner = SelectedSliderValueOwner()
@@ -29,8 +28,8 @@ final class SelectedHIDOwner {
     var isBusy: Bool { admission.inFlight || maintainingRetainedInput || batchRunning || shouldStop || quarantined }
     var currentTime: TimeInterval { dependencies.now() }
 
-    init(simulatorUDID: String, logger: AxeLogger, helperURL: URL, dependencies: SelectedAXDependencies? = nil) {
-        self.simulatorUDID = simulatorUDID; self.logger = logger; self.helperURL = helperURL
+    init(simulatorUDID: String, logger: AxeLogger, dependencies: SelectedAXDependencies? = nil) {
+        self.simulatorUDID = simulatorUDID; self.logger = logger
         let transportOwner = FBSimulatorHIDTransportOwner()
         self.transportOwner = transportOwner
         self.dependencies = dependencies ?? .live(transportOwner: transportOwner)
@@ -55,7 +54,7 @@ final class SelectedHIDOwner {
             do {
                 try acquireLease()
                 let result = await AgentModeNativeOperation.perform(request, simulatorUDID: simulatorUDID,
-                    brokerID: brokerID, logger: logger, helperURL: helperURL, transportOwner: transportOwner)
+                    brokerID: brokerID, logger: logger, transportOwner: transportOwner)
                 if result.cleanup == "uncertain" {
                     await transportOwner.close()
                     return quarantine(result, request: request)
@@ -77,9 +76,9 @@ final class SelectedHIDOwner {
                 let result: SelectedHIDResponse
                 if request.ax?.kind == .sliderPercentage {
                     result = await SelectedAXOperation.perform(request, simulatorUDID: simulatorUDID,
-                        brokerID: brokerID, logger: logger, helperURL: helperURL, valueOwner: sliderValueOwner, transportOwner: transportOwner)
+                        brokerID: brokerID, logger: logger, valueOwner: sliderValueOwner, transportOwner: transportOwner)
                 } else {
-                    result = await dependencies.execute(request, simulatorUDID, brokerID, logger, helperURL, batchTap)
+                    result = await dependencies.execute(request, simulatorUDID, brokerID, logger, batchTap)
                 }
                 let rotationNeedsInputQuarantine = result.rotation?.failure?.delivery == .uncertain
                     && !isStateOnlyRotationFailure(result, request: request)
@@ -347,7 +346,7 @@ final class SelectedHIDOwner {
         if requiresSharedKeyboard, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
             throw SelectedHIDFailure.invalid("Raw keyboard transport or verified profile changed before input")
         }
-        let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
+        let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
             screenID: displayID, screenUniqueID: displayUUID)
         self.feed = feed
         observation = feed.initialObservation

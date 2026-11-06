@@ -17,7 +17,6 @@ final class SliderPickupHelper {
     }
     private let observation: FBSimulatorHIDSessionObservation
     private let live: FBSimulatorHIDNativeFreshnessProvider
-    private let helperURL: URL
     private let selectorKind: SelectedAXRequest.SelectorKind
     private let selectorValue: String
     private let expectedPID: Int32
@@ -30,9 +29,9 @@ final class SliderPickupHelper {
     private(set) var pickup = CGPoint.zero
 
     init(observation: FBSimulatorHIDSessionObservation, live: FBSimulatorHIDNativeFreshnessProvider,
-         helperURL: URL, selectorKind: SelectedAXRequest.SelectorKind, selectorValue: String,
+         selectorKind: SelectedAXRequest.SelectorKind, selectorValue: String,
          expectedPID: Int32, deadline: Double) {
-        self.observation = observation; self.live = live; self.helperURL = helperURL
+        self.observation = observation; self.live = live
         self.selectorKind = selectorKind; self.selectorValue = selectorValue
         self.expectedPID = expectedPID; self.deadline = deadline
     }
@@ -74,7 +73,7 @@ final class SliderPickupHelper {
             "--screen-uuid", observation.screenUniqueID, "--pid", String(expectedPID),
             "--selector-kind", selectorKind.rawValue, "--selector-value", selectorValue,
             "--point-x", String(Double(point.x)), "--point-y", String(Double(point.y)),
-            "--helper", helperURL.path, "--out", file.path]
+            "--out", file.path]
         if let binding {
             let bytes = try Data(contentsOf: binding)
             guard bytes.count <= 1_048_576 else { throw SliderValueFailure.rejected("Slider binding exceeds its bound") }

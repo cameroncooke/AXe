@@ -84,7 +84,6 @@ private struct AgentLayoutInterruption {
             directory: session.artifacts, name: "interrupted-input")
         let externalPath = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
         let identity = catalogue.activePanel.identity
-        let cli = try TestHelpers.getAxePath()
         let rotationPlan = try action.rotating ? DuoRotationPlan(catalogue: catalogue, context: session.initialContext) : nil
         let requestedDegrees = rotationPlan.map { Double($0.target) } ?? (action == .typeOpening ? 180 : 0)
         let foldControl: DuoHeldLayoutControl? = try DuoHeldLayoutControl(boot: catalogue.bootIdentity,
@@ -92,8 +91,7 @@ private struct AgentLayoutInterruption {
         let external = try PlaygroundTestProcess(executable: externalPath,
             arguments: [action.rotating ? "rotate-write-held" : "fold-write-held", catalogue.bootIdentity, String(identity.displayID), identity.uniqueID.uuidString,
                 String(requestedDegrees), session.artifacts.appendingPathComponent("layout-change-marker.json").path,
-                session.agent.udid, URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path]
-                + (foldControl?.arguments ?? []),
+                session.agent.udid] + (foldControl?.arguments ?? []),
             directory: session.artifacts, name: "external-layout-change")
         do {
             try input.start()

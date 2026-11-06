@@ -529,53 +529,6 @@ function require_build_architectures() {
   esac
 }
 
-function verify_cadisplay_context() {
-  local helper_binary="$1"
-  local target_arch
-  for target_arch in $AXE_BUILD_ARCHS; do
-    verify_macho_has_arch "$helper_binary" "$target_arch"
-    if ! otool -arch "$target_arch" -l "$helper_binary" | awk '
-      $1 == "cmd" { build_command = ($2 == "LC_BUILD_VERSION") }
-      build_command && $1 == "platform" {
-        if ($2 == 7 || $2 == "IOSSIMULATOR") found = 1
-        build_command = 0
-      }
-      END { exit !found }'; then
-      echo "Error: cadisplay-context slice $target_arch is not an iOS Simulator executable." >&2
-      return 1
-    fi
-  done
-}
-
-function build_cadisplay_context() {
-  local output_base_dir="$1"
-  local simulator_sdk helper_binary target_arch slice
-  local helper_slices=()
-  require_build_architectures
-  simulator_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-  helper_binary="$output_base_dir/cadisplay-context"
-  mkdir -p "$output_base_dir"
-  for target_arch in $AXE_BUILD_ARCHS; do
-    slice="$output_base_dir/cadisplay-context-$target_arch"
-    xcrun clang -target "$target_arch-apple-ios17.0-simulator" -isysroot "$simulator_sdk" \
-      -framework Foundation -framework CoreGraphics -framework QuartzCore \
-      -MMD -MF "$output_base_dir/cadisplay-context-$target_arch.d" \
-      "$REPO_ROOT/Sources/CADisplayContext/cadisplay-context.m" -o "$slice"
-    helper_slices+=("$slice")
-  done
-  if [[ "${#helper_slices[@]}" -eq 1 ]]; then
-    cp "${helper_slices[0]}" "$helper_binary"
-  else
-    lipo -create -output "$helper_binary" "${helper_slices[@]}"
-  fi
-  for slice in "${helper_slices[@]}"; do rm -f "$slice"; done
-  # This is a simulator guest executable. Preserve the accepted ad-hoc signing
-  # contract, with no host CLI entitlements or runtime input during the build.
-  verify_cadisplay_context "$helper_binary"
-  codesign --force --sign - --timestamp=none "$helper_binary"
-  codesign --verify --strict "$helper_binary"
-}
-
 # Function to build a single framework
 # $1: Scheme name
 # $2: Project file path
@@ -857,7 +810,6 @@ function build_axe_executable() {
   local build_config="release"
   local executable_dest="${output_base_dir}/axe"
   require_build_architectures
-  build_cadisplay_context "$output_base_dir"
   print_subsection "⚡" "Building AXe Executable"
   swift package clean
   local target_arch executable_source slice
@@ -967,7 +919,6 @@ function verify_release_architectures() {
   local expected_frameworks=("FBControlCore" "XCTestBootstrap" "FBSimulatorControl" "FBDeviceControl")
 
   print_subsection "🧪" "Validating release artifact architectures"
-  verify_cadisplay_context "${output_base_dir}/cadisplay-context"
   local expected_arch
   for expected_arch in $AXE_BUILD_ARCHS; do
     verify_macho_has_arch "${executable_path}" "$expected_arch"
@@ -1158,11 +1109,6 @@ function notarize_package() {
 
     if [ -n "${extracted_package_dir}" ] && [ -f "${extracted_package_dir}/axe" ]; then
       cp "${extracted_package_dir}/axe" "${BUILD_OUTPUT_DIR}/axe"
-      if [[ ! -f "${extracted_package_dir}/cadisplay-context" ]]; then
-        echo "Error: Notarized package missing cadisplay-context" >&2
-        exit 1
-      fi
-      cp "${extracted_package_dir}/cadisplay-context" "${BUILD_OUTPUT_DIR}/cadisplay-context"
       print_success "Original executable replaced with notarized version"
 
       rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
@@ -1227,7 +1173,6 @@ function notarize_package() {
         # Clean up build artifacts (axe executable and Frameworks, keep XCFrameworks)
         print_info "Cleaning up build artifacts..."
         rm -f "${BUILD_OUTPUT_DIR}/axe"
-        rm -f "${BUILD_OUTPUT_DIR}/cadisplay-context"
         rm -rf "${BUILD_OUTPUT_DIR}/AXe_AXe.bundle"
         rm -rf "${BUILD_OUTPUT_DIR}/Frameworks"
         print_success "Cleaned up axe executable, resource bundle, and Frameworks directory"
@@ -1320,11 +1265,7 @@ Commands:
     Code sign all XCFrameworks with Developer ID.
 
   executable
-    Build AXe and its signed simulator cadisplay-context sibling.
-
-  debug-helper
-    Build and sign cadisplay-context in each selected SwiftPM debug output directory.
-    Run again after swift package clean, before a selected debug CLI or test run.
+    Build the AXe executable using Swift Package Manager.
 
   sign-executable
     Code sign the resource bundle, then the AXe executable with Developer ID.
@@ -1365,7 +1306,6 @@ Environment Variables (set inline, exported, or via a git-ignored .env file):
 Examples:
   ./build.sh                    # Build everything (default)
   ./build.sh help               # Show this help
-  AXE_BUILD_ARCHS=arm64 ./build.sh debug-helper  # Stage the selected debug helper
   ./build.sh frameworks         # Only build frameworks
   ./build.sh sign-frameworks    # Only sign frameworks
   ./build.sh notarize           # Only run notarization step
@@ -1456,20 +1396,6 @@ function cmd_sign_xcframeworks() {
 function cmd_executable() {
   print_section "⚡" "Building AXe Executable"
   build_axe_executable "${BUILD_OUTPUT_DIR}"
-}
-
-function cmd_debug_helper() {
-  require_build_architectures
-  local debug_bin_path target_arch
-  for target_arch in $AXE_BUILD_ARCHS; do
-    debug_bin_path="$(cd "$REPO_ROOT" && swift build --configuration debug --arch "$target_arch" --show-bin-path)"
-    if [[ -z "$debug_bin_path" || "$debug_bin_path" != /* || "$debug_bin_path" == *$'\n'* ]]; then
-      echo "Error: SwiftPM did not return one absolute debug output path." >&2
-      return 1
-    fi
-    build_cadisplay_context "$debug_bin_path"
-    print_success "Signed cadisplay-context staged in $debug_bin_path"
-  done
 }
 
 function cmd_sign_executable() {
@@ -1580,12 +1506,9 @@ case $COMMAND in
     cmd_strip
     cmd_sign_frameworks
     cmd_xcframeworks
-    cmd_sign_xcframeworks
-    build_cadisplay_context "$BUILD_OUTPUT_DIR";;
+    cmd_sign_xcframeworks;;
   executable)
     cmd_executable;;
-  debug-helper)
-    cmd_debug_helper;;
   sign-executable)
     cmd_sign_executable;;
   package)

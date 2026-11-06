@@ -31,7 +31,7 @@ AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hu
 
 Release artifacts are built once with the Xcode version selected by the release environment and run unchanged with either supported Xcode selected. Compatibility was validated with Xcode 26.5 (build `17F42`) and iOS 26.5 (`23F77`), and with Xcode 27 Beta 3 (build `27A5218g`) and iOS 27 (`24A5380g`).
 
-AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build applies the tracked Duo foundation patch and checks its complete source hashes. Unexpected checkout changes stop the build without discarding them. The default `AXE_BUILD_ARCHS="arm64 x86_64"` builds a universal CLI, IDB frameworks and simulator helper. Set `AXE_BUILD_ARCHS=arm64` or `AXE_BUILD_ARCHS=x86_64` for one architecture. Build checks require the requested slices and iOS Simulator platform metadata for each helper slice.
+AXe builds IDB from the immutable fork revision configured in `scripts/build.sh`, based on a verified upstream IDB revision. The build applies the tracked Duo foundation patch and checks its complete source hashes. Unexpected checkout changes stop the build without discarding them. The default `AXE_BUILD_ARCHS="arm64 x86_64"` builds a universal CLI and IDB frameworks. Set `AXE_BUILD_ARCHS=arm64` or `AXE_BUILD_ARCHS=x86_64` for one architecture. Build checks require the requested slices.
 
 ## E2E development
 
@@ -41,9 +41,9 @@ For repeated local Playground checks, reuse the requested warm simulator. Do not
 
 To validate a release payload unchanged under another supported Xcode, first build the test bundle with that Xcode, then run `AXE_BIN_PATH=/path/to/release/axe ./test-runner.sh --tests-only`. The supplied executable must retain its packaged frameworks beside it.
 
-For local Duo work on Apple silicon, use `AXE_BUILD_ARCHS=arm64`. After the final SwiftPM clean, run `scripts/build.sh debug-helper` with the same `AXE_BUILD_ARCHS` value as the CLI build, for example `AXE_BUILD_ARCHS=arm64 scripts/build.sh debug-helper`. This builds and signs `cadisplay-context` beside each selected debug executable. Selected input requires this simulator helper; AXe does not search other runtime paths.
+For local Duo work on Apple silicon, use `AXE_BUILD_ARCHS=arm64`. Selected input reads the display state in-process; no simulator helper binary is built or required.
 
-For release signing, `scripts/build.sh sign-executable` signs and strictly verifies the copied `AXe_AXe.bundle` before signing `axe`. The bundle uses the configured signing identity and timestamp, without executable entitlements; the CLI signing options and separate simulator-helper signing stay unchanged.
+For release signing, `scripts/build.sh sign-executable` signs and strictly verifies the copied `AXe_AXe.bundle` before signing `axe`. The bundle uses the configured signing identity and timestamp, without executable entitlements; the CLI signing options stay unchanged.
 
 ## Benchmarks
 
@@ -276,7 +276,7 @@ Selected keyboard input also requires `--expected-pid <PID> --focus-id <exact-fi
 
 Selected slider control requires exactly one `--id <ID>` or `--label <Label>`, plus exactly one `--endpoint minimum|maximum` or `--value <0...100>`. Interior values require a native Slider with horizontal scrubber geometry that increases from left to right, in the current measured display context. Numeric 0 and 100 select the existing semantic endpoint route before input. The physical route uses one guarded contact and bounded native value feedback, with no endpoint search or replay. RTL, custom and vertical Sliders remain unproved. [Selector rules, input bounds and receipts](Skills/CLI/axe/references/slider-reference.md). Explicit selected retained touch operations use the receipt's token through `--contact-token`; read `axe touch --help` for complete and retained forms.
 
-On the iPhone Duo, no-flag `slider --value` uses the current measured display, a fresh frontmost app PID and the existing owned native value-feedback route for values strictly between 0 and 100. It requires the signed `cadisplay-context` helper beside AXe and matching native frameworks. The original 15-second native action budget and final raw AX tolerance and stability checks remain. Stdout remains plain text. Numeric 0/100 and other devices use the existing direct drag. A failed request is not replayed.
+On the iPhone Duo, no-flag `slider --value` uses the current measured display, a fresh frontmost app PID and the existing owned native value-feedback route for values strictly between 0 and 100. It requires matching native frameworks. The original 15-second native action budget and final raw AX tolerance and stability checks remain. Stdout remains plain text. Numeric 0/100 and other devices use the existing direct drag. A failed request is not replayed.
 
 `list-simulators --displays --udid <UDID>` reports the measured integrated display catalogue, active panel, native size, scale and orientation for one booted simulator. It validates host identities and geometry against the device display read. The existing top-level fields are retained, with `bootIdentity` matched before/after discovery and `readInterval` containing `startedUptime` and `finishedUptime` in host monotonic seconds. These times bound the full discovery read; they are not frame timestamps or times to compare across machines. The result is an observation, not a lease or admission token. Selected input and capture still perform fresh checks. No new option is required, and default legacy capture is unchanged.
 
@@ -372,7 +372,7 @@ axe screenshot --udid "$UDID" --screen-id "$SCREEN_ID" \
   --screen-uuid "$SCREEN_UUID" --expected-boot "$BOOT_ID" --output ./selected-boot.png
 ```
 
-This PNG route accepts only the measured active panel. Both selection options are required; it does not use `--input-mode` or `--expected-pid`. It rejects a changed context or invalid selection without choosing another display or using legacy capture. The signed `cadisplay-context` helper must be beside the AXe executable.
+This PNG route accepts only the measured active panel. Both selection options are required; it does not use `--input-mode` or `--expected-pid`. It rejects a changed context or invalid selection without choosing another display or using legacy capture.
 
 Selected capture does not replace an existing output file. On success, stdout contains a JSON receipt with `source: "appleSimctlSelectedPNG"`, the output path, pixel dimensions, before/after context reads and the capture child receipt. `surfaceIdentity` and `framePresentationTime` are `"unavailable"`. Context reads and live change checks bound the capture; they do not make the frame and context an atomic observation.
 
@@ -387,7 +387,7 @@ axe record-video --udid "$UDID" --screen-id "$SCREEN_ID" \
   --screen-uuid "$SCREEN_UUID" --expected-boot "$BOOT_ID" --output ./selected.mp4
 ```
 
-The paired screen options select one measured active panel. The signed `cadisplay-context` helper must be beside AXe. Each frame uses the selected PNG capture and must match the first frame's boot, display identity, orientation, hinge pose and geometry. A changed context or capture error fails the recording; it does not retarget another screen or continue with stale frames. Use the separate follow-active mode below when the selected panel can change.
+The paired screen options select one measured active panel. Each frame uses the selected PNG capture and must match the first frame's boot, display identity, orientation, hinge pose and geometry. A changed context or capture error fails the recording; it does not retarget another screen or continue with stale frames. Use the separate follow-active mode below when the selected panel can change.
 
 `SIGINT` and `SIGTERM` request a normal stop. AXe cancels and awaits any in-flight capture, finishes the validated frames and publishes the completed MP4 without replacing an existing destination. A stop before the first accepted frame, task cancellation or unconfirmed cleanup produces no successful output. A late signal can arrive after publication. Parent termination and `SIGKILL` cleanup are not guaranteed.
 
@@ -408,7 +408,7 @@ Follow-active recording is low-rate capture, not smooth animation capture. See t
 
 ## Selected video streams
 
-`stream-video` accepts the same paired `--screen-id` and `--screen-uuid` options, with optional `--expected-boot`. Use a fresh measured active-panel pair and keep the signed `cadisplay-context` helper beside AXe. Do not add `--input-mode` or `--expected-pid`.
+`stream-video` accepts the same paired `--screen-id` and `--screen-uuid` options, with optional `--expected-boot`. Use a fresh measured active-panel pair. Do not add `--input-mode` or `--expected-pid`.
 
 ```bash
 axe stream-video --udid "$UDID" --screen-id "$SCREEN_ID" \

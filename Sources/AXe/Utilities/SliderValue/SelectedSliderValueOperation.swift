@@ -52,7 +52,6 @@ final class SelectedSliderValueOperation {
     private let simulator: FBSimulator
     private let observation: FBSimulatorHIDSessionObservation
     private let live: FBSimulatorHIDNativeFreshnessProvider
-    private let helperURL: URL
     private let transportOwner: FBSimulatorHIDTransportOwner?
     private let selectorKind: SelectedAXRequest.SelectorKind
     private let selectorValue: String
@@ -76,13 +75,13 @@ final class SelectedSliderValueOperation {
     private(set) var requiresExternalRecovery = false
 
     init(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
-         live: FBSimulatorHIDNativeFreshnessProvider, helperURL: URL,
+         live: FBSimulatorHIDNativeFreshnessProvider,
          selectorKind: SelectedAXRequest.SelectorKind, selectorValue: String, expectedPID: Int32,
          elementType: String?,
          admissionGuard: (any FBSimulatorSliderAdmissionGuard)?,
          transportOwner: FBSimulatorHIDTransportOwner? = nil) {
         self.simulator = simulator; self.observation = observation; self.live = live
-        self.helperURL = helperURL; self.selectorKind = selectorKind; self.selectorValue = selectorValue
+        self.selectorKind = selectorKind; self.selectorValue = selectorValue
         self.expectedPID = expectedPID; self.elementType = elementType; self.transportOwner = transportOwner
         readDiagnostics = SliderValueReadDiagnostics(admissionGuard: admissionGuard)
     }
@@ -170,7 +169,7 @@ final class SelectedSliderValueOperation {
             finalValue = try final.requireValue()
             return "alreadyAtValue"
         }
-        let helper = SliderPickupHelper(observation: observation, live: live, helperURL: helperURL,
+        let helper = SliderPickupHelper(observation: observation, live: live,
             selectorKind: selectorKind, selectorValue: selectorValue, expectedPID: expectedPID, deadline: deadline)
         pickupHelper = helper
         let admitted = try await helper.prepare(before: initial)

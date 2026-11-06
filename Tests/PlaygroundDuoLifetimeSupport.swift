@@ -21,13 +21,11 @@ func prepareDuoControls(_ position: DuoControlsPosition) async throws -> Playgro
 func changeDuoControls(_ app: PlaygroundControlsSession, change: PlaygroundDuoChange,
                        afterInputRelease: (() async throws -> Void)? = nil) async throws -> DuoCatalogue {
     let executable = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
-    let cli = try TestHelpers.getAxePath()
     let panel = app.catalogue.activePanel.identity
     let mode = change == .rotate ? "rotate" : "fold"
     let operation = try PlaygroundTestProcess(executable: executable, arguments: [mode, app.catalogue.bootIdentity,
         String(panel.displayID), panel.uniqueID.uuidString, change == .open ? "180" : "0",
-        app.artifacts.appendingPathComponent("change-marker-" + UUID().uuidString + ".json").path, app.app.udid,
-        URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path],
+        app.artifacts.appendingPathComponent("change-marker-" + UUID().uuidString + ".json").path, app.app.udid],
         directory: app.artifacts, name: "external-" + UUID().uuidString)
     do {
         try operation.start()

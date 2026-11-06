@@ -21,19 +21,18 @@ struct PlaygroundDuoHeldModifierTests {
             try #require(FileManager.default.isExecutableFile(atPath: probe))
             try #require(FileManager.default.isExecutableFile(atPath: stateOperator))
             let cli = try TestHelpers.getAxePath()
-            let helper = URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path
             let catalogue = controls.catalogue
             let pair = catalogue.activePanel.identity
             let markerURL = controls.artifacts.appendingPathComponent("modifier-down.json")
             let arguments = ["FBSIMULATORCONTROL_LOG_HID_DETAILS=1", probe, controls.app.udid,
                 catalogue.bootIdentity, String(pair.displayID), pair.uniqueID.uuidString,
-                helper, "shift-a", markerURL.path]
+                "shift-a", markerURL.path]
             try JSONEncoder().encode(arguments).write(to: controls.artifacts.appendingPathComponent("modifier-argv.json"))
             let input = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: arguments,
                 directory: controls.artifacts, name: "modifier")
             let external = try PlaygroundTestProcess(executable: stateOperator, arguments: [mode,
                 catalogue.bootIdentity, String(pair.displayID), pair.uniqueID.uuidString, "0",
-                controls.artifacts.appendingPathComponent("external-marker.json").path, controls.app.udid, helper],
+                controls.artifacts.appendingPathComponent("external-marker.json").path, controls.app.udid],
                 directory: controls.artifacts, name: "external")
             do {
                 try input.start()

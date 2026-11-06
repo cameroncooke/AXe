@@ -143,12 +143,11 @@ private func witnessWaitOwner(_ app: PlaygroundControlsSession, while process: P
 }
 
 private func changeSamePanelHinge(_ app: PlaygroundControlsSession) async throws {
-    let cli = try TestHelpers.getAxePath()
     let executable = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
     let panel = app.catalogue.activePanel.identity
     let operation = try PlaygroundTestProcess(executable: executable, arguments: ["fold", app.catalogue.bootIdentity,
         String(panel.displayID), panel.uniqueID.uuidString, "90", app.artifacts.appendingPathComponent("hinge90-marker.json").path,
-        app.app.udid, URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path],
+        app.app.udid],
         directory: app.artifacts, name: "same-panel-hinge")
     do {
         try operation.start()

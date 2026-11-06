@@ -27,12 +27,11 @@ private struct SliderProbeArguments: Encodable {
   let label: String
   let percent: Double
   let deadlineUptime: Double
-  let helper: String
   let output: String
 
   init(_ args: [String]) throws {
     let names: Set<String> = ["--udid", "--boot", "--screen-id", "--screen-uuid", "--pid",
-      "--id", "--label", "--percent", "--deadline-uptime", "--helper", "--output"]
+      "--id", "--label", "--percent", "--deadline-uptime", "--output"]
     guard args.count == names.count * 2 else {
       throw SliderProbeError.invalid("Supply each of: " + names.sorted().joined(separator: " "))
     }
@@ -53,7 +52,6 @@ private struct SliderProbeArguments: Encodable {
           let label = values["--label"], !label.isEmpty, label.utf8.count <= 4096,
           let percent = values["--percent"].flatMap(Double.init), percent.isFinite, (0...100).contains(percent),
           let deadline = values["--deadline-uptime"].flatMap(Double.init), deadline.isFinite,
-          let helper = values["--helper"], helper.hasPrefix("/"),
           let output = values["--output"], output.hasPrefix("/") else {
       throw SliderProbeError.invalid("Invalid explicit device, target, percentage, deadline or absolute file path")
     }
@@ -63,7 +61,7 @@ private struct SliderProbeArguments: Encodable {
     }
     self.udid = udid; self.boot = boot; self.screenID = screenID; self.screenUUID = screenUUID
     self.pid = pid; self.identifier = identifier; self.label = label; self.percent = percent
-    self.deadlineUptime = deadline; self.helper = helper; self.output = output
+    self.deadlineUptime = deadline; self.output = output
   }
 }
 
@@ -181,7 +179,7 @@ private struct SliderProbeEvidence: Encodable {
       }), simulator.state == .booted else { throw SliderProbeError.invalid("Explicit device is not booted") }
       try check(args, cancellation)
       let live = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
-        helperURL: URL(fileURLWithPath: args.helper), screenID: args.screenID, screenUniqueID: args.screenUUID)
+        screenID: args.screenID, screenUniqueID: args.screenUUID)
       feed = live
       let observation = live.initialObservation
       guard observation.bootIdentity == args.boot, UUID(uuidString: observation.simulatorUDID) == args.udid,

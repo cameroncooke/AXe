@@ -34,18 +34,11 @@ enum LegacyDuoInput {
                 throw SelectedHIDFailure.invalid(capability.reason)
             }
         }
-        guard let executable = Bundle.main.executableURL else {
-            throw SelectedHIDFailure.invalid("Missing executable")
-        }
-        let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
-        guard FileManager.default.isExecutableFile(atPath: helper.path) else {
-            throw SelectedHIDFailure.invalid("Missing signed cadisplay-context helper beside axe")
-        }
         try await wait(preDelay)
         let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
         let panel = discovery.readback.snapshot.activePanel.identity
         let reader = FBSimulatorNativeContextReader(
-            simulator: simulator, helperURL: helper, screenID: panel.displayID,
+            simulator: simulator, screenID: panel.displayID,
             screenUniqueID: panel.uniqueID
         )
         let observation = try await reader.observation()

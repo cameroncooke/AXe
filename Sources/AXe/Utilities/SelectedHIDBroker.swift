@@ -109,10 +109,7 @@ enum SelectedHIDBroker {
         let listener = try HIDBroker.makeListener(at: endpoint)
         let identity = try HIDBroker.socketIdentity(at: endpoint)
         defer { Darwin.close(listener); try? HIDBroker.removeOwnedSocket(endpoint, matching: identity) }
-        guard let executable = Bundle.main.executableURL else { throw SelectedHIDFailure.invalid("Missing executable") }
-        let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
-        guard FileManager.default.isExecutableFile(atPath: helper.path) else { throw SelectedHIDFailure.invalid("Missing signed cadisplay-context helper beside axe") }
-        let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger, helperURL: helper)
+        let owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger)
         let agentController = AgentModeController(simulatorUDID: simulatorUDID, logger: logger, owner: owner)
         var tasks: [UUID: Task<Void, Never>] = [:]
         do {

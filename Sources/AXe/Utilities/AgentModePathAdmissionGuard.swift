@@ -66,7 +66,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
                 }
             }
             try validateFirstEvent(firstEvent)
-            var initialHits: [FBSimulatorAXNode] = []
+            var initialHits: [FBSimulatorAXNode?] = []
             for start in starts { initialHits.append(try await pointHit(at: start, observation: observation)) }
             let tree = try await PhaseTimer.measure("native.pathGuard.tree") {
                 try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
@@ -86,7 +86,13 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             // Confirm every initial hit after the same fresh tree, before either DOWN.
             for (start, initialHit) in zip(starts, initialHits) {
                 let confirmedHit = try await pointHit(at: start, observation: observation)
-                guard sameSignature(initialHit, confirmedHit) else {
+                let same: Bool
+                switch (initialHit, confirmedHit) {
+                case (nil, nil): same = true
+                case let (initial?, confirmed?): same = sameSignature(initial, confirmed)
+                default: same = false
+                }
+                guard same else {
                     throw AgentModeFailure("\(kind.rawValue)HitChanged", "The control at the \(kind.rawValue) start changed. Refresh the snapshot.")
                 }
             }
@@ -120,11 +126,16 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         }
     }
 
-    private func pointHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
+    /// Nil only for a swipe start in empty space; the fresh tree must then account for the point.
+    private func pointHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode? {
         let result = try await PhaseTimer.measure("native.pathGuard.pointHit") {
             try await FBSimulatorAXSnapshot.acquire(at: start, for: simulator,
                 expectedPID: admission.expectedPID, observation: observation, freshnessProvider: feed,
                 policy: try policy(), includeNativeIdentity: nativeTarget.nativeIdentity != nil)
+        }
+        if kind == .swipe, result.outcome == .noElementAtPoint {
+            try checkDeadline()
+            return nil
         }
         guard result.outcome == .ready, let snapshot = result.snapshot, snapshot.roots.count == 1,
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
@@ -136,7 +147,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         return hit
     }
 
-    private func validateRelationship(hit: FBSimulatorAXNode, start: CGPoint, tree: AgentModeSnapshot,
+    private func validateRelationship(hit: FBSimulatorAXNode?, start: CGPoint, tree: AgentModeSnapshot,
                                       roots: [FBSimulatorAXNode]) throws {
         guard let expected = admission.target else {
             throw AgentModeFailure("unsupportedIdentity", "The \(kind.rawValue) target has no exact native selector.")
@@ -162,6 +173,10 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         guard tree.nodes.count == tree.elements.count else {
             throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) hierarchy could not be matched to its reference table. Refresh the snapshot.")
         }
+        guard let hit else {
+            try validateEmptyStart(start, area: target, tree: tree)
+            return
+        }
         if kind == .swipe, nativeTarget.nativeIdentity != nil,
            try AgentModeCoarseScrollAdmission.validateIfAncestor(hit: hit, area: target,
                 start: start, ends: ends, snapshot: tree,
@@ -186,6 +201,33 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
                 (element.role == .other && element.actions.contains(.swipeWithin))
         }) else {
             throw AgentModeFailure("nestedScrollTarget", "The \(kind.rawValue) starts inside another scroll area. Select that scroll area.")
+        }
+    }
+
+    /// A swipe may start where accessibility reports no element, as in the blank part of a scroll
+    /// view. The fresh complete tree must account for the start: every element covering it is the
+    /// selected area, one of its ancestors, or a passive descendant such as the area's content
+    /// group (only the generic touch and long-press actions; no tap, typing or nested scrolling).
+    /// A hittable gesture surface would have been the point read's hit, so it cannot pass here.
+    private func validateEmptyStart(_ start: CGPoint, area: FBSimulatorAXNode, tree: AgentModeSnapshot) throws {
+        guard kind == .swipe else {
+            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "The control at the \(kind.rawValue) start could not be confirmed. Refresh the snapshot.")
+        }
+        let areaIndex = try AgentModePathIdentityPolicy.uniqueIndex(matching: area, in: tree,
+            usingNativeIdentity: nativeTarget.nativeIdentity != nil)
+        let areaPath = tree.elements[areaIndex].path
+        for (index, node) in tree.nodes.enumerated() where index != areaIndex {
+            guard node.hidden != true, let frame = node.frame, frame.contains(start) else { continue }
+            let element = tree.elements[index]
+            if areaPath.hasPrefix(element.path + ".") { continue }
+            let passive: Bool
+            switch element.role {
+            case .other, .image, .text: passive = element.actions.allSatisfy { $0 == .touch || $0 == .longPress }
+            default: passive = false
+            }
+            guard element.path.hasPrefix(areaPath + "."), passive else {
+                throw AgentModeFailure("swipeStartCovered", "Another element covers the empty swipe start. Refresh the snapshot.")
+            }
         }
     }
 

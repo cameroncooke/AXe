@@ -100,7 +100,7 @@ struct AgentBatchTapAdmissionTests {
         let target = roots[0].children[variant == .wrongTarget ? 2 : 0]
         let state = State()
         let udid = UUID().uuidString
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, batchTap in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, batchTap in
             state.calls += 1
             do {
                 let supplied = try #require(batchTap)
@@ -110,8 +110,7 @@ struct AgentBatchTapAdmissionTests {
                 return Self.response(request, broker: broker, count: 2, error: nil)
             } catch { return Self.response(request, broker: broker, count: 0, error: String(describing: error)) }
         }, persist: { _, _, _ in Issue.record("No quarantine expected") }, now: { 0 })
-        let owner = SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(),
-            helperURL: URL(fileURLWithPath: "/unused-context"), dependencies: dependencies)
+        let owner = SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(), dependencies: dependencies)
         let result = await owner.perform(try admission.request(requestID: UUID()), batchTap: admission)
         let expectedCount = variant == .valid ? 2 : 0
         #expect((result.error == nil) == (variant == .valid))
@@ -125,13 +124,12 @@ struct AgentBatchTapAdmissionTests {
     func invalidLaterReferenceHasNoInput() async throws {
         let fixture = try Fixture()
         let state = State()
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
             state.calls += 1
             state.inputs += 2
             return Self.response(request, broker: broker, count: 2, error: nil)
         }, persist: { _, _, _ in Issue.record("No quarantine expected") }, now: { 0 })
-        let owner = SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(),
-            helperURL: URL(fileURLWithPath: "/unused-context"), dependencies: dependencies)
+        let owner = SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(), dependencies: dependencies)
         for (ref, table) in [("e999", fixture.table), ("e4", UUID())] {
             do {
                 let plan = try fixture.plan(laterRef: ref, publishedTable: table)

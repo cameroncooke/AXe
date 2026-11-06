@@ -265,6 +265,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed agent replacement snapshots read during a screen transition containing both the old and new screens. A large change is confirmed by two equal reads before publication; in-place changes publish at once.
 
+- Fixed agent swipes refusing a start point in the blank part of a scroll area, where accessibility reports no element. The fresh tree must show that only the area, its ancestors and passive content containers cover the start; a covered or nested start still refuses before input. Point reads no longer prepare and retry when the point is empty.
+
+### Removed
+
+- Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.
+
 ## [v1.8.0] - 2026-07-20
 
 ### Added

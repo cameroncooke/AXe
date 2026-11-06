@@ -7,7 +7,7 @@ import FBSimulatorControl
 @MainActor
 enum SelectedAXOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL,
+                        brokerID: UUID, logger: AxeLogger,
                         valueOwner: SelectedSliderValueOwner? = nil,
                         transportOwner: FBSimulatorHIDTransportOwner? = nil,
                         batchTap: (any AgentOwnedTapAdmission)? = nil) async -> SelectedHIDResponse {
@@ -38,7 +38,7 @@ enum SelectedAXOperation {
             if ax.kind == .describe || ax.kind == .describePoint {
                 // A snapshot is a bounded read. Live subscriptions belong to actual input.
                 let reader = PhaseTimedFreshnessProvider(FBSimulatorNativeContextReader(simulator: simulator,
-                    helperURL: helperURL, screenID: display.id, screenUniqueID: display.uuid))
+                    screenID: display.id, screenUniqueID: display.uuid))
                 let initial = try await PhaseTimer.measure("ax.contextRead") { try await reader.observation() }
                 observation = initial
                 try SelectedAXBounds.validateContext(SelectedHIDContext(initial))
@@ -89,7 +89,7 @@ enum SelectedAXOperation {
                 throw SelectedHIDFailure.invalid("Selected AX input requires a positive expected PID")
             }
             let live = try await PhaseTimer.measure("ax.liveContextStart") {
-                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
+                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
                     screenID: display.id, screenUniqueID: display.uuid)
             }
             feed = live; observation = live.initialObservation
@@ -147,7 +147,7 @@ enum SelectedAXOperation {
                 }
                 let sliderAdmission = try request.agentAdmission.map(AgentModeSliderAdmission.init)
                 let operation = SelectedSliderValueOperation(simulator: simulator,
-                    observation: live.initialObservation, live: live, helperURL: helperURL,
+                    observation: live.initialObservation, live: live,
                     selectorKind: selectorKind, selectorValue: selectorValue, expectedPID: expectedPID,
                     elementType: ax.elementType,
                     admissionGuard: sliderAdmission, transportOwner: transportOwner)

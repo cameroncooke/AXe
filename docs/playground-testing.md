@@ -8,7 +8,7 @@ Duo checks cover device support. SimUse checks cover the optional agent interfac
 
 Use the tracked XcodeGen definition, `AxePlaygroundApp/project.yml`. Generated projects and test packages stay under the new result directory. Install XcodeGen first.
 
-Supply the exact built AXe payload with its matching frameworks, helper and resources. The runner does not rebuild AXe. It records all payload file hashes and links and requires them to stay unchanged. This binds a run to those bytes; it does not prove that an arbitrary executable matches the checkout.
+Supply the exact built AXe payload with its matching frameworks and resources. The runner does not rebuild AXe. It records all payload file hashes and links and requires them to stay unchanged. This binds a run to those bytes; it does not prove that an arbitrary executable matches the checkout.
 
 The runner builds the normal Playground once, then copies and builds the exact current test sources once. `checks/source-pins.json` records Package.swift and copied source hashes. `checks/proposal-source-pins.json` records current source origins and the runner/config/count/parser hashes. These files are inputs, not build or test results.
 
@@ -144,7 +144,7 @@ The direct Duo-only path validates an explicit available Duo UUID before simulat
 
 ### Physical tap timing and release
 
-Use `scripts/verify-physical-taps.py` for the repeatable physical-tap check. First build the normal Playground from the tracked XcodeGen setup and install it on the existing warm target. The installed app must include the `duo-controls` page and its version-6 Documents readback. Supply the complete matched AXe runtime, including its frameworks, helper and resources. This script does not build, install or boot a simulator.
+Use `scripts/verify-physical-taps.py` for the repeatable physical-tap check. First build the normal Playground from the tracked XcodeGen setup and install it on the existing warm target. The installed app must include the `duo-controls` page and its version-6 Documents readback. Supply the complete matched AXe runtime, including its frameworks and resources. This script does not build, install or boot a simulator.
 
 Run one device at a time, with no other UI job on that device:
 

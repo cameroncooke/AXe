@@ -54,12 +54,12 @@ final class SelectedMediaCapture {
         return receipt.exitConfirmed || !receipt.launchAttempted
     }
 
-    func capture(simulator: FBSimulator, helper: URL, screenID: UInt32,
+    func capture(simulator: FBSimulator, screenID: UInt32,
                  screenUUID: UUID, expectedBoot: String?,
                  initial: FBSimulatorHIDSessionObservation?) async throws -> FBSimulatorSelectedScreenshot? {
         try await captureOwned(simulator: simulator) {
             let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
-                helperURL: helper, screenID: screenID, screenUniqueID: screenUUID,
+                screenID: screenID, screenUniqueID: screenUUID,
                 expectedBootIdentity: expectedBoot)
             let before = try frame.before.observation.sessionObservation()
             let after = try frame.after.observation.sessionObservation()
@@ -69,7 +69,7 @@ final class SelectedMediaCapture {
     }
 
     /// Discovery and this one frame share the lease. A later frame can use a new active panel.
-    func captureActive(simulator: FBSimulator, helper: URL,
+    func captureActive(simulator: FBSimulator,
                        expectedBoot: String?) async throws -> FBSimulatorSelectedScreenshot? {
         try await captureOwned(simulator: simulator) {
             let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
@@ -78,7 +78,7 @@ final class SelectedMediaCapture {
             }
             let panel = discovery.readback.snapshot.activePanel.identity
             let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
-                helperURL: helper, screenID: panel.displayID, screenUniqueID: panel.uniqueID,
+                screenID: panel.displayID, screenUniqueID: panel.uniqueID,
                 expectedBootIdentity: discovery.bootIdentity)
             let before = try frame.before.observation.sessionObservation()
             let after = try frame.after.observation.sessionObservation()

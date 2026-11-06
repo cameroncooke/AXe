@@ -122,7 +122,7 @@ axe screenshot --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --output sele
 axe screenshot --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --expected-boot <BOOT_ID> --output selected-boot.png
 ```
 
-Both screen options are required. Do not add `--input-mode` or `--expected-pid` to this command. The signed `cadisplay-context` helper must be beside AXe. An inactive panel, invalid selection or changed context fails without display or legacy fallback. Existing output files are not replaced.
+Both screen options are required. Do not add `--input-mode` or `--expected-pid` to this command. An inactive panel, invalid selection or changed context fails without display or legacy fallback. Existing output files are not replaced.
 
 Success writes a PNG and prints a JSON receipt with the output path, dimensions, before/after context and capture child receipt. Surface identity and frame presentation time are unavailable. The context checks bound capture; they do not prove an atomic frame/context observation. Without the screen pair, legacy capture and path-only stdout stay unchanged.
 
@@ -134,7 +134,7 @@ Use the paired `--screen-id`/`--screen-uuid` options for a fixed panel, or `--fo
 
 ## Selected video streams
 
-Use `axe stream-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --format raw` with the pair from a fresh measured active-panel read. `--expected-boot <BOOT_ID>` is optional. The signed `cadisplay-context` helper must be beside AXe. Do not add `--input-mode` or `--expected-pid`.
+Use `axe stream-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --format raw` with the pair from a fresh measured active-panel read. `--expected-boot <BOOT_ID>` is optional. Do not add `--input-mode` or `--expected-pid`.
 
 Keep stdout for stream bytes only and capture stderr separately. It carries dimensions, layout, frame counts and the final summary. Use the decoder for the chosen format:
 

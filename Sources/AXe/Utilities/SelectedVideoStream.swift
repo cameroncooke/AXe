@@ -28,11 +28,7 @@ enum SelectedVideoStream {
         guard let simulator = set.allSimulators.first(where: { $0.udid == udid }), simulator.state == .booted else {
             throw CLIError(errorDescription: "Selected streaming requires the requested booted simulator")
         }
-        guard let executable = Bundle.main.executableURL else {
-            throw CLIError(errorDescription: "Missing executable URL")
-        }
-        let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
-        guard let first = try await owner.capture(simulator: simulator, helper: helper, screenID: screenID,
+        guard let first = try await owner.capture(simulator: simulator, screenID: screenID,
             screenUUID: screenUUID, expectedBoot: expectedBoot, initial: nil) else {
             throw CLIError(errorDescription: "Stream stopped before a complete selected frame")
         }
@@ -70,7 +66,7 @@ enum SelectedVideoStream {
                 let remaining = 1 / Double(fps) - (ProcessInfo.processInfo.systemUptime - now)
                 if remaining > 0 { try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
                 guard !owner.stopRequested else { break }
-                guard let next = try await owner.capture(simulator: simulator, helper: helper, screenID: screenID,
+                guard let next = try await owner.capture(simulator: simulator, screenID: screenID,
                     screenUUID: screenUUID, expectedBoot: initial.bootIdentity, initial: initial) else { break }
                 guard next.pixelWidth == first.pixelWidth, next.pixelHeight == first.pixelHeight else {
                     throw FBSimulatorSelectedScreenshotError.wrongDimensions

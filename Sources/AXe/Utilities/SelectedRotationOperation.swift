@@ -6,7 +6,7 @@ import FBSimulatorControl
 @MainActor
 enum SelectedRotationOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL) async -> SelectedHIDResponse {
+                        brokerID: UUID, logger: AxeLogger) async -> SelectedHIDResponse {
         guard let rotation = request.rotation else {
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: "rejectedBeforeInput", token: nil, enqueuedEventCount: 0,
@@ -21,7 +21,7 @@ enum SelectedRotationOperation {
             let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
             guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
                   simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-            result.receipt = try await FBSimulatorRotationNative.rotate(for: simulator, helperURL: helperURL,
+            result.receipt = try await FBSimulatorRotationNative.rotate(for: simulator,
                 screenID: display.id, screenUUID: display.uuid, expectedBootIdentity: rotation.expectedBootIdentity,
                 direction: rotation.direction, timeoutSeconds: rotation.timeoutSeconds)
         } catch {

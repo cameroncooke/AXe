@@ -47,10 +47,10 @@ struct ModifierProbeEvidence: Encodable {
   @MainActor static func main() async {
     do {
       let args = Array(CommandLine.arguments.dropFirst())
-      guard args.count == 7, UUID(uuidString: args[0]) != nil,
+      guard args.count == 6, UUID(uuidString: args[0]) != nil,
             let screen = UInt32(args[2]), let uuid = UUID(uuidString: args[3]),
-            args[5] == "shift-a" else {
-        throw ModifierProbeError.invalid("Expected owned device, boot, screen, UUID, helper, button, marker path")
+            args[4] == "shift-a" else {
+        throw ModifierProbeError.invalid("Expected owned device, boot, screen, UUID, button, marker path")
       }
       let logger = FBControlCoreLoggerFactory.systemLoggerWriting(toStderr: true, withDebugLogging: false)
       FBControlCoreGlobalConfiguration.defaultLogger = logger
@@ -61,7 +61,7 @@ struct ModifierProbeEvidence: Encodable {
         UUID(uuidString: $0.udid) == UUID(uuidString: args[0])
       }), simulator.state == .booted else { throw ModifierProbeError.invalid("Explicit Duo is not booted") }
       let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
-        helperURL: URL(fileURLWithPath: args[4]), screenID: screen, screenUniqueID: uuid)
+        screenID: screen, screenUniqueID: uuid)
       guard feed.initialObservation.bootIdentity == args[1] else {
         await feed.closeAndWait(); throw ModifierProbeError.invalid("Boot changed")
       }
@@ -83,10 +83,10 @@ struct ModifierProbeEvidence: Encodable {
         while ProcessInfo.processInfo.systemUptime < markerDeadline {
           let status = await session.status()
           if status.state == .executing && status.enqueuedEventCount == 2 {
-            let marker = ModifierDownMarker(button: args[5], state: status.state.rawValue,
+            let marker = ModifierDownMarker(button: args[4], state: status.state.rawValue,
               capturedUptime: ProcessInfo.processInfo.systemUptime, device: args[0], boot: args[1],
               screenID: screen, screenUUID: uuid.uuidString)
-            try JSONEncoder().encode(marker).write(to: URL(fileURLWithPath: args[6]), options: .withoutOverwriting)
+            try JSONEncoder().encode(marker).write(to: URL(fileURLWithPath: args[5]), options: .withoutOverwriting)
             markerWritten = true
             break
           }
@@ -108,7 +108,7 @@ struct ModifierProbeEvidence: Encodable {
       let status = await session.status()
       let execution = await session.executionEvidence()
       let evidence = ModifierProbeEvidence(frameworkPath: Bundle(for: FBSimulator.self).bundleURL.path,
-        button: args[5], expectedRelease: FBSimulatorHIDEvent.composite([
+        button: args[4], expectedRelease: FBSimulatorHIDEvent.composite([
           .keyboard(direction: .up, keyCode: 4), .keyboard(direction: .up, keyCode: 225)]).description,
         downMarkerWritten: markerWritten, outcome: executionFailure == nil ? "enqueuedAndDrained" : "failedNoReplay",
         normalEventCount: status.enqueuedEventCount, phase: execution?.phase.rawValue,

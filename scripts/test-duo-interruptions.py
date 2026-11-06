@@ -193,7 +193,7 @@ class Check:
 
     def prepare(self):
         self.pin('driver', Path(__file__))
-        for label, file in [('cli', self.args.cli), ('helper', self.args.helper), ('operator', self.args.operator),
+        for label, file in [('cli', self.args.cli), ('operator', self.args.operator),
                             ('fixture-source', ROOT / 'scripts/fixtures/DuoTapWaitProbe.m'),
                             ('operator-source', ROOT / 'scripts/fixtures/DuoExternalStateChange.swift')]:
             self.pin(label, file)
@@ -288,7 +288,7 @@ class Check:
         active = self.before_catalogue['activePanel']['identity']
         changed = self.run('external-change', [self.args.operator, self.args.change, self.before_catalogue['bootIdentity'],
                            str(active['displayID']), active['uniqueID'], str(self.args.fold_degrees),
-                           self.out / 'change-marker.json', self.args.udid, self.args.helper])
+                           self.out / 'change-marker.json', self.args.udid])
         response = self.finish('gesture', expected=None, timeout=15)
         require(child.returncode != 0 and response['outcome'] == 'failedNoReplay'
                 and 'staleContext' in response.get('error', ''), 'The original path was not interrupted by stale context')
@@ -425,8 +425,7 @@ def main():
     args.udid = str(args.udid)
     for name in ['cli', 'operator', 'fixture_app']:
         setattr(args, name, getattr(args, name).resolve(strict=True))
-    args.helper = args.cli.with_name('cadisplay-context').resolve(strict=True)
-    require(all(os.access(file, os.X_OK) for file in [args.cli, args.helper, args.operator]), 'CLI, helper and operator must be executable')
+    require(all(os.access(file, os.X_OK) for file in [args.cli, args.operator]), 'CLI and operator must be executable')
     require(args.pid > 0 and math.isfinite(args.fold_degrees) and 0 <= args.fold_degrees <= 180, 'Invalid PID or fold target')
     require(not args.expect_panel_change or args.change == 'fold', '--expect-panel-change requires a fold case')
     args.out = args.out.resolve()

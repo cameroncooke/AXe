@@ -174,7 +174,7 @@ struct AgentReferenceTapAdmissionTests {
             let acquisition = try JSONDecoder().decode(SelectedAXAcquisition.self, from: Data("""
             {"outcome":"ready","attempts":[{"index":1,"startUptime":0,"endUptime":1,"rootPID":1234,"outcome":"ready"}],"phases":[]}
             """.utf8))
-            let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, batchTap in
+            let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, batchTap in
                 guard let ax = request.ax else {
                     Issue.record("Only AX requests are expected")
                     return Self.failed(request, broker: broker, error: "unexpected", agent: nil)
@@ -216,8 +216,7 @@ struct AgentReferenceTapAdmissionTests {
                     return Self.failed(request, broker: broker, error: "unexpected", agent: nil)
                 }
             }, persist: { _, _, _ in Issue.record("No quarantine expected") }, now: { 0 })
-            owner = SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(),
-                helperURL: URL(fileURLWithPath: "/unused-context"), dependencies: dependencies)
+            owner = SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(), dependencies: dependencies)
             controller = AgentModeController(simulatorUDID: UUID().uuidString, logger: AxeLogger(), owner: owner,
                 discoverDisplay: { _ in
                     state.discoveries += 1

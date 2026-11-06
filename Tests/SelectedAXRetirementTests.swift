@@ -123,7 +123,7 @@ private struct RetirementFixture {
             screenUUID: screen, operation: .complete, token: nil, primitives: [], ax: ax)
     }
     func owner() -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
             state.calls += 1
             let axRequest = request.ax!
             var ax = SelectedAXResult(kind: exclusion == .wrongAXKind ? .tap : axRequest.kind,
@@ -141,8 +141,7 @@ private struct RetirementFixture {
             state.lastResponse = response
             return response
         }, persist: { _, _, _ in state.persists += 1 }, now: { 0 })
-        return SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(),
-            helperURL: URL(fileURLWithPath: "/unused-cadisplay-context"), dependencies: dependencies)
+        return SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(), dependencies: dependencies)
     }
     func encoded(_ value: SelectedHIDResponse) throws -> Data {
         let encoder = JSONEncoder()

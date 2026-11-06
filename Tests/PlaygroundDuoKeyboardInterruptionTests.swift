@@ -82,8 +82,7 @@ private struct KeyboardInterruptionSession {
         let foldControl: DuoHeldLayoutControl? = try DuoHeldLayoutControl(boot: before.bootIdentity,
             udid: udid, degrees: requestedDegrees, artifacts: directory, rotation: rotationPlan)
         let operatorArguments = [change == .fold ? "fold-write-held" : "rotate-write-held", before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString,
-            String(requestedDegrees), directory.appendingPathComponent("state-change-marker.json").path, udid,
-            URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path]
+            String(requestedDegrees), directory.appendingPathComponent("state-change-marker.json").path, udid]
             + (foldControl?.arguments ?? [])
         try save(operatorArguments, name: "external-change-argv")
         let external = try PlaygroundTestProcess(executable: stateOperator, arguments: operatorArguments,

@@ -68,12 +68,8 @@ struct Screenshot: AsyncParsableCommand {
         if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
             let lease = try HIDInputLease.acquire(simulatorUDID: trimmedUDID)
             defer { withExtendedLifetime(lease) {} }
-            guard let executable = Bundle.main.executableURL else {
-                throw CLIError(errorDescription: "Missing executable URL")
-            }
-            let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
             let capture = try await FBSimulatorSelectedScreenshotCapture.png(for: targetSimulator,
-                helperURL: helper, screenID: screenID, screenUniqueID: uuid, expectedBootIdentity: expectedBoot)
+                screenID: screenID, screenUniqueID: uuid, expectedBootIdentity: expectedBoot)
             try Task.checkCancellation()
             let outputURL = try prepareOutputURL(simulator: targetSimulator, replaceExisting: false)
             let receipt = SelectedScreenshotOutput.Receipt(output: outputURL.path,

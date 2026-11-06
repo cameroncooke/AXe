@@ -27,17 +27,13 @@ enum SelectedVideoRecording {
         guard let simulator = set.allSimulators.first(where: { $0.udid == udid }), simulator.state == .booted else {
             throw CLIError(errorDescription: "Selected recording requires the requested booted simulator")
         }
-        guard let executable = Bundle.main.executableURL else {
-            throw CLIError(errorDescription: "Missing executable URL")
-        }
-        let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
         let destination = try Self.outputURL(output)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent(".axe-selected-video-" + UUID().uuidString + ".mp4")
         // No final file exists until successful writer completion and publication.
         defer { try? FileManager.default.removeItem(at: temporary) }
         FileHandle.standardError.write(Data("Recording selected display; Ctrl+C stops and saves accepted frames.\n".utf8))
-        guard let first = try await owner.capture(simulator: simulator, helper: helper, screenID: screenID,
+        guard let first = try await owner.capture(simulator: simulator, screenID: screenID,
             screenUUID: screenUUID, expectedBoot: expectedBoot, initial: nil) else {
             throw CLIError(errorDescription: "Recording stopped before a complete selected frame")
         }
@@ -61,7 +57,7 @@ enum SelectedVideoRecording {
             let remaining = 1 / Double(fps) - (ProcessInfo.processInfo.systemUptime - lastAccepted)
             if remaining > 0 { try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
             guard !owner.stopRequested else { break }
-            guard let frame = try await owner.capture(simulator: simulator, helper: helper, screenID: screenID,
+            guard let frame = try await owner.capture(simulator: simulator, screenID: screenID,
                 screenUUID: screenUUID, expectedBoot: initial.bootIdentity, initial: initial) else { break }
             guard frame.pixelWidth == first.pixelWidth, frame.pixelHeight == first.pixelHeight,
                   let image = VideoFrameUtilities.makeCGImage(from: frame.png) else {

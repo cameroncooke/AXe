@@ -380,7 +380,7 @@ def check(folder, current):
     cli = [source for source in sources if source.endswith("/runtime-exact/axe")]
     require(len(cli) == 1, "Missing unique exact-ID CLI pin")
     binding["_cli"] = cli[0]
-    required = ["/runtime-exact/axe", "/runtime-exact/cadisplay-context", "/DuoSliderValueProbe.app/DuoSliderValueProbe",
+    required = ["/runtime-exact/axe", "/DuoSliderValueProbe.app/DuoSliderValueProbe",
                 "/DuoSliderValueProbe.app/Info.plist", "/scripts/fixtures/DuoSliderValueProbe.m"]
     required += ["/runtime-exact/" + name + ".framework/Versions/A/" + name for name in FRAMEWORKS]
     required += ["/" + name for name in ("FBAccessibilityElement.swift", "FBSimulatorSlider.swift", "FBSimulatorAXSnapshot.swift")]

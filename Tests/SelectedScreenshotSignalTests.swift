@@ -52,6 +52,5 @@ struct SelectedScreenshotSignalTests {
         #expect(SelectedScreenshotSignals.isCancellation(CancellationError()))
         #expect(SelectedScreenshotSignals.isCancellation(ActivePanelReadError(childFailure: .cancelled)))
         #expect(!SelectedScreenshotSignals.isCancellation(ActivePanelReadError(childFailure: .cleanupUnconfirmed)))
-        #expect(!SelectedScreenshotSignals.isCancellation(FBSimulatorContextError.guestCleanupUnconfirmed("late owner")))
     }
 }

@@ -14,13 +14,12 @@ struct PlaygroundDuoTypingInterruptionTests {
             let stateOperator = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
             let catalogue = controls.catalogue
             let pair = catalogue.activePanel.identity
-            let helper = URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path
             let text = String(repeating: "a", count: 256)
             let input = try PlaygroundTestProcess(executable: cli,
                 arguments: ["type", text, "--udid", controls.app.udid], directory: controls.artifacts, name: "long-type")
             let external = try PlaygroundTestProcess(executable: stateOperator, arguments: ["fold", catalogue.bootIdentity,
                 String(pair.displayID), pair.uniqueID.uuidString, "0", controls.artifacts.appendingPathComponent("fold-marker.json").path,
-                controls.app.udid, helper], directory: controls.artifacts, name: "external-fold")
+                controls.app.udid], directory: controls.artifacts, name: "external-fold")
             do {
                 try input.start()
                 let deadline = ProcessInfo.processInfo.systemUptime + 10

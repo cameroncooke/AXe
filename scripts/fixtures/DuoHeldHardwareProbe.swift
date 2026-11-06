@@ -47,12 +47,12 @@ struct HardwareProbeEvidence: Encodable {
   @MainActor static func main() async {
     do {
       let args = Array(CommandLine.arguments.dropFirst())
-      guard args.count == 7, UUID(uuidString: args[0]) != nil,
+      guard args.count == 6, UUID(uuidString: args[0]) != nil,
             let screen = UInt32(args[2]), let uuid = UUID(uuidString: args[3]),
-            ["home", "side-button"].contains(args[5]) else {
-        throw HardwareProbeError.invalid("Expected owned device, boot, screen, UUID, helper, button, marker path")
+            ["home", "side-button"].contains(args[4]) else {
+        throw HardwareProbeError.invalid("Expected owned device, boot, screen, UUID, button, marker path")
       }
-      let button: FBSimulatorHIDButton = args[5] == "home" ? .homeButton : .sideButton
+      let button: FBSimulatorHIDButton = args[4] == "home" ? .homeButton : .sideButton
       let logger = FBControlCoreLoggerFactory.systemLoggerWriting(toStderr: true, withDebugLogging: false)
       FBControlCoreGlobalConfiguration.defaultLogger = logger
       try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
@@ -62,7 +62,7 @@ struct HardwareProbeEvidence: Encodable {
         UUID(uuidString: $0.udid) == UUID(uuidString: args[0])
       }), simulator.state == .booted else { throw HardwareProbeError.invalid("Explicit Duo is not booted") }
       let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
-        helperURL: URL(fileURLWithPath: args[4]), screenID: screen, screenUniqueID: uuid)
+        screenID: screen, screenUniqueID: uuid)
       guard feed.initialObservation.bootIdentity == args[1] else {
         await feed.closeAndWait(); throw HardwareProbeError.invalid("Boot changed")
       }
@@ -83,10 +83,10 @@ struct HardwareProbeEvidence: Encodable {
         while ProcessInfo.processInfo.systemUptime < markerDeadline {
           let status = await session.status()
           if status.state == .executing && status.enqueuedEventCount == 1 {
-            let marker = HardwareDownMarker(button: args[5], state: status.state.rawValue,
+            let marker = HardwareDownMarker(button: args[4], state: status.state.rawValue,
               capturedUptime: ProcessInfo.processInfo.systemUptime, device: args[0], boot: args[1],
               screenID: screen, screenUUID: uuid.uuidString)
-            try JSONEncoder().encode(marker).write(to: URL(fileURLWithPath: args[6]), options: .withoutOverwriting)
+            try JSONEncoder().encode(marker).write(to: URL(fileURLWithPath: args[5]), options: .withoutOverwriting)
             markerWritten = true
             break
           }
@@ -108,7 +108,7 @@ struct HardwareProbeEvidence: Encodable {
       let status = await session.status()
       let execution = await session.executionEvidence()
       let evidence = HardwareProbeEvidence(frameworkPath: Bundle(for: FBSimulator.self).bundleURL.path,
-        button: args[5], expectedRelease: FBSimulatorHIDEvent.button(direction: .up, button: button).description,
+        button: args[4], expectedRelease: FBSimulatorHIDEvent.button(direction: .up, button: button).description,
         downMarkerWritten: markerWritten, outcome: executionFailure == nil ? "enqueuedAndDrained" : "failedNoReplay",
         normalEventCount: status.enqueuedEventCount, phase: execution?.phase.rawValue,
         error: probeFailure ?? executionFailure, interruption: execution?.interruption.map { String(reflecting: $0) },

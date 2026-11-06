@@ -23,7 +23,6 @@ struct PairProbeConfiguration: Decodable {
   let bootIdentity: String
   let screenID: UInt32
   let screenUUID: UUID
-  let helperPath: String
   let first: PairPoint
   let second: PairPoint
   let movedFirst: PairPoint
@@ -135,7 +134,6 @@ struct PairChange: Encodable {
 
   @MainActor static func pair(_ configuration: PairProbeConfiguration, simulator: FBSimulator) async throws {
     let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
-      helperURL: URL(fileURLWithPath: configuration.helperPath),
       screenID: configuration.screenID, screenUniqueID: configuration.screenUUID)
     guard feed.initialObservation.bootIdentity == configuration.bootIdentity else {
       await feed.closeAndWait(); throw PairProbeError.invalid("Boot changed before pair session")
@@ -199,8 +197,7 @@ struct PairChange: Encodable {
   /// External device-state write only. It neither sends touch input nor takes an AXe input lease.
   @MainActor static func change(_ configuration: PairProbeConfiguration, simulator: FBSimulator) async throws {
     guard configuration.mode != "normal" else { throw PairProbeError.invalid("Normal case has no external change") }
-    let helper = URL(fileURLWithPath: configuration.helperPath)
-    let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helper,
+    let reader = FBSimulatorNativeContextReader(simulator: simulator,
       screenID: configuration.screenID, screenUniqueID: configuration.screenUUID)
     let before = try await reader.read()
     guard before.observation.bootIdentity == configuration.bootIdentity else { throw PairProbeError.invalid("Boot changed before external change") }
@@ -212,7 +209,7 @@ struct PairChange: Encodable {
         FBSimulatorHingeRequest(degrees: configuration.hingeDegrees, expectedBootIdentity: configuration.bootIdentity,
           toleranceDegrees: 0.5, timeoutSeconds: 8))
     } else {
-      rotation = try await FBSimulatorRotationNative.rotate(for: simulator, helperURL: helper,
+      rotation = try await FBSimulatorRotationNative.rotate(for: simulator,
         screenID: configuration.screenID, screenUUID: configuration.screenUUID,
         expectedBootIdentity: configuration.bootIdentity, direction: .right)
     }

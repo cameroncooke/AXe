@@ -122,8 +122,7 @@ private struct PlaygroundInterruptionSession {
         let panel = before.activePanel.identity
         let external = try PlaygroundTestProcess(executable: stateOperator,
             arguments: [change.rawValue, before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString, "0",
-                directory.appendingPathComponent("state-change-marker.json").path, udid,
-                URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path],
+                directory.appendingPathComponent("state-change-marker.json").path, udid],
             directory: directory, name: "external-change")
         do {
             try input.start()

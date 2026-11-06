@@ -230,7 +230,7 @@ def main():
         value = getattr(args, name).resolve(strict=True)
         require(value.is_dir(), name + ' must be a directory')
         setattr(args, name, value)
-    for file in ['axe', 'cadisplay-context'] + [name + '.framework/' + name for name in FRAMEWORKS]:
+    for file in ['axe'] + [name + '.framework/' + name for name in FRAMEWORKS]:
         require((args.runtime / file).is_file(), 'Runtime input is missing: ' + file)
     args.out = args.out.resolve()
     require(not args.out.is_relative_to(args.runtime)

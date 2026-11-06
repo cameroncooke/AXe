@@ -70,14 +70,13 @@ try:
     catalogue = check.catalogue('before-catalogue')
     check.description('before-description', catalogue, args.pid)
     active = catalogue['activePanel']['identity']
-    helper = str(Path(check.cli).with_name('cadisplay-context'))
     down_marker = check.folder / 'down-marker.json'
     if args.public:
         probe_command = [check.cli, 'button', args.button, '--duration', '6',
                          '--expected-boot', catalogue['bootIdentity'], *check.selection(catalogue), '--udid', args.device]
     else:
         probe_command = [args.probe, args.device, catalogue['bootIdentity'], str(active['displayID']),
-                         active['uniqueID'], helper, args.button, str(down_marker)]
+                         active['uniqueID'], args.button, str(down_marker)]
     controls.save(check.folder / 'hardware-probe-argv.json', probe_command)
     probe_files = [(check.folder / 'hardware-probe-stdout').open('xb'), (check.folder / 'hardware-probe-stderr').open('xb')]
     probe_started = time.monotonic()
@@ -104,7 +103,7 @@ try:
     assert probe.poll() is None, 'Hold ended before the external write'
     change = check.run('external-change', [args.operator, args.mode, catalogue['bootIdentity'],
                        str(active['displayID']), active['uniqueID'], str(args.fold_angle),
-                       str(check.folder / 'change-marker.json'), args.device, helper])
+                       str(check.folder / 'change-marker.json'), args.device])
     probe.wait(timeout=12)
     assert probe.returncode == 1
     finish_probe()

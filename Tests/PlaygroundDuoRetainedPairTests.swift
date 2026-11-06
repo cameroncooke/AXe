@@ -16,10 +16,8 @@ struct PlaygroundDuoRetainedPairTests {
         let y = frame.y + frame.height / 2
         let before = try app.documents.read()
         let panel = app.catalogue.activePanel.identity
-        let cli = try TestHelpers.getAxePath()
         let configuration = ControlsRetainedPairConfiguration(simulatorUDID: app.app.udid, bootIdentity: app.catalogue.bootIdentity,
             screenID: panel.displayID, screenUUID: panel.uniqueID,
-            helperPath: URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path,
             first: .init(x: x - 25, y: y), second: .init(x: x + 25, y: y),
             movedFirst: .init(x: x - 15, y: y), movedSecond: .init(x: x + 35, y: y),
             staleFirst: .init(x: x - 10, y: y), staleSecond: .init(x: x + 40, y: y),
@@ -94,7 +92,7 @@ struct PlaygroundDuoRetainedPairTests {
 
 private struct ControlsRetainedPairConfiguration: Encodable {
     struct Point: Encodable { let x: Double; let y: Double }
-    let simulatorUDID: String; let bootIdentity: String; let screenID: UInt32; let screenUUID: UUID; let helperPath: String
+    let simulatorUDID: String; let bootIdentity: String; let screenID: UInt32; let screenUUID: UUID
     let first: Point; let second: Point; let movedFirst: Point; let movedSecond: Point; let staleFirst: Point; let staleSecond: Point
     let coordinationDirectory: String; let mode: String; let hingeDegrees: Double
 }

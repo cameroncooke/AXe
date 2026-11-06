@@ -19,7 +19,7 @@ enum SelectedScreenshotSignals {
                 FileHandle.standardError.write(Data(
                     "Selected screenshot cancelled; awaited operation returned.\n".utf8))
             }
-            // In particular, keep cleanupUnconfirmed and guestCleanupUnconfirmed intact.
+            // In particular, keep cleanupUnconfirmed intact.
             throw error
         }
     }

@@ -316,8 +316,7 @@ struct MediaPlaygroundSession {
         let tool = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
         let panel = before.activePanel.identity
         let args = [change == "open" ? "fold" : change, before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString, change == "open" ? "180" : "0",
-            directory.appendingPathComponent("change-" + UUID().uuidString + ".json").path, udid,
-            URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path]
+            directory.appendingPathComponent("change-" + UUID().uuidString + ".json").path, udid]
         let result = try await CommandRunner.run(([tool] + args).map(Self.quote).joined(separator: " "), timeout: 20)
         try #require(result.exitCode == 0)
     }

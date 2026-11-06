@@ -6,7 +6,7 @@ import FBSimulatorControl
 @MainActor
 enum AgentModeNativeOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL,
+                        brokerID: UUID, logger: AxeLogger,
                         transportOwner: FBSimulatorHIDTransportOwner? = nil) async -> SelectedHIDResponse {
         var observation: FBSimulatorHIDSessionObservation?
         var feed: FBSimulatorHIDNativeFreshnessProvider?
@@ -28,7 +28,7 @@ enum AgentModeNativeOperation {
             }
             let display = try request.selectedDisplay()
             let live = try await PhaseTimer.measure("native.liveContextStart") {
-                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, helperURL: helperURL,
+                try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
                     screenID: display.id, screenUniqueID: display.uuid)
             }
             feed = live; observation = live.initialObservation

@@ -153,7 +153,7 @@ struct SelectedAgentLifetimeTests {
     }
 
     private func makeOwner(_ clock: LifetimeClock) -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
             clock.nativeCalls += 1
             Issue.record("Idle maintenance must not start a native operation.")
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
@@ -163,8 +163,7 @@ struct SelectedAgentLifetimeTests {
             clock.persistenceCalls += 1
             Issue.record("Idle maintenance must not write an input recovery record.")
         }, now: { clock.now })
-        return SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(),
-            helperURL: URL(fileURLWithPath: "/unused-cadisplay-context"), dependencies: dependencies)
+        return SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(), dependencies: dependencies)
     }
 }
 
@@ -213,7 +212,7 @@ private struct RotationLifetimeFixture {
     }
 
     func owner() -> SelectedHIDOwner {
-        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _, _ in
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
             state.calls += 1
             if request.rotation != nil {
                 var rotation = SelectedRotationResult(direction: .right)
@@ -230,7 +229,6 @@ private struct RotationLifetimeFixture {
                 brokerID: broker, outcome: "ready", token: nil, enqueuedEventCount: 0,
                 cleanup: "notNeeded", error: nil, context: after, ax: ax)
         }, persist: { _, _, _ in state.persists += 1 }, now: { 0 })
-        return SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(),
-            helperURL: URL(fileURLWithPath: "/unused-cadisplay-context"), dependencies: dependencies)
+        return SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(), dependencies: dependencies)
     }
 }

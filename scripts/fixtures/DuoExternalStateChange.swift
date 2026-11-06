@@ -31,14 +31,14 @@ struct ChangeReceipt: Encodable {
   @MainActor static func main() async {
     do {
       let args = Array(CommandLine.arguments.dropFirst())
-      guard ((args.count == 8 && ["fold", "fold-write", "rotate"].contains(args[0]))
-        || ((args.count == 10 || (args.count == 11 && args[10] == "state-wait=30")) && args[0] == "fold-write-held")
-        || (args.count == 12 && args[0] == "rotate-write-held" && args[10] == "state-wait=30"
-          && ["rotation-from=0", "rotation-from=90", "rotation-from=180", "rotation-from=270"].contains(args[11]))),
+      guard ((args.count == 7 && ["fold", "fold-write", "rotate"].contains(args[0]))
+        || ((args.count == 9 || (args.count == 10 && args[9] == "state-wait=30")) && args[0] == "fold-write-held")
+        || (args.count == 11 && args[0] == "rotate-write-held" && args[9] == "state-wait=30"
+          && ["rotation-from=0", "rotation-from=90", "rotation-from=180", "rotation-from=270"].contains(args[10]))),
             let screen = UInt32(args[2]), let uuid = UUID(uuidString: args[3]),
             UUID(uuidString: args[6]) != nil,
             let angle = Double(args[4]), angle.isFinite else {
-        throw ChangeError.invalid("Expected fold/fold-write/rotate, boot, screen, UUID, fold angle, marker path, owned device UUID, helper path")
+        throw ChangeError.invalid("Expected fold/fold-write/rotate, boot, screen, UUID, fold angle, marker path, owned device UUID")
       }
       let rotationWrite = args[0] == "rotate-write-held"
       guard rotationWrite ? [0.0, 90, 180, 270].contains(angle) : (0...180).contains(angle) else {
@@ -46,20 +46,20 @@ struct ChangeReceipt: Encodable {
       }
       let orientation: String?
       if rotationWrite {
-        guard let from = Int(args[11].dropFirst("rotation-from=".count)) else {
+        guard let from = Int(args[10].dropFirst("rotation-from=".count)) else {
           throw ChangeError.invalid("Expected the measured rotation before the one right-turn write")
         }
         orientation = try IndependentHingeWriter.rotationTarget(from: from, requested: angle, screenID: screen)
       } else { orientation = nil }
       let held = args[0] == "fold-write-held" || rotationWrite
       if held {
-        guard args[8].hasPrefix("/"), args[9].hasPrefix("/") else {
+        guard args[7].hasPrefix("/"), args[8].hasPrefix("/") else {
           throw ChangeError.invalid("Held control paths must be absolute")
         }
       }
       let lifetime = held
-        ? try IndependentConnectionLifetime(readyURL: URL(fileURLWithPath: args[8]),
-            releaseURL: URL(fileURLWithPath: args[9]), stateWaitSeconds: args.count >= 11 ? 30 : nil) : nil
+        ? try IndependentConnectionLifetime(readyURL: URL(fileURLWithPath: args[7]),
+            releaseURL: URL(fileURLWithPath: args[8]), stateWaitSeconds: args.count >= 10 ? 30 : nil) : nil
       let protocolOnly = args[0] == "fold-write" || held
       let logger = FBControlCoreLoggerFactory.systemLoggerWriting(toStderr: true, withDebugLogging: false)
       FBControlCoreGlobalConfiguration.defaultLogger = logger
@@ -69,8 +69,7 @@ struct ChangeReceipt: Encodable {
       guard let simulator = control.set.allSimulators.first(where: {
         UUID(uuidString: $0.udid) == UUID(uuidString: args[6])
       }), simulator.state == .booted else { throw ChangeError.invalid("Explicit Duo is not booted") }
-      let helper = URL(fileURLWithPath: args[7])
-      let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helper,
+      let reader = FBSimulatorNativeContextReader(simulator: simulator,
         screenID: screen, screenUniqueID: uuid)
       let before: FBSimulatorContextReadback?
       if protocolOnly {
@@ -99,7 +98,7 @@ struct ChangeReceipt: Encodable {
         hinge = try await FBSimulatorHingeNative.operation(for: simulator).set(
           FBSimulatorHingeRequest(degrees: angle, expectedBootIdentity: args[1], toleranceDegrees: 0.5, timeoutSeconds: 8))
       } else {
-        rotation = try await FBSimulatorRotationNative.rotate(for: simulator, helperURL: helper,
+        rotation = try await FBSimulatorRotationNative.rotate(for: simulator,
           screenID: screen, screenUUID: uuid, expectedBootIdentity: args[1], direction: .right)
       }
       let value = ChangeReceipt(mode: args[0], startedUptime: started,

@@ -110,9 +110,8 @@ def verify_deferred(args, command):
     """Read-only final check. It never launches, signals or stops a product process."""
     started = time.monotonic()
     failures, owned, remaining = [], {}, []
-    records, boot, baseline_guest = [], None, set()
+    records, boot = [], None
     dedicated_groups = set()
-    helper = str(Path(command[0]).resolve().parent / "cadisplay-context")
     udid = command[command.index("--udid") + 1]
     try:
         files = sorted(args.verify_deferred_directory.glob("*-ownership.json"))
@@ -137,10 +136,8 @@ def verify_deferred(args, command):
             dedicated_groups.add(record["cliPID"])
             for row in record["owned"]:
                 owned.setdefault(identity(row), row)
-                if row.get("ownership") != "selected-boot-guest-helper" and row["pgid"] == row["pid"]:
+                if row["pgid"] == row["pid"]:
                     dedicated_groups.add(row["pgid"])
-        # Only identities present before every command are borrowed from outside this case.
-        baseline_guest = set.intersection(*(set(tuple(row) for row in record["baselineGuestIdentities"]) for record in records))
         empty_since = None
         while True:
             current_boot = info(boot[0])
@@ -157,24 +154,13 @@ def verify_deferred(args, command):
                 current = info(key[0])
                 if current is None or identity(current) != key:
                     continue
-                if owned[key].get("ownership") != "selected-boot-guest-helper" and current["pgid"] == current["pid"]:
+                if current["pgid"] == current["pid"]:
                     dedicated_groups.add(current["pgid"])
                 for pid in listed(6, current["pid"]):
                     child = info(pid)
                     detailed = describe(child) if child is not None else None
                     if detailed is not None:
                         owned.setdefault(identity(detailed), detailed)
-            for pid in listed(6, boot[0]):
-                current = info(pid)
-                if current is None:
-                    continue
-                executable = ctypes.create_string_buffer(4096)
-                count = libproc.proc_pidpath(pid, executable, len(executable))
-                if count <= 0 or os.fsdecode(executable.value) != helper:
-                    continue
-                detailed = describe(current)
-                if detailed is not None and identity(detailed) not in baseline_guest:
-                    owned.setdefault(identity(detailed), dict(detailed, ownership="selected-boot-guest-helper"))
             remaining = []
             for key in list(owned):
                 current = info(key[0])
@@ -199,7 +185,7 @@ def verify_deferred(args, command):
                "remaining": remaining, "failures": failures,
                "completeOwnedGroupAbsent": bool(records) and not failures and not remaining,
                "newSelectedBootGuestHelpersAbsent": bool(records) and not failures and not remaining,
-               "guestBootIdentity": boot, "baselineGuestIdentities": sorted(baseline_guest),
+               "guestBootIdentity": boot,
                "commandReceipts": len(records), "dedicatedProcessGroups": sorted(dedicated_groups),
                "elapsedSeconds": time.monotonic() - started,
                "scope": "final read-only PID/start identity check for deferred case commands and their descendants"}
@@ -235,9 +221,7 @@ def main():
     cli_exit = None
     root_identity = None
     empty_since = None
-    helper = str(Path(command[0]).resolve().parent / "cadisplay-context")
     boot_identity = None
-    baseline_guest = set()
     udid = command[command.index("--udid") + 1]
 
     def selected_boot():
@@ -256,24 +240,12 @@ def main():
             raise RuntimeError("The media observer requires one existing warm simulator boot")
         return matches[0]
 
-    def guest_helpers():
+    def check_boot():
         if boot_identity is None:
-            return []
+            return
         current_boot = info(boot_identity[0])
         if current_boot is None or identity(current_boot) != boot_identity:
             raise RuntimeError("The selected boot changed during owned media observation")
-        result = []
-        for pid in listed(6, boot_identity[0]):
-            row = info(pid)
-            if row is None:
-                continue
-            path = ctypes.create_string_buffer(4096)
-            count = libproc.proc_pidpath(pid, path, len(path))
-            if count > 0 and os.fsdecode(path.value) == helper:
-                detailed = describe(row)
-                if detailed is not None:
-                    result.append(dict(detailed, ownership="selected-boot-guest-helper"))
-        return result
 
     def receive(number, _frame):
         requested.append(number)
@@ -290,10 +262,8 @@ def main():
                 (key for key in owned if key[0] == parent), None)
             if current is not None and identity(current) == expected:
                 pids.update(listed(6, parent))  # Also record children that change process group.
-        guest_rows = [row for row in guest_helpers() if identity(row) not in baseline_guest]
-        for row in guest_rows:
-            owned.setdefault(identity(row), row)
-        rows = list(guest_rows)
+        check_boot()
+        rows = []
         for pid in pids:
             row = info(pid)
             if row is None:
@@ -314,7 +284,6 @@ def main():
 
     try:
         boot_identity = selected_boot()
-        baseline_guest = {identity(row) for row in guest_helpers()}
         child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=sys.stdout.buffer,
                                  stderr=sys.stderr.buffer, start_new_session=True)
         first = info(child.pid)
@@ -406,10 +375,10 @@ def main():
                    "forcedCleanup": forced, "remaining": remaining, "failures": failures,
                    "completeOwnedGroupAbsent": child is not None and not remaining,
                    "newSelectedBootGuestHelpersAbsent": not [row for row in remaining if row.get("ppid") == (boot_identity[0] if boot_identity else -1)],
-                   "guestBootIdentity": boot_identity, "baselineGuestIdentities": sorted(baseline_guest),
+                   "guestBootIdentity": boot_identity,
                    "groupCheckDeferred": args.defer_group_check,
                    "elapsedSeconds": time.monotonic() - started,
-                   "scope": "dedicated CLI group, observed descendants, and new exact-runtime CAD helpers of the selected boot; PID/start identities"}
+                   "scope": "dedicated CLI group and observed descendants on the selected boot; PID/start identities"}
         write_json(args.receipt, receipt)
     if failures or forced:
         return 70

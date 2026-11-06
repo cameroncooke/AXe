@@ -156,7 +156,7 @@ enum SliderPickupReadPhase {
         var ownedOutput = false
         var root: FBAccessibilityElement?
         do {
-            let required: Set<String> = ["--phase", "--read-id", "--remaining-budget-seconds", "--udid", "--boot", "--screen-id", "--screen-uuid", "--pid", "--selector-kind", "--selector-value", "--point-x", "--point-y", "--helper", "--out"]
+            let required: Set<String> = ["--phase", "--read-id", "--remaining-budget-seconds", "--udid", "--boot", "--screen-id", "--screen-uuid", "--pid", "--selector-kind", "--selector-value", "--point-x", "--point-y", "--out"]
             let optional: Set<String> = ["--binding", "--binding-sha256"]
             guard args.count % 2 == 0 else { throw SliderPickupReadError.rejected("Named arguments require values") }
             var fields: [String: String] = [:]
@@ -180,7 +180,6 @@ enum SliderPickupReadPhase {
                   let selectorValue = fields["--selector-value"], !selectorValue.isEmpty, selectorValue.utf8.count <= 4096,
                   let pointX = fields["--point-x"].flatMap(Double.init), pointX.isFinite,
                   let pointY = fields["--point-y"].flatMap(Double.init), pointY.isFinite,
-                  let helper = fields["--helper"], helper.hasPrefix("/"),
                   let out = fields["--out"], out.hasPrefix("/") else {
                 throw SliderPickupReadError.rejected("Invalid explicit phase, identity, shared deadline or file path")
             }
@@ -221,7 +220,7 @@ enum SliderPickupReadPhase {
             let control = try FBSimulatorControl.withConfiguration(FBSimulatorControlConfiguration(deviceSetPath: nil, logger: logger, reporter: SliderPickupReadReporter()))
             guard let simulator = control.set.allSimulators.first(where: { UUID(uuidString: $0.udid) == udid }),
                   simulator.state == .booted else { throw SliderPickupReadError.rejected("Explicit device is not booted") }
-            let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: URL(fileURLWithPath: helper), screenID: screenID, screenUniqueID: screenUUID)
+            let reader = FBSimulatorNativeContextReader(simulator: simulator, screenID: screenID, screenUniqueID: screenUUID)
             try check(); try mark("before-context")
             let before = try await reader.read()
             let observation = try before.observation.sessionObservation()

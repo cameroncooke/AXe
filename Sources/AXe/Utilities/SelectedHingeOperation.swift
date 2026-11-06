@@ -6,7 +6,7 @@ import FBSimulatorControl
 @MainActor
 enum SelectedHingeOperation {
     static func perform(_ request: SelectedHIDRequest, simulatorUDID: String,
-                        brokerID: UUID, logger: AxeLogger, helperURL: URL) async -> SelectedHIDResponse {
+                        brokerID: UUID, logger: AxeLogger) async -> SelectedHIDResponse {
         guard let hinge = request.hinge else {
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: "rejectedBeforeInput", token: nil, enqueuedEventCount: 0,
@@ -28,7 +28,7 @@ enum SelectedHingeOperation {
             let observer: FBSimulatorHingeDisplayReadiness?
             if let readiness = hinge.readiness, let expectedBoot = hinge.expectedBootIdentity {
                 do {
-                    observer = try await FBSimulatorHingeDisplayReadiness.prepare(for: simulator, helperURL: helperURL,
+                    observer = try await FBSimulatorHingeDisplayReadiness.prepare(for: simulator,
                         expectedBootIdentity: expectedBoot, expected: readiness)
                 } catch {
                     result.readinessPreflightFailure = error as? FBSimulatorHingeReadinessError ??

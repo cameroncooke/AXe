@@ -29,10 +29,6 @@ enum FollowActiveVideoRecording {
               simulator.state == .booted else {
             throw CLIError(errorDescription: "Follow-active recording requires the requested booted simulator")
         }
-        guard let executable = Bundle.main.executableURL else {
-            throw CLIError(errorDescription: "Missing executable URL")
-        }
-        let helper = executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context")
         let destination = try SelectedVideoRecording.outputURL(output)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent(".axe-follow-video-" + UUID().uuidString + ".mp4")
@@ -40,7 +36,7 @@ enum FollowActiveVideoRecording {
         let recovery = Recovery()
         log("Recording the measured active display; Ctrl+C stops and saves accepted frames.")
         guard let first = try await recovery.capture(owner: owner, simulator: simulator,
-            helper: helper, expectedBoot: expectedBoot) else {
+            expectedBoot: expectedBoot) else {
             throw CLIError(errorDescription: "Recording stopped before a complete active-display frame")
         }
         guard let image = VideoFrameUtilities.makeCGImage(from: first.png) else {
@@ -65,7 +61,7 @@ enum FollowActiveVideoRecording {
             if remaining > 0 { try await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000)) }
             guard !owner.stopRequested else { break }
             guard let frame = try await recovery.capture(owner: owner, simulator: simulator,
-                helper: helper, expectedBoot: first.before.observation.bootIdentity) else { break }
+                expectedBoot: first.before.observation.bootIdentity) else { break }
             guard let image = VideoFrameUtilities.makeCGImage(from: frame.png) else {
                 throw VideoProcessingError.failedToDecodeImage
             }
@@ -127,7 +123,7 @@ enum FollowActiveVideoRecording {
         private(set) var attempts: Int64 = 0
         private(set) var waitSeconds: Double = 0
 
-        func capture(owner: SelectedMediaCapture, simulator: FBSimulator, helper: URL,
+        func capture(owner: SelectedMediaCapture, simulator: FBSimulator,
                      expectedBoot: String?) async throws -> FBSimulatorSelectedScreenshot? {
             var firstFailure: Double?
             for attempt in 0..<10 {
@@ -137,7 +133,7 @@ enum FollowActiveVideoRecording {
                     throw CLIError(errorDescription: "Active-display transition recovery window expired")
                 }
                 do {
-                    return try await owner.captureActive(simulator: simulator, helper: helper, expectedBoot: expectedBoot)
+                    return try await owner.captureActive(simulator: simulator, expectedBoot: expectedBoot)
                 } catch {
                     guard !owner.stopRequested, Self.canRecover(error) else { throw error }
                     let now = ProcessInfo.processInfo.systemUptime

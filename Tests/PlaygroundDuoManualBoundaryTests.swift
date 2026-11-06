@@ -119,7 +119,7 @@ struct PlaygroundDuoManualBoundaryTests {
             let panel = app.catalogue.activePanel.identity
             let cli = try TestHelpers.getAxePath()
             let config = ShortFactoryConfiguration(simulatorUDID: app.app.udid, bootIdentity: app.catalogue.bootIdentity, screenID: panel.displayID,
-                screenUUID: panel.uniqueID, helperPath: URL(fileURLWithPath: cli).deletingLastPathComponent().appendingPathComponent("cadisplay-context").path,
+                screenUUID: panel.uniqueID,
                 first: point, second: end, movedFirst: point, movedSecond: end, staleFirst: point, staleSecond: end,
                 coordinationDirectory: app.artifacts.path, mode: "normal", hingeDegrees: 180)
             let file = app.artifacts.appendingPathComponent("short-factory.json")
@@ -147,7 +147,7 @@ struct PlaygroundDuoManualBoundaryTests {
 
 private struct ShortFactoryConfiguration: Encodable {
     struct Point: Encodable { let x: Double; let y: Double }
-    let simulatorUDID: String; let bootIdentity: String; let screenID: UInt32; let screenUUID: UUID; let helperPath: String
+    let simulatorUDID: String; let bootIdentity: String; let screenID: UInt32; let screenUUID: UUID
     let first: Point; let second: Point; let movedFirst: Point; let movedSecond: Point; let staleFirst: Point; let staleSecond: Point
     let coordinationDirectory: String; let mode: String; let hingeDegrees: Double
 }

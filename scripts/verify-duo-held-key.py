@@ -93,11 +93,10 @@ try:
         time.sleep(0.025)
     else:
         raise AssertionError('No real Space effect observed before external change; do not send a state change')
-    helper = str(Path(check.cli).with_name('cadisplay-context'))
     active = original['activePanel']['identity']
     change = check.run('external-change', [args.operator, args.mode, original['bootIdentity'],
                        str(active['displayID']), active['uniqueID'], str(args.fold_angle),
-                       str(check.folder / 'change-marker.json'), args.device, helper])
+                       str(check.folder / 'change-marker.json'), args.device])
     key.wait(timeout=12)
     assert key.returncode == 1
     finish_key()

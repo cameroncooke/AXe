@@ -187,11 +187,7 @@ struct Batch: AsyncParsableCommand {
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger)
         let owner: SelectedHIDOwner?
         if measured != nil {
-            guard let executable = Bundle.main.executableURL else {
-                throw SelectedHIDFailure.invalid("Missing executable")
-            }
-            owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger,
-                helperURL: executable.deletingLastPathComponent().appendingPathComponent("cadisplay-context"))
+            owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger)
         } else {
             owner = nil
         }

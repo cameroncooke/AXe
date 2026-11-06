@@ -1358,15 +1358,18 @@ index 0ebd3bb257c0c90113674a23cc78f88ce0943c5e..4a317291131201bdab4ae492dcda43e2
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
 new file mode 100644
-index 000000000..536ef75ec
+index 000000000..a69bd55eb
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXAcquisition.swift
-@@ -0,0 +1,658 @@
+@@ -0,0 +1,674 @@
 +import FBControlCore
 +import Foundation
 +
 +public enum FBSimulatorAXAcquisitionOutcome: String, Codable, Sendable {
 +  case ready, notReady, cancelled, deadlineExceeded, requestTimedOut, processChanged, contextChanged, failed
++  /// A point read found no accessibility element at the point. It is evidence of empty space,
++  /// never of a target; callers decide whether the complete tree can account for the point.
++  case noElementAtPoint
 +}
 +
 +public struct FBSimulatorAXAcquisitionPolicy: Sendable {
@@ -1471,6 +1474,10 @@ index 000000000..536ef75ec
 +  }
 +}
 +struct FBAXAcquisitionStop: Error { let outcome: FBSimulatorAXAcquisitionOutcome }
++/// The frontmost app answered, but the point request returned no element.
++struct FBAXEmptyPoint: Error, CustomStringConvertible {
++  var description: String { "No accessibility element at the requested point" }
++}
 +
 +extension FBSimulatorAXSnapshot {
 +  /// Explicit bounded acquisition. Each empty response is retained in the result.
@@ -1761,7 +1768,14 @@ index 000000000..536ef75ec
 +        request.acquisitionBudget = budget
 +        try budget.check()
 +        try Task.checkCancellation()
-+        let handle = try await commands.accessibilityElementForAcquisition(request: request, worker: self)
++        let handle: FBAccessibilityElement
++        do { handle = try await commands.accessibilityElementForAcquisition(request: request, worker: self) }
++        catch let accessibility as FBAccessibilityError {
++          // The frontmost app read above succeeded, so accessibility is answering. No element
++          // at this point is empty space; preparation cannot change that.
++          if case .noTranslationObject = accessibility { throw FBAXEmptyPoint() }
++          throw accessibility
++        }
 +        defer { handle.close() }
 +        try budget.check()
 +        let hitPID = handle.acquisitionPID
@@ -1802,6 +1816,7 @@ index 000000000..536ef75ec
 +      else if error is CancellationError { outcome = .cancelled }
 +      else if let selection = error as? FBSimulatorAXSnapshotError,
 +              case .staleContext = selection { outcome = .contextChanged }
++      else if error is FBAXEmptyPoint { outcome = .noElementAtPoint }
 +      else { outcome = .failed }
 +    }
 +    phase("standard-read-finished")
@@ -1824,6 +1839,7 @@ index 000000000..536ef75ec
 +    if error is CancellationError || error is FBAXAcquisitionStop { return false }
 +    if let selection = error as? FBSimulatorAXSnapshotError, case .staleContext = selection { return false }
 +    if let target = error as? FBSimulatorAXTargetError, case .wrongPID = target { return false }
++    if error is FBAXEmptyPoint { return false }
 +    return true
 +  }
 +
@@ -5791,278 +5807,12 @@ index 0000000000000000000000000000000000000000..804e9daf86614a03a2c0dd95fad420c3
 +    }, onCancel: { self.finish(.failure(CancellationError())) })
 +  }
 +}
-diff --git a/FBSimulatorControl/HID/ActivePanelDecoder.swift b/FBSimulatorControl/HID/ActivePanelDecoder.swift
-new file mode 100644
-index 0000000..c0b10ff
---- /dev/null
-+++ b/FBSimulatorControl/HID/ActivePanelDecoder.swift
-@@ -0,0 +1,260 @@
-+import Foundation
-+
-+public enum ActivePanelDecoder {
-+    public static let maximumJSONBytes = 1_048_576
-+
-+    public static func validateExpected(_ panels: [ActivePanelIdentity], selected: ActivePanelExpectation) throws {
-+        guard !panels.isEmpty, panels.count <= 32,
-+              Set(panels.map(\.displayID)).count == panels.count,
-+              Set(panels.map(\.uniqueID)).count == panels.count else {
-+            throw ActivePanelValidationError.invalidExpectedCatalog
-+        }
-+        guard panels.contains(selected.identity),
-+              [selected.nativePixelWidth, selected.nativePixelHeight].allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 65536 }),
-+              selected.scale.isFinite, selected.scale > 0, selected.scale <= 16 else {
-+            throw ActivePanelValidationError.invalidSelectedExpectation
-+        }
-+    }
-+
-+    public static func decode(_ data: Data, simulatorUDID: UUID,
-+                              expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation,
-+                              exactArguments: [String], schemaPolicy: ActivePanelSchemaPolicy = .explicitActiveFlag) throws -> ActivePanelSnapshot {
-+        try validateExpected(expectedPanels, selected: selected)
-+        let snapshot = try decodeCatalog(data, simulatorUDID: simulatorUDID,
-+            expectedPanels: expectedPanels, exactArguments: exactArguments, schemaPolicy: schemaPolicy)
-+        let panel = snapshot.activePanel
-+        guard panel.identity == selected.identity else {
-+            throw ActivePanelValidationError.inactiveSelection(requested: selected.identity, observed: panel.identity)
-+        }
-+        guard panel.nativePixelWidth == selected.nativePixelWidth,
-+              panel.nativePixelHeight == selected.nativePixelHeight,
-+              panel.boundsOriginX == 0, panel.boundsOriginY == 0,
-+              panel.boundsWidth == selected.nativePixelWidth, panel.boundsHeight == selected.nativePixelHeight,
-+              Double(panel.pointScale) == selected.scale else {
-+            throw ActivePanelValidationError.selectedGeometryMismatch
-+        }
-+        guard panel.currentOrientation == selected.rotation else {
-+            throw ActivePanelValidationError.selectedRotationMismatch
-+        }
-+        return snapshot
-+    }
-+
-+    /// Discovers the active row only after every integrated host identity and geometry matches.
-+    public static func decodeDiscovery(_ data: Data, simulatorUDID: UUID,
-+                                       expectedCatalog: [ActivePanelCatalogEntry], exactArguments: [String],
-+                                       schemaPolicy: ActivePanelSchemaPolicy = .explicitActiveFlag) throws -> ActivePanelSnapshot {
-+        try validateCatalog(expectedCatalog)
-+        let snapshot = try decodeCatalog(data, simulatorUDID: simulatorUDID,
-+            expectedPanels: expectedCatalog.map(\.identity), exactArguments: exactArguments, schemaPolicy: schemaPolicy)
-+        for panel in snapshot.panels {
-+            guard let expected = expectedCatalog.first(where: { $0.identity == panel.identity }),
-+                  panel.nativePixelWidth == expected.nativePixelWidth,
-+                  panel.nativePixelHeight == expected.nativePixelHeight,
-+                  panel.boundsOriginX == 0, panel.boundsOriginY == 0,
-+                  panel.boundsWidth == expected.nativePixelWidth,
-+                  panel.boundsHeight == expected.nativePixelHeight,
-+                  Double(panel.pointScale) == expected.scale else {
-+                throw ActivePanelValidationError.catalogGeometryMismatch(panel.identity.displayID)
-+            }
-+        }
-+        return snapshot
-+    }
-+
-+    public static func validateCatalog(_ catalog: [ActivePanelCatalogEntry]) throws {
-+        guard !catalog.isEmpty, catalog.count <= 32,
-+              Set(catalog.map { $0.identity.displayID }).count == catalog.count,
-+              Set(catalog.map { $0.identity.uniqueID }).count == catalog.count,
-+              catalog.allSatisfy({ entry in
-+                  [entry.nativePixelWidth, entry.nativePixelHeight].allSatisfy { $0.isFinite && $0 > 0 && $0 <= 65536 }
-+                      && entry.scale.isFinite && entry.scale > 0 && entry.scale <= 16
-+              }) else {
-+            throw ActivePanelValidationError.invalidExpectedCatalog
-+        }
-+    }
-+
-+    private static func decodeCatalog(_ data: Data, simulatorUDID: UUID,
-+                                      expectedPanels: [ActivePanelIdentity], exactArguments: [String],
-+                                      schemaPolicy: ActivePanelSchemaPolicy) throws -> ActivePanelSnapshot {
-+        guard data.count <= maximumJSONBytes else { throw ActivePanelValidationError.oversizedJSON }
-+        let envelope: DisplayEnvelope
-+        do { envelope = try JSONDecoder().decode(DisplayEnvelope.self, from: data) }
-+        catch { throw ActivePanelValidationError.malformedJSON(String(describing: error)) }
-+        let info = envelope.info
-+        let measuredSchema6 = info.jsonVersion == 6 && info.version == "689.2"
-+        guard info.jsonVersion == 5 || measuredSchema6, info.commandType == "devicectl.device.info.displays",
-+              !info.version.isEmpty else { throw ActivePanelValidationError.wrongCommandOrSchema }
-+        guard info.outcome == "success" else { throw ActivePanelValidationError.unsuccessfulOutcome(info.outcome) }
-+        let args = info.arguments
-+        guard args == exactArguments, args.count == 10,
-+              Array(args.prefix(5)) == ["devicectl", "device", "info", "displays", "--device"],
-+              UUID(uuidString: args[5]) == simulatorUDID,
-+              args[6] == "--timeout", args[7] == "5", args[8] == "--json-output", !args[9].isEmpty else {
-+            throw ActivePanelValidationError.wrongArguments
-+        }
-+        guard let rows = envelope.result?.displays, !rows.isEmpty, rows.count <= 32 else {
-+            throw ActivePanelValidationError.invalidDisplayCount
-+        }
-+        let identities = rows.map { ActivePanelIdentity(displayID: $0.displayId, uniqueID: $0.uniqueId) }
-+        guard Set(identities.map(\.displayID)).count == rows.count,
-+              Set(identities.map(\.uniqueID)).count == rows.count else {
-+            throw ActivePanelValidationError.duplicateIdentity
-+        }
-+        // DeviceKit651.28 omits active on every row of the measured iPhone18Pro405
-+        // schema. This permits exclusion of an off, non-primary virtual row only;
-+        // the independent integrated identity remains the selection authority.
-+        let integratedRows = rows.filter { $0.type == .integrated }
-+        let measuredRigidOmittedActive = info.jsonVersion == 5 && schemaPolicy == .verifiedIPhone18ProProfile405
-+            && info.version == "651.28" && expectedPanels.count == 1
-+            && expectedPanels.first?.displayID == 1 && integratedRows.count == 1
-+            && integratedRows.first?.primary == true && rows.allSatisfy({ $0.active == nil })
-+            && integratedRows.first?.displayId == expectedPanels.first?.displayID
-+            && integratedRows.first?.uniqueId == expectedPanels.first?.uniqueID
-+        let panels = try rows.compactMap { row -> ActivePanel? in
-+            guard row.nativeSize.count == 2, row.bounds.count == 2,
-+                  row.bounds.allSatisfy({ $0.count == 2 }), row.pointScale > 0, row.pointScale <= 16,
-+                  row.nativeSize.allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 65536 }),
-+                  row.bounds.flatMap({ $0 }).allSatisfy({ $0.isFinite }),
-+                  row.bounds[1].allSatisfy({ $0 > 0 && $0 <= 65536 }) else {
-+                throw ActivePanelValidationError.invalidGeometry(row.displayId)
-+            }
-+            if row.type == .virtual {
-+                let measuredOmittedVirtual = measuredRigidOmittedActive && row.active == nil
-+                    && row.backlightState == "off"
-+                guard row.active == false || measuredOmittedVirtual, !row.primary,
-+                      !expectedPanels.contains(where: {
-+                          $0.displayID == row.displayId || $0.uniqueID == row.uniqueId
-+                      }) else {
-+                    throw ActivePanelValidationError.catalogMismatch
-+                }
-+                return nil
-+            }
-+            return ActivePanel(identity: ActivePanelIdentity(displayID: row.displayId, uniqueID: row.uniqueId),
-+                active: row.active, primary: row.primary, currentOrientation: row.currentOrientation,
-+                nativeOrientation: row.nativeOrientation, nativePixelWidth: row.nativeSize[0],
-+                nativePixelHeight: row.nativeSize[1], boundsOriginX: row.bounds[0][0],
-+                boundsOriginY: row.bounds[0][1], boundsWidth: row.bounds[1][0], boundsHeight: row.bounds[1][1],
-+                pointScale: row.pointScale, backlightState: row.backlightState)
-+        }
-+        let integratedIdentities = panels.map(\.identity)
-+        guard Set(integratedIdentities) == Set(expectedPanels),
-+              integratedIdentities.count == expectedPanels.count else {
-+            throw ActivePanelValidationError.catalogMismatch
-+        }
-+        if info.jsonVersion == 5, schemaPolicy == .verifiedIPadMiniA17ProProfile405 {
-+            guard info.version == "651.28", panels.count == 1, expectedPanels.count == 1,
-+                  panels.first?.identity.displayID == 1 else {
-+                throw ActivePanelValidationError.unsupportedRigidSchema
-+            }
-+        }
-+        let panel: ActivePanel
-+        let selectionBasis: ActivePanelSelectionBasis
-+        if panels.contains(where: { $0.active == nil }) {
-+            if measuredSchema6 {
-+                // The measured schema has one primary, lit integrated panel and omits active.
-+                // The independent catalog has already matched its exact identity.
-+                guard rows.count == 1, let only = panels.first, only.primary,
-+                      only.backlightState == "activeOn" else {
-+                    throw ActivePanelValidationError.missingActiveFlag
-+                }
-+                panel = only
-+            } else {
-+                guard schemaPolicy == .verifiedIPhone18ProProfile405
-+                        || schemaPolicy == .verifiedIPadMiniA17ProProfile405 else {
-+                    throw ActivePanelValidationError.missingActiveFlag
-+                }
-+                // A measured schema-5 profile allows one exact integrated panel.
-+                guard info.version == "651.28", panels.count == 1, expectedPanels.count == 1,
-+                      let only = panels.first, only.active == nil else {
-+                    throw ActivePanelValidationError.unsupportedRigidSchema
-+                }
-+                panel = only
-+            }
-+            selectionBasis = .verifiedSingleIntegratedPanel
-+        } else {
-+            let active = panels.filter { $0.active == true }
-+            guard active.count == 1, let only = active.first else {
-+                throw ActivePanelValidationError.activeStateUnavailable(active.count)
-+            }
-+            panel = only
-+            selectionBasis = .explicitActiveFlag
-+        }
-+        return ActivePanelSnapshot(requestedSimulatorUDID: simulatorUDID,
-+            sourceCommandType: info.commandType, sourceJSONVersion: info.jsonVersion,
-+            sourceVersion: info.version, activePanel: panel, selectionBasis: selectionBasis, panels: panels)
-+    }
-+}
-+
-+private enum DisplayKind: Decodable, Equatable {
-+    case integrated
-+    case virtual
-+
-+    private struct Key: CodingKey {
-+        let stringValue: String
-+        var intValue: Int? { nil }
-+        init?(stringValue: String) { self.stringValue = stringValue }
-+        init?(intValue: Int) { return nil }
-+    }
-+    init(from decoder: Decoder) throws {
-+        let object = try decoder.container(keyedBy: Key.self)
-+        guard object.allKeys.count == 1, let key = object.allKeys.first else {
-+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unsupported display kind"))
-+        }
-+        switch key.stringValue {
-+        case "integrated": self = .integrated
-+        case "virtual": self = .virtual
-+        default:
-+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unsupported display kind"))
-+        }
-+        let payload = try object.nestedContainer(keyedBy: Key.self, forKey: key)
-+        guard payload.allKeys.isEmpty else {
-+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Unexpected \(key.stringValue) payload"))
-+        }
-+    }
-+}
-+
-+private struct DisplayRow: Decodable {
-+    let displayId: UInt32
-+    let uniqueId: UUID
-+    let active: Bool?
-+    let primary: Bool
-+    let currentOrientation: ActivePanelRotation
-+    let nativeOrientation: ActivePanelRotation
-+    let nativeSize: [Double]
-+    let bounds: [[Double]]
-+    let pointScale: Int
-+    let type: DisplayKind
-+    let backlightState: String?
-+
-+    private enum CodingKeys: String, CodingKey {
-+        case displayId, uniqueId, active, primary, currentOrientation, nativeOrientation
-+        case nativeSize, bounds, pointScale, type, backlightState
-+    }
-+    init(from decoder: Decoder) throws {
-+        let values = try decoder.container(keyedBy: CodingKeys.self)
-+        displayId = try values.decode(UInt32.self, forKey: .displayId)
-+        uniqueId = try values.decode(UUID.self, forKey: .uniqueId)
-+        // Only an omitted key is the measured rigid schema. Null or another type fails.
-+        active = values.contains(.active) ? try values.decode(Bool.self, forKey: .active) : nil
-+        primary = try values.decode(Bool.self, forKey: .primary)
-+        currentOrientation = try values.decode(ActivePanelRotation.self, forKey: .currentOrientation)
-+        nativeOrientation = try values.decode(ActivePanelRotation.self, forKey: .nativeOrientation)
-+        nativeSize = try values.decode([Double].self, forKey: .nativeSize)
-+        bounds = try values.decode([[Double]].self, forKey: .bounds)
-+        pointScale = try values.decode(Int.self, forKey: .pointScale)
-+        type = try values.decode(DisplayKind.self, forKey: .type)
-+        backlightState = try values.decodeIfPresent(String.self, forKey: .backlightState)
-+    }
-+}
-+
-+private struct DisplayEnvelope: Decodable {
-+    struct Info: Decodable {
-+        let arguments: [String]
-+        let commandType: String
-+        let jsonVersion: Int
-+        let outcome: String
-+        let version: String
-+    }
-+    struct Rows: Decodable { let displays: [DisplayRow] }
-+    let info: Info
-+    let result: Rows?
-+}
 diff --git a/FBSimulatorControl/HID/ActivePanelModels.swift b/FBSimulatorControl/HID/ActivePanelModels.swift
 new file mode 100644
-index 0000000..ff1bbd0
+index 000000000..9fdcb1687
 --- /dev/null
 +++ b/FBSimulatorControl/HID/ActivePanelModels.swift
-@@ -0,0 +1,158 @@
+@@ -0,0 +1,151 @@
 +import Foundation
 +
 +public struct ActivePanelIdentity: Codable, Hashable, Sendable {
@@ -6111,11 +5861,10 @@ index 0000000..ff1bbd0
 +    }
 +}
 +
-+/// Explicit flags remain mandatory unless the verified rigid profile supplies the sole panel.
++/// A display report with several integrated panels must flag exactly one as active. A report
++/// that omits the flag can select only one lit primary panel.
 +public enum ActivePanelSchemaPolicy: String, Codable, Sendable {
 +    case explicitActiveFlag
-+    case verifiedIPhone18ProProfile405
-+    case verifiedIPadMiniA17ProProfile405
 +}
 +
 +public enum ActivePanelSelectionBasis: String, Codable, Sendable {
@@ -6152,11 +5901,6 @@ index 0000000..ff1bbd0
 +public enum ActivePanelValidationError: Error, Equatable, Sendable {
 +    case invalidExpectedCatalog
 +    case invalidSelectedExpectation
-+    case oversizedJSON
-+    case malformedJSON(String)
-+    case wrongCommandOrSchema
-+    case unsuccessfulOutcome(String)
-+    case wrongArguments
 +    case invalidDisplayCount
 +    case duplicateIdentity
 +    case catalogMismatch
@@ -6164,7 +5908,6 @@ index 0000000..ff1bbd0
 +    case invalidGeometry(UInt32)
 +    case activeStateUnavailable(Int)
 +    case missingActiveFlag
-+    case unsupportedRigidSchema
 +    case inactiveSelection(requested: ActivePanelIdentity, observed: ActivePanelIdentity)
 +    case selectedGeometryMismatch
 +    case selectedRotationMismatch
@@ -6223,25 +5966,14 @@ index 0000000..ff1bbd0
 +}
 diff --git a/FBSimulatorControl/HID/ActivePanelReader.swift b/FBSimulatorControl/HID/ActivePanelReader.swift
 new file mode 100644
-index 000000000..c18f12528
+index 000000000..9fa29a3bd
 --- /dev/null
 +++ b/FBSimulatorControl/HID/ActivePanelReader.swift
-@@ -0,0 +1,115 @@
+@@ -0,0 +1,45 @@
 +import Foundation
 +import FBControlCore
 +
 +public enum ActivePanelReader {
-+    public static func read(simulatorUDID: UUID, expectedPanels: [ActivePanelIdentity],
-+                            selected: ActivePanelExpectation, developerDirectory: URL,
-+                            schemaPolicy: ActivePanelSchemaPolicy = .explicitActiveFlag) async throws -> ActivePanelReadback {
-+        do { try ActivePanelDecoder.validateExpected(expectedPanels, selected: selected) }
-+        catch let error as ActivePanelValidationError { throw ActivePanelReadError(validationFailure: error) }
-+        return try await readSnapshot(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory) { data, arguments in
-+            try ActivePanelDecoder.decode(data, simulatorUDID: simulatorUDID,
-+                expectedPanels: expectedPanels, selected: selected, exactArguments: arguments, schemaPolicy: schemaPolicy)
-+        }
-+    }
-+
 +    /// Read-only discovery. The result is a measured catalogue, not an input admission token.
 +    public static func discover(for simulator: FBSimulator) async throws -> ActivePanelReadback {
 +        let discovery = try await discoverWithMetadata(for: simulator)
@@ -6253,9 +5985,8 @@ index 000000000..c18f12528
 +    public static func discoverWithMetadata(for simulator: FBSimulator) async throws -> ActivePanelDiscoveryResult {
 +        let started = ProcessInfo.processInfo.systemUptime
 +        try Task.checkCancellation()
-+        guard simulator.state == .booted, let simulatorID = UUID(uuidString: simulator.udid),
-+              !FBXcodeConfiguration.developerDirectory.isEmpty else {
-+            throw FBSimulatorContextError.unavailable("Display discovery requires a booted simulator and a developer directory")
++        guard simulator.state == .booted, let simulatorID = UUID(uuidString: simulator.udid) else {
++            throw FBSimulatorContextError.unavailable("Display discovery requires a booted simulator")
 +        }
 +        let bootBefore = try FBSimulatorNativeContextReader.bootIdentity(simulator.udid)
 +        let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
@@ -6268,7 +5999,7 @@ index 000000000..c18f12528
 +            return ActivePanelCatalogEntry(identity: ActivePanelIdentity(displayID: display.screenID, uniqueID: uniqueID),
 +                nativePixelWidth: display.nativePixelSize.width, nativePixelHeight: display.nativePixelSize.height, scale: display.scale)
 +        }
-+        // In-process CoreDevice display info replaces the devicectl child for discovery.
++        // The guest's own CoreDevice display report, read in-process.
 +        let readback = try FBSimulatorDisplayInfoReader.discovery(
 +            await FBSimulatorDisplayInfoReader.read(for: simulator),
 +            simulatorUDID: simulatorID, expectedCatalog: catalog)
@@ -6282,64 +6013,6 @@ index 000000000..c18f12528
 +        try Task.checkCancellation()
 +        return ActivePanelDiscoveryResult(readback: readback, bootIdentity: bootBefore,
 +            startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
-+    }
-+
-+    public static func discover(simulatorUDID: UUID, expectedCatalog: [ActivePanelCatalogEntry],
-+                                developerDirectory: URL,
-+                                schemaPolicy: ActivePanelSchemaPolicy = .explicitActiveFlag) async throws -> ActivePanelReadback {
-+        do { try ActivePanelDecoder.validateCatalog(expectedCatalog) }
-+        catch let error as ActivePanelValidationError { throw ActivePanelReadError(validationFailure: error) }
-+        return try await readSnapshot(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory) { data, arguments in
-+            try ActivePanelDecoder.decodeDiscovery(data, simulatorUDID: simulatorUDID,
-+                expectedCatalog: expectedCatalog, exactArguments: arguments, schemaPolicy: schemaPolicy)
-+        }
-+    }
-+
-+    private static func readSnapshot(simulatorUDID: UUID, developerDirectory: URL,
-+                                     decode: (Data, [String]) throws -> ActivePanelSnapshot) async throws -> ActivePanelReadback {
-+        let receipt = try await captureSnapshot(simulatorUDID: simulatorUDID, developerDirectory: developerDirectory)
-+        return try decodeSnapshot(receipt, decode: decode)
-+    }
-+
-+    /// Capture raw read-only bytes while another independent context probe runs.
-+    /// Joined host/guest expectations are still required before this data can be accepted.
-+    static func captureSnapshot(simulatorUDID: UUID, developerDirectory: URL) async throws -> ActivePanelChildReceipt {
-+        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled) }
-+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("axe-active-panel-" + UUID().uuidString)
-+        let response = directory.appendingPathComponent("response.json")
-+        let arguments = ["device", "info", "displays", "--device", simulatorUDID.uuidString,
-+                         "--timeout", "5", "--json-output", response.path]
-+        var environment = ProcessInfo.processInfo.environment
-+        environment["DEVELOPER_DIR"] = developerDirectory.path
-+        let command = ActivePanelChildCommand(executable: developerDirectory.appendingPathComponent("usr/bin/devicectl"),
-+            arguments: arguments, environment: environment, directory: directory, responseURL: response,
-+            timeout: 6, maximumBytes: ActivePanelDecoder.maximumJSONBytes)
-+        let receipt = try await OwnedActivePanelChild(command: command).run()
-+        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
-+        return receipt
-+    }
-+
-+    static func decodeCapturedSnapshot(_ receipt: ActivePanelChildReceipt, simulatorUDID: UUID,
-+                                       expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation,
-+                                       schemaPolicy: ActivePanelSchemaPolicy) throws -> ActivePanelReadback {
-+        do { try ActivePanelDecoder.validateExpected(expectedPanels, selected: selected) }
-+        catch let error as ActivePanelValidationError { throw ActivePanelReadError(validationFailure: error) }
-+        return try decodeSnapshot(receipt) { data, arguments in
-+            try ActivePanelDecoder.decode(data, simulatorUDID: simulatorUDID,
-+                expectedPanels: expectedPanels, selected: selected, exactArguments: arguments, schemaPolicy: schemaPolicy)
-+        }
-+    }
-+
-+    private static func decodeSnapshot(_ receipt: ActivePanelChildReceipt,
-+                                       decode: (Data, [String]) throws -> ActivePanelSnapshot) throws -> ActivePanelReadback {
-+        guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
-+        do {
-+            let snapshot = try decode(receipt.json, ["devicectl"] + receipt.arguments)
-+            guard !Task.isCancelled else { throw ActivePanelReadError(childFailure: .cancelled, receipt: receipt) }
-+            return ActivePanelReadback(snapshot: snapshot, receipt: receipt)
-+        } catch let error as ActivePanelValidationError {
-+            throw ActivePanelReadError(validationFailure: error, receipt: receipt)
-+        }
 +    }
 +}
 diff --git a/FBSimulatorControl/HID/DTUHIDModels.swift b/FBSimulatorControl/HID/DTUHIDModels.swift
@@ -6369,115 +6042,6 @@ index 48db610a689f2ffbf9a4336b4dcb8ed94531127e..9011baebf63525e396143e8a1b4049b5
 +    case (.rot0, .left), (.rot90, .top), (.rot180, .right), (.rot270, .bottom): return .left
 +    case (.rot0, .bottom), (.rot90, .left), (.rot180, .top), (.rot270, .right): return .bottom
 +    case (.rot0, .right), (.rot90, .bottom), (.rot180, .left), (.rot270, .top): return .right
-+    }
-+  }
-+}
-diff --git a/FBSimulatorControl/HID/FBSimulatorContextGuestRead.swift b/FBSimulatorControl/HID/FBSimulatorContextGuestRead.swift
-new file mode 100644
-index 0000000000000000000000000000000000000000..3ba176adb8a3e56ebf39f19a937ee4437f42c2a3
---- /dev/null
-+++ b/FBSimulatorControl/HID/FBSimulatorContextGuestRead.swift
-@@ -0,0 +1,103 @@
-+@preconcurrency import FBControlCore
-+import Foundation
-+import Darwin
-+
-+public enum FBSimulatorContextError: Error, Sendable {
-+  case unavailable(String)
-+  case changedDuringRead
-+  case guestCleanupUnconfirmed(String)
-+}
-+
-+struct FBSimulatorContextGuestResult: Sendable {
-+  let data: Data
-+  let processIdentifier: Int32
-+}
-+
-+/// Owns the subprocess after caller cancellation, including a late launch completion.
-+/// Only normal exit with all IO detached can produce a successful read.
-+private final class ContextGuestOwner: @unchecked Sendable {
-+  private let lock = NSLock()
-+  private var process: FBSubprocess<AnyObject, AnyObject, AnyObject>?
-+  private var stopped = false
-+  let completed = FBSimulatorBoundedResult<FBSimulatorContextGuestResult>()
-+  let terminated = FBSimulatorBoundedResult<Bool>()
-+
-+  func launched(_ process: FBSubprocess<AnyObject, AnyObject, AnyObject>, stdout: NSMutableData) {
-+    lock.lock()
-+    self.process = process
-+    let shouldStop = stopped
-+    lock.unlock()
-+    process.statLoc.onQueue(DispatchQueue.global(), notifyOfCompletion: { [self] resolved in
-+      guard resolved.error == nil, resolved.result != nil else {
-+        completed.finish(.failure(FBSimulatorContextError.guestCleanupUnconfirmed("No guest termination receipt")))
-+        return
-+      }
-+      terminated.finish(.success(true))
-+    })
-+    process.exitCode.onQueue(DispatchQueue.global(), notifyOfCompletion: { [self] resolved in
-+      guard resolved.error == nil, let code = resolved.result as? NSNumber, code.int32Value == 0 else {
-+        completed.finish(.failure(FBSimulatorContextError.unavailable("Guest context helper did not exit normally")))
-+        return
-+      }
-+      guard stdout.length <= 65_536 else {
-+        completed.finish(.failure(FBSimulatorContextError.unavailable("Guest context output exceeds its limit")))
-+        return
-+      }
-+      completed.finish(.success(FBSimulatorContextGuestResult(data: stdout as Data,
-+        processIdentifier: process.processIdentifier)))
-+    })
-+    if shouldStop { stopProcess(process) }
-+  }
-+
-+  func launchFailed(_ error: Error) {
-+    terminated.finish(.success(true))
-+    completed.finish(.failure(error))
-+  }
-+
-+  func stop() {
-+    lock.lock(); stopped = true; let process = self.process; lock.unlock()
-+    if let process { stopProcess(process) }
-+  }
-+
-+  private func stopProcess(_ process: FBSubprocess<AnyObject, AnyObject, AnyObject>) {
-+    // This API owns SIGTERM, SIGKILL escalation and the process termination future.
-+    _ = process.sendSignal(SIGTERM, backingOffToKillWithTimeout: 0.2, logger: nil)
-+  }
-+}
-+
-+enum FBSimulatorContextGuestRead {
-+  static func read(simulator: FBSimulator, helperURL: URL, requestID: UUID) async throws -> FBSimulatorContextGuestResult {
-+    guard helperURL.isFileURL, FileManager.default.isExecutableFile(atPath: helperURL.path) else {
-+      throw FBSimulatorContextError.unavailable("Packaged CAD helper is missing or not executable")
-+    }
-+    try Task.checkCancellation()
-+    let owner = ContextGuestOwner()
-+    let stdout = NSMutableData()
-+    // Objective-C generic erasure is required by the existing launchProcess boundary.
-+    let output = FBProcessOutput<NSMutableData>(to: stdout) as! FBProcessOutput<AnyObject>
-+    let io = FBProcessIO<AnyObject, AnyObject, AnyObject>(stdIn: nil, stdOut: output, stdErr: nil)
-+    let configuration = FBProcessSpawnConfiguration(launchPath: helperURL.path,
-+      arguments: [requestID.uuidString], environment: [:], io: io, mode: .launchd)
-+    // This task remains owned by the callback state if spawn completes after the caller deadline.
-+    Task {
-+      do { owner.launched(try await simulator.launchProcess(configuration), stdout: stdout) }
-+      catch { owner.launchFailed(error) }
-+    }
-+    do {
-+      return try await withTaskCancellationHandler(operation: {
-+        try await owner.completed.value(timeout: 5, operation: "Guest CAD read") { _ in }
-+      }, onCancel: { owner.stop() })
-+    } catch {
-+      owner.stop()
-+      // A detached cleanup wait is not cancelled with its caller.
-+      let cleanup = await Task.detached {
-+        do { return try await owner.terminated.value(timeout: 2, operation: "Guest CAD cleanup") { _ in } }
-+        catch { return false }
-+      }.value
-+      guard cleanup else {
-+        throw FBSimulatorContextError.guestCleanupUnconfirmed("Spawn or termination callback did not arrive; late cleanup remains owned")
-+      }
-+      throw error
 +    }
 +  }
 +}
@@ -7177,10 +6741,10 @@ index 0000000000000000000000000000000000000000..b9419cab66b41e7c76613477baedc883
 
 diff --git a/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift b/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..e74e7b56ef0bd1debe077593460966b6d966f3be
+index 000000000..983a37839
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHIDLiveFreshness.swift
-@@ -1,0 +1,335 @@
+@@ -0,0 +1,335 @@
 +@preconcurrency import CoreSimulator
 +import Foundation
 +
@@ -7224,9 +6788,9 @@ index 0000000000000000000000000000000000000000..e74e7b56ef0bd1debe077593460966b6
 +  }
 +
 +  /// Preferred entry point: native full context reads plus the native change feed.
-+  public static func start(for simulator: FBSimulator, helperURL: URL, screenID: UInt32,
++  public static func start(for simulator: FBSimulator, screenID: UInt32,
 +                           screenUniqueID: UUID, maximumFeedAge: TimeInterval = 0.5) async throws -> FBSimulatorHIDNativeFreshnessProvider {
-+    let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helperURL,
++    let reader = FBSimulatorNativeContextReader(simulator: simulator,
 +      screenID: screenID, screenUniqueID: screenUniqueID)
 +    return try await start(for: simulator, authoritativeProvider: reader, maximumFeedAge: maximumFeedAge)
 +  }
@@ -9257,7 +8821,7 @@ index 0000000000000000000000000000000000000000..fd7cf8aa0a01cef1b200b630a0ac5366
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeNative.swift b/FBSimulatorControl/HID/FBSimulatorHingeNative.swift
 new file mode 100644
-index 000000000..1605db651
+index 000000000..74b5b2971
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHingeNative.swift
 @@ -0,0 +1,291 @@
@@ -9450,7 +9014,7 @@ index 000000000..1605db651
 +/// The selected panel is an admission/readback target, not an independently rotated display.
 +public enum FBSimulatorRotationNative {
 +  @MainActor
-+  public static func rotate(for simulator: FBSimulator, helperURL: URL, screenID: UInt32, screenUUID: UUID,
++  public static func rotate(for simulator: FBSimulator, screenID: UInt32, screenUUID: UUID,
 +                            expectedBootIdentity: String, direction: FBSimulatorRotationDirection,
 +                            timeoutSeconds: Double = 8) async throws -> FBSimulatorRotationReceipt {
 +    let backend = NativeHingeBackend(simulator: simulator)
@@ -9462,7 +9026,7 @@ index 000000000..1605db651
 +      }
 +      try Task.checkCancellation()
 +      try await backend.validate(expectedBoot: expectedBootIdentity)
-+      let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helperURL,
++      let reader = FBSimulatorNativeContextReader(simulator: simulator,
 +        screenID: screenID, screenUniqueID: screenUUID)
 +      let initial = try await reader.read()
 +      before = initial.observation
@@ -9941,22 +9505,19 @@ index 0000000000000000000000000000000000000000..fb9534d634601adc8a142f2afde64e92
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorHingeReadinessNative.swift b/FBSimulatorControl/HID/FBSimulatorHingeReadinessNative.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfccf5b4650
+index 000000000..3f06d3b20
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorHingeReadinessNative.swift
-@@ -0,0 +1,141 @@
+@@ -0,0 +1,137 @@
 +@preconcurrency import CoreSimulator
 +import Foundation
 +
 +extension FBSimulatorHingeDisplayReadiness {
 +  /// Preflight the comparator while the caller owns the device, before any hinge write.
-+  public static func prepare(for simulator: FBSimulator, helperURL: URL, expectedBootIdentity: String,
++  public static func prepare(for simulator: FBSimulator, expectedBootIdentity: String,
 +                             expected: FBSimulatorHingeReadinessRequest) async throws -> FBSimulatorHingeDisplayReadiness {
 +    _ = try FBSimulatorHingeReadinessRequest(screenID: expected.screenID, screenUUID: expected.screenUUID,
 +      timeoutSeconds: expected.timeoutSeconds)
-+    guard helperURL.isFileURL, FileManager.default.isExecutableFile(atPath: helperURL.path) else {
-+      throw FBSimulatorHingeReadinessError(.unavailable, "Packaged CAD context helper is absent")
-+    }
 +    try Task.checkCancellation()
 +    let capability = try NativeHingeReadinessBackend.validate(simulator, expectedBoot: expectedBootIdentity)
 +    let catalog = try FBSimulatorNativeContextReader.hostCatalog(
@@ -9972,7 +9533,7 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +      return ActivePanelIdentity(displayID: panel.screenID, uniqueID: uuid)
 +    }
 +    return FBSimulatorHingeDisplayReadiness(expected: expected, expectedBoot: expectedBootIdentity,
-+      backend: NativeHingeReadinessBackend(simulator: simulator, helperURL: helperURL,
++      backend: NativeHingeReadinessBackend(simulator: simulator,
 +        expected: expected, expectedBoot: expectedBootIdentity, catalog: identities))
 +  }
 +}
@@ -9983,10 +9544,10 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +  private let expected: FBSimulatorHingeReadinessRequest
 +  private let expectedBoot: String
 +  private let catalog: [ActivePanelIdentity]
-+  init(simulator: FBSimulator, helperURL: URL, expected: FBSimulatorHingeReadinessRequest,
++  init(simulator: FBSimulator, expected: FBSimulatorHingeReadinessRequest,
 +       expectedBoot: String, catalog: [ActivePanelIdentity]) {
 +    self.simulator = simulator; self.expected = expected; self.expectedBoot = expectedBoot; self.catalog = catalog
-+    reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helperURL,
++    reader = FBSimulatorNativeContextReader(simulator: simulator,
 +      screenID: expected.screenID, screenUniqueID: expected.screenUUID)
 +  }
 +
@@ -10037,7 +9598,7 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +          value.activeSnapshot.selectionBasis == .explicitActiveFlag, value.activeSnapshot.activePanel.active == true,
 +          value.activeSnapshot.activePanel.identity == ActivePanelIdentity(displayID: expected.screenID, uniqueID: expected.screenUUID),
 +          value.joinedPanels == catalog, value.joinedPanels.count <= 32,
-+          value.guestExitConfirmed, value.activeChildReceipt.exitConfirmed,
++          value.activeChildReceipt.exitConfirmed,
 +          let before = value.hingeBefore, let after = value.hingeAfter else {
 +      throw FBSimulatorHingeReadinessError(.unavailable, "Readiness identity, active selection, catalog or child completion differs")
 +    }
@@ -10065,7 +9626,6 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +    if let value = error as? FBSimulatorContextError {
 +      switch value {
 +      case .changedDuringRead: return .init(.changedDuringRead, "Full native context changed during read")
-+      case .guestCleanupUnconfirmed(let detail): return .init(.observationCleanupUnconfirmed, detail, cleanup: .unconfirmed)
 +      case .unavailable(let detail): return .init(.unavailable, detail)
 +      }
 +    }
@@ -10088,14 +9648,19 @@ index 0000000000000000000000000000000000000000..8feabefc9a4a29075b908c0132f22cfc
 +}
 diff --git a/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
 new file mode 100644
-index 000000000..441ff2b28
+index 000000000..822af7323
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorNativeContextReader.swift
-@@ -0,0 +1,321 @@
+@@ -0,0 +1,319 @@
 +@preconcurrency import CoreSimulator
 +@preconcurrency import FBControlCore
 +import Foundation
 +import Darwin
++
++public enum FBSimulatorContextError: Error, Sendable {
++  case unavailable(String)
++  case changedDuringRead
++}
 +
 +public enum FBSimulatorHingeCapability: String, Codable, Sendable {
 +  case supported, unsupported, unverified
@@ -10146,8 +9711,6 @@ index 000000000..441ff2b28
 +  public let joinedPanels: [ActivePanelIdentity]
 +  public let activeSnapshot: ActivePanelSnapshot
 +  public let activeChildReceipt: ActivePanelChildReceipt
-+  public let guestProcessIdentifier: Int32
-+  public let guestExitConfirmed: Bool
 +  public let startedUptime: Double
 +  public let finishedUptime: Double
 +}
@@ -10156,13 +9719,11 @@ index 000000000..441ff2b28
 +/// transaction or a transition generation. Use the live feed between full observations.
 +public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FBSimulatorHIDCleanupIdentityProvider {
 +  private let simulator: FBSimulator
-+  private let helperURL: URL
 +  private let screenID: UInt32
 +  private let screenUniqueID: UUID
 +
-+  public init(simulator: FBSimulator, helperURL: URL, screenID: UInt32, screenUniqueID: UUID) {
++  public init(simulator: FBSimulator, screenID: UInt32, screenUniqueID: UUID) {
 +    self.simulator = simulator
-+    self.helperURL = helperURL
 +    self.screenID = screenID
 +    self.screenUniqueID = screenUniqueID
 +  }
@@ -10220,12 +9781,12 @@ index 000000000..441ff2b28
 +      throw FBSimulatorContextError.unavailable("Active-panel simulator identity is unavailable")
 +    }
 +    // One in-process CoreDevice read supplies guest CAD identity, geometry, rotation and the
-+    // active flag. It replaces the guest helper and the devicectl child within the same bounds.
++    // active flag, within the same host catalogue, hinge and boot bounds.
 +    let info = try await FBSimulatorDisplayInfoReader.read(for: simulator)
 +    let guestDisplays = info.rows.filter(\.integrated).map {
-+      GuestEnvelope.Display(displayId: $0.displayID, uniqueId: $0.uniqueID.uuidString,
++      GuestDisplay(displayId: $0.displayID, uniqueId: $0.uniqueID.uuidString,
 +        currentOrientation: $0.currentOrientation.rawValue,
-+        bounds: GuestEnvelope.Bounds(x: $0.boundsX, y: $0.boundsY, width: $0.boundsWidth, height: $0.boundsHeight))
++        bounds: GuestDisplay.Bounds(x: $0.boundsX, y: $0.boundsY, width: $0.boundsWidth, height: $0.boundsHeight))
 +    }
 +    let joinedPanels = try Self.joinedCatalog(host: beforeCatalog, guest: guestDisplays)
 +    let matches = guestDisplays.filter { $0.displayId == screenID && UUID(uuidString: $0.uniqueId) == screenUniqueID }
@@ -10272,13 +9833,10 @@ index 000000000..441ff2b28
 +      hingeBefore: hingeBefore, hingeAfter: hingeAfter, hostRawUIOrientation: after.rawUIOrientation,
 +      hostRawPowerState: after.rawPowerState, hostRawBacklightState: after.rawBacklightState,
 +      joinedPanels: joinedPanels, activeSnapshot: active.snapshot, activeChildReceipt: active.receipt,
-+      // No guest process runs; 0 records that the guest values came from the XPC read.
-+      guestProcessIdentifier: 0, guestExitConfirmed: true,
 +      startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
 +  }
 +
-+  /// Narrow, explicit device catalog. Unknown device profiles remain unverified.
-+  /// A screen count alone never identifies a hinged device.
++  /// The device type's declared integrated digitizers, classified below.
 +  public static func capability(for simulator: FBSimulator) throws -> FBSimulatorContextCapability {
 +    guard let type = simulator.device.deviceType, let bundle = type.bundle,
 +          let identifier = type.identifier, let model = type.modelIdentifier,
@@ -10315,8 +9873,8 @@ index 000000000..441ff2b28
 +      integratedDigitizerIDs: ids, reason: reason)
 +  }
 +
-+  // The verified device profile defines the integrated set. Virtual CAD displays are not
-+  // classified by names or guessed raw enums. Devicectl independently validates its full set.
++  // The device profile defines the integrated set. Virtual CAD displays are not classified by
++  // names or guessed raw enums. The guest display report independently validates its full set.
 +  static func hostCatalog(_ values: [FBSimulatorDisplayInfo], profileIDs: [UInt32]) throws -> [FBSimulatorDisplayInfo] {
 +    guard !profileIDs.isEmpty, Set(profileIDs).count == profileIDs.count,
 +          Set(values.map(\.screenID)).count == values.count else {
@@ -10338,7 +9896,7 @@ index 000000000..441ff2b28
 +    return catalog
 +  }
 +
-+  static func joinedCatalog(host: [FBSimulatorDisplayInfo], guest: [GuestEnvelope.Display]) throws -> [ActivePanelIdentity] {
++  static func joinedCatalog(host: [FBSimulatorDisplayInfo], guest: [GuestDisplay]) throws -> [ActivePanelIdentity] {
 +    guard guest.count <= 32, Set(guest.map(\.displayId)).count == guest.count else {
 +      throw FBSimulatorContextError.unavailable("Guest catalog is oversized or has duplicate screen IDs")
 +    }
@@ -10404,13 +9962,13 @@ index 000000000..441ff2b28
 +    struct Capabilities: Decodable { let displays: [Display] }
 +    struct Display: Decodable { let displayType: String; let hasDigitizer: Bool; let screenID: UInt32 }
 +  }
-+  struct GuestEnvelope: Decodable {
-+    let schemaVersion: Int
-+    let requestID: UUID
-+    let processIdentifier: Int32
-+    let displays: [Display]
-+    struct Display: Decodable { let displayId: UInt32; let uniqueId: String; let currentOrientation: String; let bounds: Bounds }
-+    struct Bounds: Decodable { let x: Double; let y: Double; let width: Double; let height: Double }
++  /// One integrated row of the guest display report, joined against the host catalogue.
++  struct GuestDisplay {
++    let displayId: UInt32
++    let uniqueId: String
++    let currentOrientation: String
++    let bounds: Bounds
++    struct Bounds { let x: Double; let y: Double; let width: Double; let height: Double }
 +  }
 +}
 diff --git a/FBSimulatorControl/HID/OwnedActivePanelChild.swift b/FBSimulatorControl/HID/OwnedActivePanelChild.swift
@@ -11941,6 +11499,7 @@ new file mode 100644
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSelectedScreenshot.swift b/FBSimulatorControl/Commands/FBSimulatorSelectedScreenshot.swift
 new file mode 100644
+index 000000000..0f5ee1211
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorSelectedScreenshot.swift
 @@ -0,0 +1,142 @@
@@ -11988,7 +11547,7 @@ new file mode 100644
 +  /// One read, no retry or alternate display. The child has a ten-second operation limit;
 +  /// inherited context reads, cleanup and synchronous ImageIO decoding are additional work.
 +  /// The caller owns the common device lease until output publication or failure.
-+  public static func png(for simulator: FBSimulator, helperURL: URL,
++  public static func png(for simulator: FBSimulator,
 +                         screenID: UInt32, screenUniqueID: UUID,
 +                         expectedBootIdentity: String? = nil) async throws -> FBSimulatorSelectedScreenshot {
 +    guard expectedBootIdentity == nil || expectedBootIdentity?.isEmpty == false,
@@ -11996,7 +11555,7 @@ new file mode 100644
 +      throw FBSimulatorSelectedScreenshotError.invalidRequest
 +    }
 +    try Task.checkCancellation()
-+    let reader = FBSimulatorNativeContextReader(simulator: simulator, helperURL: helperURL,
++    let reader = FBSimulatorNativeContextReader(simulator: simulator,
 +      screenID: screenID, screenUniqueID: screenUniqueID)
 +    let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator, authoritativeProvider: reader)
 +    do {
@@ -13197,65 +12756,16 @@ index 000000000..eac4d736d
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift
 new file mode 100644
-index 000000000..e3cb000da
+index 000000000..745c34f13
 --- /dev/null
 +++ b/FBSimulatorHIDEventTransportTests/FBSimulatorIPadMiniProfileTests.swift
-@@ -0,0 +1,204 @@
+@@ -0,0 +1,59 @@
 +import Foundation
 +import Testing
 +@testable import FBSimulatorControl
 +
 +@Suite("Device classification and iPad mini A17 Pro rigid profile")
 +struct FBSimulatorIPadMiniProfileTests {
-+  private let simulatorID = UUID(uuidString: "B3A07F27-3F72-4023-925C-4E7512AFDEC9")!
-+  private let panelID = UUID(uuidString: "C7FF5832-A145-4221-BD6F-C19A7048EE7F")!
-+  private let otherID = UUID(uuidString: "E8FBBE20-FA9D-4E62-86CF-6B63D64776B0")!
-+
-+  private struct Empty: Encodable {}
-+  private struct Kind: Encodable { var integrated = Empty() }
-+  private struct Row: Encodable {
-+    var displayId: UInt32 = 1
-+    var uniqueId = "C7FF5832-A145-4221-BD6F-C19A7048EE7F"
-+    var active: Bool? = nil
-+    var primary = true
-+    var currentOrientation = "rot0"
-+    var nativeOrientation = "rot0"
-+    var nativeSize = [1488.0, 2266.0]
-+    var bounds = [[0.0, 0.0], [1488.0, 2266.0]]
-+    var pointScale = 2
-+    var type = Kind()
-+  }
-+  private struct Info: Encodable {
-+    var arguments: [String]
-+    var commandType = "devicectl.device.info.displays"
-+    var jsonVersion = 5
-+    var outcome = "success"
-+    var version = "651.28"
-+  }
-+  private struct Rows: Encodable { var displays: [Row] }
-+  private struct Envelope: Encodable { var info: Info; var result: Rows }
-+  private var arguments: [String] {
-+    ["devicectl", "device", "info", "displays", "--device", simulatorID.uuidString,
-+     "--timeout", "5", "--json-output", "/tmp/ipad-displays.json"]
-+  }
-+  private var identity: ActivePanelIdentity { ActivePanelIdentity(displayID: 1, uniqueID: panelID) }
-+  private func catalog(_ identity: ActivePanelIdentity? = nil, width: Double = 1488,
-+                       height: Double = 2266, scale: Double = 2) -> ActivePanelCatalogEntry {
-+    ActivePanelCatalogEntry(identity: identity ?? self.identity,
-+      nativePixelWidth: width, nativePixelHeight: height, scale: scale)
-+  }
-+  private func data(rows: [Row] = [Row()], info: Info? = nil) throws -> Data {
-+    try JSONEncoder().encode(Envelope(info: info ?? Info(arguments: arguments), result: Rows(displays: rows)))
-+  }
-+  private func discover(_ bytes: Data, catalog: [ActivePanelCatalogEntry]? = nil,
-+                         policy: ActivePanelSchemaPolicy? = nil) throws -> ActivePanelSnapshot {
-+    let selectedPolicy = try policy ?? ipadPolicy()
-+    return try ActivePanelDecoder.decodeDiscovery(bytes, simulatorUDID: simulatorID,
-+      expectedCatalog: catalog ?? [self.catalog()], exactArguments: arguments, schemaPolicy: selectedPolicy)
-+  }
-+  private func ipadPolicy() throws -> ActivePanelSchemaPolicy {
-+    try #require(ActivePanelSchemaPolicy(rawValue: "verifiedIPadMiniA17ProProfile405"))
-+  }
 +  private func capability(identifier: String = "com.apple.CoreSimulator.SimDeviceType.iPad-mini-A17-Pro",
 +                          model: String = "iPad16,2", version: String = "405",
 +                          ids: [UInt32] = [1]) -> FBSimulatorContextCapability {
@@ -13307,102 +12817,6 @@ index 000000000..e3cb000da
 +    }
 +    let actual = capability(ids: ids)
 +    #expect(actual.hinge == .unverified)
-+  }
-+
-+  @Test func measuredOmittedActiveSchemaKeepsNilAndJoinsGeometry() throws {
-+    // Shape and scalar values come from the saved 651.28 / JSON 5 native iPad read.
-+    let bytes = try data()
-+    let snapshot = try discover(bytes)
-+    #expect(snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
-+    #expect(snapshot.activePanel.active == nil)
-+    #expect(snapshot.activePanel.identity == identity)
-+    #expect(snapshot.activePanel.currentOrientation == .rot0)
-+    #expect(snapshot.activePanel.nativePixelWidth == 1488 && snapshot.activePanel.nativePixelHeight == 2266)
-+    #expect(snapshot.activePanel.pointScale == 2)
-+    let selected = try ActivePanelDecoder.decode(bytes, simulatorUDID: simulatorID,
-+      expectedPanels: [identity], selected: ActivePanelExpectation(identity: identity,
-+        nativePixelWidth: 1488, nativePixelHeight: 2266, scale: 2, rotation: .rot0),
-+      exactArguments: arguments, schemaPolicy: ipadPolicy())
-+    #expect(selected.activePanel == snapshot.activePanel)
-+  }
-+
-+  @Test(arguments: ["version", "schema", "outcome", "command", "arguments", "nullActive", "stringActive"])
-+  func unmeasuredOrMalformedEnvelopesReject(change: String) throws {
-+    var info = Info(arguments: arguments)
-+    switch change {
-+    case "version": info.version = "651.29"
-+    case "schema": info.jsonVersion = 6
-+    case "outcome": info.outcome = "failure"
-+    case "command": info.commandType = "devicectl.device.info.details"
-+    case "arguments": info.arguments[5] = otherID.uuidString
-+    default: break
-+    }
-+    var bytes = try data(info: info)
-+    if change == "nullActive" || change == "stringActive" {
-+      let text = String(decoding: bytes, as: UTF8.self)
-+      let value = change == "nullActive" ? "null" : "\"true\""
-+      bytes = Data(text.replacingOccurrences(of: "\"primary\":true",
-+        with: "\"active\":\(value),\"primary\":true").utf8)
-+    }
-+    #expect(throws: ActivePanelValidationError.self) { _ = try discover(bytes) }
-+  }
-+
-+  @Test(arguments: ["id", "uuid", "width", "height", "scale", "origin"])
-+  func independentCatalogMismatchesReject(change: String) throws {
-+    var row = Row()
-+    switch change {
-+    case "id": row.displayId = 2
-+    case "uuid": row.uniqueId = otherID.uuidString
-+    case "width": row.nativeSize[0] += 1; row.bounds[1][0] += 1
-+    case "height": row.nativeSize[1] += 1; row.bounds[1][1] += 1
-+    case "scale": row.pointScale = 3
-+    default: row.bounds[0][0] = 1
-+    }
-+    #expect(throws: ActivePanelValidationError.self) { _ = try discover(data(rows: [row])) }
-+  }
-+
-+  @Test(arguments: ["duplicateID", "duplicateUUID", "multiple", "wrongSoleID"])
-+  func duplicateOrUnsupportedPanelSetsReject(change: String) throws {
-+    var second = Row(displayId: 2, uniqueId: otherID.uuidString)
-+    if change == "duplicateID" { second.displayId = 1 }
-+    if change == "duplicateUUID" { second.uniqueId = panelID.uuidString }
-+    let rows = change == "wrongSoleID" ? [second] : [Row(), second]
-+    let expected = change == "duplicateID" || change == "duplicateUUID" ? [catalog()]
-+      : rows.map { catalog(ActivePanelIdentity(displayID: $0.displayId,
-+          uniqueID: UUID(uuidString: $0.uniqueId)!)) }
-+    #expect(throws: ActivePanelValidationError.self) { _ = try discover(data(rows: rows), catalog: expected) }
-+  }
-+
-+  @Test(arguments: ["pair", "rotation", "geometry"])
-+  func selectedReadRetainsExactPairPoseAndGeometry(change: String) throws {
-+    let bytes = try data()
-+    let expected = ActivePanelExpectation(
-+      identity: change == "pair" ? ActivePanelIdentity(displayID: 1, uniqueID: otherID) : identity,
-+      nativePixelWidth: change == "geometry" ? 1489 : 1488,
-+      nativePixelHeight: 2266, scale: 2, rotation: change == "rotation" ? .rot90 : .rot0)
-+    #expect(throws: ActivePanelValidationError.self) {
-+      _ = try ActivePanelDecoder.decode(bytes, simulatorUDID: simulatorID,
-+        expectedPanels: [identity], selected: expected, exactArguments: arguments,
-+        schemaPolicy: ipadPolicy())
-+    }
-+  }
-+
-+  @Test func primaryNeverSubstitutesForActivityAndDefaultPolicyStaysStrict() throws {
-+    #expect(throws: ActivePanelValidationError.missingActiveFlag) {
-+      _ = try discover(data(), policy: .explicitActiveFlag)
-+    }
-+    #expect(throws: ActivePanelValidationError.activeStateUnavailable(0)) {
-+      _ = try discover(data(rows: [Row(active: false)]))
-+    }
-+    let explicit = try discover(data(rows: [Row(active: true)]))
-+    #expect(explicit.selectionBasis == .explicitActiveFlag)
-+    var unknownVersion = Info(arguments: arguments)
-+    unknownVersion.version = "651.29"
-+    #expect(throws: ActivePanelValidationError.unsupportedRigidSchema) {
-+      _ = try discover(data(rows: [Row(active: true)], info: unknownVersion))
-+    }
-+    let phone = try discover(data(), policy: .verifiedIPhone18ProProfile405)
-+    #expect(phone.selectionBasis == .verifiedSingleIntegratedPanel && phone.activePanel.active == nil)
 +  }
 +}
 diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorHIDRetainedIdleTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorHIDRetainedIdleTests.swift
@@ -18313,217 +17727,19 @@ index 0000000000000000000000000000000000000000..59484d29c53a666b6342917297135691
 +private struct AliasFrame: Encodable {
 +  var x: Double, y: Double, width: Double, height: Double
 +}
-diff --git a/FBSimulatorHIDEventTransportTests/ActivePanelSchema6Tests.swift b/FBSimulatorHIDEventTransportTests/ActivePanelSchema6Tests.swift
-new file mode 100644
-index 0000000..1321625
---- /dev/null
-+++ b/FBSimulatorHIDEventTransportTests/ActivePanelSchema6Tests.swift
-@@ -0,0 +1,192 @@
-+import Foundation
-+import FBSimulatorControl
-+import Testing
-+
-+@Suite("Measured DeviceKit schema 6 active panel")
-+struct ActivePanelSchema6Tests {
-+    private let simulator = UUID(uuidString: "419D3218-79E5-46DE-80C0-E58126A88252")!
-+    private let panelID = UUID(uuidString: "AA9A9ACC-A21D-4534-BCF4-B4ED099F7E6E")!
-+    private let alternateID = UUID(uuidString: "2DFB251F-846D-444D-972B-B39B02F5228D")!
-+    private let litRow = #"        "backlightState" : "activeOn""#
-+
-+    private var arguments: [String] {
-+        ["devicectl", "device", "info", "displays", "--device", simulator.uuidString,
-+         "--timeout", "5", "--json-output", "/private/tmp/axe-timing-display-diagnostic.json"]
-+    }
-+
-+    private var expected: [ActivePanelCatalogEntry] {
-+        [.init(identity: .init(displayID: 1, uniqueID: panelID), nativePixelWidth: 1206,
-+               nativePixelHeight: 2622, scale: 3)]
-+    }
-+
-+    @Test func measuredReportRetainsIdentityAndGeometry() throws {
-+        let snapshot = try discover(Self.report)
-+        #expect(snapshot.sourceJSONVersion == 6 && snapshot.sourceVersion == "689.2")
-+        #expect(snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
-+        #expect(snapshot.panels.count == 1 && snapshot.activePanel.identity == expected[0].identity)
-+        #expect(snapshot.activePanel.primary && snapshot.activePanel.active == nil)
-+        #expect(snapshot.activePanel.nativePixelWidth == 1206 && snapshot.activePanel.nativePixelHeight == 2622)
-+        #expect(snapshot.activePanel.pointScale == 3 && snapshot.activePanel.currentOrientation == .rot0)
-+    }
-+
-+    @Test func unmeasuredSchemaVersionPairsReject() throws {
-+        for (field, replacement) in [(#""jsonVersion" : 6"#, #""jsonVersion" : 7"#),
-+                                     (#""version" : "689.2""#, #""version" : "689.3""#)] {
-+            let report = try replacing(Self.report, field, replacement)
-+            #expect(throws: ActivePanelValidationError.wrongCommandOrSchema) { _ = try discover(report) }
-+        }
-+    }
-+
-+    @Test func omittedActiveRequiresOnePrimaryLitPanel() throws {
-+        let nonprimary = try replacing(Self.report, #""primary" : true"#, #""primary" : false"#)
-+        let off = try replacing(Self.report, litRow, #"        "backlightState" : "off""#)
-+        let unknown = try replacing(Self.report, litRow + ",\n", "")
-+        for report in [nonprimary, off, unknown] {
-+            #expect(throws: ActivePanelValidationError.missingActiveFlag) { _ = try discover(report) }
-+        }
-+    }
-+
-+    @Test func nullAndExplicitInactiveDoNotBecomeInferredActive() throws {
-+        let null = try withActive("null", in: Self.report)
-+        do {
-+            _ = try discover(null)
-+            Issue.record("A null active value was accepted.")
-+        } catch ActivePanelValidationError.malformedJSON(_) {}
-+        let inactive = try withActive("false", in: Self.report)
-+        #expect(throws: ActivePanelValidationError.activeStateUnavailable(0)) { _ = try discover(inactive) }
-+    }
-+
-+    @Test func multiplePanelsRequireUniqueExplicitActiveState() throws {
-+        let host = expected + [.init(identity: .init(displayID: 2, uniqueID: alternateID),
-+            nativePixelWidth: 1206, nativePixelHeight: 2622, scale: 3)]
-+        let complete = try twoPanels(firstActive: "false", secondActive: "true")
-+        let snapshot = try discover(complete, host: host)
-+        #expect(snapshot.selectionBasis == .explicitActiveFlag)
-+        #expect(snapshot.activePanel.identity == host[1].identity)
-+        let missing = try twoPanels(firstActive: nil, secondActive: "true")
-+        #expect(throws: ActivePanelValidationError.missingActiveFlag) { _ = try discover(missing, host: host) }
-+        let ambiguous = try twoPanels(firstActive: "true", secondActive: "true")
-+        #expect(throws: ActivePanelValidationError.activeStateUnavailable(2)) { _ = try discover(ambiguous, host: host) }
-+    }
-+
-+    @Test func hostIdentityGeometryAndSelectedRotationRemainRequired() throws {
-+        let wrongID = try replacing(Self.report, panelID.uuidString, alternateID.uuidString)
-+        #expect(throws: ActivePanelValidationError.catalogMismatch) { _ = try discover(wrongID) }
-+        let wrongScale = try replacing(Self.report, #""pointScale" : 3"#, #""pointScale" : 2"#)
-+        #expect(throws: ActivePanelValidationError.catalogGeometryMismatch(1)) { _ = try discover(wrongScale) }
-+        let rotated = ActivePanelExpectation(identity: expected[0].identity,
-+            nativePixelWidth: 1206, nativePixelHeight: 2622, scale: 3, rotation: .rot90)
-+        #expect(throws: ActivePanelValidationError.selectedRotationMismatch) {
-+            _ = try ActivePanelDecoder.decode(Data(Self.report.utf8), simulatorUDID: simulator,
-+                expectedPanels: expected.map(\.identity), selected: rotated, exactArguments: arguments)
-+        }
-+    }
-+
-+    @Test func schemaFiveStillRequiresItsMeasuredProfileWhenActiveIsOmitted() throws {
-+        let v5 = try replacing(Self.report, #""jsonVersion" : 6"#, #""jsonVersion" : 5"#)
-+        let legacy = try replacing(v5, #""version" : "689.2""#, #""version" : "651.28""#)
-+        #expect(throws: ActivePanelValidationError.missingActiveFlag) { _ = try discover(legacy) }
-+        let verified = try ActivePanelDecoder.decodeDiscovery(Data(legacy.utf8), simulatorUDID: simulator,
-+            expectedCatalog: expected, exactArguments: arguments, schemaPolicy: .verifiedIPhone18ProProfile405)
-+        #expect(verified.selectionBasis == .verifiedSingleIntegratedPanel)
-+        #expect(verified.activePanel.active == nil)
-+    }
-+
-+    private func discover(_ report: String, host: [ActivePanelCatalogEntry]? = nil) throws -> ActivePanelSnapshot {
-+        try ActivePanelDecoder.decodeDiscovery(Data(report.utf8), simulatorUDID: simulator,
-+            expectedCatalog: host ?? expected, exactArguments: arguments)
-+    }
-+
-+    private func replacing(_ text: String, _ from: String, _ to: String) throws -> String {
-+        try #require(text.components(separatedBy: from).count == 2)
-+        return text.replacingOccurrences(of: from, with: to)
-+    }
-+
-+    private func withActive(_ value: String, in report: String) throws -> String {
-+        try replacing(report, litRow, "        \"active\" : \(value),\n" + litRow)
-+    }
-+
-+    private func twoPanels(firstActive: String?, secondActive: String) throws -> String {
-+        let start = try #require(Self.report.range(of: "    \"displays\" : [\n"))
-+        let end = try #require(Self.report.range(of: "\n    ],\n    \"orientation\""))
-+        let row = String(Self.report[start.upperBound..<end.lowerBound])
-+        let first = try firstActive.map { try withActive($0, in: row) } ?? row
-+        var second = try replacing(row, panelID.uuidString, alternateID.uuidString)
-+        second = try replacing(second, #""displayId" : 1"#, #""displayId" : 2"#)
-+        second = try replacing(second, #""primary" : true"#, #""primary" : false"#)
-+        second = try withActive(secondActive, in: second)
-+        return try replacing(Self.report, row, first + ",\n" + second)
-+    }
-+
-+    // Exact saved successful devicectl response, including the omitted active key.
-+    private static let report = #"""
-+    {
-+      "info" : {
-+        "arguments" : [
-+          "devicectl",
-+          "device",
-+          "info",
-+          "displays",
-+          "--device",
-+          "419D3218-79E5-46DE-80C0-E58126A88252",
-+          "--timeout",
-+          "5",
-+          "--json-output",
-+          "/private/tmp/axe-timing-display-diagnostic.json"
-+        ],
-+        "commandType" : "devicectl.device.info.displays",
-+        "environment" : {
-+          "TERM" : "dumb"
-+        },
-+        "jsonVersion" : 6,
-+        "outcome" : "success",
-+        "version" : "689.2"
-+      },
-+      "result" : {
-+        "backlightState" : "activeOn",
-+        "displays" : [
-+          {
-+            "backlightState" : "activeOn",
-+            "bounds" : [
-+              [
-+                0,
-+                0
-+              ],
-+              [
-+                1206,
-+                2622
-+              ]
-+            ],
-+            "chromeIdentifier" : "com.apple.dt.devicekit.chrome.phone11",
-+            "currentOrientation" : "rot0",
-+            "displayId" : 1,
-+            "framebufferMaskIdentifier" : "4E5532ED-1470-47D1-BDF4-7AA90C26957A",
-+            "name" : "LCD",
-+            "nativeOrientation" : "rot0",
-+            "nativeSize" : [
-+              1206,
-+              2622
-+            ],
-+            "physicalSize" : [
-+              2.621739149093628,
-+              5.699999809265137
-+            ],
-+            "pointScale" : 3,
-+            "primary" : true,
-+            "type" : {
-+              "integrated" : {
-+
-+              }
-+            },
-+            "uniqueId" : "AA9A9ACC-A21D-4534-BCF4-B4ED099F7E6E"
-+          }
-+        ],
-+        "orientation" : {
-+          "currentDeviceNonFlatOrientation" : "portrait",
-+          "currentDeviceOrientation" : "unknown",
-+          "currentDeviceOrientationLocked" : false
-+        }
-+      }
-+    }
-+    """# + "\n"
-+}
 diff --git a/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift b/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift
 new file mode 100644
-index 000000000..e5ba9068e
+index 000000000..e6d68ff9d
 --- /dev/null
 +++ b/FBSimulatorControl/HID/FBSimulatorDisplayInfoReader.swift
-@@ -0,0 +1,298 @@
+@@ -0,0 +1,323 @@
 +@preconcurrency import CoreSimulator
 +import Darwin
 +import Foundation
 +@preconcurrency import XPC
 +
 +/// One display row from the guest CoreDevice display-info action (dtdeviceinfod).
-+/// These are the fields `devicectl device info displays` prints and the guest CAD helper reads.
++/// These are the fields `devicectl device info displays` prints, read without a child process.
 +public struct FBSimulatorDisplayInfoRow: Sendable {
 +  public let displayID: UInt32
 +  public let uniqueID: UUID
@@ -18561,8 +17777,8 @@ index 000000000..e5ba9068e
 +  }
 +}
 +
-+/// In-process read of `com.apple.coredevice.action.displayinfo`. It replaces the devicectl child
-+/// and the guest CAD helper with one XPC request to the simulator's own CoreDevice service.
++/// In-process read of `com.apple.coredevice.action.displayinfo`: one XPC request to the
++/// simulator's own CoreDevice service, with no child process or guest helper.
 +public enum FBSimulatorDisplayInfoReader {
 +  public static let service = "com.apple.coredevice.feature.getdisplayinfo"
 +  public static let action = "com.apple.coredevice.action.displayinfo"
@@ -18590,11 +17806,11 @@ index 000000000..e5ba9068e
 +      startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
 +  }
 +
-+  /// Same selection rules as `ActivePanelDecoder.decode`, without a profile or tool version pin.
++  /// The active panel must be the selected one, with the selected geometry and rotation.
 +  public static func snapshot(_ response: FBSimulatorDisplayInfoResponse, simulatorUDID: UUID,
 +                       expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation) throws -> ActivePanelReadback {
 +    do {
-+      try ActivePanelDecoder.validateExpected(expectedPanels, selected: selected)
++      try Self.validateExpected(expectedPanels, selected: selected)
 +      let snapshot = try catalogSnapshot(response, simulatorUDID: simulatorUDID, expectedPanels: expectedPanels)
 +      let panel = snapshot.activePanel
 +      guard panel.identity == selected.identity else {
@@ -18615,11 +17831,11 @@ index 000000000..e5ba9068e
 +    }
 +  }
 +
-+  /// Same rules as `ActivePanelDecoder.decodeDiscovery`.
++  /// Every integrated panel must match the independent host catalogue entry.
 +  public static func discovery(_ response: FBSimulatorDisplayInfoResponse, simulatorUDID: UUID,
 +                        expectedCatalog: [ActivePanelCatalogEntry]) throws -> ActivePanelReadback {
 +    do {
-+      try ActivePanelDecoder.validateCatalog(expectedCatalog)
++      try Self.validateCatalog(expectedCatalog)
 +      let snapshot = try catalogSnapshot(response, simulatorUDID: simulatorUDID,
 +        expectedPanels: expectedCatalog.map(\.identity))
 +      for panel in snapshot.panels {
@@ -18634,6 +17850,31 @@ index 000000000..e5ba9068e
 +      return ActivePanelReadback(snapshot: snapshot, receipt: response.receipt)
 +    } catch let error as ActivePanelValidationError {
 +      throw ActivePanelReadError(validationFailure: error, receipt: response.receipt)
++    }
++  }
++
++  public static func validateExpected(_ panels: [ActivePanelIdentity], selected: ActivePanelExpectation) throws {
++    guard !panels.isEmpty, panels.count <= 32,
++          Set(panels.map(\.displayID)).count == panels.count,
++          Set(panels.map(\.uniqueID)).count == panels.count else {
++      throw ActivePanelValidationError.invalidExpectedCatalog
++    }
++    guard panels.contains(selected.identity),
++          [selected.nativePixelWidth, selected.nativePixelHeight].allSatisfy({ $0.isFinite && $0 > 0 && $0 <= 65536 }),
++          selected.scale.isFinite, selected.scale > 0, selected.scale <= 16 else {
++      throw ActivePanelValidationError.invalidSelectedExpectation
++    }
++  }
++
++  public static func validateCatalog(_ catalog: [ActivePanelCatalogEntry]) throws {
++    guard !catalog.isEmpty, catalog.count <= 32,
++          Set(catalog.map { $0.identity.displayID }).count == catalog.count,
++          Set(catalog.map { $0.identity.uniqueID }).count == catalog.count,
++          catalog.allSatisfy({ entry in
++            [entry.nativePixelWidth, entry.nativePixelHeight].allSatisfy { $0.isFinite && $0 > 0 && $0 <= 65536 }
++              && entry.scale.isFinite && entry.scale > 0 && entry.scale <= 16
++          }) else {
++      throw ActivePanelValidationError.invalidExpectedCatalog
 +    }
 +  }
 +
