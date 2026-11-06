@@ -4,6 +4,12 @@ import FBSimulatorControl
 
 /// Keep the legacy CLI surface while using the measured input owner on the verified Duo.
 enum LegacyDuoInput {
+    /// The measured context for the shared input owner, and whether it belongs to the Duo.
+    struct Route {
+        let context: SelectedHIDContext
+        let isDuo: Bool
+    }
+
     @MainActor
     static func captureContext(
         simulatorUDID: String,
@@ -12,6 +18,21 @@ enum LegacyDuoInput {
         forKeyboard: Bool = false,
         includeVerifiedRigid: Bool = false
     ) async throws -> SelectedHIDContext? {
+        try await captureRoute(simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger,
+            forKeyboard: forKeyboard, includeVerifiedRigid: includeVerifiedRigid)?.context
+    }
+
+    /// Nil keeps the caller's existing route. Verified DTUHID rigid devices join the Duo only
+    /// when the caller asks: their own guest connection costs about 0.6 s to open and 0.4 s to
+    /// drain per command, which the broker's retained connection avoids.
+    @MainActor
+    static func captureRoute(
+        simulatorUDID: String,
+        preDelay: Double?,
+        logger: AxeLogger,
+        forKeyboard: Bool = false,
+        includeVerifiedRigid: Bool = false
+    ) async throws -> Route? {
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
         let set = try await getSimulatorSet(
             deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared
@@ -45,7 +66,8 @@ enum LegacyDuoInput {
         guard observation.bootIdentity == discovery.bootIdentity else {
             throw SelectedHIDFailure.invalid("Simulator boot changed during Duo input preparation")
         }
-        return SelectedHIDContext(observation)
+        return Route(context: SelectedHIDContext(observation),
+            isDuo: simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo")
     }
 
     /// One policy shared by caller capture and broker admission. Rigid Indigo and unknown

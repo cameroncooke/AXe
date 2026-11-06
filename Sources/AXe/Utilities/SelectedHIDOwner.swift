@@ -316,17 +316,19 @@ final class SelectedHIDOwner {
 
     private func open(_ request: SelectedHIDRequest) async throws {
         let display = try request.selectedDisplay()
+        // Ordinary paths, touches and keys use the retained connection on the Duo and on verified
+        // DTUHID rigid devices; the shared-owner check refuses any other profile before input.
         try await open(displayID: display.id, displayUUID: display.uuid,
-            expectedContext: request.expectedContext,
-            requiresDuo: request.legacyPath != nil || request.legacyTouch != nil,
-            requiresSharedKeyboard: request.legacyKeyboard != nil) { observation in
+            expectedContext: request.expectedContext, requiresDuo: false,
+            requiresSharedOwner: request.legacyPath != nil || request.legacyTouch != nil
+                || request.legacyKeyboard != nil) { observation in
                 try request.home?.validate(observation: observation)
                 try request.button?.validate(observation: observation)
             }
     }
 
     private func open(displayID: UInt32, displayUUID: UUID, expectedContext: SelectedHIDContext?,
-                      requiresDuo: Bool, requiresSharedKeyboard: Bool = false,
+                      requiresDuo: Bool, requiresSharedOwner: Bool = false,
                       validate: (FBSimulatorHIDSessionObservation) throws -> Void = { _ in }) async throws {
         try acquireLease()
         try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
@@ -343,8 +345,8 @@ final class SelectedHIDOwner {
                 throw SelectedHIDFailure.invalid(capability.reason)
             }
         }
-        if requiresSharedKeyboard, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
-            throw SelectedHIDFailure.invalid("Raw keyboard transport or verified profile changed before input")
+        if requiresSharedOwner, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
+            throw SelectedHIDFailure.invalid("Raw input transport or verified profile changed before input")
         }
         let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
             screenID: displayID, screenUniqueID: displayUUID)

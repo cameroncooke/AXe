@@ -467,13 +467,16 @@ struct Gesture: AsyncParsableCommand {
         
         try await performGlobalSetup(logger: logger)
 
-        let context = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+        // Duo and verified DTUHID devices use the broker's retained input connection.
+        let route = try await LegacyDuoInput.captureRoute(
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )
+        let context = route?.context
+        let measured = route?.isDuo == true ? context : nil
 
         // Keep explicit overrides and rigid-device defaults; measure omitted Duo dimensions.
-        let width = screenWidth ?? context?.logicalWidth ?? 390.0
-        let height = screenHeight ?? context?.logicalHeight ?? 844.0
+        let width = screenWidth ?? measured?.logicalWidth ?? 390.0
+        let height = screenHeight ?? measured?.logicalHeight ?? 844.0
         
         // Get gesture coordinates
         let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)

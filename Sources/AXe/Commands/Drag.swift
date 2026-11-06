@@ -119,8 +119,9 @@ struct Drag: AsyncParsableCommand {
         logger.info().log("Performing low-level drag from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(duration)s, steps: \(steps)")
 
+        // Duo and verified DTUHID devices use the broker's retained input connection.
         if let context = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger
+            simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         ) {
             let path = LegacyDuoPath(kind: .drag, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: duration, steps: steps)

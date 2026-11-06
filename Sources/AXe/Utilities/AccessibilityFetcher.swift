@@ -49,21 +49,71 @@ struct AccessibilityFetcher {
             dependencies: recoveryDependencies
         ) {
             if let point {
-                return try await fetchAccessibilityInfoJSONData(from: target, at: point)
+                // The Duo's default display query has no translation object; read on its measured panel.
+                let observation = try await measuredDuoObservation(for: target)
+                let element: @MainActor (Bool) async throws -> FBAccessibilityElement = { bootstrap in
+                    if let observation {
+                        return try await target.accessibilityElement(atLogicalPoint: point.cgPoint,
+                            observation: observation, bootstrap: bootstrap)
+                    }
+                    return try await target.accessibilityElement(at: point.cgPoint, bootstrap: bootstrap)
+                }
+                return try await readingDirectlyFirst(direct: {
+                    let handle = try await element(false)
+                    defer { handle.close() }
+                    return try serializedAccessibilityData(from: handle)
+                }, isUsable: { try !isTransientPointFallback(in: $0, at: point) },
+                    bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point) { try await element(true) } })
             }
-            return try await fetchFrontmostAccessibilityInfoJSONData(from: target)
+            return try await readingDirectlyFirst(direct: {
+                let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
+                defer { element.close() }
+                return try serializedAccessibilityData(from: element)
+            }, isUsable: containsAccessibilityDescendant,
+                bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target) })
         }
     }
 
+    /// Simulator runtimes 27 and later need a short-lived accessibility bootstrap (0.15-0.45 s)
+    /// only before the first read after boot. Read directly first; an empty tree, a transient
+    /// point fallback or a failed read falls back to the bootstrapped reads unchanged.
+    static func readingDirectlyFirst(
+        direct: @MainActor () async throws -> Data,
+        isUsable: (Data) throws -> Bool,
+        bootstrapped: @MainActor () async throws -> Data
+    ) async throws -> Data {
+        do {
+            let data = try await direct()
+            if (try? isUsable(data)) == true { return data }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Fall through: the bootstrapped read reports its own error.
+        }
+        try Task.checkCancellation()
+        return try await bootstrapped()
+    }
+
     private static func fetchAccessibilityInfoJSONData(
-        from target: FBSimulator,
-        at point: AccessibilityPoint
+        at point: AccessibilityPoint,
+        element: @MainActor () async throws -> FBAccessibilityElement
     ) async throws -> Data {
         try await retryingTransientPointFallback(at: point) {
-            let accessibilityElement = try await target.accessibilityElement(at: point.cgPoint)
+            let accessibilityElement = try await element()
             defer { accessibilityElement.close() }
             return try serializedAccessibilityData(from: accessibilityElement)
         }
+    }
+
+    /// Nil for rigid devices, whose default display query already resolves points.
+    private static func measuredDuoObservation(for target: FBSimulator) async throws -> FBSimulatorHIDSessionObservation? {
+        guard target.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
+            return nil
+        }
+        let discovery = try await ActivePanelReader.discoverWithMetadata(for: target)
+        let panel = discovery.readback.snapshot.activePanel.identity
+        return try await FBSimulatorNativeContextReader(simulator: target, screenID: panel.displayID,
+            screenUniqueID: panel.uniqueID).observation()
     }
 
     static func retryingTransientPointFallback(

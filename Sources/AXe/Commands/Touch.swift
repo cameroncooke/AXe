@@ -137,8 +137,11 @@ struct Touch: AsyncParsableCommand {
 
         logger.info().log("Performing touch events at (\(pointX), \(pointY))")
 
+        // A complete press uses the broker's retained connection on verified DTUHID devices too.
+        // A partial down or up keeps its route there, so a held contact keeps one owner.
         if let context = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger,
+            includeVerifiedRigid: touchDown && touchUp
         ) {
             let touch = LegacyDuoTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
             try await LegacyDuoInput.perform(touch: touch, context: context,

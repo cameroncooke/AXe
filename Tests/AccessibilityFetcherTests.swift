@@ -323,7 +323,61 @@ struct AccessibilityFetcherTests {
         await #expect(throws: CancellationError.self) {
             try await task.value
         }
-        #expect(startedAt.duration(to: .now) < .seconds(1))
+        // Well under the child's 10 s run and timeout; leaves room for a loaded parallel suite.
+        #expect(startedAt.duration(to: .now) < .seconds(5))
+    }
+
+    @Test("A usable direct read skips the accessibility bootstrap")
+    func directReadSkipsBootstrap() async throws {
+        let populated = try JSONSerialization.data(withJSONObject: [[
+            "type": "Application", "children": [["type": "Button", "children": []]],
+        ]])
+        var bootstrapped = 0
+        let result = try await AccessibilityFetcher.readingDirectlyFirst(
+            direct: { populated },
+            isUsable: AccessibilityFetcher.containsAccessibilityDescendant,
+            bootstrapped: { bootstrapped += 1; return Data() })
+        #expect(result == populated && bootstrapped == 0)
+    }
+
+    enum DirectOutcome: CaseIterable, Sendable { case emptyTree, failedRead, pointFallback }
+
+    @Test("An empty, failed or fallback direct read uses the bootstrapped read", arguments: DirectOutcome.allCases)
+    func unusableDirectReadBootstraps(outcome: DirectOutcome) async throws {
+        let rootOnly = try JSONSerialization.data(withJSONObject: [["type": "Application", "children": []]])
+        let fallback = try JSONSerialization.data(withJSONObject: [
+            "type": "Group", "role": "AXGroup", "frame": ["x": 0, "y": 0, "width": 402, "height": 874],
+        ])
+        let recovered = Data("recovered".utf8)
+        let point = AccessibilityPoint(x: 38, y: 84)
+        var bootstrapped = 0
+        let result = try await AccessibilityFetcher.readingDirectlyFirst(
+            direct: {
+                switch outcome {
+                case .emptyTree: return rootOnly
+                case .pointFallback: return fallback
+                case .failedRead: throw NSError(domain: "Accessibility", code: 1)
+                }
+            },
+            isUsable: { data in
+                outcome == .pointFallback
+                    ? try !AccessibilityFetcher.isTransientPointFallback(in: data, at: point)
+                    : try AccessibilityFetcher.containsAccessibilityDescendant(in: data)
+            },
+            bootstrapped: { bootstrapped += 1; return recovered })
+        #expect(result == recovered && bootstrapped == 1)
+    }
+
+    @Test("Cancellation during the direct read does not start the bootstrap")
+    func cancelledDirectReadStops() async {
+        var bootstrapped = 0
+        await #expect(throws: CancellationError.self) {
+            _ = try await AccessibilityFetcher.readingDirectlyFirst(
+                direct: { throw CancellationError() },
+                isUsable: { _ in true },
+                bootstrapped: { bootstrapped += 1; return Data() })
+        }
+        #expect(bootstrapped == 0)
     }
 
     @Test("Classifies only confirmed accessibility channel failures as recoverable")

@@ -399,10 +399,10 @@ index 0000000000000000000000000000000000000000..b4bb9ad812bb250150950cd7e52fa27e
 +  }
 +}
 diff --git a/FBSimulatorControl/Commands/FBAXPlatformElement.swift b/FBSimulatorControl/Commands/FBAXPlatformElement.swift
-index 8e23fa7eba760a938479b31e57d2436db9c5741a..d56ca0ea34d499fda13ae986cadc7b038ef47186 100644
+index 8e23fa7eb..cb0fb2b73 100644
 --- a/FBSimulatorControl/Commands/FBAXPlatformElement.swift
 +++ b/FBSimulatorControl/Commands/FBAXPlatformElement.swift
-@@ -49,6 +49,8 @@ protocol FBAXPlatformElement: AnyObject {
+@@ -49,8 +49,12 @@ protocol FBAXPlatformElement: AnyObject {
  
    /// The pid of the backing translation object (0 when absent).
    var axTranslationPid: pid_t { get }
@@ -410,8 +410,12 @@ index 8e23fa7eba760a938479b31e57d2436db9c5741a..d56ca0ea34d499fda13ae986cadc7b03
 +  func axNativeIdentityChildren() -> FBAXNativeIdentityChildren
    /// Sets the backing translation object's bridge-delegate token (no-op when absent).
    func axSetBridgeDelegateToken(_ token: String?)
++  /// One translator request for several attributes; nil when the adapter cannot batch.
++  func axBatchedAttributes(_ names: [String]) -> [String: Any]?
  }
-@@ -118,6 +120,104 @@ extension AXPMacPlatformElement: FBAXPlatformElement {
+ 
+ extension AXPMacPlatformElement: FBAXPlatformElement {
+@@ -118,6 +122,113 @@ extension AXPMacPlatformElement: FBAXPlatformElement {
  
    func axSetValue(_ value: Any?) { setAccessibilityValue(value) }
  
@@ -428,7 +432,16 @@ index 8e23fa7eba760a938479b31e57d2436db9c5741a..d56ca0ea34d499fda13ae986cadc7b03
 +
    var axTranslationPid: pid_t { translation?.pid ?? 0 }
    func axSetBridgeDelegateToken(_ token: String?) { translation?.bridgeDelegateToken = token }
- }
++
++  func axBatchedAttributes(_ names: [String]) -> [String: Any]? {
++    accessibilityMultipleAttributes(names.map { NSAccessibility.Attribute(rawValue: $0) }) as [String: Any]?
++  }
++}
++
++// Test doubles and other adapters keep the individual accessor reads.
++extension FBAXPlatformElement {
++  func axBatchedAttributes(_ names: [String]) -> [String: Any]? { nil }
++}
 +
 +// Diagnostic boundary only: the native AX API returns heterogeneous objects.
 +// Convert once on the owning AX worker; no platform object leaves this method.
@@ -515,7 +528,7 @@ index 8e23fa7eba760a938479b31e57d2436db9c5741a..d56ca0ea34d499fda13ae986cadc7b03
 +  func axNativeIdentityChildren() -> FBAXNativeIdentityChildren {
 +    .init(elements: axChildren(), reason: "unsupportedAdapter")
 +  }
-+}
+ }
 diff --git a/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift b/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift
 index 590e2e09616cdcf77999caf6fa58a99108ee364b..4ff035d00b1e3a711aa4fc2107bb31366eb52801 100644
 --- a/FBSimulatorControl/Commands/FBAXTranslationDispatcher.swift
@@ -4423,41 +4436,70 @@ index 0000000000000000000000000000000000000000..d3a139f363146b708d56f6f19130a982
 +  deinit { close() }
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c3703120e98528 100644
+index db911121c..737967897 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
 +++ b/FBSimulatorControl/Commands/FBSimulatorAccessibilityCommands.swift
-@@ -86,13 +86,29 @@
+@@ -85,17 +85,57 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
+   // MARK: AsyncAccessibilityOperations
  
    public func accessibilityElement(at point: CGPoint) async throws -> FBAccessibilityElement {
-     try validateAccessibility()
--    let request = FBAXTranslationRequest(kind: .point(point))
++    try await accessibilityElement(at: point, bootstrap: true)
++  }
++
++  /// `bootstrap: false` reads directly. Runtime 27 needs its short-lived bootstrap only before
++  /// the first read after boot; a caller retries with `bootstrap: true` after a failed read.
++  public func accessibilityElement(at point: CGPoint, bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try validateAccessibility(bootstrap: bootstrap)
 +    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: 0)
-     return try await accessibilityElement(request: request, remediationPermitted: false)
-   }
- 
++    return try await accessibilityElement(request: request, remediationPermitted: false)
++  }
++
++  /// A plain point read on a measured display. The logical point uses the observation's display
++  /// transform and AX display ID, as selected point reads do. The default display query has no
++  /// translation object on a Duo panel. The result is a description, not an input target.
++  public func accessibilityElement(atLogicalPoint point: CGPoint, observation: FBSimulatorHIDSessionObservation,
++                                   bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try validateAccessibility(bootstrap: bootstrap)
++    let native = try FBAXPointReadRules.nativePoint(point, observation: observation)
++    let request = FBAXTranslationRequest(kind: .point(native), pointDisplayID: observation.axDisplayID,
++      displayContext: observation.displayContext)
++    return try await accessibilityElement(request: request, remediationPermitted: false)
++  }
++
 +  /// Resolves a point in the selected display's unrotated logical coordinate space.
 +  /// Convert app coordinates using the measured display orientation before calling.
 +  /// The AX display ID is explicit; this does not select a frontmost application tree.
 +  public func accessibilityElement(atNativePoint point: CGPoint, displayID: UInt32) async throws -> FBAccessibilityElement {
-+    try validateAccessibility()
-+    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: displayID)
-+    return try await accessibilityElement(request: request, remediationPermitted: false)
-+  }
-+
-   public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
      try validateAccessibility()
-     let request = FBAXTranslationRequest(kind: .frontmostApplication)
-+    return try await accessibilityElement(request: request, remediationPermitted: true)
+-    let request = FBAXTranslationRequest(kind: .point(point))
++    let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: displayID)
+     return try await accessibilityElement(request: request, remediationPermitted: false)
+   }
+ 
+   public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
+-    try validateAccessibility()
++    try await accessibilityElementForFrontmostApplication(bootstrap: true)
 +  }
 +
++  /// `bootstrap: false` reads directly. A caller retries with `bootstrap: true` after an
++  /// empty tree, as selected and agent reads do.
++  public func accessibilityElementForFrontmostApplication(bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try validateAccessibility(bootstrap: bootstrap)
+     let request = FBAXTranslationRequest(kind: .frontmostApplication)
+     return try await accessibilityElement(request: request, remediationPermitted: true)
+   }
+ 
 +  /// Selected-display whole tree. Context supplies the remote hit-test transform.
 +  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
 +    try validateAccessibility(bootstrap: false)
 +    let request = FBAXTranslationRequest(kind: .frontmostApplication, pointDisplayID: displayID, displayContext: displayContext)
-     return try await accessibilityElement(request: request, remediationPermitted: true)
-   }
- 
-@@ -103,12 +119,45 @@
++    return try await accessibilityElement(request: request, remediationPermitted: true)
++  }
++
+   public func accessibilityElementMatching(value: String, forKey key: FBAXSearchableKey, depth: UInt) async throws -> FBAccessibilityElement {
+     try validateAccessibility()
+     let request = FBAXTranslationRequest(kind: .frontmostApplication)
+@@ -103,12 +143,45 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
      return try root.findElement(withValue: value, forKey: key, depth: depth)
    }
  
@@ -4504,7 +4546,7 @@ index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c37031
      guard let simulator else {
        throw FBAccessibilityError.simulatorDeallocated
      }
-@@ -120,7 +169,7 @@
+@@ -120,7 +193,7 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
        throw FBAccessibilityError.accessibilityUnavailable
      }
      try FBSimulatorControlFrameworkLoader.accessibilityFrameworks.loadPrivateFrameworks(simulator.logger)
@@ -4513,7 +4555,7 @@ index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c37031
        try FBSimulatorControlFrameworkLoader.bootstrapAccessibility(
          forSimulatorDevice: simulator.device,
          timeout: 5,
-@@ -136,29 +185,37 @@
+@@ -136,29 +209,37 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
    // dead pid), the original request's token is popped manually (it is not wrapped in a handle
    // yet at that point), CoreSimulatorBridge is restarted, and the lookup retries with a fresh
    // request. The retry passes remediationPermitted=false, bounding it to a single attempt.
@@ -4548,17 +4590,15 @@ index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c37031
 +    try Task.checkCancellation()
      try await Self.remediateSpringBoard(forSimulator: simulator)
 -    return try await accessibilityElement(request: nextRequest, remediationPermitted: false)
--  }
--
--  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement) async throws -> Bool {
 +    return try await accessibilityElement(request: nextRequest, remediationPermitted: false, isolation: isolation)
-+  }
-+
+   }
+ 
+-  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement) async throws -> Bool {
 +  private static func remediationRequired(forSimulator simulator: FBSimulator, element: FBAXPlatformElement, isolation: isolated (any Actor)? = #isolation) async throws -> Bool {
      // A quick check: a non-zero accessibility frame indicates a healthy element.
      if !element.axFrame().equalTo(.zero) {
        return false
-@@ -193,8 +250,17 @@
+@@ -193,10 +274,32 @@ extension FBSimulator: AsyncAccessibilityCommands {
      try await accessibilityCommands().accessibilityElement(at: point)
    }
  
@@ -4569,15 +4609,30 @@ index db911121c11531d60acd1546ea7009c087f60531..6971473f7cc6a737e084d17aa0c37031
 +
    public func accessibilityElementForFrontmostApplication() async throws -> FBAccessibilityElement {
      try await accessibilityCommands().accessibilityElementForFrontmostApplication()
+   }
+ 
++  public func accessibilityElement(at point: CGPoint, bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try await accessibilityCommands().accessibilityElement(at: point, bootstrap: bootstrap)
++  }
++
++  public func accessibilityElement(atLogicalPoint point: CGPoint, observation: FBSimulatorHIDSessionObservation,
++                                   bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try await accessibilityCommands().accessibilityElement(atLogicalPoint: point, observation: observation, bootstrap: bootstrap)
++  }
++
++  public func accessibilityElementForFrontmostApplication(bootstrap: Bool) async throws -> FBAccessibilityElement {
++    try await accessibilityCommands().accessibilityElementForFrontmostApplication(bootstrap: bootstrap)
 +  }
 +
 +  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
 +    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
-   }
- 
++  }
++
    public func accessibilityElementMatching(
+     value: String,
+     forKey key: FBAXSearchableKey,
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift b/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
-index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb543d102f87 100644
+index 04c57ec9e..59a4188ce 100644
 --- a/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
 +++ b/FBSimulatorControl/Commands/FBSimulatorAccessibilitySerializer.swift
 @@ -52,12 +52,13 @@ enum FBSimulatorAccessibilitySerializer {
@@ -4614,17 +4669,26 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
    }
  
    // The values here mirror the old SimulatorBridge implementation for downstream
-@@ -85,7 +87,8 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -84,13 +86,16 @@ enum FBSimulatorAccessibilitySerializer {
+     collector: FBAccessibilityProfilingCollector?,
      coverageGrid: FBAccessibilityCoverageGrid?,
      seenPids: SeenPIDs?,
-     discoveryMethod: String
+-    discoveryMethod: String
 -  ) -> [String: Any] {
++    discoveryMethod: String,
++    attributes: FBAXElementAttributes? = nil
 +  ) throws -> [String: Any] {
 +    try Task.checkCancellation()
      // The token must always be set so that the right callback is called.
      element.axSetBridgeDelegateToken(token)
  
-@@ -99,7 +102,8 @@ enum FBSimulatorAccessibilitySerializer {
+     let elementPid = element.axTranslationPid
+     seenPids?.insert(elementPid)
++    let source = attributes ?? FBAXElementAttributes(element, keys: keys, includeChildren: false)
+ 
+     collector?.incrementElementCount()
+ 
+@@ -99,7 +104,8 @@ enum FBSimulatorAccessibilitySerializer {
      // Includes a key (with JSON serialization) only when requested, incrementing
      // the profiling counter and reading the value lazily so attribute access is
      // tracked exactly as the ObjC macro did.
@@ -4634,63 +4698,70 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
        guard keys.contains(key) else {
          return
        }
-@@ -109,6 +113,7 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -109,7 +115,8 @@ enum FBSimulatorAccessibilitySerializer {
  
      // Frame is always computed since it is used by multiple keys and the coverage grid.
      collector?.incrementAttributeFetchCount(forKey: FBAXKeys.frame.rawValue)
+-    let frame = element.axFrame()
 +    try Task.checkCancellation()
-     let frame = element.axFrame()
++    let frame = source.frame()
  
      // Role is used by multiple keys and needs processing. Check Role first to
-@@ -117,12 +122,14 @@ enum FBSimulatorAccessibilitySerializer {
+     // assign rawRole, then Type can derive from it.
+@@ -117,13 +124,15 @@ enum FBSimulatorAccessibilitySerializer {
      var rawRole: String?
      if keys.contains(.role) {
        collector?.incrementAttributeFetchCount(forKey: FBAXKeys.role.rawValue)
+-      rawRole = element.axRole()
 +      try Task.checkCancellation()
-       rawRole = element.axRole()
++      rawRole = source.role()
        values[FBAXKeys.role.rawValue] = ensureJSONSerializable(rawRole)
      }
      if keys.contains(.type) {
        if rawRole == nil {
          collector?.incrementAttributeFetchCount(forKey: FBAXKeys.type.rawValue)
+-        rawRole = element.axRole()
 +        try Task.checkCancellation()
-         rawRole = element.axRole()
++        rawRole = source.role()
        }
        // accessibilityRole may be prefixed with "AX"; strip it to match the
-@@ -138,6 +145,7 @@ enum FBSimulatorAccessibilitySerializer {
+       // SimulatorBridge implementation.
+@@ -138,7 +147,8 @@ enum FBSimulatorAccessibilitySerializer {
      if let coverageGrid {
        if rawRole == nil {
          collector?.incrementAttributeFetchCount(forKey: nil)
+-        rawRole = element.axRole()
 +        try Task.checkCancellation()
-         rawRole = element.axRole()
++        rawRole = source.role()
        }
        let isApplication = rawRole == "AXApplication" || rawRole == "Application"
-@@ -147,12 +155,12 @@ enum FBSimulatorAccessibilitySerializer {
+       if !isApplication {
+@@ -147,12 +157,12 @@ enum FBSimulatorAccessibilitySerializer {
      }
  
      // Legacy values that mirror SimulatorBridge.
 -    include(.label, element.axLabel())
-+    try include(.label, element.axLabel())
++    try include(.label, source.label())
      if keys.contains(.frame) {
        values[FBAXKeys.frame.rawValue] = NSStringFromRect(frame)
      }
 -    include(.value, element.axValue())
 -    include(.uniqueID, element.axIdentifier())
-+    try include(.value, element.axValue())
-+    try include(.uniqueID, element.axIdentifier())
++    try include(.value, source.value())
++    try include(.uniqueID, source.identifier())
  
      // Synthetic values.
      if keys.contains(.type) {
-@@ -160,7 +168,7 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -160,7 +170,7 @@ enum FBSimulatorAccessibilitySerializer {
      }
  
      // New values.
 -    include(.title, element.axTitle())
-+    try include(.title, element.axTitle())
++    try include(.title, source.title())
      if keys.contains(.frameDict) {
        collector?.incrementAttributeFetchCount(forKey: FBAXKeys.frameDict.rawValue)
        values[FBAXKeys.frameDict.rawValue] = [
-@@ -170,23 +178,25 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -170,23 +180,25 @@ enum FBSimulatorAccessibilitySerializer {
          "height": frame.size.height,
        ]
      }
@@ -4701,34 +4772,35 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 -    include(.subrole, element.axSubrole())
 -    include(.contentRequired, element.axIsRequired())
 -    include(.pid, element.axTranslationPid)
-+    try include(.help, element.axHelp())
-+    try include(.enabled, element.axIsEnabled())
-+    try include(.customActions, element.axCustomActionNames())
-+    try include(.roleDescription, element.axRoleDescription())
-+    try include(.subrole, element.axSubrole())
-+    try include(.contentRequired, element.axIsRequired())
++    try include(.help, source.help())
++    try include(.enabled, source.isEnabled())
++    try include(.customActions, source.customActionNames())
++    try include(.roleDescription, source.roleDescription())
++    try include(.subrole, source.subrole())
++    try include(.contentRequired, source.isRequired())
 +    try include(.pid, element.axTranslationPid)
      if keys.contains(.traits) {
        collector?.incrementAttributeFetchCount(forKey: FBAXKeys.traits.rawValue)
+-      values[FBAXKeys.traits.rawValue] = element.axTraits() ?? NSNull()
 +      try Task.checkCancellation()
-       values[FBAXKeys.traits.rawValue] = element.axTraits() ?? NSNull()
++      values[FBAXKeys.traits.rawValue] = source.traits() ?? NSNull()
      }
 -    include(.expanded, element.axIsExpanded())
 -    include(.placeholder, element.axPlaceholderValue())
 -    include(.hidden, element.axIsHidden())
 -    include(.focused, element.axIsFocused())
 -    include(.isRemote, discoveryMethod)
-+    try include(.expanded, element.axIsExpanded())
-+    try include(.placeholder, element.axPlaceholderValue())
-+    try include(.hidden, element.axIsHidden())
-+    try include(.focused, element.axIsFocused())
++    try include(.expanded, source.isExpanded())
++    try include(.placeholder, source.placeholderValue())
++    try include(.hidden, source.isHidden())
++    try include(.focused, source.isFocused())
 +    try include(.isRemote, discoveryMethod)
  
 +    try Task.checkCancellation()
      return values
    }
  
-@@ -200,13 +210,17 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -200,13 +212,18 @@ enum FBSimulatorAccessibilitySerializer {
      collector: FBAccessibilityProfilingCollector?,
      coverageGrid: FBAccessibilityCoverageGrid?,
      seenPids: SeenPIDs?
@@ -4737,9 +4809,11 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 +    try Task.checkCancellation()
      var values: [[String: Any]] = []
 -    values.append(accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive))
-+    values.append(try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive))
+-    for child in element.axChildren() {
++    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
++    values.append(try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes))
 +    try Task.checkCancellation()
-     for child in element.axChildren() {
++    for child in attributes.children() {
 +      try Task.checkCancellation()
        child.axSetBridgeDelegateToken(token)
 -      values.append(contentsOf: flatRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids))
@@ -4749,7 +4823,7 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
      return values
    }
  
-@@ -217,14 +231,76 @@ enum FBSimulatorAccessibilitySerializer {
+@@ -217,14 +234,157 @@ enum FBSimulatorAccessibilitySerializer {
      collector: FBAccessibilityProfilingCollector?,
      coverageGrid: FBAccessibilityCoverageGrid?,
      seenPids: SeenPIDs?
@@ -4757,10 +4831,12 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 -    var values = accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive)
 +  ) throws -> [String: Any] {
 +    try Task.checkCancellation()
-+    var values = try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive)
++    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
++    var values = try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes)
      var childrenValues: [[String: Any]] = []
+-    for child in element.axChildren() {
 +    try Task.checkCancellation()
-     for child in element.axChildren() {
++    for child in attributes.children() {
 +      try Task.checkCancellation()
        child.axSetBridgeDelegateToken(token)
 -      childrenValues.append(nestedRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids))
@@ -4800,9 +4876,11 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 +  static func identityDictionary(_ element: FBAXPlatformElement, token: String,
 +    keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
 +    coverageGrid: FBAccessibilityCoverageGrid?, seenPids: SeenPIDs?,
-+    nativeIdentity: FBAXNativeIdentityCollector, depth: Int) throws -> [String: Any] {
++    nativeIdentity: FBAXNativeIdentityCollector, depth: Int,
++    attributes: FBAXElementAttributes? = nil) throws -> [String: Any] {
 +    var values = try accessibilityDictionary(forElement: element, token: token, keys: keys,
-+      collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: "recursive")
++      collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: "recursive",
++      attributes: attributes)
 +    if let identity = nativeIdentity.identity(of: element, depth: depth) {
 +      values["nativeIdentity"] = ["pid": identity.pid, "objectID": String(identity.objectID)]
 +    }
@@ -4815,10 +4893,12 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 +    nativeIdentity: FBAXNativeIdentityCollector, depth: Int) throws -> [[String: Any]] {
 +    try Task.checkCancellation()
 +    element.axSetBridgeDelegateToken(token)
++    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
 +    var values = try identityDictionary(element, token: token, keys: keys, collector: collector,
-+      coverageGrid: coverageGrid, seenPids: seenPids, nativeIdentity: nativeIdentity, depth: depth)
++      coverageGrid: coverageGrid, seenPids: seenPids, nativeIdentity: nativeIdentity, depth: depth,
++      attributes: attributes)
 +    var descendants: [[String: Any]] = []
-+    for child in nativeIdentity.children(of: element) {
++    for child in nativeIdentity.children(from: attributes.nativeIdentityChildren()) {
 +      try Task.checkCancellation()
 +      child.axSetBridgeDelegateToken(token)
 +      descendants += try identityDescription(child, token: token, nestedFormat: nestedFormat, keys: keys,
@@ -4827,6 +4907,82 @@ index 04c57ec9e34d72374633e489c1658be0dc0cc14c..d93250e51ab7add699f6605cb93ecb54
 +    }
 +    if nestedFormat { values["children"] = descendants; return [values] }
 +    return [values] + descendants
++  }
++}
++
++/// One translator request per element for the attributes a read needs, instead of one request
++/// per accessor. `accessibilityMultipleAttributes:` omits nil values, which read as absent here.
++/// A missing answer, a missing frame or children, or an unexpected value type falls back to the
++/// element's own accessor. Custom action names always use their own read: the batched value
++/// omitted a keyboard key's custom actions in comparison reads.
++struct FBAXElementAttributes {
++  let element: FBAXPlatformElement
++  private let batch: [String: Any]?
++
++  init(_ element: FBAXPlatformElement, keys: Set<FBAXKeys>, includeChildren: Bool) {
++    self.element = element
++    batch = element.axBatchedAttributes(Self.names(for: keys, includeChildren: includeChildren))
++  }
++
++  /// Frame and role are always read: frame for coverage, role for the type and coverage checks.
++  static func names(for keys: Set<FBAXKeys>, includeChildren: Bool) -> [String] {
++    let mapped: [(FBAXKeys, String)] = [(.label, "AXDescription"), (.value, "AXValue"), (.uniqueID, "AXIdentifier"),
++      (.title, "AXTitle"), (.help, "AXHelp"), (.enabled, "AXEnabled"), (.roleDescription, "AXRoleDescription"),
++      (.subrole, "AXSubrole"), (.contentRequired, "AXRequired"), (.traits, "AXTraits"), (.expanded, "AXExpanded"),
++      (.placeholder, "AXPlaceholderValue"), (.hidden, "AXHidden"), (.focused, "AXFocused")]
++    return ["AXFrame", "AXRole"] + mapped.filter { keys.contains($0.0) }.map(\.1)
++      + (includeChildren ? ["AXChildren"] : [])
++  }
++
++  private func string(_ name: String, _ read: () -> String?) -> String? {
++    guard let batch else { return read() }
++    guard let value = batch[name] else { return nil }
++    return (value as? String) ?? read()
++  }
++
++  private func flag(_ name: String, _ read: () -> Bool) -> Bool {
++    guard let batch else { return read() }
++    guard let value = batch[name] else { return false }
++    return (value as? NSNumber)?.boolValue ?? read()
++  }
++
++  func frame() -> NSRect { (batch?["AXFrame"] as? NSValue)?.rectValue ?? element.axFrame() }
++  func role() -> String? { string("AXRole") { element.axRole() } }
++  func label() -> String? { string("AXDescription") { element.axLabel() } }
++  func value() -> Any? {
++    guard let batch else { return element.axValue() }
++    return batch["AXValue"]
++  }
++  func identifier() -> String? { string("AXIdentifier") { element.axIdentifier() } }
++  func title() -> String? { string("AXTitle") { element.axTitle() } }
++  func help() -> String? { string("AXHelp") { element.axHelp() } }
++  func roleDescription() -> String? { string("AXRoleDescription") { element.axRoleDescription() } }
++  func subrole() -> String? { string("AXSubrole") { element.axSubrole() } }
++  func placeholderValue() -> String? { string("AXPlaceholderValue") { element.axPlaceholderValue() } }
++  func isEnabled() -> Bool { flag("AXEnabled") { element.axIsEnabled() } }
++  func isRequired() -> Bool { flag("AXRequired") { element.axIsRequired() } }
++  func isExpanded() -> Bool { flag("AXExpanded") { element.axIsExpanded() } }
++  func isHidden() -> Bool { flag("AXHidden") { element.axIsHidden() } }
++  func isFocused() -> Bool { flag("AXFocused") { element.axIsFocused() } }
++  func customActionNames() -> [String] { element.axCustomActionNames() }
++
++  func traits() -> [String]? {
++    guard let batch else { return element.axTraits() }
++    guard let value = batch["AXTraits"] else { return nil }
++    guard let number = value as? NSNumber else { return element.axTraits() }
++    return Array(AXExtractTraits(number.uint64Value))
++  }
++
++  func children() -> [FBAXPlatformElement] {
++    guard let raw = batch?["AXChildren"] as? [Any] else { return element.axChildren() }
++    return raw.compactMap { $0 as? FBAXPlatformElement }
++  }
++
++  /// The batched answer lists a leaf's children as an empty array, as the individual read does.
++  func nativeIdentityChildren() -> FBAXNativeIdentityChildren {
++    guard let raw = batch?["AXChildren"] as? [Any] else { return element.axNativeIdentityChildren() }
++    let elements = raw.compactMap { $0 as? FBAXPlatformElement }
++    return .init(elements: elements, reason: elements.count == raw.count ? nil : "unsupportedChildType")
 +  }
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorSlider.swift b/FBSimulatorControl/Commands/FBSimulatorSlider.swift
@@ -15311,10 +15467,10 @@ index 0000000000000000000000000000000000000000..f1c0590a134851e3fcf740cf01b75f24
 +}
 diff --git a/FBSimulatorControl/Commands/FBSimulatorAXNativeIdentity.swift b/FBSimulatorControl/Commands/FBSimulatorAXNativeIdentity.swift
 new file mode 100644
-index 0000000000000000000000000000000000000000..519f4204a59d4a641b6ff566303dea2c0474e81c
+index 000000000..051cdcb23
 --- /dev/null
 +++ b/FBSimulatorControl/Commands/FBSimulatorAXNativeIdentity.swift
-@@ -0,0 +1,109 @@
+@@ -0,0 +1,113 @@
 +import Foundation
 +
 +/// Candidate key inside one measured acquisition, never a persistent handle.
@@ -15386,7 +15542,11 @@ index 0000000000000000000000000000000000000000..519f4204a59d4a641b6ff566303dea2c
 +  }
 +
 +  func children(of element: FBAXPlatformElement) -> [FBAXPlatformElement] {
-+    let result = element.axNativeIdentityChildren()
++    children(from: element.axNativeIdentityChildren())
++  }
++
++  /// The same completeness rule for children already read with the element's attributes.
++  func children(from result: FBAXNativeIdentityChildren) -> [FBAXPlatformElement] {
 +    if let reason = result.reason { invalidate(reason) }
 +    return result.elements
 +  }
@@ -18279,5 +18439,184 @@ index 000000000..203201a7e
 +    xpc_array_append_value(value, xpc_double_create(a))
 +    xpc_array_append_value(value, xpc_double_create(b))
 +    return value
++  }
++}
+diff --git a/FBSimulatorControl/HID/FBSimulatorIndigoHIDClient.swift b/FBSimulatorControl/HID/FBSimulatorIndigoHIDClient.swift
+index 41f0616ba..4178d9219 100644
+--- a/FBSimulatorControl/HID/FBSimulatorIndigoHIDClient.swift
++++ b/FBSimulatorControl/HID/FBSimulatorIndigoHIDClient.swift
+@@ -105,6 +105,8 @@ final class FBSimulatorIndigoHIDClient: @unchecked Sendable {
+     }
+     guard let client else {
+       free(raw)
++      // A send after disconnect must still finish its caller's continuation.
++      completionQueue.async { completion(FBSimulatorHIDError.clientDisposed) }
+       return
+     }
+     unsafeBitCast(client, to: SimDeviceLegacyHIDClientMessaging.self)
+diff --git a/FBSimulatorHIDEventTransportTests/FBSimulatorAXBatchedAttributesTests.swift b/FBSimulatorHIDEventTransportTests/FBSimulatorAXBatchedAttributesTests.swift
+new file mode 100644
+index 000000000..8a6705b39
+--- /dev/null
++++ b/FBSimulatorHIDEventTransportTests/FBSimulatorAXBatchedAttributesTests.swift
+@@ -0,0 +1,160 @@
++import AppKit
++import FBControlCore
++import Foundation
++import Testing
++@testable import FBSimulatorControl
++
++@Suite("Batched accessibility attribute reads")
++struct FBSimulatorAXBatchedAttributesTests {
++  private static let keys: Set<FBAXKeys> = [.label, .frame, .value, .uniqueID, .type, .title, .frameDict, .help,
++    .enabled, .customActions, .role, .roleDescription, .subrole, .contentRequired, .pid, .traits, .expanded,
++    .placeholder, .hidden, .focused]
++
++  @Test(arguments: [true, false])
++  func batchedOutputMatchesIndividualReads(nested: Bool) throws {
++    let individual = try serialize(tree(batched: false), nested: nested)
++    let root = tree(batched: true)
++    let batched = try serialize(root, nested: nested)
++    #expect(batched == individual)
++    // Only custom action names keep their own read; children arrive with the attributes.
++    for element in [root] + root.descendants {
++      #expect(element.individualReads.keys.sorted() == ["customActions"])
++    }
++  }
++
++  @Test func identityWalkUsesBatchedChildrenAndKeepsCompleteness() throws {
++    let root = tree(batched: true)
++    let collector = FBAXNativeIdentityCollector()
++    let batched = try serialize(root, identities: collector)
++    #expect(collector.metadata == .init(complete: true))
++    let individualCollector = FBAXNativeIdentityCollector()
++    #expect(batched == (try serialize(tree(batched: false), identities: individualCollector)))
++    #expect(individualCollector.metadata == .init(complete: true))
++    for element in [root] + root.descendants { #expect(element.individualReads["nativeChildren"] == nil) }
++  }
++
++  @Test func unsupportedBatchedChildMarksIdentityIncomplete() throws {
++    let root = tree(batched: true)
++    root.extraBatchedChild = NSObject()
++    let collector = FBAXNativeIdentityCollector()
++    _ = try serialize(root, identities: collector)
++    #expect(collector.metadata == .init(complete: false, reason: "unsupportedChildType"))
++  }
++
++  enum Gap: CaseIterable, Sendable { case frame, children, labelType, flagType, traitsType }
++
++  @Test("A missing or unexpected batched value falls back to the accessor", arguments: Gap.allCases)
++  func gapsFallBackToAccessors(gap: Gap) throws {
++    let individual = try serialize(tree(batched: false))
++    let root = tree(batched: true)
++    root.gap = gap
++    #expect(try serialize(root) == individual)
++    let expected: String
++    switch gap {
++    case .frame: expected = "frame"
++    case .children: expected = "children"
++    case .labelType: expected = "label"
++    case .flagType: expected = "enabled"
++    case .traitsType: expected = "traits"
++    }
++    #expect(root.individualReads[expected] != nil)
++  }
++
++  private func tree(batched: Bool) -> BatchElement {
++    let field = BatchElement(batched: batched, objectID: 3, role: "AXTextField", label: "Name", value: "Ada",
++      identifier: "name", focused: true, traits: 0)
++    let button = BatchElement(batched: batched, objectID: 2, role: "AXButton", label: "Save", identifier: "save",
++      customActions: ["Delete"], traits: 1)
++    return BatchElement(batched: batched, objectID: 1, role: "AXApplication", label: "App", children: [button, field])
++  }
++
++  private func serialize(_ root: BatchElement, nested: Bool = true,
++    identities: FBAXNativeIdentityCollector? = nil) throws -> FBSimulatorAXValue {
++    let values: [[String: Any]]
++    if let identities {
++      values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: root, token: "read",
++        nestedFormat: nested, keys: Self.keys, collector: nil, coverageGrid: nil, seenPids: nil,
++        nativeIdentity: identities)
++    } else {
++      values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: root, token: "read",
++        nestedFormat: nested, keys: Self.keys, collector: nil, coverageGrid: nil, seenPids: nil)
++    }
++    return try JSONDecoder().decode(FBSimulatorAXValue.self, from: JSONSerialization.data(withJSONObject: values))
++  }
++
++  /// Answers batched requests the way `accessibilityMultipleAttributes:` does: nil values are omitted.
++  private final class BatchElement: FBAXPlatformElement {
++    let batched: Bool
++    let objectID: UInt64
++    let role: String
++    let label: String?
++    let value: Any?
++    let identifier: String?
++    let focused: Bool
++    let customActions: [String]
++    let traits: UInt64
++    let children: [BatchElement]
++    var gap: Gap?
++    var extraBatchedChild: AnyObject?
++    var individualReads: [String: Int] = [:]
++
++    init(batched: Bool, objectID: UInt64, role: String, label: String?, value: Any? = nil,
++      identifier: String? = nil, focused: Bool = false, customActions: [String] = [], traits: UInt64 = 0,
++      children: [BatchElement] = []) {
++      self.batched = batched; self.objectID = objectID; self.role = role; self.label = label; self.value = value
++      self.identifier = identifier; self.focused = focused; self.customActions = customActions; self.traits = traits
++      self.children = children
++    }
++
++    var descendants: [BatchElement] { children.flatMap { [$0] + $0.descendants } }
++    private var frame: NSRect { NSRect(x: 10, y: Double(objectID) * 40, width: 100, height: 30) }
++    private func read(_ name: String) { individualReads[name, default: 0] += 1 }
++
++    func axBatchedAttributes(_ names: [String]) -> [String: Any]? {
++      guard batched else { return nil }
++      var all: [String: Any] = ["AXFrame": NSValue(rect: frame), "AXRole": role, "AXEnabled": NSNumber(value: true),
++        "AXRoleDescription": role.lowercased(), "AXTraits": NSNumber(value: traits),
++        "AXChildren": children + (extraBatchedChild.map { [$0] } ?? [])]
++      if let label { all["AXDescription"] = label }
++      if let value { all["AXValue"] = value }
++      if let identifier { all["AXIdentifier"] = identifier }
++      if focused { all["AXFocused"] = NSNumber(value: true) }
++      switch gap {
++      case .frame: all["AXFrame"] = nil
++      case .children: all["AXChildren"] = nil
++      case .labelType: all["AXDescription"] = NSNumber(value: 7)
++      case .flagType: all["AXEnabled"] = "yes"
++      case .traitsType: all["AXTraits"] = "button"
++      case nil: break
++      }
++      return all.filter { names.contains($0.key) }
++    }
++
++    func axFrame() -> NSRect { read("frame"); return frame }
++    func axRole() -> String? { read("role"); return role }
++    func axLabel() -> String? { read("label"); return label }
++    func axValue() -> Any? { read("value"); return value }
++    func axIdentifier() -> String? { read("identifier"); return identifier }
++    func axTitle() -> String? { read("title"); return nil }
++    func axHelp() -> String? { read("help"); return nil }
++    func axRoleDescription() -> String? { read("roleDescription"); return role.lowercased() }
++    func axSubrole() -> String? { read("subrole"); return nil }
++    func axPlaceholderValue() -> String? { read("placeholder"); return nil }
++    func axIsEnabled() -> Bool { read("enabled"); return true }
++    func axIsRequired() -> Bool { read("required"); return false }
++    func axIsExpanded() -> Bool { read("expanded"); return false }
++    func axIsHidden() -> Bool { read("hidden"); return false }
++    func axIsFocused() -> Bool { read("focused"); return focused }
++    func axCustomActionNames() -> [String] { read("customActions"); return customActions }
++    func axActionNames() -> [String] { [] }
++    func axTraits() -> [String]? { read("traits"); return Array(AXExtractTraits(traits)) }
++    func axChildren() -> [FBAXPlatformElement] { read("children"); return children }
++    func axNativeIdentity() -> FBSimulatorAXNativeIdentity? { .init(pid: 42, objectID: objectID) }
++    func axNativeIdentityChildren() -> FBAXNativeIdentityChildren { read("nativeChildren"); return .init(elements: children, reason: nil) }
++    func axPerformPress() -> Bool { false }
++    func axScroll(_ direction: FBAccessibilityScrollDirection) {}
++    func axSetValue(_ value: Any?) {}
++    var axTranslationPid: pid_t { 42 }
++    func axSetBridgeDelegateToken(_ token: String?) {}
 +  }
 +}
