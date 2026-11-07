@@ -65,7 +65,7 @@ struct PlaygroundCoreTests {
                 "--screen-height", String(applicationFrame.height), "--duration", "0.5",
                 "--post-delay", "0.4",
             ])
-            let state = try await app.state()
+            let state = try await app.waitForRest("the list to stop scrolling") { app.rowFrames(in: $0) }
             let rows = app.visibleRows(in: state, listFrame: listFrame)
             if let row = rows.filter({ $0 > initialLastRow }).min() {
                 revealedRow = row
@@ -238,6 +238,38 @@ struct CorePlaygroundSession {
 
     func waitForValue(_ identifier: String, equals expected: String) async throws {
         _ = try await waitFor("\(identifier)=\(expected)") { value(identifier, in: $0) == expected }
+    }
+
+    /// Reads until two consecutive reads, 300 ms apart, give the same signature. A scroll view can
+    /// decelerate for seconds after a gesture, and a tap on a moving list stops it instead of
+    /// selecting a row, so no fixed pause is enough.
+    func waitForRest<Signature: Equatable>(_ description: String,
+                                           signature: (UIElement) -> Signature) async throws -> UIElement {
+        let deadline = Date().addingTimeInterval(10)
+        var previous: Signature?
+        var lastObserved = "No app state was read."
+        repeat {
+            do {
+                let current = try await state()
+                let value = signature(current)
+                if let previous, previous == value { return current }
+                previous = value
+                lastObserved = String(describing: value)
+            } catch {
+                previous = nil
+                lastObserved = String(describing: error)
+            }
+            try await Task.sleep(nanoseconds: 300_000_000)
+        } while Date() < deadline
+        throw TestError.unexpectedState("Timed out waiting for \(description).\n\(lastObserved)")
+    }
+
+    func rowFrames(in state: UIElement) -> [String] {
+        elements(in: state).compactMap { element in
+            guard let identifier = element.identifier, identifier.hasPrefix("long-scroll-test-row-"),
+                  let frame = element.frame else { return nil }
+            return "\(identifier)@\(frame.y)"
+        }
     }
 
     func element(_ identifier: String, in state: UIElement) throws -> UIElement {
