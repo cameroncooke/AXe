@@ -14,7 +14,8 @@ struct SliderValueNativeReadTiming: Codable, Sendable {
     let lastStage: String
 }
 
-/// At most four measured paths. Strict feedback can end input; full admission precedes correction.
+/// At most `SliderValuePathPlan.maximumPaths` measured paths. Strict feedback can end input; full
+/// admission precedes correction.
 struct SliderValueFeedbackPath: Codable, Sendable {
     let iteration: Int
     let moves: Int
@@ -66,6 +67,7 @@ final class SliderValueReadDiagnostics: FBSimulatorSliderAdmissionGuard, @unchec
     private var lastStage = "unlabelled"
     private var recentReads: [SliderValueNativeReadTiming] = []
     private var feedbackPaths: [SliderValueFeedbackPath] = []
+    private var applicationFrame: CGRect?
 
     init(admissionGuard: (any FBSimulatorSliderAdmissionGuard)?) {
         self.admissionGuard = admissionGuard
@@ -112,7 +114,7 @@ final class SliderValueReadDiagnostics: FBSimulatorSliderAdmissionGuard, @unchec
         requestedValue: Double, direction: Double, nativeTrackSpan: Double,
         pickupHitWidth: Double, snapshotID: UUID) {
         lock.lock(); defer { lock.unlock() }
-        guard feedbackPaths.count < 4 else { return }
+        guard feedbackPaths.count < SliderValuePathPlan.maximumPaths else { return }
         feedbackPaths.append(SliderValueFeedbackPath(iteration: iteration, moves: moves,
             startX: Double(start.x), startY: Double(start.y),
             currentX: Double(current.x), currentY: Double(current.y),
@@ -158,7 +160,25 @@ final class SliderValueReadDiagnostics: FBSimulatorSliderAdmissionGuard, @unchec
         stage("screenValidation")
         try admissionGuard?.validateScreen(roots, observation: observation,
             allowingValueChange: allowingValueChange)
+        recordApplicationFrame(roots)
         stage("screenValidated")
+    }
+
+    /// The application frame from the latest admitted full read, or nil when that read had no
+    /// single finite Application root. Held slider travel uses it as a bound.
+    func admittedApplicationFrame() -> CGRect? {
+        lock.lock(); defer { lock.unlock() }
+        return applicationFrame
+    }
+
+    private func recordApplicationFrame(_ roots: [FBSimulatorAXNode]) {
+        let applications = roots.filter { $0.type == "Application" }
+        let frame = applications.count == 1 ? applications[0].frame : nil
+        let valid = frame.flatMap { frame -> CGRect? in
+            [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite)
+                && frame.width > 0 && frame.height > 0 ? frame : nil
+        }
+        lock.lock(); applicationFrame = valid; lock.unlock()
     }
 
     func validateTarget(_ capabilities: FBSimulatorSliderCapabilities, allowingValueChange: Bool) throws {

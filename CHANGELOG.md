@@ -292,6 +292,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed interior slider values that overshot or stopped short on iOS 27.2 because a held value was treated as settled before accessibility had refreshed it. A held value must now stay unchanged for 400 ms instead of 200 ms.
 
+- Fixed interior slider values within about 3% of the current value or of either end failing on iOS 27.2, where a slider value stays still for the first 10 points of a contact and the finger then leads it. The owned contact now steps one native pixel at a time until the value follows, measures that lead, and may pass the slider frame toward the target by at most that lead, inside the admitted application frame. Up to six feedback paths are used; input is not replayed.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.
