@@ -12,6 +12,7 @@ enum AgentModeNativeOperation {
         var feed: FBSimulatorHIDNativeFreshnessProvider?
         var session: FBSimulatorHIDSession?
         var pathGuard: AgentModePathAdmissionGuard?
+        var screenGuard: AgentModeFreshScreenGuard?
         var count = 0
         var cleanup = "notNeeded"
         do {
@@ -49,7 +50,9 @@ enum AgentModeNativeOperation {
                 pathGuard = guardValue
                 guardOwner = guardValue
             } else {
-                guardOwner = AgentModeFreshScreenGuard(simulator: simulator, feed: live, admission: admission)
+                let guardValue = AgentModeFreshScreenGuard(simulator: simulator, feed: live, admission: admission)
+                screenGuard = guardValue
+                guardOwner = guardValue
             }
             let hid = try await PhaseTimer.measure("native.hidOpen") { () async throws -> FBSimulatorHIDSession in
                 if let transportOwner {
@@ -85,10 +88,11 @@ enum AgentModeNativeOperation {
                 await ownedFeed?.closeAndWait()
                 return (count, cleanup)
             }.value
+            let guardFailure = pathGuard?.failure ?? screenGuard?.failure
             let message: String
             if released.1 == "uncertain" {
                 message = "Native input cleanup is uncertain. Do not repeat input."
-            } else if let failure = pathGuard?.failure ?? (error as? AgentModeFailure) {
+            } else if let failure = guardFailure ?? (error as? AgentModeFailure) {
                 message = failure.message
             } else if error is CancellationError {
                 message = "The agent input was cancelled. Refresh the snapshot before another action."
@@ -102,7 +106,7 @@ enum AgentModeNativeOperation {
                 token: nil, enqueuedEventCount: released.0, cleanup: released.1,
                 error: message, context: observation.map(SelectedHIDContext.init))
             // A policy rejection before input keeps its typed code for the agent reply.
-            if response.outcome == "failedBeforeInput", let policyFailure = pathGuard?.failure ?? (error as? AgentModeFailure) {
+            if response.outcome == "failedBeforeInput", let policyFailure = guardFailure ?? (error as? AgentModeFailure) {
                 response.agent = AgentModeResult(error: policyFailure,
                     cache: AgentModeCacheState(status: "invalidated", reason: policyFailure.code, requiresRefresh: true),
                     context: response.context)
@@ -117,25 +121,32 @@ private final class AgentModeFreshScreenGuard: FBSimulatorHIDInputAdmissionGuard
     private let simulator: FBSimulator
     private let feed: FBSimulatorHIDNativeFreshnessProvider
     private let admission: AgentModeAdmission
+    private(set) var failure: AgentModeFailure?
 
     init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, admission: AgentModeAdmission) {
         self.simulator = simulator; self.feed = feed; self.admission = admission
     }
 
     func validate(observation: FBSimulatorHIDSessionObservation, firstEvent: FBSimulatorHIDEvent) async throws {
-        try Task.checkCancellation()
-        try admission.validateContext(observation)
-        // Direct first read, as the snapshot's own description used. Runtime preparation runs
-        // only after a verified empty tree; an empty or failed result still sends no input.
-        let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 2)
-        let acquisition = try await PhaseTimer.measure("native.admissionRead") {
-            try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
-                observation: observation, freshnessProvider: feed, policy: policy)
+        do {
+            try Task.checkCancellation()
+            try admission.validateContext(observation)
+            // Direct first read, as the snapshot's own description used. Runtime preparation runs
+            // only after a verified empty tree; an empty or failed result still sends no input.
+            let policy = try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: 8, maximumAttempts: 2)
+            let acquisition = try await PhaseTimer.measure("native.admissionRead") {
+                try await FBSimulatorAXSnapshot.acquire(for: simulator, expectedPID: admission.expectedPID,
+                    observation: observation, freshnessProvider: feed, policy: policy)
+            }
+            guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
+                throw AgentModeFailure("admissionReadFailed", "The native screen could not be confirmed before input.")
+            }
+            try admission.validateScreen(snapshot.roots)
+            try feed.validateCurrentRevision(expected: observation)
+        } catch let known as AgentModeFailure {
+            // The HID session reports a guard rejection as text; keep the typed reason for the reply.
+            failure = known
+            throw known
         }
-        guard acquisition.outcome == .ready, let snapshot = acquisition.snapshot else {
-            throw AgentModeFailure("admissionReadFailed", "The native screen could not be confirmed before input.")
-        }
-        try admission.validateScreen(snapshot.roots)
-        try feed.validateCurrentRevision(expected: observation)
     }
 }
