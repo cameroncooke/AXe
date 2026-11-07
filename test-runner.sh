@@ -434,11 +434,25 @@ build_playground_app() {
             -scheme "$PLAYGROUND_SCHEME" \
             -destination "id=$SIMULATOR_UDID"
     else
-        xcodebuild build \
+        PLAYGROUND_BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/axe-e2e-playground-build.XXXXXX")"
+        if ! xcodebuild build \
             -project "$PLAYGROUND_PROJECT" \
             -scheme "$PLAYGROUND_SCHEME" \
             -destination "id=$SIMULATOR_UDID" \
-            -quiet > /dev/null 2>&1
+            -quiet > "$PLAYGROUND_BUILD_LOG" 2>&1; then
+            print_error "Failed to build the Playground app with Xcode $SELECTED_XCODE_VERSION. Build errors:"
+            if grep -q "error:" "$PLAYGROUND_BUILD_LOG"; then
+                grep "error:" "$PLAYGROUND_BUILD_LOG" | grep -v -E '^[[:space:]]*\|' | sort -u | head -20
+            else
+                tail -40 "$PLAYGROUND_BUILD_LOG"
+            fi
+            print_info "Full build output: $PLAYGROUND_BUILD_LOG"
+            if grep -q -E "UIHinge|reservedRegions" "$PLAYGROUND_BUILD_LOG"; then
+                print_info "The Playground's Duo hinge view needs the iOS 27.1 SDK or later (Xcode 27.1+); set DEVELOPER_DIR to that Xcode."
+            fi
+            exit 1
+        fi
+        rm "$PLAYGROUND_BUILD_LOG"
     fi
 
     # Find the built app path using TARGET_BUILD_DIR + FULL_PRODUCT_NAME (more semantically correct)
@@ -541,13 +555,15 @@ run_tests() {
         local expected_count
         local report_directory=""
         expected_count="$(playground_expected_count "$filter")"
+        # The filter is a regular expression, so a suite such as BatchTests also runs
+        # Playground suites whose names contain it. Every run gets an artifact directory.
+        mkdir -p build_products/test-runner-results || return 1
+        report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
+        export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
+        mkdir "$AXE_E2E_ARTIFACT_DIR" || return 1
         if [[ -n "$expected_count" ]]; then
-            mkdir -p build_products/test-runner-results || return 1
-            report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
             args+=(--xunit-output "$report_directory/results.xml"
                     --event-stream-output-path "$PWD/$report_directory/events.jsonl" --event-stream-version 0)
-            export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
-            mkdir "$AXE_E2E_ARTIFACT_DIR" || return 1
             print_info "Playground result directory: $report_directory"
         fi
         [[ "$VERBOSE" == true ]] && args+=(--verbose)
@@ -678,8 +694,9 @@ main() {
     boot_simulator
 
     if [[ "$TESTS_ONLY" != true ]]; then
-        generate_playground_project
+        # The framework step can recreate build_products, so the Playground project is generated after it.
         build_idb_xcframeworks
+        generate_playground_project
         clean_build
         build_axe
         ensure_test_framework_rpaths

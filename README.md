@@ -35,7 +35,7 @@ AXe keeps its own copy of the two IDB frameworks it uses, `FBControlCore` and `F
 
 ## E2E development
 
-`make build`, `make test` and `make e2e` rebuild the IDBKit XCFrameworks first when `Packages/IDBKit`, the selected Xcode or the requested architectures changed since their last build; otherwise they reuse them. `make e2e` then builds AXe and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`. XcodeGen is required to generate the IDBKit project. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`.
+`make build`, `make test` and `make e2e` rebuild the IDBKit XCFrameworks first when `Packages/IDBKit`, the selected Xcode or the requested architectures changed since their last build; otherwise they reuse them. `make e2e` then builds AXe and runs the simulator tests with the Xcode selected by `DEVELOPER_DIR` or `xcode-select`; the Playground app needs the iOS 27.1 SDK or later (Xcode 27.1+) for its Duo hinge view, and a failed Playground build prints its errors. XcodeGen is required to generate the IDBKit project. When Xcode 27 is selected, the runner starts Device Hub, chooses an available iOS 27 iPhone 17 Pro, and boots it with `simctl`; set `SIMULATOR_UDID` to use another simulator, for example when the selected runtime has no iPhone 17 Pro.
 
 For repeated local Playground checks, reuse the requested warm simulator. Do not create a fresh simulator for each check. A warm-session pass does not prove cold-start readiness.
 
