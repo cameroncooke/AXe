@@ -83,7 +83,12 @@ struct PlaygroundAgentBatchTests {
                 if partial {
                     try #require(batch.steps[0].status == "completed" && batch.steps[1].status == "rejectedBeforeInput")
                     try #require(batch.steps[1].error?.code == "batchTargetMissing")
-                    try #require(envelope.data.cache.requiresRefresh)
+                    // A batch stopped by a step that sent nothing returns the current screen.
+                    try #require(!envelope.data.cache.requiresRefresh)
+                    let capture = try #require(envelope.data.capture)
+                    try #require(capture.snapshotID != old.capture.snapshotID)
+                    try requireAgentCaptureValue(capture, identifier: "agent-examples.text", expected: "AB",
+                        action: "typeText", pid: session.pid, udid: session.app.udid)
                 } else {
                     try #require(batch.steps.allSatisfy { $0.status == "completed" && $0.receipt?.cleanup != "uncertain" })
                     try #require(batch.steps.compactMap { $0.receipt?.enqueuedEventCount } == [2, 8, 2])

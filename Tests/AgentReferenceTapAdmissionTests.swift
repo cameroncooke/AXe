@@ -151,6 +151,38 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.ownedTaps == 1)
     }
 
+    @Test("A batch stopped by a step that sent nothing returns the current screen, without resending input")
+    func stoppedBatchReturnsCurrentScreen() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var changed = harness.fixture.controls
+        changed.append(.init(type: "Button", label: "Overlay", frame: .init(y: 300)))
+        let changedRoots = try harness.fixture.roots(changed)
+        harness.state.afterTap = {
+            // Step one changes the layout; step two's owned read sees it before any input.
+            harness.state.ownedRoots = changedRoots
+            harness.state.describeRoots = changedRoots
+            harness.state.afterTap = nil
+        }
+        let response = await harness.controller.performBatch(try harness.batch(snapshot: snapshot, refs: [ref, ref]))
+        let result = try #require(response.agent)
+        #expect(result.didError && result.error?.code == "batchLayoutChanged")
+        let batch = try #require(result.data.batch)
+        #expect(batch.completedSteps == 1 && batch.stoppedAt == 2)
+        #expect(batch.steps.last?.receipt?.outcome == "failedBeforeInput" && batch.steps.last?.receipt?.enqueuedEventCount == 0)
+        let capture = try #require(result.data.capture)
+        #expect(capture.snapshotID != snapshot && capture.targets.contains { $0.contains("|tap|button|Overlay|") })
+        #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        // Two owned taps (one delivered, one refused) and one refresh read; nothing is tapped again.
+        #expect(harness.state.ownedTaps == 2)
+        #expect(harness.state.kinds == [.describe, .tap, .tap, .describe])
+        // The new table admits the agent's next action.
+        let next = try #require(capture.targets.first { $0.contains("|tap|button|Overlay|") })
+        let tap = await harness.controller.perform(harness.tap(snapshot: capture.snapshotID,
+            ref: String(next.prefix { $0 != "|" })))
+        #expect(tap.agent?.error?.code != "snapshotMissing")
+    }
+
     @Test("A failed replacement read discovers the panel once and repeats the failure when it is unchanged")
     func replacementFallbackSamePanel() async throws {
         let harness = try Harness()
@@ -194,6 +226,8 @@ struct AgentReferenceTapAdmissionTests {
             var describeRoots: [FBSimulatorAXNode] = []
             var describeContext: SelectedHIDContext
             var activePanel: ActivePanelIdentity
+            /// Runs after each owned tap that delivered input, to change the screen between steps.
+            var afterTap: (() throws -> Void)?
             init(context: SelectedHIDContext) {
                 describeContext = context
                 activePanel = ActivePanelIdentity(displayID: context.screenID, uniqueID: UUID(uuidString: context.screenUUID)!)
@@ -241,6 +275,7 @@ struct AgentReferenceTapAdmissionTests {
                         let target = try #require(state.ownedRoots.first?.children.first)
                         _ = try supplied.validateOwnedSnapshot(roots: state.ownedRoots, nativeIdentityMetadata: nil,
                             context: fixture.context, pid: 1234, nativeTarget: target)
+                        try state.afterTap?()
                         return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                             brokerID: broker, outcome: "enqueuedAndDrained", token: nil, enqueuedEventCount: 2,
                             cleanup: "notNeeded", error: nil, context: fixture.context)
@@ -272,6 +307,15 @@ struct AgentReferenceTapAdmissionTests {
             let capture = try #require(response.agent?.data.capture)
             let row = try #require(capture.targets.first { $0.contains("|tap|button|5|") })
             return (capture.snapshotID, String(row.prefix { $0 != "|" }))
+        }
+
+        func batch(snapshot: UUID, refs: [String]) throws -> SelectedHIDRequest {
+            var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+            let steps = refs.map { #"{"action":"tap","ref":"\#($0)"}"# }.joined(separator: ",")
+            request.agentBatch = try JSONDecoder().decode(AgentBatchRequest.self, from: Data(
+                #"{"snapshotID":"\#(snapshot.uuidString)","steps":[\#(steps)]}"#.utf8))
+            return request
         }
 
         func tap(snapshot: UUID, ref: String) -> SelectedHIDRequest {
