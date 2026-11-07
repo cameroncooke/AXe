@@ -205,15 +205,31 @@ struct Slider: AsyncParsableCommand {
         let resolvedIdentifier = initialMatch.element.AXUniqueId.flatMap { identifier in
             identifier.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : identifier
         }
-        if targetNormalized > 0, targetNormalized < 1,
-           let display = try await LegacyDuoInput.captureSliderDisplay(
-               simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger
-           ) {
+        let endpoint = SelectedAXRequest.endpoint(forPercentage: targetNormalized * 100)
+        // Numeric endpoints use the verified semantic endpoint route where the owned route is
+        // available, as selected and agent modes do. Elsewhere they keep the existing HID drag,
+        // so an endpoint never adds a refusal that the drag did not have.
+        let ownedDisplay: ActivePanelIdentity?
+        if endpoint != nil {
+            ownedDisplay = try? await LegacyDuoInput.captureSliderDisplay(
+                simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger)
+        } else if targetNormalized > 0, targetNormalized < 1 {
+            ownedDisplay = try await LegacyDuoInput.captureSliderDisplay(
+                simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger)
+        } else {
+            ownedDisplay = nil
+        }
+        if let display = ownedDisplay {
             guard let expectedPID = initialMatch.applicationPID, expectedPID > 0 else {
                 throw CLIError(errorDescription: "Slider requires one current frontmost application PID before input.")
             }
-            try await performOwnedSliderValue(display: display, targetNormalized: targetNormalized,
-                expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
+            if let endpoint {
+                try await performOwnedSliderEndpoint(endpoint, display: display, expectedPID: expectedPID,
+                    resolvedIdentifier: resolvedIdentifier, logger: logger)
+            } else {
+                try await performOwnedSliderValue(display: display, targetNormalized: targetNormalized,
+                    expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
+            }
         } else {
             let dragPlan = try makeDragPlan(
                 for: initialMatch.element,
@@ -240,6 +256,31 @@ struct Slider: AsyncParsableCommand {
             )
         }
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
+    }
+
+    private func performOwnedSliderEndpoint(
+        _ endpoint: FBSimulatorSliderEndpoint,
+        display: ActivePanelIdentity,
+        expectedPID: Int32,
+        resolvedIdentifier: String?,
+        logger: AxeLogger
+    ) async throws {
+        let selectorKind: SelectedAXRequest.SelectorKind = resolvedIdentifier != nil || elementID != nil ? .id : .label
+        let selectorValue = resolvedIdentifier ?? elementID ?? elementLabel
+        let ax = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: expectedPID, endpoint: endpoint,
+            selectorKind: selectorKind, selectorValue: selectorValue,
+            preDelay: 0, postDelay: 0, elementType: elementType)
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
+            primitives: [], ax: ax)
+        logger.info().log("Slider uses the native \(endpoint.rawValue) endpoint route on its measured active display")
+        let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
+        if CLIOutput.isFormatted { try CLIOutput.writeJSON(response) }
+        guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
+              let receipt = response.ax?.slider,
+              receipt.outcome == "endpointObserved" || receipt.outcome == "alreadyAtEndpoint" else {
+            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+        }
     }
 
     private func performOwnedSliderValue(

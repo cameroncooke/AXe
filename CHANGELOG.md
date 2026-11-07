@@ -296,6 +296,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed interior slider values failing before input with "Native and pickup target values differ" when the current value does not survive a JSON round trip exactly, such as 0.0009009009227156639. The pickup values now match within a few units in the last place.
 
+- Fixed `slider --value 0` and `--value 100` in the default mode taking about 9 s on Xcode 27.2 and leaving the next owned HID session unable to start. Where the owned slider route is available, numeric endpoints use the verified semantic endpoint route, as selected and agent modes already do; elsewhere the HID drag is unchanged.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.
