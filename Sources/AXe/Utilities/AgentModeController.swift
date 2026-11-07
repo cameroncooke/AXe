@@ -356,18 +356,21 @@ final class AgentModeController {
         }
     }
 
-    /// The same target on a new table: identity, type, label, value and frame unchanged.
+    /// The same target on a new table: identity, type, label, value and frame unchanged, and
+    /// still enabled and shown.
     private static func unchangedReference(_ ref: String, from original: AgentModeSnapshot,
                                            to fresh: AgentModeSnapshot) -> String? {
         guard let chosen = try? original.target(ref: ref), let old = try? original.match(target: chosen),
-              let new = try? fresh.match(target: chosen), (try? AgentModeTarget(old).validate(new)) != nil else { return nil }
+              let new = try? fresh.match(target: chosen), (try? AgentModeTarget(old).validate(new)) != nil,
+              new.enabled != false, new.hidden != true else { return nil }
         return try? fresh.reference(target: chosen)
     }
 
-    /// The refused target on the new table. An unchanged target binds at once. The
-    /// same control at a new position (same type, identifier, label, process and, when both reads
-    /// have one, native identity) binds once its frame holds still across two reads about 150 ms
-    /// apart, within four reads. Anything else does not bind.
+    /// The refused target on the new table. An unchanged target binds at once. The same control
+    /// at a new position (same type, identifier, label, value, process and, when both reads have
+    /// one, native identity) binds once its frame holds still across two reads about 150 ms apart,
+    /// within four reads. A changed value is a changed state, not a moved control. Anything else
+    /// does not bind.
     private func reboundReference(_ ref: String, original: AgentModeSnapshot, stored: inout Record) async -> String? {
         if let same = Self.unchangedReference(ref, from: original, to: stored.snapshot) { return same }
         guard let chosen = try? original.target(ref: ref), let old = try? original.match(target: chosen) else { return nil }
@@ -386,6 +389,7 @@ final class AgentModeController {
 
     private static func sameControl(_ old: FBSimulatorAXNode, _ new: FBSimulatorAXNode) -> Bool {
         old.type == new.type && old.identifier == new.identifier && old.label == new.label && old.pid == new.pid
+            && old.value == new.value
             && (old.nativeIdentity == nil || new.nativeIdentity == nil || old.nativeIdentity == new.nativeIdentity)
             && new.enabled != false && new.hidden != true
     }
@@ -638,20 +642,47 @@ final class AgentModeController {
     private func performBatchRetrying(_ request: SelectedHIDRequest, retryDepth: Int = 0) async -> SelectedHIDResponse {
         let original = record.flatMap { $0.id == request.agentBatch?.snapshotID ? $0 : nil }
         let response = await performBatchReserved(request, retryDepth: retryDepth)
-        guard retryDepth < Self.maximumRetries, let original, let batch = request.agentBatch, batch.usesReferences,
-              let error = response.agent?.error, response.enqueuedEventCount == 0, response.quarantine == nil,
-              response.agent?.data.batch?.completedSteps == 0,
-              ["screenChanged", "targetChanged", "batchLayoutChanged"].contains(error.code),
-              let stored = await refreshTable(context: original.context, pid: original.expectedPID) else { return response }
-        var steps: [AgentBatchStep] = []
-        for step in batch.steps {
-            guard let ref = step.ref, let newRef = Self.unchangedReference(ref, from: original.snapshot, to: stored.snapshot),
-                  let moved = try? step.replacingReference(newRef) else { return response }
-            steps.append(moved)
+        guard let error = response.agent?.error, let batch = request.agentBatch, response.quarantine == nil,
+              Self.batchStoppedBeforeInput(response) else { return response }
+        if retryDepth < Self.maximumRetries, let original, batch.usesReferences, response.enqueuedEventCount == 0,
+           response.agent?.data.batch?.completedSteps == 0,
+           ["screenChanged", "targetChanged", "batchLayoutChanged"].contains(error.code),
+           let stored = await refreshTable(context: original.context, pid: original.expectedPID) {
+            var steps: [AgentBatchStep] = []
+            for step in batch.steps {
+                guard let ref = step.ref, let newRef = Self.unchangedReference(ref, from: original.snapshot, to: stored.snapshot),
+                      let moved = try? step.replacingReference(newRef) else { steps = []; break }
+                steps.append(moved)
+            }
+            if !steps.isEmpty {
+                var retry = request
+                retry.agentBatch = AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps)
+                return await performBatchRetrying(retry, retryDepth: retryDepth + 1)
+            }
         }
-        var retry = request
-        retry.agentBatch = AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps)
-        return await performBatchRetrying(retry, retryDepth: retryDepth + 1)
+        // The stopping step sent nothing. Return the current screen with the stopped batch, so the
+        // agent decides its remaining steps from a fresh table instead of reading one first.
+        guard let stored = await refreshTable(context: original?.context ?? response.context,
+                                              pid: original?.expectedPID ?? batch.expectedPID) else { return response }
+        let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence, udid: simulatorUDID,
+            request: AgentModeRequest(kind: .describe), applicationPID: stored.expectedPID, context: stored.context,
+            unchanged: false, expiresIn: Self.timeToLive)
+        var withScreen = response
+        withScreen.agent = AgentModeResult(error: error, capture: capture, batch: response.agent?.data.batch,
+            cache: AgentModeCacheState(status: "refreshed", reason: error.code, requiresRefresh: false),
+            context: stored.context, quarantine: nil, observation: response.agent?.data.observation,
+            nextSteps: ["Inspect each step receipt. Completed steps were not undone; the stopping step sent no input.",
+                        "The capture is the current screen; choose the remaining steps from its snapshot ID. Do not resubmit the batch."])
+        return withScreen
+    }
+
+    /// The step that stopped the batch was refused before any of its input was sent.
+    private static func batchStoppedBeforeInput(_ response: SelectedHIDResponse) -> Bool {
+        guard let steps = response.agent?.data.batch?.steps, let stopping = steps.last(where: { $0.status != "completed" }) else {
+            return false
+        }
+        guard let receipt = stopping.receipt else { return stopping.status == "rejectedBeforeInput" }
+        return receipt.enqueuedEventCount == 0 && receipt.outcome == "failedBeforeInput" && receipt.cleanup != "uncertain"
     }
 
     private func performBatchReserved(_ request: SelectedHIDRequest, retryDepth: Int = 0) async -> SelectedHIDResponse {

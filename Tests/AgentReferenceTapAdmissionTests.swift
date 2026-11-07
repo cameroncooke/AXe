@@ -134,6 +134,23 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.kinds == [.describe, .tap, .describe])
     }
 
+    @Test("A target that moved and changed its value is not retried")
+    func movedTargetWithChangedValueReturnsNewTable() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var changed = harness.fixture.controls
+        changed[0].frame.x += 40
+        changed[0].value = "1"
+        harness.state.ownedRoots = try harness.fixture.roots(changed)
+        harness.state.describeRoots = harness.state.ownedRoots
+        let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
+        let result = try #require(response.agent)
+        #expect(result.didError && result.error?.code == "screenChanged")
+        #expect(result.data.capture != nil && result.data.cache.status == "refreshed")
+        // One refused owned tap and one refresh read; the moved control is not tapped again.
+        #expect(harness.state.ownedTaps == 1)
+    }
+
     @Test("A failed replacement read discovers the panel once and repeats the failure when it is unchanged")
     func replacementFallbackSamePanel() async throws {
         let harness = try Harness()
