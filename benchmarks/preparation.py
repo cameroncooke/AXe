@@ -52,7 +52,8 @@ class ContactPreparation:
         folder = self.args.out / f'{len(self.calls):03d}-{phase}'
         folder.mkdir(parents=True)
         command = [str(self.args.axe), *argv, '--udid', self.args.udid]
-        record = {'argv': command, 'phase': phase, 'inputAttempted': phase != 'read',
+        record = {'argv': command, 'phase': phase,
+                  'inputAttempted': phase not in ('read', 'screenshot'),
                   'stdout': str(folder / 'stdout'), 'stderr': str(folder / 'stderr')}
         started = time.monotonic()
         try:
@@ -69,7 +70,7 @@ class ContactPreparation:
             if isinstance(error, subprocess.TimeoutExpired):
                 (folder / 'stdout').write_bytes(error.stdout or b'')
                 (folder / 'stderr').write_bytes(error.stderr or b'')
-                record['inputOutcomeUnknown'] = phase != 'read'
+                record['inputOutcomeUnknown'] = record['inputAttempted']
             raise
         finally:
             record['elapsedSeconds'] = time.monotonic() - started
@@ -148,18 +149,78 @@ class ContactPreparation:
         require(bool(found) or not required, 'No visible button matches ' + label)
         return next(iter(found.values())) if found else None
 
-    def tap(self, node, phase):
+    def tap(self, node, phase, arrived=None):
         x, y = self.centre(node)
         self.call(['tap', '-x', str(x), '-y', str(y), '--tap-style', 'physical'], phase)
-        self.read()
+        self.await_arrival(arrived)
+
+    def display_held(self):
+        """True when two screenshots in a row show the same pixels."""
+        captures = []
+        for _ in range(2):
+            path = self.args.out / f'{len(self.calls):03d}-screenshot' / 'screen.png'
+            self.call(['screenshot', '--output', str(path)], 'screenshot')
+            captures.append(sha256(path))
+        return captures[0] == captures[1]
+
+    def await_arrival(self, arrived, seconds=10):
+        """Read until the screen a tap leads to has arrived, at most `seconds`.
+
+        A push or pop can still be in flight at the first read, and the tree shows a presented
+        sheet at its final frame while it is still animating in, when a tap is accepted and
+        ignored. So each read waits for the display to hold first. The tap is never repeated:
+        the caller's checks then judge the last screen read, arrived or not.
+        """
+        deadline = time.monotonic() + seconds
+        while True:
+            if not self.display_held():
+                remaining = deadline - time.monotonic()
+                if remaining > 0:
+                    time.sleep(min(0.25, remaining))
+                    continue
+            self.read()
+            try:
+                if arrived is None or arrived():
+                    return
+            except ValueError:
+                pass  # An ambiguous screen in flight is not yet the arrived one.
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            time.sleep(min(0.25, remaining))
+
+    def layout(self):
+        return [(n.get('type'), n.get('AXLabel'), n.get('frame')) for n in self.tree]
+
+    def layout_held(self, before):
+        """A check that passes once a read shows the same layout as the read before it."""
+        last = [before]
+
+        def held():
+            current = self.layout()
+            same, last[0] = current == last[0], current
+            return same
+        return held
 
     def list_rows(self):
         return [n['AXLabel'] for n in self.tree if n.get('type') == 'GenericElement'
                 and isinstance(n.get('AXLabel'), str) and n['AXLabel'] != '']
 
+    def static_texts(self):
+        return [n.get('AXLabel') for n in self.tree if n.get('type') == 'StaticText']
+
+    def card_arrived(self):
+        # The list leaves the tree only once the push ends; the email is shown only on the card.
+        return (self.profile['rowLabel'] not in self.list_rows()
+                and self.profile['fields']['email'] in self.static_texts())
+
+    def list_arrived(self):
+        return (self.profile['fields']['email'] not in self.static_texts()
+                and any(row in self.profile['baselineRows'] for row in self.list_rows()))
+
     def verify_card(self):
         fields = self.profile['fields']
-        texts = [n.get('AXLabel') for n in self.tree if n.get('type') == 'StaticText']
+        texts = self.static_texts()
         require(texts.count(fields['firstName'] + ' ' + fields['lastName']) == 1,
                 'The saved card name does not prove the approved first and last names.')
         require(sum(' '.join((s or '').split()) == fields['organization'] for s in texts) == 1,
@@ -180,7 +241,7 @@ class ContactPreparation:
             back = self.button('Back', required=False)
             require(back is not None, 'Expected contact list or owned saved card is not visible.')
             self.verify_card()
-            self.tap(back, 'return-to-contact-list')
+            self.tap(back, 'return-to-contact-list', self.list_arrived)
         if sorted(self.list_rows()) == sorted(baseline):
             self.checks.append('Approved contact absent; complete expected baseline rows observed.')
             return
@@ -190,29 +251,34 @@ class ContactPreparation:
         matches = [n for n in self.tree if n.get('type') == 'GenericElement'
                    and n.get('AXLabel') == self.profile['rowLabel']]
         require(len(matches) == 1, 'The owned whole-card row is not unique.')
-        self.tap(matches[0], 'open-owned-card')
+        self.tap(matches[0], 'open-owned-card', self.card_arrived)
         self.verify_card()
-        self.tap(self.button('Edit'), 'open-edit')
+        self.tap(self.button('Edit'), 'open-edit',
+                 lambda: any(n.get('type') == 'TextField' for n in self.tree))
         require(any(n.get('type') == 'TextField' for n in self.tree), 'Edit form not observed.')
         for count in range(self.profile['maximumScrolls'] + 1):
             target = self.button('Delete Contact', required=False)
             if target is not None:
                 break
             require(count < self.profile['maximumScrolls'], 'Delete Contact was not visible.')
-            before = [(n.get('type'), n.get('AXLabel'), n.get('frame')) for n in self.tree]
+            before = self.layout()
             # Normal scrolling uses current application dimensions, never saved coordinates.
             width, height = self.screen
             self.call(['gesture', 'scroll-up', '--screen-width', str(width),
                        '--screen-height', str(height), '--duration', '0.5',
                        '--post-delay', '1'], 'scroll-edit')
-            self.read()
-            require(before != [(n.get('type'), n.get('AXLabel'), n.get('frame'))
-                               for n in self.tree], 'Scroll produced no observed layout change.')
-        self.tap(target, 'open-delete-confirmation')
+            # A fling can still be moving or bouncing at the first read, and a tap into a
+            # moving scroll view only stops it. Judge and tap the layout once it holds.
+            self.await_arrival(self.layout_held(before))
+            require(before != self.layout(), 'Scroll produced no observed layout change.')
+        self.tap(target, 'open-delete-confirmation',
+                 lambda: self.button('Delete', required=False) is not None)
         require(any(n.get('AXLabel') == 'Delete Contact' for n in self.tree)
                 and self.button('Delete') is not None,
                 'Expected Delete Contact confirmation is absent.')
-        self.tap(self.button('Delete'), 'confirm-approved-delete')
+        self.tap(self.button('Delete'), 'confirm-approved-delete',
+                 lambda: self.list_arrived() and not any(
+                     self.profile['approvedRecord'] in (n.get('AXLabel') or '') for n in self.tree))
         require(sorted(self.list_rows()) == sorted(baseline),
                 'Final list differs from the expected baseline rows; no further action is allowed.')
         require(not any(self.profile['approvedRecord'] in (n.get('AXLabel') or '')

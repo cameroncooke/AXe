@@ -68,12 +68,16 @@ class PreparationTests(unittest.TestCase):
                                     env={'DEVELOPER_DIR': '/fixture/ConfiguredXcode/Contents/Developer'},
                                     expected_pid=321)
 
-    def run_contact(self, trees, timeout_input=False):
+    def run_contact(self, trees, timeout_input=False, frames=()):
         worker = ContactPreparation(self.args, CONTACT)
         pending = iter(trees)
+        pixels = iter(frames)
 
         def execute(argv, **kwargs):
             self.assertIs(kwargs['env'], self.args.env)
+            if argv[1] == 'screenshot':
+                Path(argv[argv.index('--output') + 1]).write_bytes(next(pixels, b'still'))
+                return subprocess.CompletedProcess(argv, 0, b'', b'')
             if argv[1] == 'describe-ui':
                 payload = json.dumps(next(pending)).encode()
             else:
@@ -125,7 +129,8 @@ class PreparationTests(unittest.TestCase):
                 self.run_contact([card(), changed])
         sleep.assert_not_called()
         calls = json.loads((self.args.out / 'calls.json').read_text())
-        self.assertEqual([call['phase'] for call in calls], ['read', 'return-to-contact-list', 'read'])
+        self.assertEqual([call['phase'] for call in calls if call['phase'] != 'screenshot'],
+                         ['read', 'return-to-contact-list', 'read'])
 
     def test_prepare_passes_configured_environment_to_public_cli(self):
         binary = self.args.out / 'fixture-axe'
@@ -147,6 +152,108 @@ class PreparationTests(unittest.TestCase):
         phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
         self.assertEqual(phases, ['return-to-contact-list', 'open-owned-card', 'open-edit',
                                   'open-delete-confirmation', 'confirm-approved-delete'])
+
+    def test_card_is_awaited_after_the_row_tap(self):
+        # The row tap's first read can catch the push: the list is still in the tree and
+        # only the row's name and organization are visible, not the card's phone or email.
+        pushing = contact_list(True)
+        pushing[0]['children'] += raw('Contacts', [
+            ('StaticText', 'MCP Contact Benchmark'), ('StaticText', 'XcodeBuildMCP Benchmark')])[0]['children']
+        edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
+        confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
+        with patch('preparation.time.sleep') as sleep:
+            worker = self.run_contact([contact_list(True), pushing, card(), edit, confirm, contact_list()])
+        self.assertEqual(sleep.call_count, 1)
+        phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
+        self.assertEqual(phases, ['open-owned-card', 'open-edit', 'open-delete-confirmation',
+                                  'confirm-approved-delete'])
+
+    def test_list_is_awaited_after_returning_from_the_restored_card(self):
+        # Back's first read can still show the card while it pops.
+        edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
+        confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
+        with patch('preparation.time.sleep') as sleep:
+            worker = self.run_contact([card(), card(), contact_list(True), card(), edit, confirm,
+                                       contact_list()])
+        self.assertEqual(sleep.call_count, 1)
+        phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
+        self.assertEqual(phases, ['return-to-contact-list', 'open-owned-card', 'open-edit',
+                                  'open-delete-confirmation', 'confirm-approved-delete'])
+
+    def test_presented_confirmation_is_tapped_only_once_the_display_holds(self):
+        # The tree shows a presented sheet at its final frame while it is still animating in,
+        # and a tap then is accepted and ignored. Only the pixels show the presentation.
+        edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
+        confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
+        frames = [b'still', b'still', b'still', b'still',  # the card, then the edit form
+                  b'rising', b'risen', b'risen', b'risen',  # the confirmation presents, then holds
+                  b'still', b'still']
+        with patch('preparation.time.sleep') as sleep:
+            worker = self.run_contact([contact_list(True), card(), edit, confirm, contact_list()],
+                                      frames=frames)
+        self.assertEqual(sleep.call_count, 1)
+        phases = [call['phase'] for call in worker.calls]
+        delete = phases.index('confirm-approved-delete')
+        self.assertEqual(phases[delete - 5:delete],
+                         ['screenshot', 'screenshot', 'screenshot', 'screenshot', 'read'])
+        self.assertFalse(any(call['inputAttempted'] for call in worker.calls
+                             if call['phase'] == 'screenshot'))
+
+    def test_scroll_is_awaited_until_the_layout_holds_before_the_delete_tap(self):
+        # A fling can still be bouncing at the first read; a tap then only stops the scroll.
+        def form(delete_y=None):
+            tree = raw('Contacts', [('TextField', 'First name')])
+            if delete_y is not None:
+                tree[0]['children'].append({'type': 'Button', 'AXLabel': 'Delete Contact', 'pid': 321,
+                                            'enabled': True, 'frame': {'x': 16, 'y': delete_y,
+                                                                       'width': 370, 'height': 51}})
+            return tree
+        confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
+        self.profile = dict(CONTACT, maximumScrolls=1)
+        worker = ContactPreparation(self.args, self.profile)
+        pending = iter([contact_list(True), card(), form(), form(776.7), form(772), form(772),
+                        confirm, contact_list()])
+
+        def execute(argv, **kwargs):
+            if argv[1] == 'screenshot':
+                Path(argv[argv.index('--output') + 1]).write_bytes(b'still')
+            payload = json.dumps(next(pending)).encode() if argv[1] == 'describe-ui' else b'OK'
+            return subprocess.CompletedProcess(argv, 0, payload, b'')
+
+        with patch('preparation.time.sleep') as sleep, \
+                patch('preparation.subprocess.run', side_effect=execute):
+            worker.run()
+        self.assertEqual(sleep.call_count, 2)
+        delete_tap = next(call['argv'] for call in worker.calls
+                          if call['phase'] == 'open-delete-confirmation')
+        self.assertEqual(float(delete_tap[delete_tap.index('-y') + 1]), 772 + 51 / 2)
+
+    def test_card_that_never_arrives_stops_without_repeating_the_tap(self):
+        worker = ContactPreparation(self.args, CONTACT)
+        clock = [0.0]
+        reads = [0]
+
+        def sleep(seconds):
+            clock[0] += seconds
+
+        def execute(argv, **kwargs):
+            if argv[1] == 'screenshot':
+                Path(argv[argv.index('--output') + 1]).write_bytes(b'still')
+            if argv[1] == 'describe-ui':
+                reads[0] += 1
+                tree = contact_list(True)
+                return subprocess.CompletedProcess(argv, 0, json.dumps(tree).encode(), b'')
+            return subprocess.CompletedProcess(argv, 0, b'OK', b'')
+
+        with patch('preparation.time.monotonic', side_effect=lambda: clock[0]), \
+                patch('preparation.time.sleep', side_effect=sleep), \
+                patch('preparation.subprocess.run', side_effect=execute):
+            with self.assertRaisesRegex(ValueError, 'card name'):
+                worker.run()
+        self.assertEqual([call['phase'] for call in worker.calls if call['inputAttempted']],
+                         ['open-owned-card'])
+        self.assertEqual(clock[0], 10)
+        self.assertEqual(reads[0], 42)
 
     def test_restored_card_with_wrong_fields_stops_before_input(self):
         wrong = card()
