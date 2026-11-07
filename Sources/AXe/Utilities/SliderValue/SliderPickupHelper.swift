@@ -171,12 +171,14 @@ final class SliderPickupHelper {
               minimum.y >= frame.minY, minimum.y < frame.maxY else {
             throw SliderValueFailure.rejected("Slider value input requires contained horizontal scrubber geometry")
         }
-        // A raw endpoint may equal maxX, which is outside CGRect's half-open bounds.
-        // Use a current pixel centre only as a search candidate. It never admits DOWN.
+        // A raw endpoint may equal maxX, which is outside CGRect's half-open bounds. Clamp to the
+        // first and last native pixels inside the frame: the owned path snaps every point to that
+        // pixel grid, so a half-pixel candidate next to maxX would round onto maxX itself.
+        // The candidate is only a search point. It never admits DOWN.
         let scale = CGFloat(observation.displayContext.scale)
         guard scale.isFinite, scale > 0 else { throw SliderValueFailure.rejected("Display pixel scale is invalid") }
-        let low = (ceil(frame.minX * scale - 0.5) + 0.5) / scale
-        let high = (ceil(frame.maxX * scale - 0.5) - 0.5) / scale
+        let low = ceil(frame.minX * scale) / scale
+        let high = (ceil(frame.maxX * scale) - 1) / scale
         guard scale.isFinite, scale > 0, low <= high else { throw SliderValueFailure.rejected("Slider has no contained pixel search point") }
         let candidate = CGPoint(x: min(max(raw.x, low), high), y: raw.y)
         guard frame.contains(candidate) else { throw SliderValueFailure.rejected("Scrubber search candidate is outside the Slider") }
