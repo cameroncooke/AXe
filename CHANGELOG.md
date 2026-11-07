@@ -288,6 +288,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed interior slider values that start at the maximum failing before input with the pickup outside the hit frame. The search point is clamped to the last native pixel inside the frame, which the owned path does not round onto the excluded right edge.
 
+- Fixed interior slider values moving past the target when the contact ends on iOS 27.2, which then failed released verification. After a full held admission, the owned contact moves one native pixel away and back, settles at the target again and then lifts. The receipt counts both moves; input is not replayed.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.

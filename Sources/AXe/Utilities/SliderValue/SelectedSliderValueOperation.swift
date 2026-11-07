@@ -31,6 +31,10 @@ enum SliderValuePathPlan {
     static let steps = 12
     static let pauseNanoseconds: UInt64 = 25_000_000
     static let minimumSettleSeconds = 0.200
+    /// Four feedback paths of `steps` MOVEs each position the contact.
+    static let positioningMoveLimit = 48
+    /// One MOVE to an adjacent pixel and one back before UP.
+    static let releaseMoves = 2
 
     static func canBegin(remainingSeconds: Double, releaseReserveSeconds: Double) -> Bool {
         let pacingSeconds = Double(steps - 1) * Double(pauseNanoseconds) / 1_000_000_000
@@ -304,6 +308,8 @@ final class SelectedSliderValueOperation {
                 proposedDistance: proposed, proposedNext: next)
         }
         guard reached else { throw SliderValueFailure.rejected("Slider target was not reached within four feedback paths") }
+        try await prepareRelease(token: token, frame: frame, initial: initial,
+            target: (requested, domain.tolerance), direction: direction)
         let up = try await hid.end(token)
         guard up.outcome == .endedAndDrained, !(await hid.status().hasRetainedContact) else {
             throw SliderValueFailure.rejected("Slider contact did not end and drain")
@@ -323,6 +329,49 @@ final class SelectedSliderValueOperation {
         }
         try check(deadline: verificationDeadline)
         return "reached"
+    }
+
+    /// A slider can carry the contact's last movement into its value on UP: on iOS 27.2 a contact
+    /// held still at the target after a fast final path moved on by about one frame of that
+    /// path's velocity. One planned MOVE to an adjacent native pixel and one back to the held
+    /// point make the last delivered motion a single pixel. The reached sample permits only UP,
+    /// so a full admission precedes these MOVEs, and the held value must settle within
+    /// tolerance again before UP. Released verification still decides the result.
+    private func prepareRelease(token: FBSimulatorHIDContactToken, frame: CGRect,
+        initial: FBSimulatorSliderCapabilities, target: (value: Double, tolerance: Double),
+        direction: Double) async throws {
+        guard let backend, let session else { throw SliderValueFailure.rejected("Slider feedback ownership is unavailable") }
+        let admitted = try await readNative(backend, phase: "releaseAdmission",
+            deadline: deadline - releaseReserveSeconds, physicalAdmission: initial)
+        try admitted.requireSameTarget(as: initial, includeValue: false)
+        guard abs(try admitted.requireValue() - target.value) <= target.tolerance else {
+            throw SliderValueFailure.rejected("Held Slider value changed before release; no replay")
+        }
+        let held = currentPoint
+        let pixel = CGFloat(1 / observation.displayContext.scale)
+        // Prefer the pixel the final path just crossed; it cannot clamp at an endpoint.
+        let candidates = try [held.x - CGFloat(direction) * pixel, held.x + CGFloat(direction) * pixel].map {
+            try canonicalPoint(CGPoint(x: $0, y: held.y))
+        }
+        guard let adjacent = candidates.first(where: { frame.contains($0) && $0 != held }) else {
+            throw SliderValueFailure.rejected("No adjacent Slider pixel can prepare the release")
+        }
+        for point in [adjacent, held] {
+            try check(deadline: deadline - releaseReserveSeconds)
+            guard moveCount < SliderValuePathPlan.positioningMoveLimit + SliderValuePathPlan.releaseMoves else {
+                throw SliderValueFailure.rejected("Slider release MOVE limit reached")
+            }
+            let receipt = try await session.move(token, to: point)
+            guard receipt.outcome == .moved, receipt.enqueuedEventCount == 1 else {
+                throw SliderValueFailure.rejected("Slider release MOVE failed; no second gesture or replay")
+            }
+            currentPoint = point; moveCount += 1
+            try await Task.sleep(nanoseconds: SliderValuePathPlan.pauseNanoseconds)
+        }
+        let settled = try await settledValue(initial: initial, released: false, deadline: deadline, target: target)
+        guard abs(try settled.requireValue() - target.value) <= target.tolerance else {
+            throw SliderValueFailure.rejected("Held Slider value left the target while preparing the release; no replay")
+        }
     }
 
     private func readNative(_ backend: FBSimulatorSliderBackend, phase: String, deadline: Double,
@@ -444,7 +493,8 @@ final class SelectedSliderValueOperation {
     }
 
     private func movePath(to destination: CGPoint, token: FBSimulatorHIDContactToken, frame: CGRect) async throws {
-        guard let session, moveCount + SliderValuePathPlan.steps <= 48, frame.contains(destination),
+        guard let session, moveCount + SliderValuePathPlan.steps <= SliderValuePathPlan.positioningMoveLimit,
+              frame.contains(destination),
               SliderValuePathPlan.canBegin(remainingSeconds: deadline - ProcessInfo.processInfo.systemUptime,
                   releaseReserveSeconds: releaseReserveSeconds) else {
             throw SliderValueFailure.rejected("Slider path limit, frame or release reserve reached")
@@ -455,7 +505,9 @@ final class SelectedSliderValueOperation {
             let fraction = Double(step) / Double(SliderValuePathPlan.steps)
             let point = try canonicalPoint(CGPoint(x: start.x + (destination.x - start.x) * CGFloat(fraction),
                 y: start.y + (destination.y - start.y) * CGFloat(fraction)))
-            guard frame.contains(point), moveCount < 48 else { throw SliderValueFailure.rejected("Slider path left the selected frame") }
+            guard frame.contains(point), moveCount < SliderValuePathPlan.positioningMoveLimit else {
+                throw SliderValueFailure.rejected("Slider path left the selected frame")
+            }
             let receipt = try await session.move(token, to: point)
             guard receipt.outcome == .moved, receipt.enqueuedEventCount == 1 else {
                 throw SliderValueFailure.rejected("Slider MOVE failed; no second gesture or replay")
