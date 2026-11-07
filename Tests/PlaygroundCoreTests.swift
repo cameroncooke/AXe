@@ -154,6 +154,9 @@ struct PlaygroundCoreTests {
         let app = try CorePlaygroundSession()
         let initial = try await app.open("slider-value-test", readyID: "slider-value-slider")
         #expect(try app.element("slider-exact-value-state", in: initial).value == "0.2500")
+        // Slider value input follows native feedback; it needs the app's accessibility settled.
+        try await TestHelpers.waitForSettledAccessibility(simulatorUDID: app.simulatorUDID,
+            description: "screen slider-value-test")
 
         for percent in [75, 40] {
             try await app.run([
@@ -176,6 +179,7 @@ struct PlaygroundCoreTests {
 
 struct CorePlaygroundSession {
     private let udid: String
+    var simulatorUDID: String { udid }
     private let axePath: String
 
     init() throws {

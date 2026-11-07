@@ -61,7 +61,7 @@ struct SliderTests {
         100.0
     ])
     func sliderCommandReachesObservableAXValueToleranceWithOneCommand(requestedPercent: Double) async throws {
-        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
+        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test", settled: true)
 
         _ = try await TestHelpers.runAxeCommand(
             "slider --id slider-value-slider --value \(formatCommandValue(requestedPercent)) --element-type Slider",
@@ -74,7 +74,7 @@ struct SliderTests {
 
     @Test("Slider command sets value by accessibility label")
     func sliderCommandSetsValueByAccessibilityLabel() async throws {
-        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
+        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test", settled: true)
 
         try await TestHelpers.runAxeCommand(
             "slider --label 'Slider Value Slider' --value 40 --element-type Slider",
@@ -87,7 +87,7 @@ struct SliderTests {
 
     @Test("Slider command reaches observable AXValue tolerance across sequential moves")
     func sliderCommandReachesObservableAXValueToleranceAcrossSequentialMoves() async throws {
-        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test")
+        try await TestHelpers.launchPlaygroundApp(to: "slider-value-test", settled: true)
 
         for requestedPercent in [0.0, 0.1, 1.50, 100.0, 78.25, 40.0, 75.0] {
             try await TestHelpers.runAxeCommand(
