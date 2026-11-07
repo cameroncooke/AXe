@@ -183,6 +183,19 @@ struct AgentBatchReferencePlanTests {
         }
     }
 
+    @Test("Inert, hidden and off-display additions do not stop later input")
+    func inertAdditionsKeepTheLayout() throws {
+        let plan = try plan(#"[{"action":"tap","ref":"e2"},{"action":"tap","ref":"e3"}]"#,
+            snapshot: snapshot(controls()))
+        var variants: [[Node]] = []
+        var changed = controls(); changed.append(Node(type: "Group", label: "", frame: .init(x: 8, y: 370, width: 300, height: 400))); variants.append(changed)
+        changed = controls(); changed.append(Node(type: "Button", label: "Hidden", frame: .init(x: 10, y: 300), hidden: true)); variants.append(changed)
+        changed = controls(); changed.append(Node(type: "Button", label: "Below", frame: .init(x: 10, y: 2000))); variants.append(changed)
+        for nodes in variants {
+            _ = try plan.resolve(index: 1, snapshot: snapshot(nodes), context: context(), pid: 1234)
+        }
+    }
+
     @Test("Text container labels remain identity evidence")
     func ordinaryTextExceptionIsNarrow() throws {
         var original = controls()
