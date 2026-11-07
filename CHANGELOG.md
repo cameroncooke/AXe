@@ -298,6 +298,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed `slider --value 0` and `--value 100` in the default mode taking about 9 s on Xcode 27.2 and leaving the next owned HID session unable to start. Where the owned slider route is available, numeric endpoints use the verified semantic endpoint route, as selected and agent modes already do; elsewhere the HID drag is unchanged.
 
+- Fixed owned input failing to start with "DTUHID initial guest barrier timed out" when it begins soon after an earlier owned session on Xcode 27.2. When the guest does not answer the initial barrier of a new connection, which carries no input, one fresh connection is opened after the context check. Requires rebuilt native frameworks.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.

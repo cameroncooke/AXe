@@ -125,10 +125,27 @@ public actor FBSimulatorHIDSession {
       }
       let reused = transport != nil
       if transport == nil {
-        let opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
-          displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
-        transport = opened
-        try await opened.prepareSelectedConnection()
+        // The initial guest barrier carries no input. On Xcode 27.2 a new connection opened soon
+        // after an earlier owned session can go unanswered for its whole timeout; the guest then
+        // answers a fresh connection. Try one, after the context check, before any input.
+        for attempt in 0..<2 {
+          let opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
+            displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
+          transport = opened
+          do {
+            try await opened.prepareSelectedConnection()
+            break
+          } catch is CancellationError {
+            throw CancellationError()
+          } catch where attempt == 0 && !Task.isCancelled {
+            opened.disconnect()
+            transport = nil
+            guard try await freshnessProvider.observation() == observation else {
+              throw FBSimulatorHIDSessionError.invalidObservation("Context changed before opening the connection")
+            }
+            FBControlCoreGlobalConfiguration.defaultLogger.log("Selected HID initial barrier failed; opening one fresh connection: \(error)")
+          }
+        }
       }
       try Task.checkCancellation()
       guard let transport else { throw FBSimulatorHIDSessionError.invalidObservation("Missing owned transport") }
