@@ -641,7 +641,7 @@ struct AgentModeSnapshot: Sendable {
     }
 
     /// Missing or invalid geometry is kept: it does not prove that a node is off-screen.
-    private static func affectsAdmission(_ node: FBSimulatorAXNode, hidden: Bool, display: CGRect) -> Bool {
+    static func affectsAdmission(_ node: FBSimulatorAXNode, hidden: Bool, display: CGRect) -> Bool {
         if hidden { return false }
         if let frame = node.frame, [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
            frame.width > 0, frame.height > 0, !frame.intersects(display) { return false }

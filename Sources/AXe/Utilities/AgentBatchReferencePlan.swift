@@ -41,7 +41,7 @@ struct AgentBatchReferencePlan: Sendable {
         _ = try AgentModePIDPolicy.verifiedPID(pid, expected: request.expectedPID)
         self.context = context
         expectedPID = pid
-        layout = try Self.layoutFingerprint(snapshot)
+        layout = try Self.layoutFingerprint(snapshot, display: Self.display(of: context))
         targets = try request.steps.map { step in
             guard let ref = step.ref else {
                 throw AgentModeFailure("mixedBatchTargets", "Reference batches cannot contain native ID steps.")
@@ -63,7 +63,7 @@ struct AgentBatchReferencePlan: Sendable {
             throw AgentModeFailure("invalidBatchStep", "The reference batch step is outside its validated plan.")
         }
         try validateContext(context, pid: pid)
-        guard try Self.layoutFingerprint(snapshot) == layout else {
+        guard try Self.layoutFingerprint(snapshot, display: Self.display(of: context)) == layout else {
             throw AgentModeFailure("batchLayoutChanged", "The app layout or control identity changed during the reference batch. Later steps were stopped.")
         }
         // Optional object metadata is not part of the shared semantic layout hash.
@@ -115,31 +115,40 @@ struct AgentBatchReferencePlan: Sendable {
         return request
     }
 
-    private static func layoutFingerprint(_ snapshot: AgentModeSnapshot) throws -> String {
+    private static func display(of context: SelectedHIDContext) -> CGRect {
+        CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)
+    }
+
+    /// Nodes that cannot affect a tap or typing (hidden, wholly off the display, or an empty inert
+    /// group) contribute only their descendants, as input admission already treats them, so a
+    /// transient decorative layer does not stop a batch.
+    private static func layoutFingerprint(_ snapshot: AgentModeSnapshot, display: CGRect) throws -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         var offset = 0
-        func collect(controlAncestor: Bool = false) throws -> String {
+        func collect(controlAncestor: Bool = false, parentHidden: Bool = false) throws -> [String] {
             guard snapshot.nodes.indices.contains(offset), snapshot.semanticElements.indices.contains(offset) else {
                 throw AgentModeFailure("invalidBatchLayout", "The native layout cannot be bound to its reference table.")
             }
             let index = offset
             let node = snapshot.nodes[index]
             offset += 1
+            let hidden = parentHidden || node.hidden == true
             let actions = snapshot.semanticElements[index].actions
             let semanticControl = actions.contains(.tap) || actions.contains(.typeText)
-            let children = try node.children.map { _ in
-                try collect(controlAncestor: controlAncestor || semanticControl)
+            let children = try node.children.flatMap { _ in
+                try collect(controlAncestor: controlAncestor || semanticControl, parentHidden: hidden)
             }.sorted()
+            guard AgentModeSnapshot.affectsAdmission(node, hidden: hidden, display: display) else { return children }
             let ordinaryText = !controlAncestor && node.type == "StaticText" && node.children.isEmpty &&
                 snapshot.semanticElements[index].actions.allSatisfy {
                     $0 != .tap && $0 != .typeText && $0 != .swipeWithin
                 }
             let shape = LayoutNode(node, ordinaryText: ordinaryText, children: children)
-            return digest(try encoder.encode(shape))
+            return [digest(try encoder.encode(shape))]
         }
         var roots: [String] = []
-        while offset < snapshot.nodes.count { roots.append(try collect()) }
+        while offset < snapshot.nodes.count { roots += try collect() }
         return digest(try encoder.encode(roots.sorted()))
     }
 
