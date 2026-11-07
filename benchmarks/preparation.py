@@ -272,9 +272,27 @@ class ReminderPreparation(ContactPreparation):
         return [row[3] for row in self.rows(capture)
                 if len(row) >= 4 and any('apple-reminderkit://REMCDReminder/' in field for field in row)]
 
+    def buttons(self, capture, label):
+        return [row for row in self.rows(capture) if len(row) >= 4
+                and 'tap' in row[1].split(',') and row[2] == 'button' and row[3] == label]
+
+    def await_button(self, capture, label, attempts=10, pause=0.5):
+        """Read until exactly one tappable button with LABEL is visible, within a bound.
+
+        A tap reply is published from one read, so it can still show a transition: the list
+        overview and the opening detail in one tree, with the detail's toolbar not yet present.
+        Preparation waits outside the benchmark clock instead of judging that tree.
+        """
+        for attempt in range(attempts):
+            if len(self.buttons(capture, label)) == 1 or attempt == attempts - 1:
+                return capture
+            time.sleep(pause)
+            capture = self.run_agent(['describe-ui', '--agent', '--view', 'full'])
+        return capture
+
     def tap_label(self, capture, label):
-        matches = [row for row in self.rows(capture) if len(row) >= 4
-                   and 'tap' in row[1].split(',') and row[2] == 'button' and row[3] == label]
+        capture = self.await_button(capture, label)
+        matches = self.buttons(capture, label)
         require(len(matches) == 1, 'Expected exactly one observed button: ' + label)
         return self.run_agent(['tap', '--agent', '--view', 'full', '--expected-pid', str(self.pid),
                                '--label', label, '--element-type', 'Button', '--tap-style', 'simulator'],
@@ -318,6 +336,8 @@ class ReminderPreparation(ContactPreparation):
                 return
             require(self.args.allow_cleanup, 'Owned list exists; cleanup authorization is required.')
             capture = self.tap_label(capture, self.profile['ownedListRow'])
+            # The detail's rows are read once its toolbar has arrived, not from the opening tree.
+            capture = self.await_button(capture, 'More')
         else:
             require(self.args.allow_cleanup, 'Cleanup authorization is required.')
         require(self.has(capture, 'MCP Benchmark List'), 'Owned list detail is not visible.')

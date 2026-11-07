@@ -212,6 +212,25 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(phases[1:], ['read', 'read'])
         self.assertIn('Owned list absent; expected other list rows preserved.', worker.checks)
 
+    def test_opening_detail_is_awaited_before_its_rows_are_judged(self):
+        # The owned list's tap reply still shows the overview with the detail arriving; its rows
+        # are judged only once the detail toolbar (More) is present.
+        home = capture(['My Lists'], ['Scheduled, 0 reminders', 'All, 0 reminders'],
+                       lists=['Reminders, 0 reminders', 'MCP Benchmark List, 1 reminder'])
+        opening = capture(['My Lists', 'MCP Benchmark List'], ['Add List', 'New Reminder'],
+                          ['File report benchmark, Incomplete'])
+        detail = capture(['MCP Benchmark List'], ['More'], REMINDERS['ownedReminderRows'])
+        settled = capture(['My Lists'], ['Scheduled, 0 reminders', 'All, 0 reminders'],
+                          lists=['Reminders, 0 reminders'])
+        with patch('preparation.time.sleep') as sleep:
+            worker = self.run_reminders([home, opening, detail, capture(buttons=['Delete List']),
+                                        capture(['Delete list “MCP Benchmark List”?'], ['Delete']),
+                                        settled, settled])
+        self.assertEqual(sleep.call_count, 1)
+        labels = [call['argv'][call['argv'].index('--label') + 1]
+                  for call in worker.calls if '--label' in call['argv']]
+        self.assertEqual(labels, ['MCP Benchmark List, 1 reminder', 'More', 'Delete List', 'Delete'])
+
     def test_unexpected_reminder_is_not_deleted(self):
         with self.assertRaisesRegex(ValueError, 'Unexpected reminder'):
             self.run_reminders([capture(['MCP Benchmark List'], ['More'], ['Unrelated, Incomplete'])])
