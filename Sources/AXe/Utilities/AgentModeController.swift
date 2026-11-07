@@ -91,8 +91,11 @@ final class AgentModeController {
         return enriched
     }
 
+    /// `preread` supplies the typing phase of focus-and-type with the focus tap's own replacement
+    /// read instead of a new one; the keyboard guard still reads the field before every key.
     private func performReserved(_ request: SelectedHIDRequest,
-                                 focusPlan: AgentFocusAndTypePlan? = nil, retryDepth: Int = 0) async -> SelectedHIDResponse {
+                                 focusPlan: AgentFocusAndTypePlan? = nil, retryDepth: Int = 0,
+                                 preread: Record? = nil) async -> SelectedHIDResponse {
         if request.agent?.kind == .focusAndType {
             return await performFocusAndTypeRetrying(request, retryDepth: retryDepth)
         }
@@ -180,23 +183,36 @@ final class AgentModeController {
             }
             // A table names its display; the full context read admits that panel again.
             // Without a table the active panel must be measured first.
-            let display: ActivePanelIdentity
-            if let referenceRecord {
-                try requireRequestedDisplay(request, matches: referenceRecord.context)
-                display = try Self.display(of: referenceRecord.context)
+            let context: SelectedHIDContext
+            let pid: Int32
+            let snapshot: AgentModeSnapshot
+            var fresh: SelectedHIDResponse?
+            if let preread, focusPlan != nil, mode.kind == .typeText {
+                context = preread.context
+                pid = preread.expectedPID
+                snapshot = preread.snapshot
             } else {
-                display = try await discover(request)
-            }
-            let fresh = try await observe(display: display, pid: expectedPID)
-            guard let context = fresh.context, let roots = fresh.ax?.roots,
-                  let pid = fresh.ax?.expectedPID else {
-                throw AgentModeFailure("missingObservation", "The native observation has no selected context or hierarchy.")
+                let display: ActivePanelIdentity
+                if let referenceRecord {
+                    try requireRequestedDisplay(request, matches: referenceRecord.context)
+                    display = try Self.display(of: referenceRecord.context)
+                } else {
+                    display = try await discover(request)
+                }
+                let observed = try await observe(display: display, pid: expectedPID)
+                guard let observedContext = observed.context, let roots = observed.ax?.roots,
+                      let observedPID = observed.ax?.expectedPID else {
+                    throw AgentModeFailure("missingObservation", "The native observation has no selected context or hierarchy.")
+                }
+                context = observedContext
+                pid = observedPID
+                snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                    try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata, context: observedContext)
+                }
+                fresh = observed
             }
             refusalContext = context
             refusalPID = pid
-            let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
-                try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
-            }
             if let focusPlan {
                 if mode.kind == .tap {
                     try focusPlan.validateBeforeTap(snapshot: snapshot, context: context, pid: pid)
@@ -210,6 +226,7 @@ final class AgentModeController {
                     throw AgentModeFailure("invalidReadReference", "The reference read has no field query.")
                 }
                 let detail = try stored.snapshot.detail(ref: reference, query: query)
+                guard let fresh else { throw AgentModeFailure("missingObservation", "The reference read has no native observation.") }
                 return success(request, native: fresh,
                     cache: AgentModeCacheState(status: "validated", reason: nil, requiresRefresh: false),
                     detail: detail)
@@ -254,6 +271,7 @@ final class AgentModeController {
                     udid: simulatorUDID, request: page, applicationPID: stored.expectedPID, context: stored.context,
                     unchanged: unchanged,
                     expiresIn: max(0, Self.timeToLive - (now - stored.capturedAt)))
+                guard let fresh else { throw AgentModeFailure("missingObservation", "The description has no native observation.") }
                 return success(request, native: fresh, capture: capture,
                     cache: AgentModeCacheState(status: cacheStatus, reason: nil, requiresRefresh: false))
             }
@@ -593,7 +611,8 @@ final class AgentModeController {
                 return type
             }
             let typeResult = await PhaseTimer.measure("agent.typeText") {
-                await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth)
+                await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth,
+                    preread: focused)
             }
             last = typeResult
             try progress.append(typeResult, action: .type)
