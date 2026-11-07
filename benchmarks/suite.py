@@ -5,11 +5,19 @@ import json
 from pathlib import Path
 import re
 import shlex
+import shutil
 
 from adapters import allowed_tools, render_guide, tool_matchers
 
 
 ROOT = Path(__file__).resolve().parent
+# AXe runs measure the skill that `axe init` installs, not a benchmark-only guide.
+SHIPPED_AXE_SKILL = ROOT.parent / 'Skills' / 'CLI' / 'axe'
+
+
+def skill_name(tool):
+    """The installed skill's directory and activation name for a tool."""
+    return 'axe' if tool == 'axe' else tool + '-benchmark'
 
 
 def _text(value, name):
@@ -41,7 +49,7 @@ def make_suite(config, scenario, tool, identity, app, output):
         raise ValueError('App working directory must be absolute')
     rules = (ROOT / 'shared-rules.md').read_text(encoding='utf-8')
     prompt = (ROOT / 'tasks' / (scenario + '.md')).read_text(encoding='utf-8')
-    guide = render_guide(tool, executable, udid)
+    guide = None if tool == 'axe' else render_guide(tool, executable, udid)
     setup = [
         'Use only the assigned CLI for UI automation: ' + shlex.quote(executable),
         'Target existing warm simulator UDID: ' + udid,
@@ -49,6 +57,9 @@ def make_suite(config, scenario, tool, identity, app, output):
         'Run artifacts directory: {runDirectory}',
         'DEVELOPER_DIR is ' + str(developer) + '.',
     ]
+    if tool == 'axe':
+        setup.append('The AXe skill writes `axe` in its examples; run the assigned CLI '
+                     + shlex.quote(executable) + ' in its place, always with --udid ' + udid + '.')
     allowed = allowed_tools(tool, executable)
     xbm_root = Path(_text(config['xcodebuildmcp'], 'xcodebuildmcp'))
     if not xbm_root.is_absolute():
@@ -93,9 +104,13 @@ def make_suite(config, scenario, tool, identity, app, output):
                      'shortName': 'setup.launch', 'uiAutomation': False})
 
     output.mkdir(parents=True, exist_ok=True)
-    skill = output / 'skills' / (tool + '-benchmark')
-    skill.mkdir(parents=True, exist_ok=False)
-    (skill / 'SKILL.md').write_text(guide, encoding='utf-8')
+    skill = output / 'skills' / skill_name(tool)
+    if guide is None:
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(SHIPPED_AXE_SKILL, skill, ignore=shutil.ignore_patterns('.DS_Store'))
+    else:
+        skill.mkdir(parents=True, exist_ok=False)
+        (skill / 'SKILL.md').write_text(guide, encoding='utf-8')
     prompt_path = output / 'task.md'
     with prompt_path.open('x', encoding='utf-8') as destination:
         destination.write(prompt)
@@ -106,7 +121,7 @@ def make_suite(config, scenario, tool, identity, app, output):
             'model': model, 'useMcpServer': False, 'permissionMode': 'default',
             'maxClaudeSeconds': timeout, 'tools': ['Bash', 'Read', 'Write'],
             'allowedTools': list(dict.fromkeys(allowed)), 'skillDirs': [str(skill)],
-            'activateSkill': tool + '-benchmark', 'isolatedWorkingDirectory': True,
+            'activateSkill': skill_name(tool), 'isolatedWorkingDirectory': True,
             'extraArgs': ['--setting-sources', 'project,local'],
             'appendSystemPrompt': '\n'.join(setup) + '\n\n' + rules,
         },

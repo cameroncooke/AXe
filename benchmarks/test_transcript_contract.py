@@ -132,6 +132,19 @@ class ContractTests(unittest.TestCase):
             calls, _ = read_transcript(file, "axe", directory)
             self.assertEqual([call.category for call in calls], ["unknown", "unknown"])
 
+    def test_reads_of_the_installed_skill_count_as_help(self):
+        with tempfile.TemporaryDirectory() as directory:
+            cwd = Path(directory).resolve() / "cwd"
+            file = Path(directory) / "claude.jsonl"
+            data = events("Read", {"file_path": str(cwd / ".claude/skills/axe/references/batch-reference.md")}, "# batch", 1)
+            data += events("Read", {"file_path": str(cwd / "notes.md")}, "notes", 2)
+            data += events("Read", {"file_path": "/Users/someone/.claude/skills/other/SKILL.md"}, "other", 3)
+            for event in data:
+                event["cwd"] = str(cwd)
+            file.write_text("\n".join(json.dumps(event) for event in data))
+            calls, _ = read_transcript(file, "axe", directory)
+            self.assertEqual([call.category for call in calls], ["help", "unknown", "unknown"])
+
     def test_public_overflow_read_preserves_exact_cost_and_origin(self):
         with tempfile.TemporaryDirectory() as directory:
             file = Path(directory) / "claude.jsonl"

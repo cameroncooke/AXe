@@ -67,14 +67,14 @@ class RunnerTests(unittest.TestCase):
             'app_identity': deepcopy(self.app), 'inputs': deepcopy(self.hashes),
             'resource_sample': {'processes': []}, 'lifecycle': None,
             'prepare': {'status': 'ready'}, 'archive_run': self.evidence,
-            'score_run': deepcopy(self.score), 'digest': 'e' * 64,
+            'score_run': deepcopy(self.score), 'digest': 'e' * 64, 'tree_digest': 'f' * 64,
             'run_monitored': {'exitCode': 0, 'stopReason': None},
         }
         for name, value in values.items():
             self.mocks[name] = self.stack.enter_context(patch.object(benchmark, name, return_value=value))
 
         def suite(config, scenario, name, identity, app, output):
-            skill = output / 'skills' / (name + '-benchmark')
+            skill = output / 'skills' / benchmark.skill_name(name)
             skill.mkdir(parents=True)
             (skill / 'SKILL.md').write_text('generic guide')
             return {'name': output.name}

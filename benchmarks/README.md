@@ -87,7 +87,7 @@ measured job. The suite continues other tools when a case cannot start.
 | --- | --- |
 | `run`, `cli.py`, `benchmark.py` | Stable commands and serial runner |
 | `scoring.py`, `transcript.py` | Task grading and returned-token measurements |
-| `adapters.py`, `suite.py`, `guides/` | Equivalent tool modes and model instructions |
+| `adapters.py`, `suite.py`, `guides/` | Equivalent tool modes and model instructions; AXe runs use the shipped skill in `Skills/CLI/axe/` |
 | `tasks/`, `shared-rules.md` | Original task requirements and allowed actions |
 | `preparation.py`, `environment.py`, `monitor.py`, `processes.py` | Starting-state checks, identity, resource samples and cleanup |
 | `baselines.py`, `baselines.json` | Explicit best-baseline selection and accepted results |
@@ -145,9 +145,13 @@ one list with three exact reminders and their required completion states.
 Original save and read-only verification rules remain unchanged.
 
 AXe uses agent reading/navigation/full views. FlowDeck uses compact interactive
-JSON and a full view when needed. RocketSim uses its agent modes. Generic guides
-contain tool instructions, not app routes or answers. No target app changes or
-app-specific production workarounds are part of this suite.
+JSON and a full view when needed. RocketSim uses its agent modes. AXe runs load
+the skill that `axe init` installs, `Skills/CLI/axe/` with its references, so the
+benchmark measures what users get; the run prompt tells the agent to run the
+assigned binary where the skill writes `axe`. FlowDeck and RocketSim keep generic
+guides in `guides/`. Skills and guides contain tool instructions, not app routes
+or answers. Reading the installed skill's files counts as a help call. No target
+app changes or app-specific production workarounds are part of this suite.
 
 Each result records tool version, binary/runtime hashes, actual model and Claude
 version, task/app/guide/runner/grader hashes, Xcode, host OS, device runtime and

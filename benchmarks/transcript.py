@@ -407,12 +407,16 @@ def read_transcript(file, tool, run_directory=None):
     calls, by_id, errors = [], {}, []
     previous = []
     public_files, batch_files = {}, {}
+    skill_root = None
     for number, line in enumerate(Path(file).read_text().splitlines(), 1):
         try:
             event = json.loads(line)
         except ValueError:
             errors.append(f"Malformed JSONL at line {number}")
             continue
+        if isinstance(event, dict) and isinstance(event.get("cwd"), str) and event["cwd"]:
+            # The harness installs the run's skills under its isolated working directory.
+            skill_root = Path(event["cwd"]).resolve() / ".claude" / "skills"
         message = event.get("message", {}) if isinstance(event, dict) else {}
         content = message.get("content", []) if isinstance(message, dict) else []
         if not isinstance(content, list):
@@ -473,6 +477,9 @@ def read_transcript(file, tool, run_directory=None):
                     origin = public_files[resolved]
                     call.category = "image" if call.image_count else "publicOutput"
                     call.evidence_call = origin.number
+                elif (call.name == "Read" and resolved and skill_root is not None
+                        and Path(resolved).is_relative_to(skill_root)):
+                    call.category = "help"  # Reading the installed skill, like a --help call.
                 evidence_text = read_output(call.text) if call.category == "publicOutput" else call.text
                 call.captures = captures(json_output(evidence_text), call.evidence_call or call.number, number) if call.category in ("ui", "publicOutput") else []
                 if call.captures:

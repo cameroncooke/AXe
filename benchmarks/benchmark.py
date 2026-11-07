@@ -24,7 +24,7 @@ from environment import app_identity, digest, host_environment, tree_digest
 from monitor import resource_sample, run_monitored
 from preparation import prepare
 from scoring import score_run, token_totals
-from suite import make_suite
+from suite import make_suite, skill_name
 
 HERE = Path(__file__).resolve().parent
 SCENARIOS = ('weather', 'reminders', 'contacts')
@@ -64,7 +64,8 @@ def inputs(config):
             'src', 'benchmarks/claude-ui/parse_claude_conversation.py',
             'package.json', 'package-lock.json', 'provenance.json', 'verify-provenance.mjs']),
         'scorerSHA256': tree_digest(HERE, ['scoring.py', 'transcript.py']),
-        'guideSetSHA256': tree_digest(HERE / 'guides'),
+        # The guide set is what agents receive: competitor guides and the shipped AXe skill.
+        'guideSetSHA256': tree_digest(HERE.parent, ['benchmarks/guides', 'Skills/CLI/axe']),
         'sharedRulesSHA256': digest(HERE / 'shared-rules.md'),
         'runnerSHA256': tree_digest(HERE, ['benchmark.py', 'suite.py', 'preparation.py',
                                          'environment.py', 'monitor.py', 'processes.py', 'adapters.py']),
@@ -212,7 +213,9 @@ def run_case(config, scenario, name, output, env):
             raise RuntimeError('Preparation: ' + prep.get('reason', 'not ready'))
         lifecycle(config, app, env, output / 'terminate-ready.json')
         suite = make_suite(config, scenario, name, result['tool'], app, output)
-        result['tool']['guideSHA256'] = digest(output / 'skills' / (name + '-benchmark') / 'SKILL.md')
+        skill_dir = output / 'skills' / skill_name(name)
+        result['tool']['guideSHA256'] = (tree_digest(skill_dir) if name == 'axe'
+                                         else digest(skill_dir / 'SKILL.md'))
         tsx = Path(config['xcodebuildmcp']) / 'node_modules/.bin/tsx'
         if not tsx.is_file():
             raise RuntimeError('Run ./benchmarks/run setup to install the local benchmark dependencies')
