@@ -294,6 +294,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed interior slider values within about 3% of the current value or of either end failing on iOS 27.2, where a slider value stays still for the first 10 points of a contact and the finger then leads it. The owned contact now steps one native pixel at a time until the value follows, measures that lead, and may pass the slider frame toward the target by at most that lead, inside the admitted application frame. Up to six feedback paths are used; input is not replayed.
 
+- Fixed interior slider values failing before input with "Native and pickup target values differ" when the current value does not survive a JSON round trip exactly, such as 0.0009009009227156639. The pickup values now match within a few units in the last place.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.

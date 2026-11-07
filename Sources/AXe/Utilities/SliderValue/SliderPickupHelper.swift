@@ -133,8 +133,13 @@ final class SliderPickupHelper {
             return value
         }
         let domain = try before.requireDomain()
-        guard try number("AXValue") == before.requireValue(), try number("AXMinValue") == domain.minimum,
-              try number("AXMaxValue") == domain.maximum else {
+        // The child's values cross a JSON round trip, which can return a nearby double: 0.0009009009227156639
+        // comes back as 0.0009009009227156636. Equal means equal within a few units in the last place.
+        func same(_ value: Double, _ native: Double) -> Bool {
+            value == native || abs(value - native) <= max(abs(value), abs(native)) * 1e-12
+        }
+        guard same(try number("AXValue"), try before.requireValue()), same(try number("AXMinValue"), domain.minimum),
+              same(try number("AXMaxValue"), domain.maximum) else {
             throw SliderValueFailure.rejected("Native and pickup target values differ")
         }
         let (geometry, _) = try await readPhase("geometry", point: .zero, binding: targetFile)
