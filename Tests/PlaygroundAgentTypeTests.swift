@@ -39,7 +39,9 @@ struct PlaygroundAgentTypeTests {
         let before = try session.document.read()
         let result: CommandOutput
         if variant == .stdin {
-            let input = try PlaygroundStdinProcess(executable: TestHelpers.getAxePath(), arguments: arguments + ["--udid", session.agent.udid],
+            // The session's command helper is bypassed for stdin, so request the canonical view here.
+            let input = try PlaygroundStdinProcess(executable: TestHelpers.getAxePath(),
+                arguments: canonicalAgentArguments(arguments) + ["--udid", session.agent.udid],
                 data: Data("q7".utf8), directory: session.artifacts, name: "agent-type-stdin")
             do { try input.start(); result = try await input.wait(); await input.finish() }
             catch { await input.finish(); throw error }
