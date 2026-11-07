@@ -40,9 +40,10 @@ struct SelectedSliderValuePlanTests {
 
     @Test func pathAdmissionIncludesPacingSettleAndRelease() {
         // The failure admitted a fourth path with only 287 ms before the release reserve.
+        // A path needs 275 ms of pacing, the 400 ms settle and the 1.5 s release reserve.
         #expect(!SliderValuePathPlan.canBegin(remainingSeconds: 1.5 + 0.287, releaseReserveSeconds: 1.5))
-        #expect(!SliderValuePathPlan.canBegin(remainingSeconds: 1.975, releaseReserveSeconds: 1.5))
-        #expect(SliderValuePathPlan.canBegin(remainingSeconds: 1.976, releaseReserveSeconds: 1.5))
+        #expect(!SliderValuePathPlan.canBegin(remainingSeconds: 2.175, releaseReserveSeconds: 1.5))
+        #expect(SliderValuePathPlan.canBegin(remainingSeconds: 2.176, releaseReserveSeconds: 1.5))
         #expect(!SliderValuePathPlan.canBegin(remainingSeconds: .infinity, releaseReserveSeconds: 1.5))
         #expect(!SliderValuePathPlan.canBegin(remainingSeconds: .nan, releaseReserveSeconds: 1.5))
     }

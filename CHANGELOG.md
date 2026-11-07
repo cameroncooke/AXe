@@ -290,6 +290,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed interior slider values moving past the target when the contact ends on iOS 27.2, which then failed released verification. After a full held admission, the owned contact moves one native pixel away and back, settles at the target again and then lifts. The receipt counts both moves; input is not replayed.
 
+- Fixed interior slider values that overshot or stopped short on iOS 27.2 because a held value was treated as settled before accessibility had refreshed it. A held value must now stay unchanged for 400 ms instead of 200 ms.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.

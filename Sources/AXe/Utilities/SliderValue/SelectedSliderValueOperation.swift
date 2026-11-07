@@ -30,7 +30,10 @@ private final class SliderValueDeadlineFeed: FBSimulatorHIDLiveFreshnessProvider
 enum SliderValuePathPlan {
     static let steps = 12
     static let pauseNanoseconds: UInt64 = 25_000_000
-    static let minimumSettleSeconds = 0.200
+    /// A held value must stay unchanged this long to count as settled. While a contact moves, an
+    /// iOS 27.2 slider's accessibility value refreshes only about every 300-350 ms, so a shorter
+    /// window could accept a value the slider has already left.
+    static let minimumSettleSeconds = 0.400
     /// Four feedback paths of `steps` MOVEs each position the contact.
     static let positioningMoveLimit = 48
     /// One MOVE to an adjacent pixel and one back before UP.
