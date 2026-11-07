@@ -89,8 +89,13 @@ extension TestHelpers {
                         return confirmedState
                     }
                 } else {
-                    let focusIndicator = UIStateParser.findElement(in: state) { element in
-                        element.identifier == "text-input-screen" && element.label == "✏️ Typing active"
+                    // The screen shows its own indicator element while the field has focus.
+                    // Accessibility does not fold that label into the screen container.
+                    let focusIndicator = UIStateParser.findElement(
+                        in: state,
+                        withIdentifier: "text-input-screen"
+                    ).flatMap {
+                        UIStateParser.findElement(in: $0, withIdentifier: "typing-active-indicator")
                     }
                     if focusIndicator != nil {
                         return state
