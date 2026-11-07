@@ -74,9 +74,16 @@ enum SliderPickupRawAttributes {
             return value
         }
         let initial = try number(.value), low = try number(.minValue), high = try number(.maxValue)
-        guard low.compare(NSNumber(value: 0)) == .orderedSame, high.compare(NSNumber(value: 1)) == .orderedSame,
+        guard low.compare(high) == .orderedAscending, (high.doubleValue - low.doubleValue).isFinite,
               initial.compare(low) != .orderedAscending, initial.compare(high) != .orderedDescending else {
-            throw SliderPickupReadError.rejected("Raw Slider read currently requires a native numeric unit range0...1")
+            throw SliderPickupReadError.rejected("Raw Slider read requires a finite increasing native value domain")
+        }
+        // The raw absolute value is the normalized position in 0...1 for every domain; it equals
+        // the native value only for a unit range. It selects a search point and never admits input.
+        let normalized = (initial.doubleValue - low.doubleValue) / (high.doubleValue - low.doubleValue)
+        func matchesPosition(_ absolute: NSNumber) -> Bool {
+            CFGetTypeID(absolute) != CFBooleanGetTypeID() && absolute.doubleValue.isFinite
+                && (0...1).contains(absolute.doubleValue) && abs(absolute.doubleValue - normalized) <= 1e-6
         }
         let queue = DispatchQueue(label: "axe.slider.raw-read.reply")
         var admitted = Set([frameID, absoluteID])
@@ -114,8 +121,7 @@ enum SliderPickupRawAttributes {
             return value.rectValue
         }
         guard try rect(raw(frameID)) == frame, let absolute = try raw(absoluteID) as? NSNumber,
-              CFGetTypeID(absolute) != CFBooleanGetTypeID(), absolute.doubleValue.isFinite,
-              absolute.compare(initial) == .orderedSame,
+              matchesPosition(absolute),
               try number(.value).compare(initial) == .orderedSame,
               try number(.minValue).compare(low) == .orderedSame,
               try number(.maxValue).compare(high) == .orderedSame else {

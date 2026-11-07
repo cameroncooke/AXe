@@ -284,6 +284,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Report the typed reason, such as `screenChanged`, when a snapshot-bound agent coordinate tap is refused before input. The fresh screen check reported every refusal as `nativeActionFailed`. No input is sent or replayed.
 
+- Fixed interior slider values failing before input on sliders whose native domain is not 0...1, such as 0...100. The raw scrubber read now accepts any finite increasing domain; its absolute value is the normalized position. No input is sent before the existing pickup proof.
+
 ### Removed
 
 - Removed the `cadisplay-context` simulator helper, its build, signing, packaging and Homebrew install, the `scripts/build.sh debug-helper` command and the `devicectl` display-report decoder. Display state is read in-process through CoreDevice, so selected input, capture and recording no longer need a helper beside AXe. Requires rebuilt native frameworks.
