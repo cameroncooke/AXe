@@ -70,37 +70,37 @@ enum AgentModePublicErrorProjection {
 
     private static func message(code: String, native: SelectedHIDResponse?) -> String {
         if native?.quarantine != nil || native?.cleanup == "uncertain" {
-            return "Input cleanup is uncertain. Inspect the cleanup receipt and complete input recovery before more input."
+            return "AXe could not confirm that the touch or key was released, so the simulator may still be holding input. Send no more input until you have followed the recovery steps in the cleanup receipt."
         }
         if let failure = native?.ax?.failure {
             switch failure {
             case .ownershipRejected:
-                return "The native operation could not acquire input ownership. Wait for current input to finish, then refresh the snapshot."
+                return "Another input on this simulator was still running, so nothing was sent. Wait for it to finish, then act again from a current capture."
             case .acquisitionFailed:
-                return "The accessibility read failed. Refresh the snapshot before more input."
+                return "AXe could not read the app's accessibility tree, so nothing was sent. The app may still be launching or busy: run describe-ui again and act from that capture."
             case .targetRejected:
-                return "The native check rejected the selected control. Refresh the snapshot before more input."
+                return "Another control is at the tap point (yours is covered or has moved), so nothing was sent. Check the capture in this reply, then scroll it into view, close what covers it, or choose it again."
             case .pressFailed, .sliderFailed, .inputFailed:
-                return "The native input did not finish successfully. Inspect the input and cleanup receipts before more input."
+                return "The input started but did not finish. Do not repeat it: read the screen to see what happened, and check the event count in the action receipt."
             case .cleanupUncertain:
-                return "Input cleanup is uncertain. Inspect the cleanup receipt and complete input recovery before more input."
+                return "AXe could not confirm that the touch or key was released, so the simulator may still be holding input. Send no more input until you have followed the recovery steps in the cleanup receipt."
             case .responseTooLarge:
-                return "The native response exceeded its size limit. Inspect the input receipt before more input."
+                return "The reply was too large to return, and input may have been sent. Read the screen before acting again; do not repeat the input."
             case .setupFailed:
-                return "The native input setup failed. Refresh the snapshot before more input."
+                return "AXe could not start the input because the screen or display changed as it began, so nothing was sent. Act again from a current capture."
             case .waitTimedOut:
-                return "The selected control was not ready before the timeout. Refresh the snapshot before more input."
+                return "The control did not become ready before the wait ended, so nothing was sent. Check a current capture to see whether it exists, then try again."
             case .waitCancelled:
-                return "The wait for the selected control was cancelled. Refresh the snapshot before more input."
+                return "The wait for the control was cancelled, so nothing was sent. Act again from a current capture."
             }
         }
         switch code {
         case "observationFailed", "batchObservationFailed":
-            return "The simulator observation failed. Refresh the snapshot before more input."
+            return "AXe could not read the simulator screen, so nothing was sent. Run describe-ui again; if it keeps failing, check that the app is in the foreground."
         case "batchStopped":
-            return "The batch stopped. Inspect the completed-step receipts before more input."
+            return "The batch stopped. The receipt lists the completed steps, which were not undone. Read the screen before planning the remaining steps; do not resend the batch."
         default:
-            return "The native action failed. Inspect the input and cleanup receipts before more input."
+            return "The input did not finish cleanly. Check the action receipt: do not repeat input that reports sent events, and read the screen to see what happened."
         }
     }
 }

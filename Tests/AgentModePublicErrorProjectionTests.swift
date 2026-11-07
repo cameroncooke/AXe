@@ -16,7 +16,7 @@ struct AgentModePublicErrorProjectionTests {
         let original = AgentModeFailure("nativeActionFailed", diagnostic)
         let projected = AgentModePublicErrorProjection.project(original, native: native)
         #expect(projected.code == original.code)
-        #expect(projected.message == "The native check rejected the selected control. Refresh the snapshot before more input.")
+        #expect(projected.message == "Another control is at the tap point (yours is covered or has moved), so nothing was sent. Check the capture in this reply, then scroll it into view, close what covers it, or choose it again.")
         #expect(projected.message.utf8.count < 256)
         #expect(native.error == diagnostic && original.message == diagnostic)
         let action = AgentModeActionReceipt(kind: .tap, outcome: native.outcome,
@@ -49,9 +49,9 @@ struct AgentModePublicErrorProjectionTests {
             #expect(!projected.message.contains(objectID) && !projected.message.contains("private-tree-label"))
         }
         let unknown = AgentModePublicErrorProjection.project(.init("nativeActionFailed", diagnostic), native: nil)
-        #expect(unknown.message == "The native action failed. Inspect the input and cleanup receipts before more input.")
+        #expect(unknown.message == "The input did not finish cleanly. Check the action receipt: do not repeat input that reports sent events, and read the screen to see what happened.")
         let stopped = AgentModePublicErrorProjection.project(.init("batchStopped", diagnostic), native: nil)
-        #expect(stopped.message == "The batch stopped. Inspect the completed-step receipts before more input.")
+        #expect(stopped.message == "The batch stopped. The receipt lists the completed steps, which were not undone. Read the screen before planning the remaining steps; do not resend the batch.")
     }
 
     @Test(arguments: [SelectedAXFailure.ownershipRejected, .acquisitionFailed, .targetRejected,
@@ -69,7 +69,7 @@ struct AgentModePublicErrorProjectionTests {
     func failedBatchEvidenceIsNotCompactedAway() throws {
         let native = response(failure: .inputFailed, count: 2, cleanup: "uncertain", quarantined: true)
         let projected = AgentModePublicErrorProjection.project(.init("nativeActionFailed", diagnostic), native: native)
-        #expect(projected.message == "Input cleanup is uncertain. Inspect the cleanup receipt and complete input recovery before more input.")
+        #expect(projected.message == "AXe could not confirm that the touch or key was released, so the simulator may still be holding input. Send no more input until you have followed the recovery steps in the cleanup receipt.")
         let action = AgentModeActionReceipt(kind: .tap, outcome: native.outcome,
             enqueuedEventCount: 2, cleanup: "uncertain", replayed: false, quarantine: native.quarantine)
         let cache = AgentModeCacheState(status: "quarantined", reason: projected.code, requiresRefresh: true)

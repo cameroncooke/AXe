@@ -256,6 +256,29 @@ struct AgentFocusAndTypeTests {
         #expect(result.steps[1].status == "rejectedBeforeInput" && !result.replayed && !result.rolledBack)
     }
 
+    @Test("A batch focus step that typed nothing after its focus tap is never completed")
+    func focusStepOutcome() throws {
+        var partial = AgentFocusAndTypeProgress()
+        try partial.append(response(kind: .tap, count: 2), action: .tap)
+        partial.reject(AgentModeFailure("focusTargetChanged", "Changed."), context: nil)
+        let typedNothing = AgentFocusAndTypeProgress.stepAction(partial.receipt(stopped: true), failed: true,
+            cleanup: "notNeeded", quarantine: nil, retried: false)
+        #expect(typedNothing.outcome == "failedNoReplay" && typedNothing.enqueuedEventCount == 2)
+
+        var refused = AgentFocusAndTypeProgress()
+        refused.reject(AgentModeFailure("targetChanged", "Moved."), context: nil)
+        let sentNothing = AgentFocusAndTypeProgress.stepAction(refused.receipt(stopped: true), failed: true,
+            cleanup: "notNeeded", quarantine: nil, retried: false)
+        #expect(sentNothing.outcome == "failedBeforeInput" && sentNothing.enqueuedEventCount == 0)
+
+        var done = AgentFocusAndTypeProgress()
+        try done.append(response(kind: .tap, count: 2), action: .tap)
+        try done.append(response(kind: .typeText, count: 8), action: .type)
+        let both = AgentFocusAndTypeProgress.stepAction(done.receipt(stopped: false), failed: false,
+            cleanup: "notNeeded", quarantine: nil, retried: false)
+        #expect(both.outcome == "enqueuedAndDrained" && both.enqueuedEventCount == 10 && both.kind == .focusAndType)
+    }
+
     @Test("Failed focus does not become a failed type attempt")
     func failedFirstPhase() throws {
         var progress = AgentFocusAndTypeProgress()

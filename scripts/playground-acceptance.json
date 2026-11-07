@@ -20,6 +20,7 @@
     "PlaygroundAgentTouchTests.swift",
     "PlaygroundAgentTypeTests.swift",
     "PlaygroundAgentFocusAndTypeTests.swift",
+    "PlaygroundDuoAgentFocusAndTypeTests.swift",
     "PlaygroundClipboardTests.swift",
     "PlaygroundColdInputHandoverTests.swift",
     "PlaygroundCoreTests.swift",
@@ -557,7 +558,7 @@
     "PlaygroundAgentTransportTests": "PlaygroundAgentTransportTests.swift",
     "PlaygroundDuoRawLongTextTests": "PlaygroundDuoRawLongTextTests.swift",
     "PlaygroundAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift",
-    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift"
+    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundDuoAgentFocusAndTypeTests.swift"
   },
   "directSuiteSources": {
     "PlaygroundAgentAdaptiveOutputTests": "PlaygroundAgentAdaptiveOutputTests.swift",
@@ -567,7 +568,7 @@
     "PlaygroundRawInputAdmissionTests": "PlaygroundRawInputAdmissionTests.swift",
     "PlaygroundAutomaticPIDTests": "PlaygroundAutomaticPIDTests.swift",
     "PlaygroundAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift",
-    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundAgentFocusAndTypeTests.swift"
+    "PlaygroundDuoAgentFocusAndTypeTests": "PlaygroundDuoAgentFocusAndTypeTests.swift"
   },
   "ordinaryOnlyDirectSuites": [
     "PlaygroundRawKeyboardBrokerTests",

@@ -97,6 +97,6 @@ enum AgentModeCoarseScrollAdmission {
 
     private static func rejected() -> AgentModeFailure {
         AgentModeFailure("coarseScrollTargetRejected",
-            "The native ancestor hit cannot prove one current scroll area at the swipe start. Refresh the snapshot.")
+            "AXe could not confirm one scroll area at the swipe start, so nothing was sent. Swipe the innermost scroll-area ref from the capture in this reply, or run describe-ui --agent if it has none.")
     }
 }

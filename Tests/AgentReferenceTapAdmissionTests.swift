@@ -134,6 +134,27 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.kinds == [.describe, .tap, .describe])
     }
 
+    @Test("A reference read follows an unchanged control on a changed screen and refuses a changed one")
+    func readFollowsUnchangedControl() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var elsewhere = harness.fixture.controls
+        elsewhere[1].label = "8"
+        harness.state.describeRoots = try harness.fixture.roots(elsewhere)
+        // Another row changed: the read is of the same control on the current screen, and the
+        // cache state still reports the snapshot as stale for input.
+        let read = try #require(await harness.controller.perform(harness.read(snapshot: snapshot, ref: ref)).agent)
+        #expect(!read.didError && read.data.detail?.text == "5" && read.data.detail?.ref == ref)
+        #expect(read.data.cache.status == "invalidated" && read.data.cache.requiresRefresh)
+
+        var changed = elsewhere
+        changed[0].label = "7"
+        harness.state.describeRoots = try harness.fixture.roots(changed)
+        let refused = try #require(await harness.controller.perform(harness.read(snapshot: snapshot, ref: ref)).agent)
+        #expect(refused.didError && refused.error?.code == "screenChanged" && refused.data.detail == nil)
+        #expect(harness.state.ownedTaps == 0)
+    }
+
     @Test("A target that moved and changed its value is not retried")
     func movedTargetWithChangedValueReturnsNewTable() async throws {
         let harness = try Harness()
@@ -315,6 +336,14 @@ struct AgentReferenceTapAdmissionTests {
             let steps = refs.map { #"{"action":"tap","ref":"\#($0)"}"# }.joined(separator: ",")
             request.agentBatch = try JSONDecoder().decode(AgentBatchRequest.self, from: Data(
                 #"{"snapshotID":"\#(snapshot.uuidString)","steps":[\#(steps)]}"#.utf8))
+            return request
+        }
+
+        func read(snapshot: UUID, ref: String) -> SelectedHIDRequest {
+            var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+            request.agent = AgentModeRequest(kind: .read, snapshotID: snapshot, readReference: ref,
+                textQuery: AgentModeTextQuery(field: .label, offset: 0, limit: 64))
             return request
         }
 

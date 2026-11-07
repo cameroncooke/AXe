@@ -33,7 +33,7 @@ struct AgentModeSnapshot: Sendable {
          context: SelectedHIDContext) throws {
         guard context.logicalWidth.isFinite, context.logicalHeight.isFinite,
               context.logicalWidth > 0, context.logicalHeight > 0 else {
-            throw AgentModeFailure("missingContext", "The selected display has no valid logical viewport.")
+            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
         }
         var nodes: [FBSimulatorAXNode] = []
         var inheritedHidden: [Bool] = []
@@ -194,10 +194,10 @@ struct AgentModeSnapshot: Sendable {
         guard let index = referenceIndices[ref],
               elements[index].state.visible, elements[index].state.enabled,
               elements[index].actions.contains(requiredAction) else {
-            throw AgentModeFailure("unsupportedReference", "The reference is missing, hidden, disabled, or does not support this action.")
+            throw AgentModeFailure("unsupportedReference", "That ref is not on the current screen, is hidden or disabled, or does not offer this action; use only the actions listed in its row. Nothing was sent. Choose a ref from your latest capture.")
         }
         guard selectedTargets[index] != nil else {
-            throw AgentModeFailure("unsupportedIdentity", "The target has no unique native ID or label. Cached coordinates cannot authorize this action.")
+            throw AgentModeFailure("unsupportedIdentity", "AXe cannot identify this control uniquely (it has no unique ID or label), so nothing was sent. Use its ref from a current capture, or tap it by position with -x and -y.")
         }
         return nodes[index]
     }
@@ -290,7 +290,7 @@ struct AgentModeSnapshot: Sendable {
 
     func target(ref: String) throws -> SelectedNativeTarget {
         guard let index = referenceIndices[ref] else {
-            throw AgentModeFailure("referenceMissing", "The reference does not belong to this snapshot.")
+            throw AgentModeFailure("referenceMissing", "That ref is not in this snapshot, so nothing was sent. Use a ref from the same capture as the snapshot ID.")
         }
         guard let target = selectedTargets[index] else {
             let code = nativeIdentityMetadata?.complete == true ? "unsupportedIdentity" : "nativeIdentityIncomplete"
@@ -312,10 +312,10 @@ struct AgentModeSnapshot: Sendable {
         guard let identity = node.nativeIdentity else { return reference }
         try identity.validate()
         guard identity.pid == nativePID, identity.pid == node.pid else {
-            throw AgentModeFailure("targetChanged", "The Button native identity has another process owner.")
+            throw AgentModeFailure("targetChanged", "That control now belongs to another app, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         guard let occurrences = nativeOccurrences[identity], occurrences.count == 1, let index = occurrences.first else {
-            throw AgentModeFailure("targetAmbiguous", "The Button native identity is not unique in the complete tree.")
+            throw AgentModeFailure("targetAmbiguous", "AXe could not tell this control apart from another one on screen, so nothing was sent. Use its ref from the capture in this reply; if that is refused too, tap it by position.")
         }
         guard nativeIdentityMetadata?.complete == true, node.enabled == true, node.hidden == false,
               node.focused != nil, node.role?.isEmpty == false,
@@ -344,14 +344,14 @@ struct AgentModeSnapshot: Sendable {
             }
             if matches.count > 1 {
                 guard aliasTapKeys.contains(identity), let aliasTapIndex else {
-                    throw AgentModeFailure("targetAmbiguous", "The native aliases have no complete consistent tap evidence.")
+                    throw AgentModeFailure("targetAmbiguous", "AXe could not tell this control apart from another one on screen, so nothing was sent. Use its ref from the capture in this reply; if that is refused too, tap it by position.")
                 }
                 return try aliasTapIndex.resolve(identity: identity, elementType: type, expectedPID: identity.pid).node
             }
             let node = nodes[index]
             guard identity.pid == nativePID, node.pid == identity.pid, node.type == type,
                   node.nativeIdentity == identity else {
-                throw AgentModeFailure("targetChanged", "The native object process or exact type changed.")
+                throw AgentModeFailure("targetChanged", "Your target changed type or app after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
             return node
         }
@@ -369,7 +369,7 @@ struct AgentModeSnapshot: Sendable {
                 index = try aliasTapIndex.resolve(identity: identity, elementType: type,
                     expectedPID: identity.pid).canonicalIndex
             } else {
-                throw AgentModeFailure("targetAmbiguous", "The current native object has no consistent tap evidence.")
+                throw AgentModeFailure("targetAmbiguous", "AXe could not tell this control apart from another one on screen, so nothing was sent. Use its ref from the capture in this reply; if that is refused too, tap it by position.")
             }
         case let .semantic(kind, value, type):
             guard let entry = identityIndex.entry(kind: kind, value: value, type: type), entry.count == 1 else {
@@ -378,14 +378,14 @@ struct AgentModeSnapshot: Sendable {
             index = entry.index
         }
         guard nodes[index].type == node.type else {
-            throw AgentModeFailure("targetChanged", "The current target alignment changed.")
+            throw AgentModeFailure("targetChanged", "Your target changed or moved after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         return elements[index].ref
     }
 
     func validateProtectedReference(_ ref: String, in fresh: AgentModeSnapshot) throws {
         guard let index = referenceIndices[ref] else {
-            throw AgentModeFailure("referenceMissing", "The reference does not belong to this snapshot.")
+            throw AgentModeFailure("referenceMissing", "That ref is not in this snapshot, so nothing was sent. Use a ref from the same capture as the snapshot ID.")
         }
         guard let chosen = selectedTargets[index], chosen.nativeIdentity != nil else { return }
         let node = try fresh.match(target: chosen)
@@ -414,7 +414,7 @@ struct AgentModeSnapshot: Sendable {
         let entry = identityIndex.entry(kind: kind, value: value, type: type)
         guard let entry, entry.count == 1 else {
             throw AgentModeFailure(entry == nil ? "targetMissing" : "targetAmbiguous",
-                                   "The exact native selector did not identify one target. Refresh the snapshot or use a unique ID.")
+                                   "No control, or more than one, matches this selector, so nothing was sent. Narrow it (an exact --id, --label with --element-type, or --frame), or tap by ref from a current capture.")
         }
         return nodes[entry.index]
     }
@@ -443,7 +443,7 @@ struct AgentModeSnapshot: Sendable {
             }
             guard let raw, try matcher.matches(raw) else { continue }
             guard matched == nil else {
-                throw AgentModeFailure("targetAmbiguous", "The agent selector matches more than one native target. Narrow the type or frame filter.")
+                throw AgentModeFailure("targetAmbiguous", "The selector matches more than one control, so nothing was sent. Narrow it with --element-type or --frame, or use a ref from the capture in this reply.")
             }
             matched = node
         }
@@ -458,7 +458,7 @@ struct AgentModeSnapshot: Sendable {
 
     func uniqueSelector(for node: FBSimulatorAXNode) throws -> (kind: SelectedAXRequest.SelectorKind, value: String) {
         guard let selector = identityIndex.selector(for: node, nodes: nodes) else {
-            throw AgentModeFailure("unsupportedIdentity", "The target has no unique native ID or label. Cached coordinates cannot authorize this action.")
+            throw AgentModeFailure("unsupportedIdentity", "AXe cannot identify this control uniquely (it has no unique ID or label), so nothing was sent. Use its ref from a current capture, or tap it by position with -x and -y.")
         }
         return (selector.kind, selector.value)
     }
@@ -546,7 +546,7 @@ struct AgentModeSnapshot: Sendable {
     func detail(ref: String, query: AgentModeTextQuery) throws -> AgentModeTextDetail {
         try query.validate()
         guard let index = referenceIndices[ref] else {
-            throw AgentModeFailure("referenceMissing", "The reference does not belong to this snapshot.")
+            throw AgentModeFailure("referenceMissing", "That ref is not in this snapshot, so nothing was sent. Use a ref from the same capture as the snapshot ID.")
         }
         let node = nodes[index]
         let value: String

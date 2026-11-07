@@ -228,7 +228,7 @@ struct AgentModeRequest: Codable, Sendable {
             }
         } else if kind == .tap {
             guard ref != nil || selectorValue != nil || tapSelector != nil || point != nil else {
-                throw AgentModeFailure("missingTarget", "Agent tap requires a reference, selector, or point.")
+                throw AgentModeFailure("missingTarget", "Tap needs a target: pass --ref with --snapshot-id, a selector such as --label, or -x and -y.")
             }
         }
     }
@@ -282,20 +282,20 @@ enum AgentModePIDPolicy {
         }
         guard let snapshot else { return assertion }
         guard snapshot > 0 else {
-            throw AgentModeFailure("processEvidenceMissing", "The snapshot has no verified application PID.")
+            throw AgentModeFailure("processEvidenceMissing", "AXe could not confirm which app owns this snapshot, so nothing was sent. Run describe-ui --agent again and act from that capture.")
         }
         if let assertion, assertion != snapshot {
-            throw AgentModeFailure("contextChanged", "The expected application differs from the snapshot owner. Refresh the snapshot.")
+            throw AgentModeFailure("contextChanged", "This snapshot belongs to another app than the one expected, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         return snapshot
     }
 
     static func verifiedPID(_ observedPID: Int32, expected: Int32?) throws -> Int32 {
         guard observedPID > 0 else {
-            throw AgentModeFailure("processEvidenceMissing", "The native observation has no positive application PID.")
+            throw AgentModeFailure("processEvidenceMissing", "AXe could not confirm which app owns the screen, so nothing was sent. The app may still be launching: run describe-ui --agent again.")
         }
         if let expected, expected != observedPID {
-            throw AgentModeFailure("contextChanged", "The frontmost application changed. Refresh the snapshot.")
+            throw AgentModeFailure("contextChanged", "Another app is now in front, so nothing was sent. Refs never carry over to another app: run describe-ui --agent and act from that capture.")
         }
         return observedPID
     }
@@ -306,6 +306,10 @@ struct AgentModeFailure: Error, Codable, Sendable, LocalizedError {
     let message: String
     init(_ code: String, _ message: String) { self.code = code; self.message = message }
     var errorDescription: String? { message }
+    /// The next step after a refusal before input. Refusal replies usually carry the current screen.
+    static let actFromCapture = "Act again from the capture in this reply, or run describe-ui --agent if it has none."
+    /// The next step after a batch stops early: what stands, and how to plan the rest.
+    static let batchRest = "Completed steps are in the receipt and were not undone. Plan the rest from the capture in this reply; do not resend the batch."
 }
 
 /// Keep native cleanup and quarantine evidence when a read fails before an action.
@@ -455,7 +459,7 @@ struct AgentModeAdmission: Codable, Sendable {
 
     func validateContext(_ observation: FBSimulatorHIDSessionObservation) throws {
         guard context == SelectedHIDContext(observation) else {
-            throw AgentModeFailure("contextChanged", "The simulator boot, display, geometry, orientation, or pose changed. Refresh the snapshot.")
+            throw AgentModeFailure("contextChanged", "The simulator restarted, rotated or changed its display after this snapshot, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
     }
 
@@ -467,7 +471,7 @@ struct AgentModeAdmission: Codable, Sendable {
 
     func validateScreen(_ snapshot: AgentModeSnapshot) throws {
         guard snapshot.visibleFingerprint == visibleFingerprint else {
-            throw AgentModeFailure("screenChanged", "The screen changed before input. Refresh the snapshot.")
+            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
         }
         if let nativeTarget, nativeTarget.nativeIdentity != nil {
             let node = try snapshot.match(target: nativeTarget)
@@ -496,7 +500,7 @@ struct AgentModeTarget: Codable, Sendable {
         if let identity = nativeTarget?.nativeIdentity {
             try nativeTarget?.validate()
             guard node.nativeIdentity == identity, node.pid == identity.pid, node.type == nativeTarget?.elementType else {
-                throw AgentModeFailure("targetChanged", "The selected native object does not match its captured node.")
+                throw AgentModeFailure("targetChanged", "Your target changed after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
             nativeIdentity = identity
             nativeRole = node.role; nativeSubrole = node.subrole; nativeRoleDescription = node.roleDescription
@@ -517,7 +521,7 @@ struct AgentModeTarget: Codable, Sendable {
               nativeRole == node.role, nativeSubrole == node.subrole,
               nativeRoleDescription == node.roleDescription, nativeFocused == node.focused,
               nativeEnabled == node.enabled, nativeHidden == node.hidden else {
-            throw AgentModeFailure("targetChanged", "The protected native object or state changed before input.")
+            throw AgentModeFailure("targetChanged", "Your target changed after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
     }
 
@@ -526,7 +530,24 @@ struct AgentModeTarget: Codable, Sendable {
         try validateNativeIdentity(node)
         guard type == fresh.type, identifier == fresh.identifier, label == fresh.label, pid == fresh.pid,
               frame == fresh.frame, allowingValueChange || value == fresh.value else {
-            throw AgentModeFailure("targetChanged", "The native target identity or frame changed before input. Refresh the snapshot.")
+            throw AgentModeFailure("targetChanged", "Your target changed or moved after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
+        }
+    }
+
+    /// The same control at a new position: everything `validate` binds except the frame.
+    /// A changed value is a changed state, not a moved control.
+    /// Focus may move to or from it: the expected effect of an earlier focus step.
+    func validateMoved(_ node: FBSimulatorAXNode) throws {
+        let fresh = try AgentModeTarget(node)
+        if let nativeIdentity {
+            guard nativeIdentity == node.nativeIdentity, nativeRole == node.role, nativeSubrole == node.subrole,
+                  nativeRoleDescription == node.roleDescription else {
+                throw AgentModeFailure("targetChanged", "A later batch target was replaced after a focus step, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
+            }
+        }
+        guard type == fresh.type, identifier == fresh.identifier, label == fresh.label, pid == fresh.pid,
+              value == fresh.value else {
+            throw AgentModeFailure("targetChanged", "A later batch target changed after a focus step, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
         }
     }
 }

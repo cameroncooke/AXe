@@ -18,7 +18,7 @@ enum SelectedKeyboardEditingTargetPolicy {
               [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite),
               frame.size.width > 0, frame.size.height > 0,
               CGRect(origin: .zero, size: logicalSize).contains(frame) else {
-            throw AgentModeFailure("targetChanged", "The current focused field has no positive frame inside the selected display.")
+            throw AgentModeFailure("targetChanged", "The focused field is off screen or has no size, so nothing was sent. Scroll it into view, then act again from the capture in this reply.")
         }
     }
 
@@ -52,7 +52,7 @@ enum SelectedKeyboardEditingTargetPolicy {
         guard identityMatches, original.type == "TextField", original.pid == expectedPID,
               original.type == field.type, original.identifier == field.identifier,
               original.pid == field.pid else {
-            throw AgentModeFailure("targetChanged", "The focused field identity changed during keyboard input.")
+            throw AgentModeFailure("targetChanged", "The focused field changed while typing, so typing stopped. Check the event count in the action receipt and the field's value in the capture before typing the rest; do not resend text already typed.")
         }
         // An absent native label uses the exact native ID for identity. Empty strings,
         // case changes and distinct materialized labels are not aliases.

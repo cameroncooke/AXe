@@ -1,12 +1,13 @@
 import Foundation
 import Testing
 
-enum PlaygroundAgentBatchVariant: String, Sendable { case invalidJSON, wrongPID, normal, stopAtMissing, rawCompatibility, selectedCompatibility }
+enum PlaygroundAgentBatchVariant: String, Sendable { case invalidJSON, wrongPID, normal, stopAtMissing, rawCompatibility, selectedCompatibility, focusReferences }
 
 @Suite("Playground Agent Batch E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentBatchTests {
     @Test("Agent batches preserve order and completed work without replay", arguments: [
         PlaygroundAgentBatchVariant.invalidJSON, .wrongPID, .normal, .stopAtMissing, .rawCompatibility, .selectedCompatibility,
+        .focusReferences,
     ])
     func batch(_ variant: PlaygroundAgentBatchVariant) async throws {
         let session = try await PlaygroundAgentExamplesSession.open()
@@ -39,6 +40,14 @@ struct PlaygroundAgentBatchTests {
             .init(action: "tap", id: "agent-examples.tap", text: nil),
         ])
         if variant == .invalidJSON { try Data("{".utf8).write(to: file) }
+        else if variant == .focusReferences {
+            // One reference batch focuses the unfocused field, types, then taps the button.
+            let document: [String: Any] = ["snapshotID": old.capture.snapshotID.uuidString, "steps": [
+                ["action": "type", "ref": try session.reference("agent-examples.text", in: old), "text": "AB", "focus": true],
+                ["action": "tap", "ref": try session.reference("agent-examples.tap", in: old)],
+            ]]
+            try JSONSerialization.data(withJSONObject: document).write(to: file)
+        }
         else { try JSONEncoder().encode(variant == .stopAtMissing ? missing : normal).write(to: file) }
         var arguments = ["batch", "--agent", "--file", file.path,
             "--expected-pid", String(variant == .wrongPID ? session.pid + 1 : session.pid)]
@@ -71,14 +80,15 @@ struct PlaygroundAgentBatchTests {
             try #require(after == before)
         } else {
             let partial = variant == .stopAtMissing
-            if variant == .normal || partial {
+            if variant == .normal || variant == .focusReferences || partial {
                 let envelope = try session.decode(result.output)
                 try #require(envelope.didError == partial && (result.exitCode != 0) == partial)
                 let batch = try #require(try AgentExampleBatchResult.decode(result.output).data.batch)
-                try #require(batch.totalSteps == 3 && batch.completedSteps == (partial ? 1 : 3))
+                let steps = variant == .focusReferences ? 2 : 3
+                try #require(batch.totalSteps == steps && batch.completedSteps == (partial ? 1 : steps))
                 try #require(!batch.replayed && !batch.rolledBack)
                 try #require(batch.stoppedAt == (partial ? 2 : nil))
-                try #require(batch.steps.count == (partial ? 2 : 3))
+                try #require(batch.steps.count == (partial ? 2 : steps))
                 try #require(Set(batch.steps.map(\.requestID)).count == batch.steps.count)
                 if partial {
                     try #require(batch.steps[0].status == "completed" && batch.steps[1].status == "rejectedBeforeInput")
@@ -91,18 +101,22 @@ struct PlaygroundAgentBatchTests {
                         action: "typeText", pid: session.pid, udid: session.app.udid)
                 } else {
                     try #require(batch.steps.allSatisfy { $0.status == "completed" && $0.receipt?.cleanup != "uncertain" })
-                    try #require(batch.steps.compactMap { $0.receipt?.enqueuedEventCount } == [2, 8, 2])
+                    // A focus step counts its focus tap (2) and its typing (8) together.
+                    try #require(batch.steps.compactMap { $0.receipt?.enqueuedEventCount }
+                        == (variant == .focusReferences ? [10, 2] : [2, 8, 2]))
                     if let capture = envelope.data.capture {
                         try requireAgentCaptureValue(capture, identifier: "agent-examples.text", expected: "AB",
                             action: "typeText", pid: session.pid, udid: session.app.udid)
                     }
                 }
             } else { try #require(result.exitCode == 0) }
-            let expectedText = partial ? "AB" : variant == .normal ? "AB" : variant == .rawCompatibility ? "ABc" : "ABcd"
+            let expectedText = partial ? "AB" : variant == .normal || variant == .focusReferences ? "AB"
+                : variant == .rawCompatibility ? "ABc" : "ABcd"
             let after = try await session.document.waitFor("ordered batch callbacks and release") {
                 $0.taps == before.taps + 1 && $0.text == expectedText && $0.activeWindowTouches == 0
             }
-            try #require(after.textChanges == before.textChanges + (partial ? 0 : variant == .normal ? 2 : 1))
+            try #require(after.textChanges == before.textChanges
+                + (partial ? 0 : variant == .normal || variant == .focusReferences ? 2 : 1))
             let oldIDs = Set(before.windowTouchTrace.map(\.contactID))
             let groups = Dictionary(grouping: after.windowTouchTrace.filter { !oldIDs.contains($0.contactID) }, by: \.contactID)
             try #require(groups.count == (partial ? 1 : 2) && after.windowTraceDropped == 0)

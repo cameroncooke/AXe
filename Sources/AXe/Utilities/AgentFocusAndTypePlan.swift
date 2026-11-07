@@ -46,12 +46,12 @@ struct AgentFocusAndTypePlan: Sendable {
                          requiringFocus: Bool, allowingFocusValueChange: Bool = false) throws -> (node: FBSimulatorAXNode, ref: String) {
         _ = try AgentModePIDPolicy.verifiedPID(pid, expected: expectedPID)
         guard self.context == context, snapshot.hasNativeOwner(expectedPID) else {
-            throw AgentModeFailure("focusContextChanged", "The focus action's app or display context changed. Typing was stopped.")
+            throw AgentModeFailure("focusContextChanged", "The app or display changed while AXe was focusing the field, so nothing was typed; the focus tap may have been sent (see the action receipt). Act again from the capture in this reply.")
         }
         let ref = try snapshot.reference(target: fieldTarget)
         let node = try snapshot.node(ref: ref, requiredAction: requiringFocus ? .typeText : .tap)
         guard try snapshot.target(ref: ref) == fieldTarget else {
-            throw AgentModeFailure("focusTargetChanged", "The field's chosen identity changed. Typing was stopped.")
+            throw AgentModeFailure("focusTargetChanged", "The field changed while AXe was focusing it, so nothing was typed; the focus tap may have been sent (see the action receipt). Check the field in the capture in this reply, then type again.")
         }
         try SelectedKeyboardFocusPolicy.validateIdentity(node, expectedPID: expectedPID, fieldTarget: fieldTarget)
         guard node.type == original.type, node.identifier == original.identifier, node.label == original.label,
@@ -59,12 +59,12 @@ struct AgentFocusAndTypePlan: Sendable {
               node.roleDescription == original.roleDescription, node.customActionNames == original.customActionNames,
               allowingFocusValueChange || node.value == original.value,
               node.pid == original.pid, node.enabled == true, node.hidden == false, node.focused != nil else {
-            throw AgentModeFailure("focusTargetChanged", "The field's identity, owner or available state changed. Typing was stopped.")
+            throw AgentModeFailure("focusTargetChanged", "The field changed while AXe was focusing it, so nothing was typed; the focus tap may have been sent (see the action receipt). Check the field in the capture in this reply, then type again.")
         }
         if let observedIdentity {
             try observedIdentity.validate()
             guard observedIdentity.pid == expectedPID, node.nativeIdentity == observedIdentity else {
-                throw AgentModeFailure("focusTargetChanged", "The observed native field changed during focus. Typing was stopped.")
+                throw AgentModeFailure("focusTargetChanged", "The field changed while AXe was focusing it, so nothing was typed; the focus tap may have been sent (see the action receipt). Check the field in the capture in this reply, then type again.")
             }
         }
         // Retain object evidence when available, without granting anonymous or alias authority.
@@ -72,14 +72,14 @@ struct AgentFocusAndTypePlan: Sendable {
             try identity.validate()
             guard identity.pid == expectedPID,
                   snapshot.nodes.filter({ $0.nativeIdentity == identity }).count == 1 else {
-                throw AgentModeFailure("focusTargetChanged", "The observed native field has conflicting occurrences. Typing was stopped.")
+                throw AgentModeFailure("focusTargetChanged", "AXe found the field more than once on screen, so nothing was typed; the focus tap may have been sent (see the action receipt). Type into its ref from the capture in this reply.")
             }
         }
         guard let frame = node.frame,
               [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite),
               frame.size.width > 0, frame.size.height > 0,
               CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(frame) else {
-            throw AgentModeFailure("focusTargetChanged", "The focused field has no positive frame inside the current display.")
+            throw AgentModeFailure("focusTargetChanged", "The field is off screen or has no size, so nothing was typed. Scroll it into view, then act again from the capture in this reply.")
         }
         if requiringFocus {
             try SelectedKeyboardFocusPolicy.validate(node, expectedPID: expectedPID, fieldTarget: fieldTarget)
@@ -121,5 +121,30 @@ struct AgentFocusAndTypeProgress {
     func receipt(stopped: Bool) -> AgentBatchReceipt {
         AgentBatchReceipt(totalSteps: 2, completedSteps: completed, steps: steps,
             stoppedAt: stopped ? min(2, max(1, steps.count)) : nil)
+    }
+
+    /// Both phases as one batch step. It completes only when the focus tap and the typing both
+    /// completed. Events from either phase are input: a delivered focus tap followed by refused or
+    /// failed typing is `failedNoReplay` (or typing's own failure), never stopped before input.
+    static func stepAction(_ phases: AgentBatchReceipt?, failed: Bool, cleanup: String,
+                           quarantine: SelectedHIDQuarantine?, retried: Bool) -> AgentModeActionReceipt {
+        let steps = phases?.steps ?? []
+        let events = steps.reduce(0) { $0 + ($1.receipt?.enqueuedEventCount ?? 0) }
+        let typing = steps.count == 2 ? steps[1].receipt : nil
+        let outcome: String
+        if !failed && phases?.completedSteps == 2 {
+            outcome = "enqueuedAndDrained"
+        } else if events == 0 {
+            outcome = "failedBeforeInput"
+        } else if let typing, typing.outcome != "enqueuedAndDrained" {
+            outcome = typing.outcome
+        } else {
+            outcome = "failedNoReplay"
+        }
+        let last = steps.last(where: { $0.receipt != nil })?.receipt
+        return AgentModeActionReceipt(kind: .focusAndType, outcome: outcome, enqueuedEventCount: events,
+            cleanup: last?.cleanup ?? cleanup, replayed: false, quarantine: last?.quarantine ?? quarantine,
+            slider: nil, sliderValue: nil,
+            retried: retried || steps.contains { $0.receipt?.retried == true } ? true : nil)
     }
 }

@@ -236,7 +236,7 @@ struct PlaygroundAgentNativeStateTests {
         return after
     }
 
-    @Test("A native trailing space invalidates the old reference without input")
+    @Test("A native change elsewhere refreshes a stale reference and types once on the fresh read")
     func exactNativeWhitespace() async throws {
         let session = try await PlaygroundAgentExamplesSession.open()
         try await session.tap("agent-examples.text")
@@ -252,17 +252,17 @@ struct PlaygroundAgentNativeStateTests {
         try #require(initial.status == "a")
         let changed = try await session.document.waitFor("normal delayed native trailing space", timeout: 12) { $0.status == "a " }
         try #require(changed.text == "q7" && changed.focused)
-        let result = try await session.run(["type", "z"] + (try session.arguments(old, id: "agent-examples.text")), allowFailure: true)
-        let refusal = try session.decode(result.output)
-        try #require(result.exitCode != 0 && refusal.didError && refusal.error?.code == "screenChanged")
-        try #require(refusal.data.action == nil && refusal.data.cache.requiresRefresh)
-        let afterRefusal = try session.document.read()
-        try #require(afterRefusal == changed)
-        let fresh = try await session.capture()
-        try #require(fresh.capture.snapshotID != old.capture.snapshotID)
-        _ = try await session.run(["type", "z"] + (try session.arguments(fresh, id: "agent-examples.text")))
-        _ = try await session.document.waitFor("fresh text after whitespace change") { $0.text == "q7z" }
-        try old.requireUnexpired("after whitespace invalidation and fresh input")
+        // The status text gained a trailing space after the snapshot, so the reference is stale. The
+        // field itself is unchanged, so AXe re-reads inside the call and types once on the fresh table.
+        let result = try await session.run(["type", "z"] + (try session.arguments(old, id: "agent-examples.text")))
+        let typed = try session.decode(result.output)
+        let action = try #require(typed.data.action)
+        try #require(!typed.didError && action.outcome == "enqueuedAndDrained" && !action.replayed
+            && action.retried == true && action.enqueuedEventCount > 0)
+        let capture = try #require(typed.data.capture)
+        try #require(capture.snapshotID != old.capture.snapshotID)
+        let after = try await session.document.waitFor("typed once after the refresh") { $0.text == "q7z" }
+        try #require(after.textChanges == changed.textChanges + 1)
     }
 
     @Test("A native trailing space changes the compact hash and replaces cached references")
@@ -357,20 +357,27 @@ struct PlaygroundAgentNativeStateTests {
         let publicFailure = try JSONDecoder().decode(BoundedPublicFailure.self, from: Data(result.output.utf8))
         try #require(publicFailure.schema == "axe.output.agent-result" && publicFailure.schemaVersion == "1"
             && publicFailure.didError && publicFailure.error.code == "nativeActionFailed"
-            && publicFailure.error.message == "The native check rejected the selected control. Refresh the snapshot before more input.")
-        try #require(publicFailure.error.message.utf8.count < 256 && result.output.utf8.count < 2 * 1024,
+            && publicFailure.error.message == "Another control is at the tap point (yours is covered or has moved), so nothing was sent. Check the capture in this reply, then scroll it into view, close what covers it, or choose it again.")
+        // The refusal returns the current screen, which in full view is the complete tree with the
+        // long text. Everything else in the reply stays small and free of native diagnostics.
+        var reply = try #require(try JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: Any])
+        var replyData = try #require(reply["data"] as? [String: Any])
+        try #require(replyData.removeValue(forKey: "capture") != nil, "A refusal returns the current screen.")
+        reply["data"] = replyData
+        let rest = try #require(String(data: try JSONSerialization.data(withJSONObject: reply), encoding: .utf8))
+        try #require(publicFailure.error.message.utf8.count < 256 && rest.utf8.count < 2 * 1024,
             "The public refusal must not include the large reflected native diagnostic.")
         for privateMarker in ["FBSimulatorAX", "nativeIdentity", "objectID", "nativeTarget", "fieldTarget",
                               "AXUniqueId", "AXLabel", "AXValue", "roots", "freshRoots", "confirmedRoots",
                               "rejectedHit", "verifiedTarget"] {
-            try #require(!result.output.contains(privateMarker), "A private native diagnostic escaped into public output.")
+            try #require(!rest.contains(privateMarker), "A private native diagnostic escaped into public output.")
         }
-        try #require(publicFailure.data.cache.status == "invalidated"
-            && publicFailure.data.cache.reason == "nativeActionFailed")
         let action = try #require(envelope.data.action)
         try #require(action.kind == "tap" && action.outcome == "failedBeforeInput"
             && action.enqueuedEventCount == 0 && action.cleanup == "notNeeded" && !action.replayed)
-        try #require(envelope.data.cache.requiresRefresh && envelope.data.capture == nil)
+        // The returned screen is the new current table, so it needs no further read.
+        try #require(publicFailure.data.cache.status == "refreshed"
+            && publicFailure.data.cache.reason == "nativeActionFailed" && !envelope.data.cache.requiresRefresh)
         let after = try session.document.read()
         try #require(after == before)
         let state = try await session.core.state()
@@ -392,7 +399,7 @@ struct PlaygroundAgentNativeStateTests {
         struct Payload: Decodable {
             struct Cache: Decodable {
                 let status: String
-                let reason: String
+                let reason: String?
             }
             let cache: Cache
         }

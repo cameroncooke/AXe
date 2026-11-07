@@ -59,7 +59,8 @@ struct PlaygroundAgentPinchTests {
         if variant == .outsideArea {
             try #require(result.exitCode != 0)
             let envelope = try session.decodeAgent(result.output)
-            try #require(envelope.didError && envelope.error?.code == "nativeActionFailed")
+            // The path guard's typed refusal reaches the agent with its own code and message.
+            try #require(envelope.didError && envelope.error?.code == "pinchTargetMismatch")
             let action = try #require(envelope.data.action)
             try #require(action.kind == "pinch" && action.outcome == "failedBeforeInput"
                 && action.enqueuedEventCount == 0 && action.cleanup == "notNeeded" && !action.replayed)

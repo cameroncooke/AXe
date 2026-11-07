@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 
-private enum PlaygroundFocusField: String, CaseIterable, Sendable {
+enum PlaygroundFocusField: String, CaseIterable, Sendable {
     case uiKit, swiftUI
 
     var screen: String { self == .uiKit ? "agent-examples" : "text-input" }
@@ -18,20 +18,7 @@ struct PlaygroundAgentFocusAndTypeTests {
     }
 }
 
-@Suite("Playground Duo Agent Focus And Type E2E", .serialized, .enabled(if: isDuoPlaygroundE2EEnabled))
-struct PlaygroundDuoAgentFocusAndTypeTests {
-    @Test("Find, focus and type on the outer screen", arguments: PlaygroundFocusField.allCases)
-    private func outerScreen(_ field: PlaygroundFocusField) async throws {
-        try await PlaygroundFocusTypeCheck.run(field: field, position: .outer0)
-    }
-
-    @Test("Find, focus and type on the inner landscape screen", arguments: PlaygroundFocusField.allCases)
-    private func innerLandscape(_ field: PlaygroundFocusField) async throws {
-        try await PlaygroundFocusTypeCheck.run(field: field, position: .inner90)
-    }
-}
-
-private struct PlaygroundFocusTypeCheck {
+struct PlaygroundFocusTypeCheck {
     let app: AgentPlaygroundSession
     let pid: Int32
     let field: PlaygroundFocusField

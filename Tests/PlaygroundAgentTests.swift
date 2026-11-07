@@ -296,6 +296,8 @@ struct AgentPlaygroundResult: Decodable {
         let enqueuedEventCount: Int
         let cleanup: String
         let replayed: Bool
+        /// Present when a refusal before input was recovered inside the call.
+        var retried: Bool? = nil
     }
     struct Cache: Decodable {
         let status: String

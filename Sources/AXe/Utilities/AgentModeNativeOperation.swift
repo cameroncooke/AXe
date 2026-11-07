@@ -45,7 +45,7 @@ enum AgentModeNativeOperation {
                     guardValue = try AgentModePathAdmissionGuard(simulator: simulator, feed: live,
                         admission: admission, path: path)
                 } else {
-                    throw AgentModeFailure("unsupportedTargetPath", "A target admission requires a complete path or pinch.")
+                    throw AgentModeFailure("unsupportedTargetPath", "AXe could not check the whole path to this control, so nothing was sent. \(AgentModeFailure.actFromCapture)")
                 }
                 pathGuard = guardValue
                 guardOwner = guardValue
@@ -91,15 +91,15 @@ enum AgentModeNativeOperation {
             let guardFailure = pathGuard?.failure ?? screenGuard?.failure
             let message: String
             if released.1 == "uncertain" {
-                message = "Native input cleanup is uncertain. Do not repeat input."
+                message = "AXe could not confirm that the touch or key was released, so the simulator may still be holding input. Send no more input until you have followed the recovery steps in the cleanup receipt."
             } else if let failure = guardFailure ?? (error as? AgentModeFailure) {
                 message = failure.message
             } else if error is CancellationError {
-                message = "The agent input was cancelled. Refresh the snapshot before another action."
+                message = "The input was cancelled. Check the event count in the action receipt, do not repeat input that was sent, and read the screen before acting again."
             } else if released.0 == 0 {
-                message = "The native input check failed. Refresh the snapshot."
+                message = "AXe's check before input failed, so nothing was sent. \(AgentModeFailure.actFromCapture)"
             } else {
-                message = "Native input did not complete. It was not repeated. Refresh the snapshot."
+                message = "The input started but did not finish, and AXe did not repeat it. Read the screen to see what happened; do not send it again."
             }
             var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: brokerID, outcome: released.0 == 0 && released.1 == "notNeeded" ? "failedBeforeInput" : "failedNoReplay",

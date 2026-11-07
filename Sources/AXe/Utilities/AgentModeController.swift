@@ -221,15 +221,28 @@ final class AgentModeController {
                 }
             }
             if mode.kind == .read {
-                let stored = try requireRecord(mode, context: context, fresh: snapshot)
                 guard let reference = mode.readReference, let query = mode.textQuery else {
                     throw AgentModeFailure("invalidReadReference", "The reference read has no field query.")
                 }
-                let detail = try stored.snapshot.detail(ref: reference, query: query)
                 guard let fresh else { throw AgentModeFailure("missingObservation", "The reference read has no native observation.") }
-                return success(request, native: fresh,
-                    cache: AgentModeCacheState(status: "validated", reason: nil, requiresRefresh: false),
-                    detail: detail)
+                do {
+                    let stored = try requireRecord(mode, context: context, fresh: snapshot)
+                    return success(request, native: fresh,
+                        cache: AgentModeCacheState(status: "validated", reason: nil, requiresRefresh: false),
+                        detail: try stored.snapshot.detail(ref: reference, query: query))
+                } catch let changed as AgentModeFailure where ["screenChanged", "targetChanged"].contains(changed.code) {
+                    // Something else on the screen changed. When the control read is itself unchanged,
+                    // read it from this table, as the agent would after capturing again. The snapshot
+                    // stays stale for input, which the cache state reports.
+                    guard let original = try? requireRecordIdentity(mode).snapshot,
+                          let current = Self.unchangedReference(reference, from: original, to: snapshot) else { throw changed }
+                    let read = try snapshot.detail(ref: current, query: query)
+                    return success(request, native: fresh,
+                        cache: AgentModeCacheState(status: "invalidated", reason: changed.code, requiresRefresh: true),
+                        detail: AgentModeTextDetail(ref: reference, field: read.field, offset: read.offset,
+                            nextOffset: read.nextOffset, totalLength: read.totalLength, text: read.text,
+                            frame: read.frame, actions: read.actions))
+                }
             }
             if mode.kind == .describe {
                 let stored: Record
@@ -332,6 +345,23 @@ final class AgentModeController {
         guard Self.refusalRefreshes(error, native: native), let mode = request.agent,
               var stored = await refreshTable(context: context, pid: pid) else {
             return failure(request, error, native: native, action: action)
+        }
+        // A tap the native hit check refused because the keyboard covers its target fails again on
+        // every attempt: the keyboard does not move by itself. Say so at once, with the fix and the
+        // fresh screen, instead of retrying. The hit check stays the authority; the keyboard frame
+        // only explains its refusal.
+        if error.code == "nativeActionFailed", native?.outcome == "failedBeforeInput", mode.kind == .tap,
+           let original, let ref = mode.ref,
+           let fresh = Self.unchangedReference(ref, from: original, to: stored.snapshot),
+           let cover = AgentKeyboardCover.find(ref: fresh, in: stored.snapshot, pid: stored.expectedPID,
+                                               context: stored.context) {
+            let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence, udid: simulatorUDID,
+                request: mode, applicationPID: stored.expectedPID, context: stored.context,
+                unchanged: false, expiresIn: Self.timeToLive)
+            return failure(request, cover.failure, native: native, action: action,
+                cache: AgentModeCacheState(status: "refreshed", reason: "keyboardCovered", requiresRefresh: false),
+                nextSteps: ["Input was not sent. The capture is the current screen; choose the next action from its snapshot ID."],
+                capture: capture)
         }
         // The agent's own recovery, inside the call. When the refused action's target is still
         // the same control, perform the action on the new table. Anything else returns the new
@@ -525,7 +555,7 @@ final class AgentModeController {
 
     private static func display(of context: SelectedHIDContext) throws -> ActivePanelIdentity {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "The selected runtime context is incomplete.")
+            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
         }
         return ActivePanelIdentity(displayID: context.screenID, uniqueID: uuid)
     }
@@ -535,7 +565,7 @@ final class AgentModeController {
     private func requireRequestedDisplay(_ request: SelectedHIDRequest, matches context: SelectedHIDContext) throws {
         guard let requestedID = request.screenID, let requestedUUID = request.screenUUID else { return }
         guard requestedID == context.screenID, requestedUUID == UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("inactiveDisplay", "The selected display is not the snapshot's display. Refresh display selection.")
+            throw AgentModeFailure("inactiveDisplay", "The display you selected is not this snapshot's display, so nothing was sent. Use the display of the capture, or capture again on the display you want.")
         }
     }
 
@@ -575,11 +605,12 @@ final class AgentModeController {
                 throw AgentModeFailure("invalidFocusAndType", "Focus and type requires a published field reference.")
             }
             let initial = try requireRecordIdentity(mode)
-            let plan = try AgentFocusAndTypePlan(snapshot: initial.snapshot, ref: ref,
+            let fieldRef = ref
+            let plan = try AgentFocusAndTypePlan(snapshot: initial.snapshot, ref: fieldRef,
                 context: initial.context, pid: initial.expectedPID)
             var tap = request
             tap.agent = AgentModeRequest(kind: .tap, expectedPID: initial.expectedPID,
-                snapshotID: initial.id, ref: ref, tapStyle: .physical)
+                snapshotID: initial.id, ref: fieldRef, tapStyle: .physical)
             let tapResult = await PhaseTimer.measure("agent.focusTap") {
                 await performReserved(tap, focusPlan: plan, retryDepth: retryDepth)
             }
@@ -661,26 +692,25 @@ final class AgentModeController {
     private func performBatchRetrying(_ request: SelectedHIDRequest, retryDepth: Int = 0) async -> SelectedHIDResponse {
         let original = record.flatMap { $0.id == request.agentBatch?.snapshotID ? $0 : nil }
         let response = await performBatchReserved(request, retryDepth: retryDepth)
-        guard let error = response.agent?.error, let batch = request.agentBatch, response.quarantine == nil,
-              Self.batchStoppedBeforeInput(response) else { return response }
-        if retryDepth < Self.maximumRetries, let original, batch.usesReferences, response.enqueuedEventCount == 0,
+        guard let error = response.agent?.error, let batch = request.agentBatch, response.quarantine == nil else {
+            return response
+        }
+        let sentNothing = Self.batchStoppedBeforeInput(response)
+        guard sentNothing || Self.batchStoppedCleanly(response) else { return response }
+        if sentNothing, retryDepth < Self.maximumRetries, let original, batch.usesReferences, response.enqueuedEventCount == 0,
            response.agent?.data.batch?.completedSteps == 0,
            ["screenChanged", "targetChanged", "batchLayoutChanged"].contains(error.code),
-           let stored = await refreshTable(context: original.context, pid: original.expectedPID) {
-            var steps: [AgentBatchStep] = []
-            for step in batch.steps {
-                guard let ref = step.ref, let newRef = Self.unchangedReference(ref, from: original.snapshot, to: stored.snapshot),
-                      let moved = try? step.replacingReference(newRef) else { steps = []; break }
-                steps.append(moved)
-            }
+           var stored = await refreshTable(context: original.context, pid: original.expectedPID) {
+            let steps = await reboundSteps(batch.steps, original: original.snapshot, stored: &stored) ?? []
             if !steps.isEmpty {
                 var retry = request
                 retry.agentBatch = AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps)
                 return await performBatchRetrying(retry, retryDepth: retryDepth + 1)
             }
         }
-        // The stopping step sent nothing. Return the current screen with the stopped batch, so the
-        // agent decides its remaining steps from a fresh table instead of reading one first.
+        // The stopping step sent nothing, or its delivered input finished with clean release. Return
+        // the current screen with the stopped batch, so the agent decides its remaining steps from a
+        // fresh table instead of reading one first. Nothing is repeated.
         guard let stored = await refreshTable(context: original?.context ?? response.context,
                                               pid: original?.expectedPID ?? batch.expectedPID) else { return response }
         let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence, udid: simulatorUDID,
@@ -690,9 +720,53 @@ final class AgentModeController {
         withScreen.agent = AgentModeResult(error: error, capture: capture, batch: response.agent?.data.batch,
             cache: AgentModeCacheState(status: "refreshed", reason: error.code, requiresRefresh: false),
             context: stored.context, quarantine: nil, observation: response.agent?.data.observation,
-            nextSteps: ["Inspect each step receipt. Completed steps were not undone; the stopping step sent no input.",
+            nextSteps: [sentNothing
+                            ? "Inspect each step receipt. Completed steps were not undone; the stopping step sent no input."
+                            : "Inspect each step receipt. The stopping step's delivered input was not undone or repeated.",
                         "The capture is the current screen; choose the remaining steps from its snapshot ID. Do not resubmit the batch."])
         return withScreen
+    }
+
+    /// The stopping step delivered input that finished with clean release and no quarantine, so a
+    /// read of the current screen is safe. It is never a reason to repeat that input.
+    private static func batchStoppedCleanly(_ response: SelectedHIDResponse) -> Bool {
+        guard let steps = response.agent?.data.batch?.steps,
+              let stopping = steps.last(where: { $0.status != "completed" }),
+              let receipt = stopping.receipt else { return false }
+        return receipt.cleanup != "uncertain" && receipt.quarantine == nil
+    }
+
+    /// Every step of a batch that sent nothing, on one new table. Unchanged targets bind at once.
+    /// Moved targets (the same control at a new position, as `sameControl` defines) bind once all
+    /// of them hold still across two reads about 150 ms apart, within four reads, as a single
+    /// refused action does. All refs come from the same table.
+    private func reboundSteps(_ steps: [AgentBatchStep], original: AgentModeSnapshot,
+                              stored: inout Record) async -> [AgentBatchStep]? {
+        let unchanged = steps.map { step -> AgentBatchStep? in
+            guard let ref = step.ref, let newRef = Self.unchangedReference(ref, from: original, to: stored.snapshot) else { return nil }
+            return try? step.replacingReference(newRef)
+        }
+        if unchanged.allSatisfy({ $0 != nil }) { return unchanged.compactMap { $0 } }
+        var previousFrames: [CGRect]?
+        for _ in 0..<4 {
+            var frames: [CGRect] = []
+            var moved: [AgentBatchStep] = []
+            for step in steps {
+                guard let ref = step.ref, let chosen = try? original.target(ref: ref),
+                      let old = try? original.match(target: chosen),
+                      let new = try? stored.snapshot.match(target: chosen), Self.sameControl(old, new),
+                      let frame = new.frame, let newRef = try? stored.snapshot.reference(target: chosen),
+                      let rebound = try? step.replacingReference(newRef) else { return nil }
+                frames.append(frame)
+                moved.append(rebound)
+            }
+            if previousFrames == frames { return moved }
+            previousFrames = frames
+            guard (try? await PhaseTimer.measure("agent.reboundPause") { try await Task.sleep(for: .milliseconds(150)) }) != nil,
+                  let next = await refreshTable(context: stored.context, pid: stored.expectedPID) else { return nil }
+            stored = next
+        }
+        return nil
     }
 
     /// The step that stopped the batch was refused before any of its input was sent.
@@ -741,7 +815,7 @@ final class AgentModeController {
                 throw AgentModeFailure("missingBatch", "The agent batch request is missing.")
             }
             let initialRecord: Record
-            let referencePlan: AgentBatchReferencePlan?
+            var referencePlan: AgentBatchReferencePlan?
             if batch.usesReferences {
                 let identity = AgentModeRequest(kind: .describe, expectedPID: batch.expectedPID, snapshotID: batch.snapshotID)
                 initialRecord = try requireRecordIdentity(identity)
@@ -771,14 +845,25 @@ final class AgentModeController {
                 let response = try await PhaseTimer.measure("batch.step \(offset + 1) \(step.action)") {
                     () async throws -> SelectedHIDResponse in
                     if let referencePlan {
+                        if referencePlan.isFocusStep(offset) {
+                            return await performReferenceFocusStep(action, step: step, retryDepth: retryDepth,
+                                index: offset, plan: referencePlan, pid: batchPID)
+                        }
                         return await performReferenceBatchStep(action, step: step, retryDepth: retryDepth, index: offset,
                             plan: referencePlan, pid: batchPID)
                     }
                     guard let current = record, current.context == baseline else {
-                        throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Later steps were stopped.")
+                        throw AgentModeFailure("batchContextChanged", "The simulator restarted, rotated or changed its display during the batch, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
                     }
                     guard let id = step.id else {
                         throw AgentModeFailure("invalidBatchID", "A native ID batch step has no ID.")
+                    }
+                    if step.action == .type && step.focuses {
+                        let ref = try current.snapshot.reference(id: id, action: .tap)
+                        action.agent = AgentModeRequest(kind: .focusAndType, expectedPID: batchPID,
+                            snapshotID: current.id, ref: ref, text: step.text)
+                        return Self.focusStep(await performFocusAndTypeRetrying(action, retryDepth: retryDepth),
+                            retried: retryDepth > 0)
                     }
                     let ref = try current.snapshot.reference(id: id,
                         action: step.action == .tap ? .tap : .typeText)
@@ -801,12 +886,26 @@ final class AgentModeController {
                 guard didComplete else {
                     throw AgentModeFailure("batchInputFailed", "The step did not complete. Later steps were stopped; input was not replayed.")
                 }
-                if referencePlan != nil { continue }
+                if let plan = referencePlan {
+                    if plan.isFocusStep(offset), batch.steps.indices.contains(offset + 1) {
+                        // The focus step's keyboard is a declared layout change. Bind the remaining
+                        // steps to the screen after typing; a refusal belongs to the next step.
+                        currentIndex = offset + 2
+                        currentRequestID = UUID()
+                        guard let typed = record, !result.data.cache.requiresRefresh else {
+                            throw AgentModeFailure("batchRefreshFailed", "AXe could not read the screen after a focus step, so the remaining steps were not sent. Completed steps are in the receipt and were not undone. Run describe-ui --agent and plan the rest from it; do not resend the batch.")
+                        }
+                        let current = await settledTable(after: typed, pid: batchPID)
+                        referencePlan = try plan.rebased(afterFocusStep: offset, snapshot: current.snapshot,
+                            context: current.context, pid: batchPID)
+                    }
+                    continue
+                }
                 guard !result.data.cache.requiresRefresh, record != nil else {
-                    throw AgentModeFailure("batchRefreshFailed", "The step ended without a usable replacement snapshot. Later steps were stopped; completed input was not replayed.")
+                    throw AgentModeFailure("batchRefreshFailed", "AXe could not read the screen after a step, so the remaining steps were not sent. Completed steps are in the receipt and were not undone. Run describe-ui --agent and plan the rest from it; do not resend the batch.")
                 }
                 guard record?.context == baseline else {
-                    throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Later steps were stopped.")
+                    throw AgentModeFailure("batchContextChanged", "The simulator restarted, rotated or changed its display during the batch, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
                 }
             }
             if referencePlan != nil {
@@ -818,10 +917,10 @@ final class AgentModeController {
                 final.agent = AgentModeRequest(kind: .describe, expectedPID: batchPID)
                 last = await PhaseTimer.measure("batch.finalDescribe") { await performReserved(final) }
                 guard let finalResult = last?.agent, !finalResult.didError, record != nil else {
-                    throw last?.agent?.error ?? AgentModeFailure("batchRefreshFailed", "Completed input has no usable replacement snapshot. Do not replay the batch.")
+                    throw last?.agent?.error ?? AgentModeFailure("batchRefreshFailed", "The batch input was sent, but AXe could not read the screen afterwards. Do not resend the batch: run describe-ui --agent to see what happened, then plan from that capture.")
                 }
                 guard record?.context == baseline else {
-                    throw AgentModeFailure("batchContextChanged", "The batch boot, display, orientation or hinge context changed. Completed input was not replayed.")
+                    throw AgentModeFailure("batchContextChanged", "The simulator restarted, rotated or changed its display during the batch, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
                 }
             }
             return withReadingContinuation(finish(nil), request: request)
@@ -869,7 +968,7 @@ final class AgentModeController {
                 // Typing retains its existing independent description and focused-field path.
                 // The step request carries the plan's display; its full context read admits it.
                 guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
-                    throw AgentModeFailure("missingContext", "The batch step has no selected display.")
+                    throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
                 }
                 let fresh = try await observe(display: ActivePanelIdentity(displayID: screenID, uniqueID: screenUUID), pid: pid)
                 guard let context = fresh.context, let roots = fresh.ax?.roots else {
@@ -904,8 +1003,86 @@ final class AgentModeController {
             let nativeFailure = error as? AgentModeNativeFailure
             let failure = error as? AgentModeFailure
                 ?? AgentModeFailure("batchObservationFailed", "The batch observation failed.")
-            return self.failure(request, failure, native: nativeFailure?.response)
+            // Every error caught here comes before the step's input is sent. Report that, so a
+            // batch that sent nothing retries on a new table and returns the current screen.
+            let action = AgentModeActionReceipt(kind: step.action == .tap ? .tap : .typeText,
+                outcome: "failedBeforeInput", enqueuedEventCount: 0, cleanup: "notNeeded", replayed: false,
+                quarantine: nil, slider: nil, sliderValue: nil, retried: retryDepth > 0 ? true : nil)
+            return self.failure(request, failure, native: nativeFailure?.response, action: action)
         }
+    }
+
+    /// A focus step makes the same guarded focus tap and typing as `type --focus`, on the field the
+    /// plan bound, found on a fresh read. The table it reads stays internal: the batch holds the
+    /// controller reservation, and later steps resolve their own fresh evidence.
+    private func performReferenceFocusStep(_ request: SelectedHIDRequest, step: AgentBatchStep, retryDepth: Int,
+                                          index: Int, plan: AgentBatchReferencePlan,
+                                          pid: Int32) async -> SelectedHIDResponse {
+        do {
+            guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
+                throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+            }
+            let fresh = try await observe(display: ActivePanelIdentity(displayID: screenID, uniqueID: screenUUID), pid: pid)
+            guard let context = fresh.context, let roots = fresh.ax?.roots else {
+                throw AgentModeFailure("missingObservation", "The batch step has no fresh native context or hierarchy.")
+            }
+            let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
+                try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: context)
+            }
+            let target = try plan.resolve(index: index, snapshot: snapshot, context: context, pid: pid)
+            let ref = try snapshot.reference(target: target.nativeTarget)
+            let table = store(snapshot, context: context, pid: pid)
+            var focus = request
+            focus.agent = AgentModeRequest(kind: .focusAndType, expectedPID: pid, snapshotID: table.id,
+                ref: ref, text: step.text)
+            return Self.focusStep(await performFocusAndTypeRetrying(focus, retryDepth: retryDepth),
+                retried: retryDepth > 0)
+        } catch {
+            record = nil
+            let nativeFailure = error as? AgentModeNativeFailure
+            let failure = error as? AgentModeFailure
+                ?? AgentModeFailure("batchObservationFailed", "The batch observation failed.")
+            // Nothing was sent: the step was refused before its focus tap.
+            let action = AgentModeActionReceipt(kind: .focusAndType, outcome: "failedBeforeInput",
+                enqueuedEventCount: 0, cleanup: "notNeeded", replayed: false, quarantine: nil,
+                slider: nil, sliderValue: nil, retried: retryDepth > 0 ? true : nil)
+            return self.failure(request, failure, native: nativeFailure?.response, action: action)
+        }
+    }
+
+    /// The screen after a focus step, once two reads in a row show the same batch layout. The
+    /// keyboard's suggestion bar can change after the last key, so a baseline taken from the read
+    /// straight after typing could stop the next step. One read when the screen is already still,
+    /// at most four; there is no fixed wait.
+    private func settledTable(after typed: Record, pid: Int32) async -> Record {
+        var current = typed
+        guard var previous = try? AgentBatchReferencePlan.layoutKey(current.snapshot, context: current.context) else {
+            return current
+        }
+        for _ in 0..<4 {
+            guard let next = await PhaseTimer.measure("batch.focusSettleRead", {
+                      await refreshTable(context: current.context, pid: pid) }),
+                  let key = try? AgentBatchReferencePlan.layoutKey(next.snapshot, context: next.context) else {
+                return current
+            }
+            current = next
+            if key == previous { return current }
+            previous = key
+        }
+        return current
+    }
+
+    /// One focus step's two phases as one batch step. Events from either phase are input, so a
+    /// completed focus tap followed by failed typing is never reported as stopped before input.
+    private static func focusStep(_ response: SelectedHIDResponse, retried: Bool) -> SelectedHIDResponse {
+        guard let result = response.agent else { return response }
+        let action = AgentFocusAndTypeProgress.stepAction(result.data.batch, failed: result.error != nil,
+            cleanup: response.cleanup, quarantine: response.quarantine, retried: retried)
+        var converted = response
+        converted.agent = AgentModeResult(error: result.error, capture: result.data.capture, action: action,
+            cache: result.data.cache, context: result.data.context, quarantine: result.data.quarantine,
+            observation: result.data.observation, nextSteps: result.nextSteps)
+        return converted
     }
 
     private var now: Double { owner.currentTime }
@@ -920,10 +1097,10 @@ final class AgentModeController {
 
     private func requireRecordIdentity(_ mode: AgentModeRequest) throws -> Record {
         guard let record, mode.snapshotID == record.id else {
-            throw AgentModeFailure("snapshotMissing", "The snapshot ID is absent, replaced, or belongs to another broker. Refresh the snapshot.")
+            throw AgentModeFailure("snapshotMissing", "That snapshot ID is no longer current: a newer capture replaced it, it expired after 60 seconds, or AXe restarted. Nothing was sent. Use the snapshot ID and refs from your latest capture, or run describe-ui.")
         }
         guard now - record.capturedAt < Self.timeToLive else {
-            throw AgentModeFailure("snapshotExpired", "The snapshot expired. Refresh the snapshot.")
+            throw AgentModeFailure("snapshotExpired", "This snapshot is more than 60 seconds old, so its refs have expired and nothing was sent. Run describe-ui --agent and act from that capture.")
         }
         _ = try AgentModePIDPolicy.expectedPID(assertion: mode.expectedPID, snapshot: record.expectedPID)
         return record
@@ -933,11 +1110,11 @@ final class AgentModeController {
                                fresh: AgentModeSnapshot) throws -> Record {
         let record = try requireRecordIdentity(mode)
         guard record.context == context else {
-            throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
+            throw AgentModeFailure("contextChanged", "The app or display changed after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         guard record.snapshot.visibleFingerprint == fresh.visibleFingerprint else {
             logger.info().log("Agent snapshot fingerprint mismatch: \(AgentModeSnapshotDifference.summary(previous: record.snapshot.nodes, current: fresh.nodes))")
-            throw AgentModeFailure("screenChanged", "The screen changed outside this reference table. Refresh the snapshot.")
+            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
         }
         if let ref = mode.ref ?? mode.readReference {
             try record.snapshot.validateProtectedReference(ref, in: fresh)
@@ -953,7 +1130,7 @@ final class AgentModeController {
             let panel = try await discoverDisplay(request)
             if let requestedID = request.screenID, let requestedUUID = request.screenUUID {
                 guard requestedID == panel.displayID, requestedUUID == panel.uniqueID else {
-                    throw AgentModeFailure("inactiveDisplay", "The selected display is not the measured active panel. Refresh display selection.")
+                    throw AgentModeFailure("inactiveDisplay", "The display you selected is not the one the simulator is showing, so nothing was sent. Capture again without a display option, or select the active display.")
                 }
             }
             return panel
@@ -988,7 +1165,7 @@ final class AgentModeController {
         }
         guard result.ax?.acquisition?.outcome == .ready, let actualPID = result.ax?.expectedPID,
               result.ax?.acquisition?.attempts.last?.rootPID == actualPID else {
-            throw AgentModeFailure("processEvidenceMissing", "The native observation did not confirm its application PID.")
+            throw AgentModeFailure("processEvidenceMissing", "AXe could not confirm which app owns the screen, so nothing was sent. The app may still be launching: run describe-ui --agent again.")
         }
         _ = try AgentModePIDPolicy.verifiedPID(actualPID, expected: pid)
         return result
@@ -998,7 +1175,7 @@ final class AgentModeController {
                                snapshot: AgentModeSnapshot, cached: Record?,
                                binding: AgentBatchReferencePlan.ResolvedTarget? = nil) throws -> SelectedHIDRequest {
         guard pid > 0, let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "The selected runtime context is incomplete.")
+            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
         }
         var plannedPrimitives: [SelectedHIDPrimitive] = []
         var plannedPath: SelectedHIDPath?
@@ -1065,7 +1242,7 @@ final class AgentModeController {
         case .describe, .read, .focusAndType: throw AgentModeFailure("invalidAction", "A description or reference read is not an input action.")
         case .tap:
             if let node {
-                guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "The tap has no chosen native target.") }
+                guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "AXe could not resolve the tap target to one control, so nothing was sent. \(AgentModeFailure.actFromCapture)") }
                 plannedAX = SelectedAXRequest(kind: .tap, expectedPID: pid,
                     endpoint: nil, selectorKind: nil, selectorValue: nil,
                     preDelay: mode.preDelay, postDelay: mode.postDelay, elementType: node.type, tapStyle: mode.tapStyle,
@@ -1075,12 +1252,12 @@ final class AgentModeController {
                 if mode.preDelay > 0 { plannedPrimitives.append(.delay(mode.preDelay)) }
                 plannedPrimitives += try style.primitives(x: point.x, y: point.y)
                 if mode.postDelay > 0 { plannedPrimitives.append(.delay(mode.postDelay)) }
-            } else { throw AgentModeFailure("missingTarget", "The tap target is unavailable.") }
+            } else { throw AgentModeFailure("missingTarget", "The tap target is no longer on screen, so nothing was sent. \(AgentModeFailure.actFromCapture)") }
         case .hold:
             guard let node else {
                 throw AgentModeFailure("missingHoldTarget", "The fresh hold target is unavailable.")
             }
-            guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "The hold has no chosen native target.") }
+            guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "AXe could not resolve the press target to one control, so nothing was sent. \(AgentModeFailure.actFromCapture)") }
             plannedAX = SelectedAXRequest(kind: .hold, expectedPID: pid,
                 endpoint: nil, selectorKind: nil, selectorValue: nil,
                 preDelay: 0, postDelay: 0, elementType: node.type, holdDuration: mode.duration, nativeTarget: chosenTarget)
@@ -1088,7 +1265,7 @@ final class AgentModeController {
             guard let node, let timing = mode.doubleTapTiming else {
                 throw AgentModeFailure("missingDoubleTapTarget", "The fresh double-tap target or timing is unavailable.")
             }
-            guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "The double-tap has no chosen native target.") }
+            guard let chosenTarget else { throw AgentModeFailure("unsupportedIdentity", "AXe could not resolve the double-tap target to one control, so nothing was sent. \(AgentModeFailure.actFromCapture)") }
             plannedAX = SelectedAXRequest(kind: .doubleTap, expectedPID: pid,
                 endpoint: nil, selectorKind: nil, selectorValue: nil,
                 preDelay: mode.preDelay, postDelay: mode.postDelay,

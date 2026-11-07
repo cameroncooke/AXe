@@ -157,7 +157,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
               attempt.output.exitCode != 0, envelope.schema == "axe.output.agent-result", envelope.schemaVersion == "1",
               envelope.didError, envelope.error?.code == "nativeActionFailed",
               failure.error?.code == "nativeActionFailed",
-              failure.error?.message == #"AXe.AgentModeFailure(code: "screenChanged", message: "The screen changed before input. Refresh the snapshot.")"#,
+              failure.error?.message == "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.",
               envelope.data.capture == nil, envelope.data.cache.status == "invalidated", envelope.data.cache.requiresRefresh,
               let action = envelope.data.action, action.kind == "tap", action.outcome == "failedBeforeInput",
               action.enqueuedEventCount == 0, action.cleanup == "notNeeded", !action.replayed else { return false }

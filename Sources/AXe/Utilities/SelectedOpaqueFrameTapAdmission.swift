@@ -47,6 +47,6 @@ struct SelectedOpaqueFrameTapAdmission: FBSimulatorAXOpaqueFrameTapAdmissionGuar
     }
 
     private func rejected() -> AgentModeFailure {
-        AgentModeFailure("opaqueFrameTapRejected", "The fresh tap frame has no unique actionable control. Refresh the snapshot before more input.")
+        AgentModeFailure("opaqueFrameTapRejected", "No single tappable control is at that position now, so nothing was sent. \(AgentModeFailure.actFromCapture)")
     }
 }

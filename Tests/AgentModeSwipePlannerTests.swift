@@ -94,6 +94,25 @@ struct AgentModeSwipePlannerTests {
         #expect(empty.from == standard.from && empty.to == standard.to)
     }
 
+    @Test("A stroke that would start on a text field moves to the nearest start clear of it")
+    func strokeStartsClearOfTextFields() throws {
+        // On a form a drag that starts on a field edits or focuses it and nothing scrolls.
+        let field = Node(type: "TextField", AXLabel: "First name", frame: Frame(x: 36, y: 690, width: 330, height: 30))
+        let other = Node(type: "TextField", AXLabel: "Last name", frame: Frame(x: 36, y: 760, width: 330, height: 30))
+        let planned = try plan(makeFixture(children: [field, other]))
+        // The nearest clear start on the same line: 6 pt below the field (720), 21 pt from the
+        // planned start, against 22 pt to clear its top edge. The movement is unchanged.
+        #expect(planned.from == AgentPoint(x: 201, y: 726), "\(planned)")
+        #expect(planned.to.y - planned.from.y == standard.to.y - standard.from.y)
+        #expect(planned.to.x == planned.from.x)
+
+        // A stroke that already starts clear of every field stays exact.
+        var lower = field
+        lower.frame = Frame(x: 36, y: 800, width: 330, height: 30)
+        let untouched = try plan(makeFixture(children: [lower]))
+        #expect(untouched.from == standard.from && untouched.to == standard.to)
+    }
+
     private func plan(_ fixture: Fixture, standard: AgentModeSwipePlanner.Points? = nil,
                       viewport: CGSize? = nil) throws -> AgentModeSwipePlanner.Points {
         try AgentModeSwipePlanner.points(standard: standard ?? self.standard, target: fixture.target,

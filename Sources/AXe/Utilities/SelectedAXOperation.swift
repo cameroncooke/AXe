@@ -302,7 +302,7 @@ enum SelectedAXOperation {
             else if count > 0 { result.failure = .inputFailed }
             let outcome = count == 0 && cleanup == "notNeeded" ? "failedBeforeInput" : "failedNoReplay"
             var failed = response(request, brokerID: brokerID, result: result, observation: observation,
-                outcome: outcome, count: count, cleanup: cleanup, error: String(reflecting: error))
+                outcome: outcome, count: count, cleanup: cleanup, error: Self.publicText(error))
             // Owned admission rejections before input keep their typed code for the agent reply.
             if batchTap != nil || (request.agentAdmission != nil && outcome == "failedBeforeInput"),
                let policyFailure = error as? AgentModeFailure {
@@ -312,6 +312,14 @@ enum SelectedAXOperation {
             }
             return failed
         }
+    }
+
+    /// Error text an agent can act on: a typed AXe failure's own message, otherwise the error's
+    /// localized description. Never a Swift debug rendering of the error value.
+    private static func publicText(_ error: Error) -> String {
+        if let failure = error as? AgentModeFailure { return failure.message }
+        if let described = (error as? LocalizedError)?.errorDescription { return described }
+        return error.localizedDescription
     }
 
     private static func response(_ request: SelectedHIDRequest, brokerID: UUID, result: SelectedAXResult,

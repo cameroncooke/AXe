@@ -231,6 +231,161 @@ struct AgentBatchReferencePlanTests {
         }
     }
 
+    @Test("Focus type steps are type-only and keep their flag on a new table")
+    func focusStepDocument() throws {
+        let request = try decode(document(#"[{"action":"type","ref":"e2","text":"MCP","focus":true}]"#))
+        try request.validate()
+        #expect(request.steps[0].focus == true)
+        #expect(try request.steps[0].replacingReference("e7").focus == true)
+        let plain = try decode(document(#"[{"action":"type","ref":"e2","text":"MCP"}]"#))
+        #expect(plain.steps[0].focus == nil)
+        #expect(try plain.steps[0].replacingReference("e7").focus == nil)
+        try decode(#"{"steps":[{"action":"type","id":"first","text":"MCP","focus":true}]}"#).validate()
+        for json in [document(#"[{"action":"tap","ref":"e2","focus":true}]"#),
+                     document(#"[{"action":"type","ref":"e2","text":"x","focus":"yes"}]"#)] {
+            #expect(throws: (any Error).self) { try decode(json).validate() }
+        }
+    }
+
+    @Test("A focus step needs a tap-capable field identity, not existing focus")
+    func focusStepPlan() throws {
+        let snapshot = try snapshot(form())
+        _ = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true},{"action":"tap","ref":"e4"}]"#,
+            snapshot: snapshot)
+        // Without focus, a type step still needs a field that is focused already.
+        #expect(throws: (any Error).self) {
+            try plan(#"[{"action":"type","ref":"e2","text":"MCP"}]"#, snapshot: snapshot)
+        }
+        // A button is not a field.
+        #expect(throws: (any Error).self) {
+            try plan(#"[{"action":"type","ref":"e4","text":"x","focus":true}]"#, snapshot: snapshot)
+        }
+        let target = try plan(#"[{"action":"type","ref":"e3","text":"B","focus":true}]"#, snapshot: snapshot)
+            .resolve(index: 0, snapshot: snapshot, context: context(), pid: 1234)
+        #expect(target.node.identifier == "last" && target.selectorKind == .id)
+    }
+
+    @Test("A completed focus step rebases later targets that only moved")
+    func focusStepRebasesMovedTargets() throws {
+        let plan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true},{"action":"tap","ref":"e4"}]"#,
+            snapshot: snapshot(form()))
+        // The keyboard appears, the form scrolls up and the first field holds its text.
+        var moved = form()
+        moved[0].value = "MCP"; moved[0].focused = true
+        moved[0].frame.y -= 60; moved[1].frame.y -= 60
+        let keyboard = moved + [Node(type: "Button", label: "return", frame: .init(x: 300, y: 760))]
+        let after = try snapshot(keyboard)
+        // Without the rebase, the original layout no longer admits the later tap.
+        #expect(throws: (any Error).self) {
+            try plan.resolve(index: 2, snapshot: after, context: context(), pid: 1234)
+        }
+        let rebased = try plan.rebased(afterFocusStep: 0, snapshot: after, context: context(), pid: 1234)
+        let field = try rebased.resolve(index: 1, snapshot: after, context: context(), pid: 1234)
+        #expect(field.node.identifier == "last" && field.node.frame?.minY == 160)
+        #expect(try rebased.resolve(index: 2, snapshot: after, context: context(), pid: 1234).node.label == "Done")
+        // Layout immutability resumes from the new baseline.
+        var shifted = keyboard
+        shifted[2].frame.x += 1
+        #expect(throws: (any Error).self) {
+            try rebased.resolve(index: 2, snapshot: snapshot(shifted), context: context(), pid: 1234)
+        }
+    }
+
+    @Test("A rebase refuses later targets whose identity, value or availability changed")
+    func focusRebaseRejectsChangedTargets() throws {
+        let tapPlan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"tap","ref":"e4"}]"#,
+            snapshot: snapshot(form()))
+        var variants: [[Node]] = []
+        var changed = form(); changed[2].label = "Cancel"; variants.append(changed)
+        changed = form(); changed[2].enabled = false; variants.append(changed)
+        changed = form(); changed[2].hidden = true; variants.append(changed)
+        changed = form(); changed.append(Node(type: "Button", label: "Done", frame: .init(x: 200, y: 40))); variants.append(changed)
+        changed = form(); changed[2].frame.y = 2000; variants.append(changed)
+        for nodes in variants {
+            #expect(throws: (any Error).self) {
+                try tapPlan.rebased(afterFocusStep: 0, snapshot: snapshot(nodes), context: context(), pid: 1234)
+            }
+        }
+        #expect(throws: (any Error).self) {
+            try tapPlan.rebased(afterFocusStep: 0, snapshot: snapshot(form()), context: context(rotation: 90), pid: 1234)
+        }
+        // A later field whose value changed is a changed state, not a moved control.
+        let fieldPlan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
+            snapshot: snapshot(form()))
+        changed = form(); changed[1].value = "autocorrected"
+        #expect(throws: (any Error).self) {
+            try fieldPlan.rebased(afterFocusStep: 0, snapshot: snapshot(changed), context: context(), pid: 1234)
+        }
+    }
+
+    @Test("A focus step finds its field by identity after earlier typing changed the layout")
+    func focusStepAfterEarlierTyping() throws {
+        var fields = form()
+        fields[0].focused = true
+        let plan = try plan(#"[{"action":"type","ref":"e2","text":"MCP"},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
+            snapshot: snapshot(fields))
+        // Typing filled the first field, moved the form and changed the keyboard's suggestions.
+        var typed = fields
+        typed[0].value = "MCP"
+        typed[1].frame.y -= 20
+        let suggestions = typed + [Node(type: "Button", label: "“MCP”", frame: .init(x: 10, y: 700))]
+        let fresh = try snapshot(suggestions)
+        #expect(try plan.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234).node.identifier == "last")
+        var renamed = suggestions
+        renamed[1].label = "Surname"
+        #expect(throws: (any Error).self) {
+            try plan.resolve(index: 1, snapshot: snapshot(renamed), context: context(), pid: 1234)
+        }
+        var autocorrected = suggestions
+        autocorrected[1].value = "changed"
+        #expect(throws: (any Error).self) {
+            try plan.resolve(index: 1, snapshot: snapshot(autocorrected), context: context(), pid: 1234)
+        }
+    }
+
+    @Test("A rebase refuses a different native field that reuses a later target's ID")
+    func focusRebaseRejectsReplacementField() throws {
+        var fields = form()
+        fields[1].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 202)
+        let plan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
+            snapshot: snapshot(fields, complete: true))
+        var same = fields
+        same[1].frame.y -= 60
+        _ = try plan.rebased(afterFocusStep: 0, snapshot: snapshot(same, complete: true), context: context(), pid: 1234)
+        var replaced = same
+        replaced[1].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 303)
+        #expect(throws: (any Error).self) {
+            try plan.rebased(afterFocusStep: 0, snapshot: snapshot(replaced, complete: true), context: context(), pid: 1234)
+        }
+    }
+
+    @Test("Anonymous fields keep their native identity while focus moves between them")
+    func focusRebaseFollowsAnonymousFields() throws {
+        // No ID and a shared label: only native identity can tell these fields apart.
+        var fields = form()
+        fields[0].identifier = nil; fields[0].label = "Name"
+        fields[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 101)
+        fields[1].identifier = nil; fields[1].label = "Name"
+        fields[1].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 102)
+        fields[1].focused = true
+        let plan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
+            snapshot: snapshot(fields, complete: true))
+        // Step one's field takes focus and text; step two's field loses focus; both move.
+        var after = fields
+        after[0].focused = true; after[0].value = "MCP"; after[0].frame.y -= 60
+        after[1].focused = false; after[1].frame.y -= 60
+        let fresh = try snapshot(after, complete: true)
+        let rebased = try plan.rebased(afterFocusStep: 0, snapshot: fresh, context: context(), pid: 1234)
+        let target = try rebased.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234)
+        #expect(target.node.nativeIdentity?.objectID == 102)
+    }
+
+    private func form() -> [Node] {
+        [Node(type: "TextField", label: "First name", identifier: "first", frame: .init(x: 20, y: 160, width: 300), role: "AXTextField"),
+         Node(type: "TextField", label: "Last name", identifier: "last", frame: .init(x: 20, y: 220, width: 300), role: "AXTextField"),
+         Node(type: "Button", label: "Done", frame: .init(x: 300, y: 40))]
+    }
+
     private let table = UUID(uuidString: "3FF70D78-26DA-4314-B37B-4CB57D2A1A85")!
 
     private func document(_ steps: String) -> String {
@@ -247,10 +402,19 @@ struct AgentBatchReferencePlanTests {
             snapshot: snapshot, context: context(), pid: 1234)
     }
 
-    private func snapshot(_ controls: [Node]) throws -> AgentModeSnapshot {
+    private func snapshot(_ controls: [Node], complete: Bool = false) throws -> AgentModeSnapshot {
         let roots = [Node(type: "Application", label: "Example", frame: .init(width: 390, height: 844), children: controls)]
         let native = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(roots))
-        return try AgentModeSnapshot(roots: native, context: context())
+        guard complete else { return try AgentModeSnapshot(roots: native, context: context()) }
+        // A complete identity read reports the root and every control, as the native reader does.
+        var identified = roots
+        identified[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 1)
+        for index in identified[0].children.indices where identified[0].children[index].nativeIdentity == nil {
+            identified[0].children[index].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: UInt64(900 + index))
+        }
+        let complete = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(identified))
+        return try AgentModeSnapshot(roots: complete,
+            nativeIdentityMetadata: .init(complete: true, reason: nil), context: context())
     }
 
     private func context(boot: String = "1:2:3", screenID: Int = 1, rotation: Int = 0,
@@ -286,9 +450,11 @@ struct AgentBatchReferencePlanTests {
         var focused = false
         var enabled = true
         var hidden = false
+        var nativeIdentity: FBSimulatorAXNativeIdentity? = nil
+        var role: String? = nil
         private enum CodingKeys: String, CodingKey {
             case type, label = "AXLabel", identifier = "AXUniqueId", value = "AXValue"
-            case frame, children, pid, focused, enabled, hidden
+            case frame, children, pid, focused, enabled, hidden, nativeIdentity, role
         }
     }
 }

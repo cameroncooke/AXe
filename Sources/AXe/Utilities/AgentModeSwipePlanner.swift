@@ -75,7 +75,7 @@ enum AgentModeSwipePlanner {
         let targetIndex: Int
         if useNativeIdentity {
             guard nativeTarget?.nativeIdentity == target.nativeIdentity else {
-                throw AgentModeFailure("pathIdentityChanged", "The swipe area does not match its selected native object.")
+                throw AgentModeFailure("pathIdentityChanged", "The scroll area for this swipe changed, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
             targetIndex = try AgentModePathIdentityPolicy.uniqueIndex(matching: target, in: snapshot,
                 usingNativeIdentity: true)
@@ -119,7 +119,43 @@ enum AgentModeSwipePlanner {
             // Native tree order breaks equal-distance ties without an app-specific rule.
             if nearest == nil || distance < nearest!.distance { nearest = (translated, distance) }
         }
-        return nearest?.points ?? standard
+        if let nearest { return nearest.points }
+        return clearOfDragControls(standard, targetPath: targetPath, snapshot: snapshot,
+            bounds: planningBounds ?? area, display: display)
+    }
+
+    /// A drag that starts on a text field, slider or switch goes to that control, not to the scroll
+    /// view: on a measured form such a stroke focused or edited the field and nothing scrolled,
+    /// while the same stroke from a gap between rows scrolled. Move such a start to the nearest
+    /// point clear of those controls (6 pt around each), keeping the stroke's exact movement and
+    /// both ends inside the bounds; shifts along the stroke come first, then across it. The native
+    /// hit check at the start still decides whether the stroke can begin.
+    static func clearOfDragControls(_ stroke: Points, targetPath: String, snapshot: AgentModeSnapshot,
+                                    bounds: CGRect, display: CGRect) -> Points {
+        let blocked: [CGRect] = snapshot.elements.compactMap { element in
+            guard element.path.hasPrefix(targetPath + "."), element.state.visible,
+                  element.role == .textField || element.role == .slider || element.role == .switch
+                    || element.actions.contains(.typeText) else { return nil }
+            return CGRect(x: element.frame.x, y: element.frame.y, width: element.frame.width,
+                height: element.frame.height).insetBy(dx: -6, dy: -6)
+        }
+        func clear(_ point: AgentPoint) -> Bool {
+            !blocked.contains { $0.contains(CGPoint(x: point.x, y: point.y)) }
+        }
+        guard !blocked.isEmpty, !clear(stroke.from) else { return stroke }
+        let vertical = abs(stroke.to.y - stroke.from.y) >= abs(stroke.to.x - stroke.from.x)
+        let limit = Int(max(bounds.width, bounds.height).rounded(.up))
+        for offset in 1...max(1, limit) {
+            let step = Double(offset)
+            let along = vertical ? [(0.0, -step), (0.0, step)] : [(-step, 0.0), (step, 0.0)]
+            let across = vertical ? [(-step, 0.0), (step, 0.0)] : [(0.0, -step), (0.0, step)]
+            for (dx, dy) in along + across {
+                let moved = (from: AgentPoint(x: stroke.from.x + dx, y: stroke.from.y + dy),
+                             to: AgentPoint(x: stroke.to.x + dx, y: stroke.to.y + dy))
+                if clear(moved.from), inside(moved, area: bounds, display: display) { return moved }
+            }
+        }
+        return stroke
     }
 
     private static func hasSafeAncestors(of path: String, targetPath: String,

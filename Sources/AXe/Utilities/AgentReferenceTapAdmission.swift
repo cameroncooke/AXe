@@ -62,7 +62,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
 
     func request(requestID: UUID) throws -> SelectedHIDRequest {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "The selected runtime context is incomplete.")
+            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
         }
         let ax = SelectedAXRequest(kind: .tap, expectedPID: expectedPID, endpoint: nil,
             selectorKind: nil, selectorValue: nil, preDelay: preDelay, postDelay: postDelay,
@@ -76,7 +76,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
     func validateContext(_ context: SelectedHIDContext, pid: Int32) throws {
         _ = try AgentModePIDPolicy.verifiedPID(pid, expected: expectedPID)
         guard self.context == context else {
-            throw AgentModeFailure("contextChanged", "The native runtime context changed. Refresh the snapshot.")
+            throw AgentModeFailure("contextChanged", "The app or display changed after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
     }
 
@@ -86,7 +86,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         try validateContext(context, pid: pid)
         let fresh = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: nativeIdentityMetadata, context: context)
         guard fresh.visibleFingerprint == published.visibleFingerprint else {
-            throw AgentModeFailure("screenChanged", "The screen changed outside this reference table. Refresh the snapshot.")
+            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
         }
         try published.validateProtectedReference(ref, in: fresh)
         let current = try fresh.match(target: reference)
@@ -94,7 +94,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         let currentExecution = try Self.executionTarget(in: fresh, reference: reference, node: current,
             context: context, upgrade: upgradesPhysicalButton)
         guard currentExecution == execution else {
-            throw AgentModeFailure("targetChanged", "The native target identity or frame changed before input. Refresh the snapshot.")
+            throw AgentModeFailure("targetChanged", "Your target changed or moved after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         let target = try AgentModeTarget(current, nativeTarget: execution)
         try target.validate(nativeTarget)

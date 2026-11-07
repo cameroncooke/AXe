@@ -34,20 +34,27 @@ struct AgentBatchStep: Codable, Sendable {
     let id: String?
     let ref: String?
     let text: String?
+    /// A type step with `focus: true` makes one guarded focus tap on its field first, as
+    /// `type --focus` does. In a reference batch it is a declared layout transition.
+    let focus: Bool?
+
+    var focuses: Bool { focus == true }
 
     init(from decoder: Decoder) throws {
-        try AgentBatchJSONKey.requireOnly(["action", "id", "ref", "text"], decoder: decoder)
+        try AgentBatchJSONKey.requireOnly(["action", "id", "ref", "text", "focus"], decoder: decoder)
         let container = try decoder.container(keyedBy: CodingKeys.self)
         action = try container.decode(Action.self, forKey: .action)
         id = try container.decodeIfPresent(String.self, forKey: .id)
         ref = try container.decodeIfPresent(String.self, forKey: .ref)
         text = try container.decodeIfPresent(String.self, forKey: .text)
+        focus = try container.decodeIfPresent(Bool.self, forKey: .focus)
     }
 
     /// The same step addressed on a new table.
     func replacingReference(_ newRef: String) throws -> AgentBatchStep {
-        var object: [String: String] = ["action": action.rawValue, "ref": newRef]
+        var object: [String: Any] = ["action": action.rawValue, "ref": newRef]
         if let text { object["text"] = text }
+        if let focus { object["focus"] = focus }
         return try JSONDecoder().decode(AgentBatchStep.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
@@ -73,6 +80,7 @@ struct AgentBatchStep: Codable, Sendable {
         switch action {
         case .tap:
             guard text == nil else { throw AgentModeFailure("mixedBatchPayload", "A tap step cannot contain text.") }
+            guard focus == nil else { throw AgentModeFailure("mixedBatchPayload", "Only a type step can focus its field.") }
         case .type:
             guard let text else { throw AgentModeFailure("missingBatchText", "A type step requires literal text.") }
             let events = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
@@ -101,7 +109,7 @@ private struct AgentBatchJSONKey: CodingKey {
     static func requireOnly(_ allowed: Set<String>, decoder: Decoder) throws {
         let keys = try decoder.container(keyedBy: Self.self).allKeys.map(\.stringValue)
         guard keys.allSatisfy(allowed.contains) else {
-            throw AgentModeFailure("unsupportedBatchField", "Agent batch contains an unsupported field. Use snapshotID with ref steps, or native id steps, and literal text for type actions.")
+            throw AgentModeFailure("unsupportedBatchField", "Agent batch contains an unsupported field. Use snapshotID with ref steps, or native id steps, and literal text and optional focus for type actions.")
         }
     }
 }

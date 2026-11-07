@@ -22,7 +22,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
          admission: AgentModeAdmission, path: SelectedHIDPath) throws {
         guard path.kind == .swipe || path.kind == .drag, let startX = path.startX, let startY = path.startY,
               let endX = path.endX, let endY = path.endY, admission.target != nil else {
-            throw AgentModeFailure("unsupportedTargetPath", "A reference path requires an exact native target and complete path.")
+            throw AgentModeFailure("unsupportedTargetPath", "AXe could not check the whole path to this control, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         self.simulator = simulator
         self.feed = feed
@@ -74,7 +74,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
                     includeNativeIdentity: nativeTarget.nativeIdentity != nil)
             }
             guard tree.outcome == .ready, let snapshot = tree.snapshot else {
-                throw AgentModeFailure("\(kind.rawValue)TreeReadFailed", "The \(kind.rawValue) target could not be confirmed before input. Refresh the snapshot.")
+                throw AgentModeFailure("\(kind.rawValue)TreeReadFailed", "AXe could not read the \(kind.rawValue) target before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
             try checkDeadline()
             let currentTree = try AgentModeSnapshot(roots: snapshot.roots, nativeIdentityMetadata: snapshot.nativeIdentityMetadata,
@@ -93,7 +93,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
                 default: same = false
                 }
                 guard same else {
-                    throw AgentModeFailure("\(kind.rawValue)HitChanged", "The control at the \(kind.rawValue) start changed. Refresh the snapshot.")
+                    throw AgentModeFailure("\(kind.rawValue)HitChanged", "A different control is now at the \(kind.rawValue) start, so nothing was sent. \(AgentModeFailure.actFromCapture)")
                 }
             }
             try checkDeadline()
@@ -103,9 +103,9 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             if let known = error as? AgentModeFailure {
                 reported = known
             } else if error is CancellationError {
-                reported = AgentModeFailure("\(kind.rawValue)Cancelled", "The \(kind.rawValue) was cancelled before input. Refresh the snapshot.")
+                reported = AgentModeFailure("\(kind.rawValue)Cancelled", "The \(kind.rawValue) was cancelled before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             } else {
-                reported = AgentModeFailure("\(kind.rawValue)AdmissionFailed", "The native \(kind.rawValue) check failed. Refresh the snapshot.")
+                reported = AgentModeFailure("\(kind.rawValue)AdmissionFailed", "AXe's \(kind.rawValue) check failed before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
             failure = reported
             throw reported
@@ -116,12 +116,12 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         switch kind {
         case .swipe, .drag:
             guard case let .touch(.down, x, y) = event, starts[0] == CGPoint(x: x, y: y) else {
-                throw AgentModeFailure("\(kind.rawValue)StartChanged", "The \(kind.rawValue) start changed before input. Refresh the snapshot.")
+                throw AgentModeFailure("\(kind.rawValue)StartChanged", "The \(kind.rawValue) start point changed before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
         case .pinch:
             guard case let .twoFingerTouch(.down, first, second) = event,
                   first == starts[0], second == starts[1], first != second else {
-                throw AgentModeFailure("pinchStartChanged", "The pinch starts changed before input. Refresh the snapshot.")
+                throw AgentModeFailure("pinchStartChanged", "The pinch start points changed before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
         }
     }
@@ -141,7 +141,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
               hit.type?.isEmpty == false, hit.hidden != true, hit.enabled != false,
               let frame = hit.frame, validFrame(frame), frame.contains(start) else {
-            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "The control at the \(kind.rawValue) start could not be confirmed. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "AXe could not confirm the control at the \(kind.rawValue) start, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         try checkDeadline()
         return hit
@@ -150,7 +150,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     private func validateRelationship(hit: FBSimulatorAXNode?, start: CGPoint, tree: AgentModeSnapshot,
                                       roots: [FBSimulatorAXNode]) throws {
         guard let expected = admission.target else {
-            throw AgentModeFailure("unsupportedIdentity", "The \(kind.rawValue) target has no exact native selector.")
+            throw AgentModeFailure("unsupportedIdentity", "This control has no unique ID or label for AXe to check, so nothing was sent. Choose a labelled control or scroll area from the capture in this reply, or use coordinates.")
         }
         let target: FBSimulatorAXNode
         if kind == .pinch, case let .semantic(selectorKind, value, _) = nativeTarget {
@@ -162,16 +162,16 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         guard target.pid == admission.expectedPID, target.hidden != true, target.enabled != false,
               let frame = target.frame, validFrame(frame), frame.contains(start),
               kind == .drag || ends.allSatisfy({ frame.contains($0) }) else {
-            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) path is outside the selected area. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) path is outside the selected area now, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         if kind == .pinch, centre != CGPoint(x: frame.midX, y: frame.midY) {
-            throw AgentModeFailure("pinchStartChanged", "The pinch centre is not the fresh area centre. Refresh the snapshot.")
+            throw AgentModeFailure("pinchStartChanged", "The pinch area moved before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         if kind == .drag, start != CGPoint(x: frame.midX, y: frame.midY) {
-            throw AgentModeFailure("dragStartChanged", "The drag start is not the fresh target centre. Refresh the snapshot.")
+            throw AgentModeFailure("dragStartChanged", "The drag target moved before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         guard tree.nodes.count == tree.elements.count else {
-            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) hierarchy could not be matched to its reference table. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The screen changed under the \(kind.rawValue) target, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         guard let hit else {
             try validateEmptyStart(start, area: target, tree: tree)
@@ -186,12 +186,12 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         let chain = try AgentModePathIdentityPolicy.ancestorChain(hit: hit, area: target,
             roots: roots, snapshot: tree, usingNativeIdentity: nativeTarget.nativeIdentity != nil)
         guard let targetIndex = chain.firstIndex(where: { sameSignature(tree.nodes[$0], target) }) else {
-            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) start is outside the selected area. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) start is outside the selected area now, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         if kind == .pinch, let hitIndex = chain.last {
             let element = tree.elements[hitIndex]
             guard element.state.visible, element.state.enabled else {
-                throw AgentModeFailure("pinchTargetMismatch", "A pinch start is hidden or disabled. Refresh the snapshot.")
+                throw AgentModeFailure("pinchTargetMismatch", "A pinch start point is on a hidden or disabled element, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
         }
         let descendants = chain.dropFirst(targetIndex + 1)
@@ -211,7 +211,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     /// A hittable gesture surface would have been the point read's hit, so it cannot pass here.
     private func validateEmptyStart(_ start: CGPoint, area: FBSimulatorAXNode, tree: AgentModeSnapshot) throws {
         guard kind == .swipe else {
-            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "The control at the \(kind.rawValue) start could not be confirmed. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "AXe could not confirm the control at the \(kind.rawValue) start, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         let areaIndex = try AgentModePathIdentityPolicy.uniqueIndex(matching: area, in: tree,
             usingNativeIdentity: nativeTarget.nativeIdentity != nil)
@@ -226,7 +226,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             default: passive = false
             }
             guard element.path.hasPrefix(areaPath + "."), passive else {
-                throw AgentModeFailure("swipeStartCovered", "Another element covers the empty swipe start. Refresh the snapshot.")
+                throw AgentModeFailure("swipeStartCovered", "Another element covers the swipe start, so nothing was sent. Close what covers it or swipe another area, using the capture in this reply or describe-ui --agent if it has none.")
             }
         }
     }
@@ -242,17 +242,17 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         else if let kind = admission.selectorKind, let value = admission.selectorValue {
             target = .semantic(kind: kind, value: value, elementType: admission.target?.type)
         } else {
-            throw AgentModeFailure("unsupportedIdentity", "The reference path has no exact native target.")
+            throw AgentModeFailure("unsupportedIdentity", "AXe could not resolve this gesture target to one control, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         try target.validate()
         switch target {
         case let .semantic(kind, _, _):
             guard kind == .id || kind == .label else {
-                throw AgentModeFailure("unsupportedIdentity", "The reference path requires an exact ID or label.")
+                throw AgentModeFailure("unsupportedIdentity", "This control has no unique ID or label for AXe to check, so nothing was sent. Choose a labelled control or scroll area from the capture in this reply, or use coordinates.")
             }
         case let .nativeObject(identity, _):
             guard identity.pid == admission.expectedPID else {
-                throw AgentModeFailure("unsupportedIdentity", "The reference path object belongs to another process.")
+                throw AgentModeFailure("unsupportedIdentity", "That control belongs to another app, so nothing was sent. \(AgentModeFailure.actFromCapture)")
             }
         }
         return target
@@ -268,7 +268,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         try Task.checkCancellation()
         let now = DispatchTime.now()
         guard now < deadline else {
-            throw AgentModeFailure("\(kind.rawValue)AdmissionTimeout", "The \(kind.rawValue) check timed out before input. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)AdmissionTimeout", "AXe's \(kind.rawValue) check timed out before input; the app may be busy, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         let remaining = Double(deadline.uptimeNanoseconds - now.uptimeNanoseconds) / 1_000_000_000
         return try FBSimulatorAXAcquisitionPolicy(timeoutSeconds: remaining, maximumAttempts: attempts)
@@ -277,7 +277,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
     private func checkDeadline() throws {
         try Task.checkCancellation()
         guard DispatchTime.now() < deadline else {
-            throw AgentModeFailure("\(kind.rawValue)AdmissionTimeout", "The \(kind.rawValue) check timed out before input. Refresh the snapshot.")
+            throw AgentModeFailure("\(kind.rawValue)AdmissionTimeout", "AXe's \(kind.rawValue) check timed out before input; the app may be busy, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
     }
 }
@@ -289,7 +289,7 @@ enum AgentModePathIdentityPolicy {
                               roots: [FBSimulatorAXNode], snapshot: AgentModeSnapshot,
                               usingNativeIdentity: Bool) throws -> [Int] {
         guard snapshot.nodes.count == snapshot.elements.count else {
-            throw AgentModeFailure("pathIdentityChanged", "The path tree cannot be matched to its current reference table.")
+            throw AgentModeFailure("pathIdentityChanged", "The screen changed under this gesture, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         if usingNativeIdentity {
             // Count every occurrence before type, focus or visibility can hide a copy.
@@ -315,7 +315,7 @@ enum AgentModePathIdentityPolicy {
               chain.allSatisfy({ snapshot.nodes.indices.contains($0) }),
               chain.contains(where: { sameSignature(snapshot.nodes[$0], area,
                   usingNativeIdentity: usingNativeIdentity) }) else {
-            throw AgentModeFailure("pathIdentityChanged", "The path start is not a unique current descendant of the selected area.")
+            throw AgentModeFailure("pathIdentityChanged", "The swipe's start point is no longer inside the scroll area you chose (the screen moved), so nothing was sent. Swipe again with the area's ref from a current capture.")
         }
         return chain
     }
@@ -336,7 +336,7 @@ enum AgentModePathIdentityPolicy {
         }
         guard candidates.count == 1, let index = candidates.first,
               sameSignature(snapshot.nodes[index], node, usingNativeIdentity: usingNativeIdentity) else {
-            throw AgentModeFailure("pathIdentityChanged", "The path control is absent, duplicated or changed in the current tree.")
+            throw AgentModeFailure("pathIdentityChanged", "The control for this gesture is gone, duplicated or changed, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         return index
     }
