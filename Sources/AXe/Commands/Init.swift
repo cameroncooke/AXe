@@ -80,7 +80,7 @@ struct Init: AsyncParsableCommand {
         let skillsDirectory: URL
     }
 
-    private static func loadSkillMarkdown() throws -> String {
+    private static func bundledSkillFile() throws -> URL {
         guard let sourceURL = Bundle.module.url(
             forResource: "SKILL",
             withExtension: "md",
@@ -88,7 +88,11 @@ struct Init: AsyncParsableCommand {
         ) else {
             throw CLIError(errorDescription: "Bundled AXe skill source was not found.")
         }
+        return sourceURL
+    }
 
+    private static func loadSkillMarkdown() throws -> String {
+        let sourceURL = try bundledSkillFile()
         do {
             return try String(contentsOf: sourceURL, encoding: .utf8)
         } catch {
@@ -97,24 +101,40 @@ struct Init: AsyncParsableCommand {
     }
 
     private func installSkill(to targets: [ClientInfo]) throws {
-        let skillMarkdown = try Self.loadSkillMarkdown()
+        // SKILL.md links to files in references/, so install the whole bundled skill directory.
+        let sourceDirectory = try Self.bundledSkillFile().deletingLastPathComponent()
+        let fileManager = FileManager.default
         var installedPaths: [String] = []
 
         for target in targets {
             let targetDirectory = target.skillsDirectory.appendingPathComponent("axe", isDirectory: true)
             let targetFile = targetDirectory.appendingPathComponent("SKILL.md", isDirectory: false)
 
-            if FileManager.default.fileExists(atPath: targetFile.path), !force {
+            if fileManager.fileExists(atPath: targetFile.path), !force {
                 throw CLIError(
                     errorDescription: "Skill already installed at \(targetFile.path). Re-run with --force to overwrite."
                 )
             }
+            if fileManager.fileExists(atPath: targetDirectory.path), !force {
+                throw CLIError(
+                    errorDescription: "Skill directory already exists at \(targetDirectory.path). Re-run with --force to overwrite."
+                )
+            }
 
+            // Copy beside the target first, so a failed copy leaves an existing install in place.
+            let stagingDirectory = target.skillsDirectory.appendingPathComponent(
+                ".axe-install-\(UUID().uuidString)", isDirectory: true)
             do {
-                try FileManager.default.createDirectory(at: targetDirectory, withIntermediateDirectories: true)
-                try skillMarkdown.write(to: targetFile, atomically: true, encoding: .utf8)
+                try fileManager.createDirectory(at: target.skillsDirectory, withIntermediateDirectories: true)
+                try fileManager.copyItem(at: sourceDirectory, to: stagingDirectory)
+                if fileManager.fileExists(atPath: targetDirectory.path) {
+                    _ = try fileManager.replaceItemAt(targetDirectory, withItemAt: stagingDirectory)
+                } else {
+                    try fileManager.moveItem(at: stagingDirectory, to: targetDirectory)
+                }
                 installedPaths.append("\(target.name): \(targetFile.path)")
             } catch {
+                try? fileManager.removeItem(at: stagingDirectory)
                 throw CLIError(
                     errorDescription: "Failed to install AXe skill for \(target.name): \(error.localizedDescription)"
                 )
