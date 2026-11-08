@@ -43,6 +43,11 @@ struct AccessibilityFetcher {
             throw CLIError.simulatorNotFound(udid: simulatorUDID)
         }
 
+        if target.osVersion.version.majorVersion >= 27 {
+            try await waitingForReadableDisplays(simulatorUDID: simulatorUDID, logger: logger) {
+                try requireLitDisplay(try await FBSimulatorDisplayInfoReader.read(for: target).rows)
+            }
+        }
         return try await retryingAfterTestManagerRecovery(
             simulatorUDID: simulatorUDID,
             logger: logger,
@@ -65,12 +70,84 @@ struct AccessibilityFetcher {
                 }, isUsable: { try !isTransientPointFallback(in: $0, at: point) },
                     bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point) { try await element(true) } })
             }
-            return try await readingDirectlyFirst(direct: {
-                let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
-                defer { element.close() }
-                return try serializedAccessibilityData(from: element)
-            }, isUsable: containsAccessibilityDescendant,
-                bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target) })
+            return try await retryingMissingTranslation(logger: logger) {
+                try await readingDirectlyFirst(direct: {
+                    let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
+                    defer { element.close() }
+                    return try serializedAccessibilityData(from: element)
+                }, isUsable: containsAccessibilityDescendant,
+                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target) })
+            }
+        }
+    }
+
+    /// Just after boot, once a display is lit, the first whole-tree read on the iPhone Duo still
+    /// returned "No translation object" while the next one, a second later, returned the tree.
+    /// A whole-tree read retries that error every 250 ms for at most 10 s. Point reads are not
+    /// retried: for them the error can mean nothing is at the point.
+    static func retryingMissingTranslation(
+        logger: AxeLogger,
+        maximumWait: Duration = .seconds(10),
+        pollInterval: Duration = .milliseconds(250),
+        clock: ContinuousClock = ContinuousClock(),
+        wait: @MainActor (Duration) async throws -> Void = { duration in try await Task.sleep(for: duration) },
+        read: @MainActor () async throws -> Data
+    ) async throws -> Data {
+        let deadline = clock.now.advanced(by: maximumWait)
+        while true {
+            do {
+                return try await read()
+            } catch let error as FBAccessibilityError {
+                guard case .noTranslationObject = error, clock.now < deadline else { throw error }
+                logger.info().log("No translation object for the frontmost application yet; reading again")
+                try await wait(pollInterval)
+            }
+        }
+    }
+
+    /// On iOS 27.2 an accessibility read made in the first seconds after boot, before the guest
+    /// publishes its displays, left every later read on that simulator returning "No translation
+    /// object" until it was rebooted; a first read made once the displays answered worked. A
+    /// settled simulator answers the first display read. Otherwise this reads the displays every
+    /// 250 ms for at most 60 s before any accessibility request.
+    /// Early in a boot the display report answers before any integrated display is lit. A report
+    /// without backlight states is accepted, so devices that omit them read as before.
+    static func requireLitDisplay(_ rows: [FBSimulatorDisplayInfoRow]) throws {
+        let integrated = rows.filter(\.integrated)
+        guard !integrated.isEmpty else { throw CLIError(errorDescription: "The simulator reported no built-in display.") }
+        let states = integrated.compactMap(\.backlightState)
+        guard states.isEmpty || states.contains(where: { ["activeOn", "activeDimmed"].contains($0) }) else {
+            throw CLIError(errorDescription: "No built-in display is lit yet.")
+        }
+    }
+
+    static func waitingForReadableDisplays(
+        simulatorUDID: String,
+        logger: AxeLogger,
+        maximumWait: Duration = .seconds(60),
+        pollInterval: Duration = .milliseconds(250),
+        clock: ContinuousClock = ContinuousClock(),
+        wait: @MainActor (Duration) async throws -> Void = { duration in try await Task.sleep(for: duration) },
+        readDisplays: @MainActor () async throws -> Void
+    ) async throws {
+        let deadline = clock.now.advanced(by: maximumWait)
+        var logged = false
+        while true {
+            do {
+                try await readDisplays()
+                return
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                guard clock.now < deadline else {
+                    throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe list-simulators --displays --udid \(simulatorUDID)` succeeds, then read again.")
+                }
+                if !logged {
+                    logger.info().log("Waiting for the simulator displays before preparing accessibility")
+                    logged = true
+                }
+                try await wait(pollInterval)
+            }
         }
     }
 
