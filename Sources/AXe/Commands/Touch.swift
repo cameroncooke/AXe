@@ -11,10 +11,10 @@ struct Touch: AsyncParsableCommand {
         You can either perform a single touch down, touch up, or both.
         
         Examples:
-          axe touch --x 100 --y 200 --down --udid SIMULATOR_UDID        # Touch down at (100, 200)
-          axe touch --x 100 --y 200 --up --udid SIMULATOR_UDID          # Touch up at (100, 200)
-          axe touch --x 100 --y 200 --down --up --udid SIMULATOR_UDID   # Touch down then up (like tap)
-          axe touch --x 100 --y 200 --down --up --delay 1.0 --udid SIMULATOR_UDID # Long press (hold for 1s)
+          axe touch -x 100 -y 200 --down --udid SIMULATOR_UDID        # Touch down at (100, 200)
+          axe touch -x 100 -y 200 --up --udid SIMULATOR_UDID          # Touch up at (100, 200)
+          axe touch -x 100 -y 200 --down --up --udid SIMULATOR_UDID   # Touch down then up (like tap)
+          axe touch -x 100 -y 200 --down --up --delay 1.0 --udid SIMULATOR_UDID # Long press (hold for 1s)
         """
     )
     
