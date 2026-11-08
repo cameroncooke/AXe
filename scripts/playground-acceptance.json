@@ -178,6 +178,9 @@
   "runLast": [
     "PlaygroundSimulatorLifecycleTests"
   ],
+  "freshBootPerGroup": [
+    "duo"
+  ],
   "pendingManifests": [],
   "nativeTools": [
     {
@@ -488,7 +491,8 @@
   },
   "profileNotes": {
     "ipad": "Existing baseline core, keyboard, agent, ordinary regression and real window checks only. The new generic agent cases retain the prior iPhone and Duo scope.",
-    "lifecycle": "Run last, after local package checks. This case leaves Duo shut down."
+    "lifecycle": "Run last, after local package checks. This case leaves Duo shut down.",
+    "freshBootPerGroup": "Each listed device reboots before every group, except a first group that follows the run's own boot. After about an hour of input the Duo simulator's hinge reads time out and guest barriers go unanswered until a reboot."
   },
   "suiteSources": {
     "PlaygroundCoreTests": "PlaygroundCoreTests.swift",

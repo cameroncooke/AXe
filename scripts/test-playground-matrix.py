@@ -58,6 +58,42 @@ def planned_suites(kind, args, config):
     return [suite for suite in suites if suite in args.group] if args.group else suites
 
 
+BOOT_READY_SECONDS = 180
+
+
+def wait_for_displays(run, name, axe, identifier):
+    # bootstatus returns before CoreDevice publishes the display state: for about 12 seconds
+    # afterwards the Duo reports no active panel, and AXe correctly refuses to choose one. Wait
+    # until AXe reads the displays, within the boot readiness budget. No input is sent.
+    deadline = time.monotonic() + BOOT_READY_SECONDS
+    attempts = 0
+    while True:
+        attempts += 1
+        try:
+            run(name + '-displays-ready-' + str(attempts), [str(axe), 'list-simulators', '--displays', '--udid', identifier], timeout=60)
+            return attempts
+        except RuntimeError:
+            if time.monotonic() >= deadline:
+                raise RuntimeError('AXe could not read the displays after boot: ' + identifier)
+
+
+def reboot(run, name, axe, identifier):
+    # A long run slows the Duo's CoreDevice services until hinge reads time out and guest barriers
+    # go unanswered; a reboot clears it. A fresh boot per group gives every group the same start.
+    # The caller checks the input quarantine first, so a reboot never clears a recorded failure.
+    started = time.time()
+    run(name + '-shutdown', ['xcrun', 'simctl', 'shutdown', identifier], timeout=60)
+    inventory = json.loads(run(name + '-shutdown-state', ['xcrun', 'simctl', 'list', 'devices', '-j']))
+    rows = [row for rows in inventory['devices'].values() for row in rows if row['udid'] == identifier]
+    if len(rows) != 1 or rows[0]['state'] != 'Shutdown':
+        raise RuntimeError('The simulator did not shut down before its fresh boot: ' + identifier)
+    run(name + '-boot', ['xcrun', 'simctl', 'boot', identifier])
+    run(name + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=BOOT_READY_SECONDS)
+    attempts = wait_for_displays(run, name, axe, identifier)
+    return dict(shutdownObserved=True, bootObserved=True, displayReadAttempts=attempts,
+                seconds=round(time.time() - started, 2))
+
+
 def require_input_clear(identifier):
     # Mirror the stable, per-device endpoint in HIDInputQuarantine.fileURL.
     # Inspect only: a prior failure, malformed record or symlink must remain in place.
@@ -494,13 +530,18 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                 require_input_clear(identifier)
                 if device['state'] == 'Shutdown':
                     run(kind + '-boot', ['xcrun', 'simctl', 'boot', identifier])
-                run(kind + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=180)
+                run(kind + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=BOOT_READY_SECONDS)
                 case['bootObserved'] = True
+                case['displayReadAttempts'] = wait_for_displays(run, kind, args.axe, identifier)
                 run(kind + '-install', ['xcrun', 'simctl', 'install', identifier, str(app)])
                 suites = planned_suites(kind, args, config)
                 case['suites'] = []
-                for suite in suites:
+                for index, suite in enumerate(suites):
                     require_input_clear(identifier)
+                    fresh_boot = None
+                    # The first group also starts fresh unless this run booted the device itself.
+                    if kind in config.get('freshBootPerGroup', []) and (index > 0 or device['state'] != 'Shutdown'):
+                        fresh_boot = reboot(run, kind + '-' + suite, args.axe, identifier)
                     expected = expected_counts[suite]
                     xml = args.output / (kind + '-' + suite + '.xml')
                     events = args.output / (kind + '-' + suite + '-events.jsonl')
@@ -524,6 +565,8 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                     if failure:
                         result.update(status='FAIL', commandError=failure)
                     result['artifactDirectory'] = str(args.output / (kind + '-' + suite + '-artifacts'))
+                    if fresh_boot:
+                        result['freshBoot'] = fresh_boot
                     case['suites'].append(result)
                     save()
                     if result['status'] != 'PASS':
