@@ -58,7 +58,7 @@ struct Hinge: AsyncParsableCommand {
             let readiness: FBSimulatorHingeReadinessRequest?
             if let screenID = waitForScreenID, let screenUUID = waitForScreenUUID {
                 readiness = try FBSimulatorHingeReadinessRequest(screenID: screenID, screenUUID: screenUUID,
-                    timeoutSeconds: readinessTimeout ?? 8)
+                    timeoutSeconds: readinessTimeout ?? DisplayTransition.settleBudgetSeconds)
             } else {
                 guard waitForScreenID == nil, waitForScreenUUID == nil, readinessTimeout == nil else {
                     throw ValidationError("Both wait-for-screen-id and wait-for-screen-uuid are required for readiness")

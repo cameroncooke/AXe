@@ -41,7 +41,7 @@ struct ListSimulators: AsyncParsableCommand {
                   simulator.state == .booted else {
                 throw CLIError(errorDescription: "--displays requires the requested simulator to be booted.")
             }
-            let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
+            let discovery = try await DisplayTransition.settledDiscovery(for: simulator)
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let output = DisplayDiscoveryOutput(snapshot: discovery.readback.snapshot,
@@ -97,4 +97,26 @@ private struct SimulatorSummaryOutput: Encodable {
     let udid: String
     let name: String
     let description: String
+}
+
+/// A fold or unfold changes the display configuration for a while: on iOS 27.3 the catalogue
+/// reads as changing for about a second. Observation commands wait for the change to finish
+/// instead of failing, and never report a catalogue read across the change.
+enum DisplayTransition {
+    /// The default display coherence budget, shared with `hinge set --readiness-timeout`.
+    static let settleBudgetSeconds: Double = 8
+    /// The pause between reads, matching the hinge rotation observation interval.
+    static let rereadIntervalNanoseconds: UInt64 = 100_000_000
+
+    static func settledDiscovery(for simulator: FBSimulator) async throws -> ActivePanelDiscoveryResult {
+        let deadline = ProcessInfo.processInfo.systemUptime + settleBudgetSeconds
+        while true {
+            do {
+                return try await ActivePanelReader.discoverWithMetadata(for: simulator)
+            } catch FBSimulatorContextError.changedDuringRead
+                where ProcessInfo.processInfo.systemUptime < deadline {
+                try await Task.sleep(nanoseconds: rereadIntervalNanoseconds)
+            }
+        }
+    }
 }
