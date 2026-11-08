@@ -204,6 +204,25 @@ struct HardwareAcceptanceSession {
         return nil
     }
 
+    /// The cover windows, their owners and frames, and the expected panel size, for a failure report.
+    fileprivate func coverSummary(_ roots: [HardwareSystemNode], readSeconds: Double) -> String {
+        let panel = controls.catalogue.activePanel
+        var covers: [String] = []
+        for root in roots {
+            _ = root.find { node in
+                if node.identifier == "SBCoverSheetWindow" {
+                    covers.append("pid=\(node.pid.map(String.init) ?? "nil") enabled=\(node.enabled.map(String.init) ?? "nil") "
+                        + "frame=\(node.frame.map { "\($0.x),\($0.y),\($0.width)x\($0.height)" } ?? "nil") "
+                        + "date=\(node.find { $0.identifier == "lockscreen-date-view" } != nil)")
+                }
+                return false
+            }
+        }
+        let applications = roots.filter { $0.type == "Application" }.map { "\($0.pid.map(String.init) ?? "nil"):\($0.AXLabel ?? "")" }
+        return "read \(String(format: "%.2f", readSeconds))s; applications=\(applications); covers=\(covers); "
+            + "panel=\(panel.nativePixelWidth)x\(panel.nativePixelHeight)/\(panel.pointScale) \(panel.currentOrientation)"
+    }
+
     fileprivate func isSiriState(_ node: HardwareSystemNode) -> Bool {
         guard node.enabled == true else { return false }
         return (node.type == "GenericElement" && node.identifier == "Listening")
@@ -237,8 +256,11 @@ struct HardwareAcceptanceSession {
     fileprivate func waitForClock(expectedOwner: Int32? = nil,
                                   requireOpenPrompt: Bool = true) async throws -> HardwareSystemNode {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
+        var lastObserved = "No system tree was read."
         while ProcessInfo.processInfo.systemUptime < deadline {
+            let readStarted = ProcessInfo.processInfo.systemUptime
             let roots = try await systemTree(timeout: deadline - ProcessInfo.processInfo.systemUptime)
+            lastObserved = coverSummary(roots, readSeconds: ProcessInfo.processInfo.systemUptime - readStarted)
             if ProcessInfo.processInfo.systemUptime < deadline,
                let cover = try systemWindow("SBCoverSheetWindow", in: roots),
                let owner = cover.pid, owner != controls.pid,
@@ -259,7 +281,7 @@ struct HardwareAcceptanceSession {
             }
             try await pause(until: deadline)
         }
-        throw TestError.unexpectedState("No matching real cover window and date were observed.")
+        throw TestError.unexpectedState("No matching real cover window and date were observed. Last read: \(lastObserved)")
     }
 
     func returnToSameApp() async throws {

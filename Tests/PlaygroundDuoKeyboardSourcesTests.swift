@@ -233,6 +233,10 @@ private struct KeyboardAcceptanceSession {
         _ = try await controls.app.run(["tap", "--id", "feature.text", "--element-type", "TextField"])
         let focused = try await controls.documents.waitFor("real text field focus") { $0.textFocused && $0.activeWindowTouches == 0 }
         try focused.requireClear()
+        // Focus raises the software keyboard and scrolls the field into view. Keyboard input
+        // refuses a field that moves during the command, so start once that layout has settled.
+        try await TestHelpers.waitForSettledAccessibility(simulatorUDID: controls.app.udid,
+            description: "focused field with the software keyboard shown")
     }
 
     func requireText(_ text: String, changes: Int) async throws {

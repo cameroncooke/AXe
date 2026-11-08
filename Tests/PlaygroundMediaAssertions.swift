@@ -54,7 +54,17 @@ enum PlaygroundMediaAssertions {
     }
 
     static func markers(_ pixels: Data, width: Int, height: Int, bytesPerRow: Int) throws -> PlaygroundMarkerGeometry {
-        try #require(width > 0 && height > 0 && bytesPerRow >= width * 4 && pixels.count >= bytesPerRow * height)
+        let detected = detectMarkers(pixels, width: width, height: height, bytesPerRow: bytesPerRow)
+        return try #require(detected.geometry, "\(detected.failure)")
+    }
+
+    /// Finds the four upright capture markers without recording a test issue, so a caller can
+    /// judge a frame that legitimately shows none (such as one captured mid-rotation).
+    static func detectMarkers(_ pixels: Data, width: Int, height: Int,
+                              bytesPerRow: Int) -> (geometry: PlaygroundMarkerGeometry?, failure: String) {
+        guard width > 0 && height > 0 && bytesPerRow >= width * 4 && pixels.count >= bytesPerRow * height else {
+            return (nil, "The frame buffer is smaller than its size: \(width)x\(height), \(bytesPerRow) bytes per row")
+        }
         var count = [Int](repeating: 0, count: 4)
         var x = [Double](repeating: 0, count: 4)
         var y = x
@@ -80,15 +90,18 @@ enum PlaygroundMediaAssertions {
                 }
             }
         }
-        try #require(count.allSatisfy { $0 >= 25 }, "The frame is missing a visible colour marker: \(count)")
+        guard count.allSatisfy({ $0 >= 25 }) else { return (nil, "The frame is missing a visible colour marker: \(count)") }
         for index in 0..<4 { x[index] /= Double(count[index]); y[index] /= Double(count[index]) }
-        try #require(x[0] < x[1] && x[2] < x[3] && y[0] < y[2] && y[1] < y[3],
-            "Capture markers are not upright: x=\(x), y=\(y)")
-        try #require(abs(x[0] - x[2]) < Double(width) * 0.08 && abs(y[0] - y[1]) < Double(height) * 0.08)
+        guard x[0] < x[1] && x[2] < x[3] && y[0] < y[2] && y[1] < y[3] else {
+            return (nil, "Capture markers are not upright: x=\(x), y=\(y)")
+        }
+        guard abs(x[0] - x[2]) < Double(width) * 0.08 && abs(y[0] - y[1]) < Double(height) * 0.08 else {
+            return (nil, "Capture markers are not aligned in a grid: x=\(x), y=\(y)")
+        }
         let bounds = (0..<4).map { CGRect(x: minX[$0], y: minY[$0],
             width: maxX[$0] - minX[$0] + step, height: maxY[$0] - minY[$0] + step) }
-        return PlaygroundMarkerGeometry(width: width, height: height, x: x, y: y,
-            bounds: bounds, samplingStep: step)
+        return (PlaygroundMarkerGeometry(width: width, height: height, x: x, y: y,
+            bounds: bounds, samplingStep: step), "")
     }
 
     static func streamFrames(_ data: Data, format: String, width: Int, height: Int,
@@ -158,6 +171,9 @@ enum PlaygroundMediaAssertions {
         var previous: CMTime?
         var observedLayouts = Set<Int>()
         var observedBlackBars = false
+        // Per frame: the settled layouts it matches, and why it matched none.
+        var frameLayouts: [Set<Int>] = []
+        var unmatched: [Int: String] = [:]
         while let sample = output.copyNextSampleBuffer() {
             try #require(CMSampleBufferIsValid(sample) && CMSampleBufferDataIsReady(sample))
             let sampleCount = CMSampleBufferGetNumSamples(sample)
@@ -177,9 +193,23 @@ enum PlaygroundMediaAssertions {
                 let address = try #require(CVPixelBufferGetBaseAddress(buffer))
                 let stride = CVPixelBufferGetBytesPerRow(buffer)
                 let pixels = Data(bytes: address, count: stride * height)
-                let geometry = try markers(pixels, width: width, height: height, bytesPerRow: stride)
-                if !layouts.isEmpty {
-                    let matched = try matchingLayouts(pixels, geometry: geometry, bytesPerRow: stride, layouts: layouts)
+                if layouts.isEmpty {
+                    _ = try markers(pixels, width: width, height: height, bytesPerRow: stride)
+                } else {
+                    // A frame captured during a rotation or fold animation is genuine screen content
+                    // that matches no settled layout. It is checked against its neighbours below.
+                    var matched = Set<Int>()
+                    let detected = detectMarkers(pixels, width: width, height: height, bytesPerRow: stride)
+                    if let geometry = detected.geometry {
+                        matched = matchingLayouts(pixels, geometry: geometry, bytesPerRow: stride, layouts: layouts)
+                        if matched.isEmpty {
+                            let expected = layouts.map { "\($0.name): \($0.fittedCells(canvasWidth: width, canvasHeight: height))" }
+                            unmatched[frames] = "actual=\(geometry.bounds), expected=\(expected)"
+                        }
+                    } else {
+                        unmatched[frames] = detected.failure
+                    }
+                    frameLayouts.append(matched)
                     observedLayouts.formUnion(matched)
                     if matched.contains(where: { index in
                         let content = layouts[index].contentRect(canvasWidth: width, canvasHeight: height)
@@ -196,6 +226,15 @@ enum PlaygroundMediaAssertions {
         try #require(reader.status == .completed, "Movie decode failed: \(reader.error?.localizedDescription ?? "unknown")")
         try #require(frames == expectedFrames && frames >= 2, "Movie decoded \(frames), expected \(expectedFrames).")
         if !layouts.isEmpty {
+            // An unmatched frame is allowed only inside a layout change: the nearest matched frames
+            // on both sides must show different layouts. The first and last frames must match.
+            for (index, matched) in frameLayouts.enumerated() where matched.isEmpty {
+                let before = frameLayouts[..<index].last { !$0.isEmpty }
+                let after = frameLayouts[(index + 1)...].first { !$0.isEmpty }
+                let insideChange = before.flatMap { before in after.map { before.isDisjoint(with: $0) } } ?? false
+                try #require(insideChange,
+                    "Decoded frame \(index) differs from every settled layout outside a layout change: \(unmatched[index] ?? "")")
+            }
             try #require(observedLayouts == Set(layouts.indices), "A requested visible layout was absent from the decoded movie.")
             try #require(observedBlackBars, "The recording never showed the required decoded black bars.")
         }
@@ -234,7 +273,7 @@ enum PlaygroundMediaAssertions {
     }
 
     private static func matchingLayouts(_ pixels: Data, geometry: PlaygroundMarkerGeometry,
-                                        bytesPerRow: Int, layouts: [PlaygroundMediaLayout]) throws -> Set<Int> {
+                                        bytesPerRow: Int, layouts: [PlaygroundMediaLayout]) -> Set<Int> {
         // Sample-grid rounding plus a small H264 colour-edge margin, expressed in output pixels.
         let tolerance = Double(geometry.samplingStep + 3)
         let matching = Set(layouts.indices.filter { index in
@@ -248,9 +287,6 @@ enum PlaygroundMediaAssertions {
             return barsAreBlack(pixels, width: geometry.width, height: geometry.height,
                 bytesPerRow: bytesPerRow, content: content)
         })
-        let expected = layouts.map { "\($0.name): \($0.fittedCells(canvasWidth: geometry.width, canvasHeight: geometry.height))" }
-        try #require(!matching.isEmpty,
-            "Decoded marker bounds or black bars differ from native size and AX cell frames: actual=\(geometry.bounds), expected=\(expected)")
         return matching
     }
 

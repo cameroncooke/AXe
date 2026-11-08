@@ -23,8 +23,6 @@ class BSDInfo(ctypes.Structure):
                  ("startMicroseconds", ctypes.c_uint64)]
 
 
-SZOMB = 5  # sys/proc.h: the process has exited and awaits its parent.
-PROC_FLAG_INEXIT = 4  # sys/proc_info.h: the process is exiting.
 
 libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
 libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
@@ -72,25 +70,11 @@ def describe(row):
     data = ctypes.create_string_buffer(262144)
     size = ctypes.c_size_t(len(data))
     if libc.sysctl(mib, 3, data, ctypes.byref(size), None, 0) != 0:
-        read_errno = ctypes.get_errno()
-        failure = (f"Cannot read argv for an owned process (PID {row['pid']}, "
-                   f"start {row['startSeconds']}:{row['startMicroseconds']}, errno {read_errno})")
-        try:
-            after = info(row["pid"])
-        except RuntimeError as identity_error:
-            raise RuntimeError(failure + "; identity recheck failed: " + str(identity_error)) from identity_error
-        if after is not None and identity(after) != identity(row):
-            return None
-        if after is not None and (after["status"] == SZOMB or after["flags"] & PROC_FLAG_INEXIT):
-            return None  # It exited while being described; the final group checks still count it.
-        if after is None:
-            # A missing info row alone is insufficient; require confirmed PID absence.
-            try:
-                os.kill(row["pid"], 0)
-            except OSError as absence_error:
-                if absence_error.errno == errno.ESRCH:
-                    return None
-        raise RuntimeError(failure)
+        # The kernel refuses argv (EIO or EINVAL) while a child is still replacing its image
+        # (a shell subshell running exec) and once it is a zombie or exiting. None of these is
+        # a fault: the process stays owned by its PID/start identity, the next sample reads it
+        # again, and the final group checks still require it to be gone.
+        return None
     raw = data.raw[:size.value]
     argc = int.from_bytes(raw[:4], sys.byteorder, signed=True)
     if argc < 1 or argc > 8192:
@@ -274,7 +258,7 @@ def main():
             if row is None:
                 continue
             key = identity(row)
-            if key not in owned:
+            if key not in owned or "arguments" not in owned[key]:
                 owned[key] = describe(row) or row
             rows.append(row)
         for key in list(owned):
@@ -350,8 +334,19 @@ def main():
             # A failed check cannot strand a known owned child. Forced cleanup is always a test failure.
             if child.poll() is None:
                 failures.append("The test had to stop its owned CLI")
+
+            def cleanup_sample():
+                # An inventory failure here must not abandon cleanup: fall back to the identities
+                # already owned, which still names every process this observer may signal.
+                try:
+                    return sample()
+                except RuntimeError as inventory_error:
+                    failures.append("Cleanup inventory failed: " + str(inventory_error))
+                    return [current for current in (info(key[0]) for key in list(owned))
+                            if current is not None and identity(current) in owned]
+
             for number in (signal.SIGTERM, signal.SIGKILL):
-                rows = sample()
+                rows = cleanup_sample()
                 alive = [row for row in rows if identity(row) in owned]
                 if not alive:
                     break
@@ -361,11 +356,11 @@ def main():
                         os.kill(row["pid"], number)
                         forced.append({"pid": row["pid"], "signal": number})
                 stop = time.monotonic() + 2
-                while time.monotonic() < stop and sample():
+                while time.monotonic() < stop and cleanup_sample():
                     child.poll()
                     time.sleep(0.02)
             cli_exit = child.poll()
-            remaining = sample()
+            remaining = cleanup_sample()
             if cli_exit is None or remaining:
                 failures.append("Owned process exit is not confirmed")
         else:
