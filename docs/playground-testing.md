@@ -55,7 +55,7 @@ PATH="/opt/homebrew/bin:$PATH" python3 scripts/test-playground-matrix.py \
   --duo DUO_UUID \
   --developer-dir /Applications/Xcode.app/Contents/Developer \
   --suite all \
-  --output build_products/playground-results/NEW_RUN
+  --output e2e-results/NEW_RUN
 ```
 
 The result directory must be new. Earlier failed output is never replaced. The default all run requires the iPad profile. Use the actual installed Xcode and the matching helper compile inputs.
@@ -63,12 +63,14 @@ The result directory must be new. Earlier failed output is never replaced. The d
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
 | Core controls | 21 | 17 | 248 | Find, tap, type, scroll, swipe, drag, switches, sliders, retained contacts and batches |
-| Agent controls | 142 | 4 | 157 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
-| Keyboard and hardware | 1 | 1 | 52 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
+| Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
+| Keyboard and hardware | 3 | 1 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 0 | 0 | 28 | Selected PNG, video, streams, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **165** | **23** | **505** | **693 case executions** |
+| **Total** | **171** | **23** | **514** | **708 case executions** |
+
+The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
 The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases and three raw/selected input handover cases. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
 
