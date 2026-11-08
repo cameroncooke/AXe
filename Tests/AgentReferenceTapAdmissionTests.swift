@@ -134,6 +134,28 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.kinds == [.describe, .tap, .describe])
     }
 
+    @Test("A ref that offers no tap is refused before input with the current screen, and is not retried",
+          arguments: ["e3", "e999"])
+    func unsupportedReferenceReturnsCurrentScreen(ref: String) async throws {
+        let harness = try Harness()
+        let (snapshot, _) = try await harness.describe()
+        // The screen moved on since the agent's capture, as when a dismissed sheet reveals a pushed card.
+        var changed = harness.fixture.controls
+        changed.append(.init(type: "Button", label: "Edit", frame: .init(y: 300)))
+        harness.state.ownedRoots = try harness.fixture.roots(changed)
+        harness.state.describeRoots = harness.state.ownedRoots
+        let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
+        let result = try #require(response.agent)
+        #expect(result.didError && result.error?.code == "unsupportedReference")
+        #expect(result.data.action == nil || result.data.action?.enqueuedEventCount == 0)
+        let capture = try #require(result.data.capture, "The refusal must carry the current screen")
+        #expect(capture.snapshotID != snapshot && capture.targets.contains { $0.contains("|tap|button|Edit|") })
+        #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        // No owned tap, and exactly one refresh read: the agent's own choice is not retried.
+        #expect(harness.state.ownedTaps == 0)
+        #expect(harness.state.kinds == [.describe, .describe])
+    }
+
     @Test("A reference read follows an unchanged control on a changed screen and refuses a changed one")
     func readFollowsUnchangedControl() async throws {
         let harness = try Harness()

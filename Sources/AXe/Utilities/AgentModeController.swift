@@ -115,6 +115,9 @@ final class AgentModeController {
             refusalOriginal = referenceRecord?.snapshot
             let expectedPID = try AgentModePIDPolicy.expectedPID(
                 assertion: mode.expectedPID, snapshot: referenceRecord?.expectedPID)
+            // A refusal before the owned paths below read anything still reads the table's display.
+            refusalContext = referenceRecord?.context
+            refusalPID = expectedPID
             // A published reference tap is admitted on the operation's own owned tree. The table
             // supplies the target, display and context; the owned full context read and tree
             // replace the separate pre-description and its two-tree equality.
@@ -366,7 +369,8 @@ final class AgentModeController {
         // The agent's own recovery, inside the call. When the refused action's target is still
         // the same control, perform the action on the new table. Anything else returns the new
         // table to the agent.
-        if Self.retriesOnNewTable(mode.kind), retryDepth < Self.maximumRetries {
+        if Self.retriesOnNewTable(mode.kind), retryDepth < Self.maximumRetries,
+           !Self.targetRefusals.contains(error.code) {
             if let original, let ref = mode.ref,
                let newRef = await reboundReference(ref, original: original, stored: &stored) {
                 var retry = request
@@ -393,9 +397,15 @@ final class AgentModeController {
     private static func refusalRefreshes(_ error: AgentModeFailure, native: SelectedHIDResponse?) -> Bool {
         let failedBeforeInput = error.code == "nativeActionFailed" && native?.outcome == "failedBeforeInput"
             && native?.cleanup != "uncertain"
-        return (["screenChanged", "targetChanged", "batchLayoutChanged", "nativeIdentityIncomplete"].contains(error.code) || failedBeforeInput)
+        return (["screenChanged", "targetChanged", "batchLayoutChanged", "nativeIdentityIncomplete"].contains(error.code)
+                || targetRefusals.contains(error.code) || failedBeforeInput)
             && (native?.enqueuedEventCount ?? 0) == 0 && native?.quarantine == nil
     }
+
+    /// A ref or selector that names no current control offering the action. The agent chose it,
+    /// often from a capture taken while the screen was still changing, so the same request is not
+    /// retried; the refusal returns the current screen so the next choice needs no separate read.
+    private static let targetRefusals: Set<String> = ["unsupportedReference", "targetMissing"]
 
     private static func retriesOnNewTable(_ kind: AgentModeRequest.Kind) -> Bool {
         switch kind {
