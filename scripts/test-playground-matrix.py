@@ -53,6 +53,11 @@ def selected_suites(kind, suite, config):
     return config['profiles'][kind] + (config['runLast'] if kind == 'duo' else [])
 
 
+def planned_suites(kind, args, config):
+    suites = selected_suites(kind, args.suite, config)
+    return [suite for suite in suites if suite in args.group] if args.group else suites
+
+
 def require_input_clear(identifier):
     # Mirror the stable, per-device endpoint in HIDInputQuarantine.fileURL.
     # Inspect only: a prior failure, malformed record or symlink must remain in place.
@@ -261,6 +266,7 @@ def main():
     parser.add_argument('--only', choices=['iphone', 'ipad', 'duo'], help='Run one device while fixing a failure.')
     parser.add_argument('--suite', choices=['core', 'agent', 'duo', 'lifecycle', 'all', 'core-controls', 'agent-controls', 'keyboard-hardware', 'media', 'hinge'], default='all')
     parser.add_argument('--developer-dir', default=os.environ.get('DEVELOPER_DIR'))
+    parser.add_argument('--group', action='append', default=[], help='Run only this test group of the selected suite (repeatable) while fixing a failure.')
     parser.add_argument('--output', type=Path, required=True, help='New result directory; existing results are never replaced.')
     args = parser.parse_args()
     if args.suite in ('duo', 'lifecycle') and args.only != 'duo':
@@ -287,7 +293,7 @@ def main():
                FBSIMULATORCONTROL_LOG_HID_DETAILS='1')
     if args.developer_dir:
         env['DEVELOPER_DIR'] = args.developer_dir
-    report = dict(status='RUNNING', requestedSuite=args.suite, requestedDevices=args.only or 'iphone,duo,ipad',
+    report = dict(status='RUNNING', requestedSuite=args.suite, requestedGroups=args.group, requestedDevices=args.only or 'iphone,duo,ipad',
                   cli=str(args.axe), cliSHA256=digest(args.axe), payloadBefore=payload_manifest(args.axe.parent),
                   sourceHashes={}, runnerSHA256=digest(Path(__file__)), commands=[], devices=[], startedAt=time.time())
     owned = None
@@ -315,10 +321,10 @@ def main():
             requested.append(('ipad', str(args.ipad).upper()))
         if args.only:
             requested = [(kind, identifier) for kind, identifier in requested if kind == args.only]
-        requested = [(kind, identifier) for kind, identifier in requested if selected_suites(kind, args.suite, config)]
+        requested = [(kind, identifier) for kind, identifier in requested if planned_suites(kind, args, config)]
         report['resolvedDevices'] = [dict(kind=kind, udid=identifier) for kind, identifier in requested]
         report['plannedSuites'] = [dict(kind=kind, name=suite, expected=expected_counts.get(suite))
-            for kind, _ in requested for suite in selected_suites(kind, args.suite, config)]
+            for kind, _ in requested for suite in planned_suites(kind, args, config)]
         missing = [item['name'] for item in report['plannedSuites']
                    if type(item['expected']) is not int or item['expected'] <= 0]
         if missing:
@@ -491,7 +497,7 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                 run(kind + '-boot-ready', ['xcrun', 'simctl', 'bootstatus', identifier, '-b'], timeout=180)
                 case['bootObserved'] = True
                 run(kind + '-install', ['xcrun', 'simctl', 'install', identifier, str(app)])
-                suites = selected_suites(kind, args.suite, config)
+                suites = planned_suites(kind, args, config)
                 case['suites'] = []
                 for suite in suites:
                     require_input_clear(identifier)

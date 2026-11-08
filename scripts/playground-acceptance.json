@@ -59,6 +59,7 @@
     "PlaygroundIndependentPairTests.swift",
     "PlaygroundInputHandoverTests.swift",
     "PlaygroundInterruptionTests.swift",
+    "PlaygroundLaunchHelpers.swift",
     "PlaygroundKeyboardTests.swift",
     "PlaygroundMediaAssertions.swift",
     "PlaygroundMediaProcessSupport.swift",
