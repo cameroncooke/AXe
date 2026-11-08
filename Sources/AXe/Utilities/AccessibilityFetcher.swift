@@ -45,7 +45,7 @@ struct AccessibilityFetcher {
 
         if target.osVersion.version.majorVersion >= 27 {
             try await waitingForReadableDisplays(simulatorUDID: simulatorUDID, logger: logger) {
-                try requireLitDisplay(try await FBSimulatorDisplayInfoReader.read(for: target).rows)
+                try requireStartedDisplay(try await FBSimulatorDisplayInfoReader.read(for: target).rows)
             }
         }
         return try await retryingAfterTestManagerRecovery(
@@ -81,7 +81,7 @@ struct AccessibilityFetcher {
         }
     }
 
-    /// Just after boot, once a display is lit, the first whole-tree read on the iPhone Duo still
+    /// Just after boot, once a display has started, the first whole-tree read on the iPhone Duo still
     /// returned "No translation object" while the next one, a second later, returned the tree.
     /// A whole-tree read retries that error every 250 ms for at most 10 s. Point reads are not
     /// retried: for them the error can mean nothing is at the point.
@@ -105,22 +105,28 @@ struct AccessibilityFetcher {
         }
     }
 
+    /// Early in a boot the display report answers while every integrated display still reports
+    /// backlight state "unknown" (measured on the iPhone and the Duo; the first known state was
+    /// "activeOn"). Any known state passes, so a locked display ("inactiveOn") reads as before; a
+    /// report without backlight states is accepted, so devices that omit them read as before.
+    static func requireStartedDisplay(_ rows: [FBSimulatorDisplayInfoRow]) throws {
+        let integrated = rows.filter(\.integrated)
+        guard !integrated.isEmpty else { throw CLIError(errorDescription: "The simulator reported no built-in display.") }
+        try requireStartedDisplay(backlightStates: integrated.map(\.backlightState))
+    }
+
+    static func requireStartedDisplay(backlightStates: [String?]) throws {
+        let states = backlightStates.compactMap { $0 }
+        guard states.isEmpty || states.contains(where: { $0 != "unknown" }) else {
+            throw CLIError(errorDescription: "No built-in display has started yet.")
+        }
+    }
+
     /// On iOS 27.2 an accessibility read made in the first seconds after boot, before the guest
     /// publishes its displays, left every later read on that simulator returning "No translation
     /// object" until it was rebooted; a first read made once the displays answered worked. A
     /// settled simulator answers the first display read. Otherwise this reads the displays every
     /// 250 ms for at most 60 s before any accessibility request.
-    /// Early in a boot the display report answers before any integrated display is lit. A report
-    /// without backlight states is accepted, so devices that omit them read as before.
-    static func requireLitDisplay(_ rows: [FBSimulatorDisplayInfoRow]) throws {
-        let integrated = rows.filter(\.integrated)
-        guard !integrated.isEmpty else { throw CLIError(errorDescription: "The simulator reported no built-in display.") }
-        let states = integrated.compactMap(\.backlightState)
-        guard states.isEmpty || states.contains(where: { ["activeOn", "activeDimmed"].contains($0) }) else {
-            throw CLIError(errorDescription: "No built-in display is lit yet.")
-        }
-    }
-
     static func waitingForReadableDisplays(
         simulatorUDID: String,
         logger: AxeLogger,

@@ -83,6 +83,14 @@ struct AccessibilityBootWaitTests {
         }
     }
 
+    @Test("Only a boot whose displays all report an unknown backlight waits", arguments: [
+        (["unknown"], false), (["unknown", "unknown"], false),
+        (["activeOn"], true), (["activeDimmed"], true), (["inactiveOn"], true), (["off"], true),
+        (["unknown", "activeOn"], true), ([nil], true), ([], true)] as [([String?], Bool)])
+    func startedDisplay(states: [String?], started: Bool) {
+        #expect(((try? AccessibilityFetcher.requireStartedDisplay(backlightStates: states)) != nil) == started)
+    }
+
     @Test("Cancellation is not retried")
     func cancellation() async {
         var reads = 0
