@@ -12,9 +12,13 @@ struct PlaygroundDuoScrollCoverageTests {
             let previous = try #require(app.visibleRows(in: before, listFrame: list).max())
             // These are the public defaults. Do not repair their coordinates in this check.
             try await app.run(["gesture", "scroll-up"])
-            let after = try await app.waitFor("a newly revealed list row after default scroll") {
+            _ = try await app.waitFor("a newly revealed list row after default scroll") {
                 app.visibleRows(in: $0, listFrame: list).contains { $0 > previous }
             }
+            // A tap while the list still coasts only stops the scroll, so tap once it has settled.
+            try await TestHelpers.waitForSettledAccessibility(simulatorUDID: app.simulatorUDID,
+                description: "long scroll list after default scroll")
+            let after = try await app.state()
             let row = try #require(app.visibleRows(in: after, listFrame: list).filter { $0 > previous }.min())
             try await app.run(["tap", "--id", "long-scroll-test-row-\(row)"])
             try await app.waitForValue("long-scroll-test-state", equals: "Row \(row)")

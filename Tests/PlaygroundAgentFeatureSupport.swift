@@ -269,11 +269,7 @@ func openAgentPlaygroundScreen(_ app: AgentPlaygroundSession, screen: String, re
     guard isDuoPlaygroundE2EEnabled else { return try await app.open(screen, readyID: readyID) }
     let device = try DuoPlaygroundSession()
     let original = try await device.catalogue()
-    var measured = try await device.setPose(position.pose, boot: original.bootIdentity)
-    for _ in 0..<4 {
-        if try measured.activePanel.rotationDegrees() == position.rotation { break }
-        measured = try await device.rotateRight(catalogue: measured)
-    }
+    let measured = try await device.position(position.pose, rotation: position.rotation, boot: original.bootIdentity)
     try #require(try measured.activePanel.rotationDegrees() == position.rotation)
     let target = DuoPlaygroundLaunchTarget(bootIdentity: measured.bootIdentity, panel: measured.activePanel)
     return try await DuoPlaygroundLaunchTarget.$current.withValue(target) {

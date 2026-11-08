@@ -7,11 +7,7 @@ enum PlaygroundDuoChange: String, CaseIterable { case fold, rotate, open }
 func prepareDuoControls(_ position: DuoControlsPosition) async throws -> PlaygroundControlsSession {
     let simulator = try DuoPlaygroundSession()
     let original = try await simulator.catalogue()
-    var current = try await simulator.setPose(position.pose, boot: original.bootIdentity)
-    for _ in 0..<4 {
-        if try current.activePanel.rotationDegrees() == position.rotation { break }
-        current = try await simulator.rotateRight(catalogue: current)
-    }
+    let current = try await simulator.position(position.pose, rotation: position.rotation, boot: original.bootIdentity)
     let degrees = try current.activePanel.rotationDegrees()
     try #require(degrees == position.rotation)
     let target = DuoPlaygroundLaunchTarget(bootIdentity: current.bootIdentity, panel: current.activePanel)

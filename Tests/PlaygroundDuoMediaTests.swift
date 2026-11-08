@@ -212,11 +212,7 @@ struct MediaPlaygroundSession {
 
     func open(inner: Bool, rotation: Int) async throws -> MediaPrepared {
         let original = try await device.catalogue()
-        var current = try await device.setPose(inner ? .open : .closed, boot: original.bootIdentity)
-        for _ in 0..<4 {
-            if try current.activePanel.rotationDegrees() == rotation { break }
-            current = try await device.rotateRight(catalogue: current)
-        }
+        let current = try await device.position(inner ? .open : .closed, rotation: rotation, boot: original.bootIdentity)
         let target = DuoPlaygroundLaunchTarget(bootIdentity: current.bootIdentity, panel: current.activePanel)
         let pid = try await DuoPlaygroundLaunchTarget.$current.withValue(target) {
             let pid = try await device.launch(screen: "media-pattern")

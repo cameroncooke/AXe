@@ -4,7 +4,8 @@ import Testing
 
 @Suite("Playground Duo Media Safety E2E", .serialized, .enabled(if: isDuoPlaygroundE2EEnabled))
 struct PlaygroundDuoMediaSafetyTests {
-    @Test("PNG cancellation awaits a real capture or context child", arguments: ["capture-int", "context-term"])
+    // Display state is read in process, so the capture is the one owned child to interrupt.
+    @Test("PNG cancellation by SIGINT or SIGTERM awaits the real capture child", arguments: ["capture-int", "capture-term"])
     func cancelledScreenshot(phase: String) async throws {
         let session = try MediaPlaygroundSession(name: "png-" + phase)
         let before = try await session.open(inner: true, rotation: 90)

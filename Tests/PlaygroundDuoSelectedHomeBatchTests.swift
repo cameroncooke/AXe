@@ -51,10 +51,22 @@ struct PlaygroundDuoSelectedHomeBatchTests {
         try #require(systemPID > 0 && systemPID != controls.pid)
         let current = try await DuoPlaygroundSession().catalogue(boot: controls.catalogue.bootIdentity)
         let panel = current.activePanel.identity
-        let foreground = try await hardware.command(["describe-ui", "--expected-pid", String(systemPID),
-            "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString])
-        let firstLine = foreground.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
-        let tree = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(firstLine.utf8))
+        // Home completes when its events are delivered; SpringBoard takes the foreground a moment
+        // later. Until then selected AX refuses the read with processChanged, so read again.
+        let describe = ["describe-ui", "--expected-pid", String(systemPID),
+            "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString]
+        let deadline = ProcessInfo.processInfo.systemUptime + 10
+        var tree: DuoCLIResponse
+        while true {
+            let foreground = try await hardware.command(describe, allowFailure: true, allowAnyExit: true)
+            let firstLine = foreground.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
+            tree = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(firstLine.utf8))
+            if foreground.exitCode == 0 { break }
+            try #require(tree.ax?.acquisition?.outcome == .processChanged && tree.enqueuedEventCount == 0
+                && ProcessInfo.processInfo.systemUptime < deadline,
+                "Selected AX did not acquire SpringBoard after Home: \(foreground.output)")
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
         try tree.requireSuccess("ready")
         try #require(tree.enqueuedEventCount == 0 && tree.cleanup == "notNeeded")
         let context = try #require(tree.context)

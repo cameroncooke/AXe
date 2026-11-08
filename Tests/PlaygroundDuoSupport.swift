@@ -162,6 +162,27 @@ struct DuoPlaygroundSession {
         return value
     }
 
+    /// Sets the pose, then rotates the active panel right until it reaches `rotation`.
+    func position(_ pose: DuoPlaygroundPose, rotation: Int, boot: String) async throws -> DuoCatalogue {
+        var current = try await setPose(pose, boot: boot)
+        let identity = current.activePanel.identity
+        if try current.activePanel.rotationDegrees() != rotation {
+            // The iPhone home screen is portrait only, so a rotation is observed only with an app
+            // in front. After a fresh boot nothing else has opened the Playground yet. The app's own
+            // orientation can change the panel's rotation, so measure it again after the launch.
+            _ = try await launch()
+            current = try await catalogue(boot: boot)
+        }
+        for _ in 0..<4 {
+            if try current.activePanel.rotationDegrees() == rotation { break }
+            current = try await rotateRight(catalogue: current)
+        }
+        guard current.activePanel.identity == identity else {
+            throw TestError.unexpectedState("Rotation changed the active panel set by the pose.")
+        }
+        return current
+    }
+
     func setPose(_ pose: DuoPlaygroundPose, boot: String) async throws -> DuoCatalogue {
         let before = try await readHinge(boot: boot)
         try before.requireSuccess("observedHinge")
@@ -405,7 +426,7 @@ struct DuoPlaygroundSession {
               receipt.vendorEventCount == 1, receipt.matchingObservationCount == 2,
               receipt.before.rotation == (try before.activePanel.rotationDegrees()),
               receipt.after.rotation != receipt.before.rotation else {
-            throw TestError.unexpectedState("Rotation lacks one request and two matching changed positions.")
+            throw TestError.unexpectedState("Rotation lacks one request and two matching changed positions.\n\(result.output)")
         }
         let after = try await stableCatalogue(boot: before.bootIdentity)
         guard after.activePanel.identity == pair,
@@ -440,8 +461,8 @@ struct DuoPlaygroundSession {
             guard let context = response.context, let ax = response.ax else {
                 throw TestError.unexpectedState("Selected description has no matching app or measured context.")
             }
-            if let acquisition = ax.acquisition, acquisition.outcome == .notReady {
-                lastValue = "notReady for PID \(pid), attempts=\(acquisition.attempts.count)"
+            if let acquisition = ax.acquisition, acquisition.outcome == .notReady || acquisition.outcome == .processChanged {
+                lastValue = "\(acquisition.outcome) for PID \(pid), attempts=\(acquisition.attempts.count)"
             } else {
                 guard let roots = ax.roots else {
                     throw TestError.unexpectedState("Ready selected description has no roots.")
@@ -499,6 +520,7 @@ struct DuoPlaygroundSession {
             }
             return response
         }
+        if response.isForegroundNotYetOwned(by: pid, exitCode: result.exitCode) { return response }
         guard result.exitCode == 1, response.outcome == "failedBeforeInput", response.error != nil,
               ax.failure == .acquisitionFailed, let acquisition = ax.acquisition,
               acquisition.outcome == .notReady, acquisition.failureDescription == nil,
@@ -1133,6 +1155,15 @@ struct DuoCLIResponse: Decodable {
     let hinge: Hinge?
     let rotation: Rotation?
     let quarantine: Quarantine?
+
+    /// A selected read refused because another process (SpringBoard, while an app launch or return
+    /// animates) still owns the foreground. Nothing was sent; a later read can find the app.
+    func isForegroundNotYetOwned(by pid: Int32, exitCode: Int32) -> Bool {
+        guard exitCode == 1, outcome == "failedBeforeInput", enqueuedEventCount == 0, cleanup == "notNeeded",
+              quarantine == nil, error != nil, let ax, ax.expectedPID == pid, ax.failure == .acquisitionFailed,
+              let acquisition = ax.acquisition, acquisition.outcome == .processChanged else { return false }
+        return !acquisition.attempts.isEmpty && acquisition.attempts.allSatisfy { $0.rootPID != pid }
+    }
 
     func requireSuccess(_ expected: String? = nil) throws {
         guard error == nil, quarantine == nil, cleanup != "uncertain", expected == nil || outcome == expected else {

@@ -28,17 +28,10 @@ enum PlaygroundMediaProcess {
             try #require(child.pid != receipt.cliPID && receipt.owned.contains { $0.pid == child.pid })
             try #require(child.signal == (phase == "capture-int" ? 2 : 15))
             let executable = try #require(child.executable)
-            if phase == "capture-int" {
-                let arguments = try #require(child.arguments)
-                try #require(URL(fileURLWithPath: executable).lastPathComponent == "simctl")
-                try #require(arguments.count >= 6 && arguments[1] == "io" && arguments[3] == "screenshot")
-                try #require(arguments[4].hasPrefix("--display=") && arguments[5].hasSuffix("/capture.png"))
-            } else {
-                let arguments = try #require(child.arguments)
-                try #require(URL(fileURLWithPath: executable).lastPathComponent == "devicectl")
-                try #require(arguments.count >= 10 && Array(arguments[1...4]) == ["device", "info", "displays", "--device"])
-                try #require(arguments.contains("--json-output") && arguments.last?.hasSuffix("/response.json") == true)
-            }
+            let arguments = try #require(child.arguments)
+            try #require(URL(fileURLWithPath: executable).lastPathComponent == "simctl")
+            try #require(arguments.count >= 6 && arguments[1] == "io" && arguments[3] == "screenshot")
+            try #require(arguments[4].hasPrefix("--display=") && arguments[5].hasSuffix("/capture.png"))
         }
         return receipt
     }

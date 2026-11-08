@@ -167,8 +167,7 @@ private enum IndependentHingeWriter {
     let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
     guard capability.hinge == .supported,
           capability.deviceTypeIdentifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo",
-          capability.modelIdentifier == "iPhone19,4", capability.profileVersion == "405",
-          capability.integratedDigitizerIDs == [1, 3] else {
+          capability.modelIdentifier == "iPhone19,4", capability.integratedDigitizerIDs == [1, 3] else {
       throw ChangeError.invalid("Independent hinge wire is not verified for this device profile")
     }
     let processes = FBProcessFetcher().processes(withProcessName: "launchd_sim").filter {

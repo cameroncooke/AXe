@@ -23,6 +23,9 @@ class BSDInfo(ctypes.Structure):
                  ("startMicroseconds", ctypes.c_uint64)]
 
 
+SZOMB = 5  # sys/proc.h: the process has exited and awaits its parent.
+PROC_FLAG_INEXIT = 4  # sys/proc_info.h: the process is exiting.
+
 libproc = ctypes.CDLL("/usr/lib/libproc.dylib", use_errno=True)
 libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib", use_errno=True)
 libproc.proc_listpids.argtypes = [ctypes.c_uint32, ctypes.c_uint32, ctypes.c_void_p, ctypes.c_int]
@@ -52,7 +55,7 @@ def info(pid):
         return None
     if result != ctypes.sizeof(value):
         raise RuntimeError("Cannot read process identity for PID " + str(pid))
-    return {"pid": value.pid, "ppid": value.ppid, "pgid": value.pgid, "status": value.status,
+    return {"pid": value.pid, "ppid": value.ppid, "pgid": value.pgid, "status": value.status, "flags": value.flags,
             "startSeconds": value.startSeconds, "startMicroseconds": value.startMicroseconds}
 
 
@@ -78,6 +81,8 @@ def describe(row):
             raise RuntimeError(failure + "; identity recheck failed: " + str(identity_error)) from identity_error
         if after is not None and identity(after) != identity(row):
             return None
+        if after is not None and (after["status"] == SZOMB or after["flags"] & PROC_FLAG_INEXIT):
+            return None  # It exited while being described; the final group checks still count it.
         if after is None:
             # A missing info row alone is insufficient; require confirmed PID absence.
             try:
@@ -196,7 +201,7 @@ def verify_deferred(args, command):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--receipt", type=Path, required=True)
-    parser.add_argument("--phase", choices=["capture-int", "context-term"])
+    parser.add_argument("--phase", choices=["capture-int", "capture-term"])
     parser.add_argument("--timeout", type=float, default=120)
     parser.add_argument("--defer-group-check", action="store_true")
     parser.add_argument("--verify-deferred-directory", type=Path)
@@ -311,11 +316,7 @@ def main():
                     capture = Path(row.get("executable", "")).name == "simctl" and (
                         len(argv) >= 6 and argv[1] == "io" and argv[2] == udid and argv[3] == "screenshot"
                         and argv[4].startswith("--display=") and argv[5].endswith("/capture.png"))
-                    context = Path(row.get("executable", "")).name == "devicectl" and (
-                        len(argv) >= 10 and argv[1:5] == ["device", "info", "displays", "--device"]
-                        and argv[5].lower() == udid.lower() and "--json-output" in argv
-                        and argv[-1].endswith("/response.json"))
-                    if (args.phase == "capture-int" and capture) or (args.phase == "context-term" and context):
+                    if capture:
                         if cli_exit is not None or not live_root():
                             raise RuntimeError("CLI exited before the target child could be signalled")
                         number = signal.SIGINT if args.phase == "capture-int" else signal.SIGTERM

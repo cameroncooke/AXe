@@ -12,6 +12,10 @@ struct PlaygroundDuoKeyboardDelayTests {
             $0.textFocused && $0.text.isEmpty && $0.activeWindowTouches == 0
         }
         try before.requireClear()
+        // Focus raises the software keyboard, which moves the field. The receipt compares the
+        // field's first and last frames, so start once that layout has settled.
+        try await TestHelpers.waitForSettledAccessibility(simulatorUDID: controls.app.udid,
+            description: "focused field with the software keyboard shown")
         let options = controls.selection() + ["--expected-pid", String(controls.pid), "--focus-id", "feature.text"]
         let arguments = ["key-sequence", "--keycodes", "4,5,6", "--delay", "5"] + options
         try JSONEncoder().encode([try TestHelpers.getAxePath()] + arguments + ["--udid", controls.app.udid])

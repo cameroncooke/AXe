@@ -100,11 +100,7 @@ private struct PlaygroundInterruptionSession {
     func run() async throws {
         let app = try DuoPlaygroundSession()
         let original = try await app.catalogue()
-        var before = try await app.setPose(.open, boot: original.bootIdentity)
-        for _ in 0..<4 {
-            if try before.activePanel.rotationDegrees() == 90 { break }
-            before = try await app.rotateRight(catalogue: before)
-        }
+        var before = try await app.position(.open, rotation: 90, boot: original.bootIdentity)
         try #require(try before.activePanel.rotationDegrees() == 90)
         let pid = try await app.launch(screen: "touch-monitor")
         before = try await app.catalogue(boot: original.bootIdentity)
@@ -282,7 +278,7 @@ private struct PlaygroundInterruptionSession {
             }
             let ax = try #require(response.ax)
             try #require(ax.schemaVersion == 1 && ax.kind == "describe" && ax.expectedPID == pid)
-            if ax.acquisition?.outcome != .notReady {
+            if ax.acquisition?.outcome != .notReady, ax.acquisition?.outcome != .processChanged {
                 try response.requireSuccess("ready")
                 try #require(ax.failure == nil && ax.acquisition?.outcome == .ready)
                 let roots = try #require(ax.roots)
@@ -307,7 +303,9 @@ private struct PlaygroundInterruptionSession {
             try await operation.wait(timeout: timeout)
             let commandDiagnostics = try operation.diagnostics()
             let response = try operation.receipt(DuoCLIResponse.self)
-            if let notReadyPID, response.ax?.acquisition?.outcome == .notReady {
+            if let notReadyPID, response.isForegroundNotYetOwned(by: notReadyPID, exitCode: operation.exitCode) {
+                try #require(arguments.first == "describe-ui")
+            } else if let notReadyPID, response.ax?.acquisition?.outcome == .notReady {
                 let ax = try #require(response.ax)
                 let acquisition = try #require(ax.acquisition)
                 try #require(arguments.first == "describe-ui" && operation.exitCode == 1)

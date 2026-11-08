@@ -80,13 +80,21 @@ struct PlaygroundAgentTransportTests {
         try #require(hypot(first.x - start.0, first.y - start.1) <= 2
             && hypot(last.x - end.0, last.y - end.1) <= 2)
         try #require(moved.allSatisfy { $0.x >= start.0 - 2 && $0.x <= end.0 + 2 && abs($0.y - center.1) <= 2 })
-        let discovered = try await session.run(["describe-ui", "--expected-pid", String(session.pid)] + selection)
-        let fresh = try decode(TransportReply.self, discovered.output)
-        try #require(fresh.outcome == "ready" && fresh.enqueuedEventCount == 0 && fresh.cleanup == "notNeeded"
-            && fresh.error == nil && fresh.quarantine == nil && fresh.context == context)
-        let ax = try #require(fresh.ax)
-        try #require(ax.expectedPID == session.pid)
-        let button = try control("agent-examples.tap", roots: ax.roots, pid: session.pid, type: "Button")
+        // A raw read returns the tree as it is. Right after a drag in a focused field iOS briefly
+        // reports the app without its content, so read again until the Button is back.
+        let deadline = Date().addingTimeInterval(10)
+        var freshRoots: [TransportNode] = []
+        repeat {
+            let discovered = try await session.run(["describe-ui", "--expected-pid", String(session.pid)] + selection)
+            let fresh = try decode(TransportReply.self, discovered.output)
+            try #require(fresh.outcome == "ready" && fresh.enqueuedEventCount == 0 && fresh.cleanup == "notNeeded"
+                && fresh.error == nil && fresh.quarantine == nil && fresh.context == context)
+            let ax = try #require(fresh.ax)
+            try #require(ax.expectedPID == session.pid)
+            freshRoots = ax.roots
+        } while !freshRoots.flatMap { $0.flattened }.contains(where: { $0.identifier == "agent-examples.tap" })
+            && Date() < deadline
+        let button = try control("agent-examples.tap", roots: freshRoots, pid: session.pid, type: "Button")
         try #require(button.hidden == false)
         let buttonFrame = try #require(button.frame)
         try requireFrame(buttonFrame, context: context)

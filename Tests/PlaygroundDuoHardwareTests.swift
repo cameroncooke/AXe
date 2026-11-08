@@ -149,7 +149,7 @@ struct HardwareAcceptanceSession {
     init() async throws { controls = try await PlaygroundControlsSession() }
     init(controls: PlaygroundControlsSession) { self.controls = controls }
 
-    func command(_ arguments: [String], allowFailure: Bool = false,
+    func command(_ arguments: [String], allowFailure: Bool = false, allowAnyExit: Bool = false,
                  timeout: TimeInterval = 30, allowChangedDisplayRead: Bool = false) async throws -> CommandOutput {
         let invocation = [try TestHelpers.getAxePath()] + arguments + ["--udid", controls.app.udid]
         let output = try await CommandRunner.run(invocation.map(playgroundShellQuote).joined(separator: " "),
@@ -161,7 +161,7 @@ struct HardwareAcceptanceSession {
         let changedDisplay = allowChangedDisplayRead && arguments == ["list-simulators", "--displays"]
             && result.exitCode == 1
             && result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "Error: changedDuringRead"
-        if changedDisplay { return result }
+        if changedDisplay || allowAnyExit { return result }
         if !allowFailure { try #require(result.exitCode == 0, "Hardware command failed: \(result.output)") }
         else { try #require(result.exitCode == 1) }
         return result

@@ -107,13 +107,8 @@ struct PlaygroundDuoCoreTests {
     private func withScreen(_ screen: DuoCoreScreen, check: () async throws -> Void) async throws {
         let app = try DuoPlaygroundSession()
         let original = try await app.catalogue()
-        var current = try await app.setPose(screen.pose, boot: original.bootIdentity)
+        let current = try await app.position(screen.pose, rotation: screen.rotation, boot: original.bootIdentity)
         let identity = current.activePanel.identity
-        for _ in 0..<4 {
-            if try current.activePanel.rotationDegrees() == screen.rotation { break }
-            current = try await app.rotateRight(catalogue: current)
-        }
-        try #require(current.activePanel.identity == identity)
         try #require(try current.activePanel.rotationDegrees() == screen.rotation)
         print("Core screen prepared: \(screen.rawValue), boot=\(current.bootIdentity), panel=\(identity.displayID)")
         print("Core catalogue before \(screen.rawValue): \(String(reflecting: current))")
