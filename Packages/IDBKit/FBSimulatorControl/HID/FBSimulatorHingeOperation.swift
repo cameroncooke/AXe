@@ -119,7 +119,12 @@ public actor FBSimulatorHingeOperation {
     while true {
       try Task.checkCancellation()
       try await backend.validate(expectedBoot: request.expectedBootIdentity)
-      let sample = try await backend.sample()
+      let sample: FBSimulatorHingeSample
+      do { sample = try await backend.sample() }
+      catch is FBSimulatorHingeReadTimeout {
+        // A slow read sends nothing. Read again; the request timeout still bounds the operation.
+        continue
+      }
       await state.record(sample)
       try validateSample(sample)
       try await backend.validate(expectedBoot: request.expectedBootIdentity)

@@ -1,6 +1,15 @@
 @preconcurrency import XPC
 import Foundation
 
+/// One read did not complete within its budget. Nothing was sent, so a caller may read again.
+public struct FBSimulatorHingeReadTimeout: LocalizedError, CustomNSError, CustomStringConvertible, Sendable {
+  public init() {}
+  public var description: String { "Context hinge sample timed out" }
+  public var errorDescription: String? { description }
+  public static var errorDomain: String { "com.facebook.FBSimulatorControl" }
+  public var errorUserInfo: [String: Any] { [NSLocalizedDescriptionKey: errorDescription ?? ""] }
+}
+
 /// A fresh sample, its cancellation reply and the original request reply complete one read.
 public enum FBSimulatorHingeReader {
   public static func read(for simulator: FBSimulator) async throws -> FBSimulatorHingeObservation {
@@ -11,7 +20,8 @@ public enum FBSimulatorHingeReader {
     let queue = DispatchQueue(label: "com.facebook.FBSimulatorControl.context-hinge")
     xpc_connection_set_target_queue(connection, queue)
     let result = FBSimulatorBoundedResult<FBSimulatorHingeObservation>()
-    return try await result.value(timeout: 3, operation: "Context hinge sample") { finish in
+    return try await result.value(timeout: 3, operation: "Context hinge sample",
+                                  timeoutError: { FBSimulatorHingeReadTimeout() }) { finish in
       let started = ProcessInfo.processInfo.systemUptime
       let completion = FBSimulatorHingeReadCompletion(deadline: started + 3, finish: finish)
       xpc_connection_set_event_handler(connection) { event in
@@ -102,7 +112,7 @@ private final class FBSimulatorHingeReadCompletion: @unchecked Sendable {
     guard !finished, receivedOriginalReply, enqueuedReplies > 0,
           drainedReplies == enqueuedReplies, let sample else { return }
     guard ProcessInfo.processInfo.systemUptime <= deadline else {
-      fail(FBSimulatorHIDHingeWire.failure("Context hinge sample timed out"))
+      fail(FBSimulatorHingeReadTimeout())
       return
     }
     finished = true

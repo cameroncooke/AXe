@@ -150,13 +150,14 @@ final class FBSimulatorBoundedResult<Value: Sendable>: @unchecked Sendable {
   }
 
   func value(timeout: TimeInterval, operation: String,
+             timeoutError: (@Sendable () -> Error)? = nil,
              start: (@escaping @Sendable (Result<Value, Error>) -> Void) -> Void) async throws -> Value {
     try await withTaskCancellationHandler(operation: {
       try Task.checkCancellation()
       return try await withCheckedThrowingContinuation { pending in
         guard install(pending) else { return }
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-          self.finish(.failure(FBSimulatorError.describe("\(operation) timed out").build()))
+          self.finish(.failure(timeoutError?() ?? FBSimulatorError.describe("\(operation) timed out").build()))
         }
         start { self.finish($0) }
       }
