@@ -53,6 +53,7 @@ struct Axe: AsyncParsableCommand {
     }
 
     static func main(_ arguments: [String]?) async {
+        UncaughtExceptionGuard.install()
         let invocation = CLIOutputInvocation(arguments: arguments ?? Array(CommandLine.arguments.dropFirst()))
         guard let format = invocation.format else {
             do {
