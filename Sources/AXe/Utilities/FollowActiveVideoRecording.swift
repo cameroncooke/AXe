@@ -118,18 +118,21 @@ enum FollowActiveVideoRecording {
     }
 
     /// Retries read-only acquisition only after a typed, cleaned-up transition or lease refusal.
+    /// The window, not an attempt count, bounds recovery: a fold can read as changing for several
+    /// seconds, longer than a few 250 ms waits.
     @MainActor
     private final class Recovery {
+        static let windowSeconds: Double = 30
         private(set) var attempts: Int64 = 0
         private(set) var waitSeconds: Double = 0
 
         func capture(owner: SelectedMediaCapture, simulator: FBSimulator,
                      expectedBoot: String?) async throws -> FBSimulatorSelectedScreenshot? {
             var firstFailure: Double?
-            for attempt in 0..<10 {
+            while true {
                 try Task.checkCancellation()
                 guard !owner.stopRequested else { return nil }
-                if let firstFailure, ProcessInfo.processInfo.systemUptime - firstFailure >= 30 {
+                if let firstFailure, ProcessInfo.processInfo.systemUptime - firstFailure >= Self.windowSeconds {
                     throw CLIError(errorDescription: "Active-display transition recovery window expired")
                 }
                 do {
@@ -139,7 +142,7 @@ enum FollowActiveVideoRecording {
                     let now = ProcessInfo.processInfo.systemUptime
                     let started = firstFailure ?? now
                     firstFailure = started
-                    guard attempt < 9, now - started < 30 else {
+                    guard now - started < Self.windowSeconds else {
                         throw CLIError(errorDescription: "Active-display transition did not settle: \(error)")
                     }
                     attempts += 1
@@ -150,7 +153,6 @@ enum FollowActiveVideoRecording {
                     waitSeconds += ProcessInfo.processInfo.systemUptime - waitStarted
                 }
             }
-            preconditionFailure("Bounded capture loop must return or throw")
         }
 
         private static func canRecover(_ error: Error) -> Bool {
