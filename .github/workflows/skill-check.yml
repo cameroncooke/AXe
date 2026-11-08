@@ -1,0 +1,35 @@
+name: Skill check
+
+on:
+  pull_request:
+    paths:
+      - 'Skills/**'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Skills/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-check-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Lint the shipped skill
+        # Fix every error and warning: npx skill-check check Skills/CLI/axe
+        run: npx --yes skill-check@1.2.0 check Skills/CLI/axe --no-security-scan --fail-on-warning --format github
