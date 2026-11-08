@@ -27,6 +27,9 @@ jobs:
           git fetch --no-tags --depth=1 origin "$base"
           python3 -I scripts/check-changelog-released.py FETCH_HEAD
 
+      - name: Run script checks
+        run: python3 -I -m unittest discover -s scripts/tests
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:

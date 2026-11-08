@@ -305,6 +305,10 @@ def main():
     parser.add_argument('--group', action='append', default=[], help='Run only this test group of the selected suite (repeatable) while fixing a failure.')
     parser.add_argument('--output', type=Path, required=True, help='New result directory; existing results are never replaced.')
     args = parser.parse_args()
+    for wiped in ('build_products', 'build_derived_data'):
+        if (ROOT / wiped) in [args.output.resolve(), *args.output.resolve().parents]:
+            parser.error('--output must not be inside ' + wiped + '/: scripts/build.sh deletes it on a clean '
+                         'or framework rebuild. Write results under e2e-results/ instead.')
     if args.suite in ('duo', 'lifecycle') and args.only != 'duo':
         parser.error('--suite duo or lifecycle requires --only duo')
     if args.only == 'ipad' and args.ipad is None:
