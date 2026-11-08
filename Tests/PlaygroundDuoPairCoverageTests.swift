@@ -103,7 +103,13 @@ private func requirePairRecognizers(_ after: PlaygroundControlsDocument, before:
     let records = Array(after.recognizerTrace.dropFirst(before.recognizerTrace.count))
     let contacts = Array(after.windowTouchTrace.dropFirst(before.windowTouchTrace.count))
     try #require(contacts.allSatisfy { $0.hitView == "feature.pad" })
-    try #require(Set(records.map(\.name)) == Set(expectedNames))
+    // The pad's two-finger hold (0.5 s, UIKit's 10 pt allowable movement) begins during a 0.6 s pinch
+    // or rotation only when the fingers have moved less than 10 pt at 0.5 s. A linear pinch has moved
+    // about 10.8 pt by then, so delivery timing decides it; the hold is optional for those gestures.
+    let optionalNames: Set<String> = action == .pinch || action == .rotate ? ["twoFingerHold"] : []
+    let recordedNames = Set(records.map(\.name))
+    try #require(recordedNames.isSubset(of: Set(expectedNames))
+        && Set(expectedNames).subtracting(optionalNames).isSubset(of: recordedNames))
     var previousTime = before.recognizerTrace.last?.timestamp ?? 0
     for record in records {
         let finite = [record.timestamp, record.x, record.y].allSatisfy(\.isFinite)
@@ -112,7 +118,7 @@ private func requirePairRecognizers(_ after: PlaygroundControlsDocument, before:
         try #require([1, 2, 3].contains(record.state))
         previousTime = record.timestamp
     }
-    for name in expectedNames {
+    for name in expectedNames where recordedNames.contains(name) {
         let matching = records.filter { $0.name == name }
         let first = try #require(matching.first), last = try #require(matching.last)
         let discrete = name == "twoFingerTap"
@@ -122,7 +128,7 @@ private func requirePairRecognizers(_ after: PlaygroundControlsDocument, before:
         if discrete { try #require(matching.count == 1) }
         try #require(after.count(name) == before.count(name) + 1)
     }
-    if action != .twoFingerTap {
+    if action != .twoFingerTap, recordedNames.contains("twoFingerHold") {
         let holdStart = try #require(records.first { $0.name == "twoFingerHold" })
         let holdEnd = try #require(records.last { $0.name == "twoFingerHold" })
         let tap = try #require(records.first { $0.name == "twoFingerTap" })

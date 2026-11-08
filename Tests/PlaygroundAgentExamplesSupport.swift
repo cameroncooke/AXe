@@ -71,6 +71,22 @@ struct PlaygroundAgentExamplesSession {
         try #require(!value.didError)
         return try AgentPlaygroundTimedCapture(capture: #require(value.data.capture), requestStartedUptime: started)
     }
+    /// Reads until the Playground is frontmost again. A system prompt reports its result to the app
+    /// while SpringBoard is still animating it away, so the app's first read can see SpringBoard.
+    func captureWhenFrontmost(timeout: TimeInterval = 15) async throws -> AgentPlaygroundTimedCapture {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        repeat {
+            try Task.checkCancellation()
+            let started = ProcessInfo.processInfo.systemUptime
+            let result = try await run(["describe-ui", "--agent", "--expected-pid", String(pid)], allowFailure: true)
+            if result.exitCode == 0, let value = try? decode(result.output), !value.didError,
+               let capture = value.data.capture, capture.applicationPID == pid {
+                return try AgentPlaygroundTimedCapture(capture: capture, requestStartedUptime: started)
+            }
+            try await Task.sleep(nanoseconds: 50_000_000)
+        } while ProcessInfo.processInfo.systemUptime < deadline
+        throw TestError.unexpectedState("The Playground did not return to the front after the system prompt closed")
+    }
     func reference(_ id: String, in capture: AgentPlaygroundTimedCapture) throws -> String {
         let rows = try (capture.capture.targets + capture.capture.scroll + capture.capture.text).map(AgentPlaygroundRow.init)
         let refs = Set(rows.filter { $0.identifier == id }.map(\.ref))

@@ -25,7 +25,7 @@ struct PlaygroundAgentObservationTests {
     func keyboardFocusedPageAndReuse() async throws {
         let session = try await PlaygroundAgentFeatureSession.open(caseName: #function)
         try await session.focusField()
-        let observation = try await capture(session)
+        let observation = try await settledCapture(session)
         try requireVisible(observation.keyboard)
         try await requirePageAndReuse(session, original: observation)
     }
@@ -44,7 +44,7 @@ struct PlaygroundAgentObservationTests {
         let session = try await PlaygroundAgentFeatureSession.open(caseName: #function)
         try await session.focusField()
         try await session.dismissKeyboard()
-        let observation = try await capture(session)
+        let observation = try await settledCapture(session)
         try #require(observation.keyboard.state == "unknown")
         try await requirePageAndReuse(session, original: observation)
     }
@@ -76,6 +76,19 @@ struct PlaygroundAgentObservationTests {
             && value.keyboard.scope == "selected-application")
         try requireConsistentEvidence(value.keyboard)
         return value
+    }
+
+    /// Paging and reuse need the snapshot's screen to still be current. The keyboard keeps
+    /// changing the tree while it animates, so page from two consecutive equal captures.
+    private func settledCapture(_ session: PlaygroundAgentFeatureSession) async throws -> KeyboardCapture {
+        let deadline = ProcessInfo.processInfo.systemUptime + 10
+        var previous = try await capture(session)
+        while ProcessInfo.processInfo.systemUptime < deadline {
+            let current = try await capture(session)
+            if current.screenHash == previous.screenHash { return current }
+            previous = current
+        }
+        throw TestError.unexpectedState("The keyboard screen did not settle within 10 seconds")
     }
 
     private func requirePageAndReuse(_ session: PlaygroundAgentFeatureSession,

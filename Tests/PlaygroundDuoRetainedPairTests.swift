@@ -62,7 +62,11 @@ struct PlaygroundDuoRetainedPairTests {
                 try #require(cleanup.trigger == "staleContext")
                 try requirePairCleanupIdentity(cleanup, app: app)
                 try #require(cleanup.outcome == "releaseEnqueuedAndDrained" && cleanup.contextValidation == "releaseIdentityMatchedBeforeAndAfter" && !cleanup.timedOut)
-                try #require(cleanup.releases.count == 1 && cleanup.releases[0].primitive == "TwoFingerTouch <hidden>" && cleanup.releases[0].returnedSuccessfully)
+                // The matrix sets FBSIMULATORCONTROL_LOG_HID_DETAILS=1, which this probe inherits; it shows the release.
+                let detailed = (ProcessInfo.processInfo.environment["FBSIMULATORCONTROL_LOG_HID_DETAILS"] as NSString?)?.boolValue ?? false
+                let releaseOK = detailed ? cleanup.releases.first?.primitive.hasPrefix("TwoFingerTouch up at ") == true
+                    : cleanup.releases.first?.primitive == "TwoFingerTouch <hidden>"
+                try #require(cleanup.releases.count == 1 && releaseOK && cleanup.releases[0].returnedSuccessfully)
                 try Data("continue\n".utf8).write(to: app.artifacts.appendingPathComponent("stale-move.ready"))
                 let first = try await pairStage(probe, name: "oldMove1")
                 try #require(first.operation?.normalEventDelta == 0 && first.operation?.error != nil && first.cleanupEvidence == cleanup)

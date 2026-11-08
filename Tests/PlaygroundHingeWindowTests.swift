@@ -208,7 +208,7 @@ private func verifyDuoDiscoveryReadInterval() async throws {
     let metadata = try JSONDecoder().decode(DuoDiscoveryMetadata.self, from: data)
     try #require(metadata.readInterval.startedUptime >= started && metadata.readInterval.finishedUptime <= finished)
     try #require(metadata.readInterval.finishedUptime >= metadata.readInterval.startedUptime)
-    try #require(metadata.sourceCommandType == "devicectl.device.info.displays" && metadata.sourceJSONVersion > 0
+    try #require(metadata.sourceCommandType == "com.apple.coredevice.action.displayinfo" && metadata.sourceJSONVersion == 0
         && !metadata.sourceVersion.isEmpty && metadata.selectionBasis == "explicitActiveFlag")
     let udid = try TestHelpers.requireSimulatorUDID()
     try #require(catalogue.requestedSimulatorUDID == UUID(uuidString: udid))

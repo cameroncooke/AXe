@@ -97,8 +97,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
             _ = try await session.document.waitFor("normal Photos denial and released app input") {
                 $0.photosStatus == 2 && $0.activeWindowTouches == 0
             }
-            let freshApp = try await session.capture()
-            try #require(freshApp.capture.applicationPID == session.pid)
+            _ = try await session.captureWhenFrontmost()
             try await session.tap("agent-examples.tap")
             _ = try await session.document.waitFor("one button callback after Photos closes") {
                 $0.taps == before.taps + 1 && $0.activeWindowTouches == 0
@@ -258,7 +257,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
         let remaining = (deadline ?? (ProcessInfo.processInfo.systemUptime + 30)) - ProcessInfo.processInfo.systemUptime
         try #require(remaining > 0, "No UI command starts after its observation deadline")
         let limit = min(30, remaining)
-        let argv = [context.cli] + arguments + ["--udid", context.udid]
+        let argv = [context.cli] + canonicalAgentArguments(arguments) + ["--udid", context.udid]
         try JSONEncoder().encode(argv).write(to: context.artifacts.appendingPathComponent(name + "-argv.json"), options: .withoutOverwriting)
         let receiptURL = context.artifacts.appendingPathComponent(name + "-ownership.json")
         let process = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: ["python3", observer,

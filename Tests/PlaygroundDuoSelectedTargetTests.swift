@@ -49,20 +49,21 @@ struct PlaygroundDuoSelectedTargetTests {
             let roots = try #require(response.ax.roots)
             try #require(roots.count == 1)
             let hit = try #require(roots.first)
-            try #require(hit.type == label.type && hit.label == label.label && hit.enabled == true)
-            try #require(hit.children?.isEmpty == true)
+            // The runtime's hit test picks the element: iOS 27.2 returns the label inside the
+            // button, iOS 27.3 the button itself. Either is the current app's element at the point.
+            let hitIsLabel = hit.type == label.type && hit.label == label.label && hit.children?.isEmpty == true
+            let hitIsButton = hit.type == button.type && hit.identifier == "feature.tap"
+            try #require((hitIsLabel || hitIsButton) && hit.enabled == true)
             let hitFrame = try #require(hit.frame)
             let hitFrameIsFinite = [hitFrame.x, hitFrame.y, hitFrame.width, hitFrame.height].allSatisfy(\.isFinite)
             try #require(hitFrameIsFinite)
             try #require(hitFrame.width > 0 && hitFrame.height > 0)
             let containsPoint = pointX >= hitFrame.x && pointX < hitFrame.x + hitFrame.width
                 && pointY >= hitFrame.y && pointY < hitFrame.y + hitFrame.height
-            let insideButton = hitFrame.x >= frame.x && hitFrame.y >= frame.y
-                && hitFrame.x + hitFrame.width <= frame.x + frame.width
-                && hitFrame.y + hitFrame.height <= frame.y + frame.height
-            let matchesLabelFrame = hitFrame.x == labelFrame.x && hitFrame.y == labelFrame.y
-                && hitFrame.width == labelFrame.width && hitFrame.height == labelFrame.height
-            try #require(containsPoint && insideButton && matchesLabelFrame)
+            let expectedFrame = hitIsLabel ? labelFrame : frame
+            let matchesFrame = hitFrame.x == expectedFrame.x && hitFrame.y == expectedFrame.y
+                && hitFrame.width == expectedFrame.width && hitFrame.height == expectedFrame.height
+            try #require(containsPoint && matchesFrame)
             _ = try await app.selected(["tap", "--label", "Text entry", "--element-type", "TextField", "--expected-pid", String(app.pid)])
             _ = try await app.documents.waitFor("label selector focused the real field") { $0.textFocused }
             _ = try await app.app.run(["type", "AXe selected value"])

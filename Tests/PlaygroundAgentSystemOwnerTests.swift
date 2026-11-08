@@ -1,6 +1,5 @@
 import Foundation
 import Testing
-@testable import AXe
 
 @Suite("Playground Agent System Owner E2E", .serialized, .enabled(if: isE2EEnabled))
 struct PlaygroundAgentSystemOwnerTests: Sendable {
@@ -81,8 +80,8 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
                 && deniedAction.enqueuedEventCount == 2 && deniedAction.cleanup == "notNeeded" && !deniedAction.replayed)
             primaryDenyDelivery = .completed
             _ = try await session.document.waitFor("normal denied Photos permission") { $0.photosStatus == 2 }
-            let fresh = try await session.capture()
-            try #require(fresh.capture.applicationPID == session.pid)
+            // The app records the denial while the alert is still leaving; wait until it is frontmost again.
+            _ = try await session.captureWhenFrontmost()
             try await session.tap("agent-examples.tap")
             _ = try await session.document.waitFor("real button after system permission closes") { $0.taps == before.taps + 1 }
         } catch { primary = error }
@@ -291,7 +290,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let remaining = (deadline ?? (ProcessInfo.processInfo.systemUptime + 30)) - ProcessInfo.processInfo.systemUptime
         try #require(remaining > 0, "No UI command starts after its observation deadline")
         let limit = min(30, remaining)
-        let argv = [context.cli] + arguments + ["--udid", context.udid]
+        let argv = [context.cli] + canonicalAgentArguments(arguments) + ["--udid", context.udid]
         try JSONEncoder().encode(argv).write(to: context.artifacts.appendingPathComponent(name + "-argv.json"), options: .withoutOverwriting)
         let receiptURL = context.artifacts.appendingPathComponent(name + "-ownership.json")
         let process = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: ["python3", observer,
@@ -318,7 +317,9 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
             let observer = try #require(ProcessInfo.processInfo.environment["AXE_MEDIA_PROCESS_OBSERVER_PATH"])
             let name = "final-processes"
             // The final capture retains its broker for the 60-second reference lifetime.
-            let limit = await MainActor.run { AgentModeController.timeToLive + 5 }
+            // The documented public reference lifetime is 60 seconds. This suite also runs in the
+            // matrix's standalone check package, which does not link the AXe module.
+            let limit = 60.0 + 5
             let receipt = context.artifacts.appendingPathComponent(name + "-ownership.json")
             let process = try PlaygroundTestProcess(executable: "/usr/bin/env", arguments: ["python3", observer,
                 "--receipt", receipt.path, "--timeout", String(limit), "--verify-deferred-directory", context.artifacts.path,

@@ -94,9 +94,9 @@ struct PlaygroundOrdinaryRegressionTests {
         try context.requireMatch(catalogue)
         let metadata = try JSONDecoder().decode(OrdinaryDiscoveryMetadata.self, from: Data(discovery.output.utf8))
         try #require(catalogue.requestedSimulatorUDID == UUID(uuidString: session.agent.udid) && !catalogue.bootIdentity.isEmpty)
-        let isMeasuredSchema6 = metadata.sourceJSONVersion == 6 && metadata.sourceVersion == "689.2"
-        try #require(metadata.sourceCommandType == "devicectl.device.info.displays"
-            && (metadata.sourceJSONVersion == 5 || isMeasuredSchema6) && !metadata.sourceVersion.isEmpty)
+        // AXe reads the guest CoreDevice display-info action in process; it has no devicectl JSON schema.
+        try #require(metadata.sourceCommandType == "com.apple.coredevice.action.displayinfo"
+            && metadata.sourceJSONVersion == 0 && !metadata.sourceVersion.isEmpty)
         try #require(catalogue.panels.count == 1)
         let panel = try #require(catalogue.panels.first)
         try #require(panel == catalogue.activePanel && panel.identity.displayID == 1)
@@ -109,8 +109,7 @@ struct PlaygroundOrdinaryRegressionTests {
         // The measured rigid schema omits active. Do not invent an active flag from primary.
         switch metadata.selectionBasis {
         case "verifiedSingleIntegratedPanel":
-            let isMeasuredSchema5 = metadata.sourceJSONVersion == 5 && metadata.sourceVersion == "651.28"
-            try #require((isMeasuredSchema5 || isMeasuredSchema6) && panel.active == nil)
+            try #require(panel.active == nil)
         case "explicitActiveFlag":
             try #require(panel.active == true)
         default:
