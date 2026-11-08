@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-marketplace.json",
+  "name": "axe",
+  "description": "AXe skills for iOS Simulator automation",
+  "owner": {
+    "name": "Cameron Cooke"
+  },
+  "plugins": [
+    {
+      "name": "axe",
+      "source": "./",
+      "description": "Automate iOS Simulators with the AXe CLI",
+      "category": "development"
+    }
+  ]
+}

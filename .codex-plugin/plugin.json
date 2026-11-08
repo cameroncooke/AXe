@@ -1,0 +1,36 @@
+{
+  "name": "axe",
+  "version": "1.8.0",
+  "description": "Agent-ready AXe CLI guidance for iOS Simulator automation.",
+  "author": {
+    "name": "Cameron Cooke",
+    "url": "https://github.com/cameroncooke"
+  },
+  "homepage": "https://axe-cli.com/docs",
+  "repository": "https://github.com/cameroncooke/AXe",
+  "license": "MIT",
+  "keywords": [
+    "ios",
+    "simulator",
+    "automation",
+    "accessibility"
+  ],
+  "skills": "./Skills/CLI/axe",
+  "interface": {
+    "displayName": "AXe",
+    "shortDescription": "Automate iOS Simulators with AXe.",
+    "longDescription": "Provides Codex with AXe CLI guidance for inspecting and automating iOS Simulator interfaces.",
+    "developerName": "Cameron Cooke",
+    "category": "Developer Tools",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://axe-cli.com/docs",
+    "defaultPrompt": [
+      "Inspect the current iOS Simulator UI with AXe.",
+      "Automate this iOS Simulator flow with AXe.",
+      "Capture and verify the current simulator screen."
+    ]
+  }
+}

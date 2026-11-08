@@ -1,0 +1,20 @@
+{
+  "name": "axe",
+  "interface": {
+    "displayName": "AXe"
+  },
+  "plugins": [
+    {
+      "name": "axe",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}
