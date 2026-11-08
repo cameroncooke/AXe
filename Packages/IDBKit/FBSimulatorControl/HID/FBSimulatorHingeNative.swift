@@ -244,7 +244,7 @@ public enum FBSimulatorRotationNative {
         try await Task.sleep(nanoseconds: 100_000_000)
       }
       guard matches == 2 else {
-        throw FBSimulatorContextError.unavailable("Requested selected rotation was not observed twice")
+        throw FBSimulatorContextError.unavailable("Requested selected rotation was not observed twice. The frontmost app may not support that orientation; the iPhone home screen is portrait only")
       }
       await backend.close()
       try await Task.sleep(nanoseconds: 250_000_000)

@@ -131,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A `rotate` that the frontmost app never performs now says the app may not support that orientation and that the iPhone home screen is portrait only, instead of only "Requested selected rotation was not observed twice".
 - `FBControlCoreFrameworkLoader loadPrivateFrameworks:error:` no longer crashes when its nullable logger is nil; it uses the default logger.
 - Deleting an input quarantine record now ends the quarantine. The quarantined broker retires without sending input once its persisted record is gone, so the next command starts a fresh broker; previously it kept rejecting input until the process was killed. Quarantine errors and next steps now name the record and say that no input was sent, instead of asking for an undocumented "explicit recovery". A quarantine that could not be saved still keeps its broker and lease.
 - `hinge set` now reads the hinge again when one readback read times out after the fold command, within the existing request timeout (8 seconds by default). Previously a single read that took longer than 3 seconds on a busy Mac failed the command as delivery uncertain and quarantined the device's input. A read that times out before the command is sent still fails with nothing delivered.
