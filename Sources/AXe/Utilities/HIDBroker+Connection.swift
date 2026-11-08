@@ -241,6 +241,9 @@ extension HIDBroker {
                 let descriptor = try connector(path)
                 Darwin.close(descriptor)
                 sleeper(100_000)
+            } catch is HIDBrokerNotReadyError {
+                // It accepted and closed the connection: still shutting down.
+                sleeper(100_000)
             } catch {
                 let error = error as NSError
                 guard error.domain == NSPOSIXErrorDomain,
@@ -419,16 +422,31 @@ extension HIDBroker {
             throw error
         }
         do {
-            try configureSocketTimeouts(
-                descriptor,
-                readMilliseconds: clientResponseTimeoutMilliseconds,
-                writeMilliseconds: clientWriteTimeoutMilliseconds
-            )
+            try configureClientSocket(descriptor)
         } catch {
             Darwin.close(descriptor)
             throw error
         }
         return descriptor
+    }
+
+    /// A connected client socket whose broker has already closed it (a stale broker accepts and
+    /// closes while it shuts down) refuses socket options with EINVAL. Nothing was sent, so this
+    /// is the same unready broker as a handshake that ends early, not a client failure.
+    static func configureClientSocket(_ descriptor: Int32) throws {
+        do {
+            try configureSocketTimeouts(
+                descriptor,
+                readMilliseconds: clientResponseTimeoutMilliseconds,
+                writeMilliseconds: clientWriteTimeoutMilliseconds
+            )
+        } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(EINVAL) {
+            throw HIDBrokerNotReadyError(
+                diagnosticDescription: "The broker closed the connection before its readiness handshake.",
+                isSafeToReplaceBroker: false,
+                allowsReplacementAfterProcessExit: true
+            )
+        }
     }
 
     private static func socketTimeout(milliseconds: Int) -> timeval {

@@ -44,6 +44,41 @@ struct HIDBrokerReliabilityTests {
         #expect(endpointExistedWhileAlive)
     }
 
+    @Test("A broker that closes a new connection before its handshake is not ready, not a socket error")
+    func peerClosedBeforeTimeoutsIsNotReady() throws {
+        var pair: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0)
+        Darwin.close(pair[1])  // A stale broker accepts and closes while shutting down.
+        defer { Darwin.close(pair[0]) }
+        do {
+            try HIDBroker.configureClientSocket(pair[0])
+            Issue.record("A closed peer must not configure as a usable client socket")
+        } catch {
+            #expect(error is HIDBrokerNotReadyError, "Got \(error)")
+            #expect(HIDBroker.isBrokerUnavailable(error))
+        }
+    }
+
+    @Test("A stale broker that accepts and closes is still shutting down")
+    func closingStaleBrokerIsAwaited() throws {
+        let endpoint = try makeEndpoint()
+        let listener = try HIDBroker.makeListener(at: endpoint)
+        Darwin.close(listener)
+        defer { try? HIDBroker.removeOwnedSocket(endpoint) }
+        var attempts = 0
+        try HIDBroker.waitForStaleEndpointShutdown(
+            endpoint,
+            connector: { _ in
+                attempts += 1
+                if attempts == 1 { throw HIDBrokerNotReadyError(diagnosticDescription: "closed") }
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(ECONNREFUSED))
+            },
+            sleeper: { _ in },
+            brokerIsAlive: { false }
+        )
+        #expect(attempts == 2)
+    }
+
     @Test("Broker startup uses a monotonic deadline")
     func startupDeadlineIsBounded() throws {
         let endpoint = try makeEndpoint()
