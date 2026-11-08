@@ -111,7 +111,10 @@ def captures(value, call, line):
     if value.get("schema") == "axe.output.agent-result":
         data = value.get("data", {})
         raw = data.get("capture")
-        if not isinstance(raw, dict) or value.get("didError") or data.get("cache", {}).get("requiresRefresh"):
+        cache = data.get("cache", {})
+        # A refusal before input may carry the current screen, marked as a refreshed table.
+        refreshed = cache.get("status") == "refreshed"
+        if not isinstance(raw, dict) or cache.get("requiresRefresh") or (value.get("didError") and not refreshed):
             return output
         rows = raw.get("rows")
         if rows is None:
@@ -396,6 +399,32 @@ def returned_paths(call):
     return {str(Path(path.strip()).resolve()) for path in paths if Path(path.strip()).is_absolute()}
 
 
+def plain_file_read(call):
+    """The one absolute file a plain `tail`, `head` or `cat` reads, or None.
+
+    Only line or byte counts are accepted; following, several files and any shell
+    operator (refused by classify, which then leaves argv empty) are not plain reads."""
+    if call.name != "Bash" or not call.argv or Path(call.argv[0]).name not in ("tail", "head", "cat"):
+        return None
+    counted = Path(call.argv[0]).name != "cat"
+    paths, index, args = [], 1, call.argv
+    while index < len(args):
+        arg = args[index]
+        if counted and arg in ("-n", "-c") and index + 1 < len(args) and re.fullmatch(r"\+?\d+", args[index + 1]):
+            index += 2
+            continue
+        if counted and re.fullmatch(r"-(?:[nc]\+?\d+|\d+)", arg):
+            index += 1
+            continue
+        if arg.startswith("-"):
+            return None
+        paths.append(arg)
+        index += 1
+    if len(paths) != 1 or not Path(paths[0]).is_absolute():
+        return None
+    return str(Path(paths[0]).resolve())
+
+
 def read_output(text):
     # Read adds line numbers and an optional standard safety footer. Keep raw
     # text for token accounting, remove only these wrappers for JSON decoding.
@@ -473,10 +502,15 @@ def read_transcript(file, tool, run_directory=None):
                             batch_files[resolved] = call
                     except (ValueError, TypeError):
                         pass
+                shell_read = plain_file_read(call)
                 if call.name == "Read" and resolved in public_files:
                     origin = public_files[resolved]
                     call.category = "image" if call.image_count else "publicOutput"
                     call.evidence_call = origin.number
+                elif call.category == "unknown" and shell_read in public_files:
+                    # A tail, head or cat of a saved public output reads the same file as Read.
+                    call.category = "publicOutput"
+                    call.evidence_call = public_files[shell_read].number
                 elif (call.name == "Read" and resolved and skill_root is not None
                         and Path(resolved).is_relative_to(skill_root)):
                     call.category = "help"  # Reading the installed skill, like a --help call.

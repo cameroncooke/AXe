@@ -158,6 +158,26 @@ class ContractTests(unittest.TestCase):
             self.assertEqual(calls[1].captures[0].call, 1)
             self.assertEqual(calls[1].captures[0].nodes[0].label, "Add")
 
+    def test_plain_tail_of_public_overflow_is_public_output(self):
+        # Agents often tail the saved build log instead of using Read; both read the same public file.
+        build = ("/Xcode/Developer/usr/bin/xcodebuild -project /source/Weather.xcodeproj -scheme Weather -configuration Debug "
+                 "-sdk iphonesimulator -destination id=" + UDID + " -derivedDataPath /run/DerivedData -jobs 1 build")
+        saved = "<persisted-output>\nOutput too large (113KB). Full output saved to: /public/build.txt\n</persisted-output>"
+        cases = (("tail -20 /public/build.txt", "publicOutput"), ("tail -n 20 /public/build.txt", "publicOutput"),
+                 ("head -c 400 /public/build.txt", "publicOutput"), ("cat /public/build.txt", "publicOutput"),
+                 ("tail -20 /source/ContentView.swift", "unknown"), ("cat /public/build.txt /source/ContentView.swift", "unknown"),
+                 ("tail -f /public/build.txt", "unknown"), ("tail -20 /public/build.txt | grep x", "unknown"))
+        for command, wanted in cases:
+            with self.subTest(command=command), tempfile.TemporaryDirectory() as directory:
+                file = Path(directory) / "claude.jsonl"
+                data = events("Bash", {"command": build}, saved, 1)
+                data += events("Bash", {"command": command}, "** BUILD SUCCEEDED **", 2)
+                file.write_text("\n".join(json.dumps(event) for event in data))
+                calls, _ = read_transcript(file, "axe", directory)
+                self.assertEqual(calls[1].category, wanted)
+                if wanted == "publicOutput":
+                    self.assertEqual(calls[1].evidence_call, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

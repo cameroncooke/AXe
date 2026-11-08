@@ -59,6 +59,15 @@ class ScoringTests(unittest.TestCase):
         batch.actions.append(Action("tap", executed=True))
         self.assertEqual(state(weather([batch], [detail]), "procedure.noInputAfterDetails"), "unverified")
 
+    def test_weather_fact_split_across_pages_of_one_snapshot_counts(self):
+        # A paged detail read: the label ends page one and its value starts page two of the same snapshot.
+        first = capture(1, Node("1", "text", "PRECIPITATION"), Node("2", "text", "chance over the next 24 hours"),
+                        Node("3", "text", "LIGHTNING"), complete=False, identity="s:h:1")
+        second = capture(2, Node("4", "text", "None"), identity="s:h:1")
+        self.assertEqual(state(weather([], [first, second]), "detail.lightning"), "passed")
+        second.identity = "other:h:1"
+        self.assertEqual(state(weather([], [first, second]), "detail.lightning"), "unverified")
+
     def test_rejected_zero_input_does_not_break_read_only_rule(self):
         detail = capture(1, Node("1", "text", "PRECIPITATION"), Node("2", "text", "chance over the next 24 hours"))
         checks = weather([input_call(2, "tap", "Back", executed=False)], [detail])
@@ -105,6 +114,17 @@ class ScoringTests(unittest.TestCase):
         stale = {"schema": "axe.output.agent-result", "data": {"cache": {"requiresRefresh": True}, "capture": {"rows": ["e1|tap|button|Done|"]}}}
         self.assertEqual(captures(stale, 1, 2), [])
         self.assertEqual(captures({"rs": "1", "data": {"disappeared": ["1|button|Done||enabled"]}}, 1, 2), [])
+
+    def test_refusal_with_refreshed_current_screen_is_proof(self):
+        # A refusal before input returns the current screen; only that refreshed capture counts.
+        rows = ["e1|tap|button|Edit|"]
+        fresh = {"schema": "axe.output.agent-result", "didError": True,
+                 "data": {"cache": {"status": "refreshed", "requiresRefresh": False}, "capture": {"rows": rows}}}
+        self.assertEqual([n.label for n in captures(fresh, 1, 2)[0].nodes], ["Edit"])
+        for cache in ({"status": "invalidated", "requiresRefresh": True}, {"status": "refreshed", "requiresRefresh": True},
+                      {"requiresRefresh": False}):
+            stale = {"schema": "axe.output.agent-result", "didError": True, "data": {"cache": cache, "capture": {"rows": rows}}}
+            self.assertEqual(captures(stale, 1, 2), [], cache)
 
     def test_batch_partial_receipt_does_not_assume_all_steps_ran(self):
         command = "axe batch --agent --steps-json '{\"steps\":[{\"action\":\"tap\",\"ref\":\"e1\"},{\"action\":\"tap\",\"ref\":\"e2\"}]}'"

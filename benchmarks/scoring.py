@@ -149,14 +149,15 @@ def weather(calls, captures):
             if identity == "main.temperature" and matches(c, "11°"):
                 return matches(c, "11°")
             return fact_nodes(c, labels)
-        evidence = find(before, nodes)
+        # A fact can span the pages of one paged read; complete views join only pages of one snapshot.
+        evidence = find(before + complete_views(before), nodes)
         checks.append(check(identity, bool(evidence), evidence))
     later = [c for c in captures if boundary is not None and c.call >= boundary]
     for identity, labels in (("detail.chance", ("78%", "chance over the next 24 hours")),
                              ("detail.total", ("TOTAL EXPECTED", "10.7 mm")),
                              ("detail.hours", ("HOURS OF RAIN", "6 hrs")),
                              ("detail.distance", ("14 km",)), ("detail.lightning", ("LIGHTNING", "None"))):
-        evidence = find(later, lambda c: fact_nodes(c, labels))
+        evidence = find(later + complete_views(later), lambda c: fact_nodes(c, labels))
         checks.append(check(identity, bool(evidence), evidence))
     checks.append(procedure_read_only(calls, detail_entry(calls, captures, boundary), "procedure.noInputAfterDetails"))
     return checks
