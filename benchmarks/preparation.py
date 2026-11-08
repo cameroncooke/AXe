@@ -238,11 +238,6 @@ class ContactPreparation:
         if sorted(self.list_rows()) not in (sorted(baseline), expected_with_owned):
             # Relaunch can restore the saved card. Prove its identity before leaving it,
             # then verify the whole list before any destructive action.
-            require(self.button('Back', required=False) is not None,
-                    'Expected contact list or owned saved card is not visible.')
-            # A relaunched app keeps filling in its accessibility tree after it is frontmost
-            # (the card's phone row arrives last). Judge the card once a read repeats the layout.
-            self.await_arrival(self.layout_held(self.layout()))
             back = self.button('Back', required=False)
             require(back is not None, 'Expected contact list or owned saved card is not visible.')
             self.verify_card()

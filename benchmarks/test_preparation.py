@@ -126,11 +126,11 @@ class PreparationTests(unittest.TestCase):
         changed[0]['pid'] = 999
         with patch('preparation.time.sleep') as sleep:
             with self.assertRaisesRegex(ValueError, 'process changed'):
-                self.run_contact([card(), card(), changed])
+                self.run_contact([card(), changed])
         sleep.assert_not_called()
         calls = json.loads((self.args.out / 'calls.json').read_text())
         self.assertEqual([call['phase'] for call in calls if call['phase'] != 'screenshot'],
-                         ['read', 'read', 'return-to-contact-list', 'read'])
+                         ['read', 'return-to-contact-list', 'read'])
 
     def test_prepare_passes_configured_environment_to_public_cli(self):
         binary = self.args.out / 'fixture-axe'
@@ -148,7 +148,7 @@ class PreparationTests(unittest.TestCase):
     def test_restored_owned_card_returns_to_list_before_delete(self):
         edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
         confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
-        worker = self.run_contact([card(), card(), contact_list(True), card(), edit, confirm, contact_list()])
+        worker = self.run_contact([card(), contact_list(True), card(), edit, confirm, contact_list()])
         phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
         self.assertEqual(phases, ['return-to-contact-list', 'open-owned-card', 'open-edit',
                                   'open-delete-confirmation', 'confirm-approved-delete'])
@@ -173,7 +173,7 @@ class PreparationTests(unittest.TestCase):
         edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
         confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
         with patch('preparation.time.sleep') as sleep:
-            worker = self.run_contact([card(), card(), card(), contact_list(True), card(), edit, confirm,
+            worker = self.run_contact([card(), card(), contact_list(True), card(), edit, confirm,
                                        contact_list()])
         self.assertEqual(sleep.call_count, 1)
         phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
@@ -255,25 +255,11 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(clock[0], 10)
         self.assertEqual(reads[0], 42)
 
-    def test_restored_card_is_judged_once_its_tree_holds(self):
-        # A relaunched app is frontmost before its tree is complete: the first read of the
-        # restored card can lack the phone row. Preparation judges the card once a read repeats.
-        partial = card()
-        partial[0]['children'] = [child for child in partial[0]['children'] if child['AXLabel'] != '(555) 010-4242']
-        edit = raw('Contacts', [('TextField', 'First name'), ('Button', 'Delete Contact')])
-        confirm = raw('Contacts', [('StaticText', 'Delete Contact'), ('Button', 'Delete')])
-        with patch('preparation.time.sleep'):
-            worker = self.run_contact([partial, card(), card(), contact_list(True), card(), edit, confirm,
-                                       contact_list()])
-        phases = [call['phase'] for call in worker.calls if call['inputAttempted']]
-        self.assertEqual(phases, ['return-to-contact-list', 'open-owned-card', 'open-edit',
-                                  'open-delete-confirmation', 'confirm-approved-delete'])
-
     def test_restored_card_with_wrong_fields_stops_before_input(self):
         wrong = card()
         wrong[0]['children'][-1]['AXLabel'] = 'other@example.com'
         with self.assertRaisesRegex(ValueError, 'email differs'):
-            self.run_contact([wrong, wrong])
+            self.run_contact([wrong])
         calls = json.loads((self.args.out / 'calls.json').read_text())
         self.assertFalse(any(call['inputAttempted'] for call in calls))
 
@@ -281,15 +267,15 @@ class PreparationTests(unittest.TestCase):
         extra = contact_list(True)
         extra[0]['children'].append(copy.deepcopy(extra[0]['children'][0]))
         with self.assertRaisesRegex(ValueError, 'Initial list'):
-            self.run_contact([card(), card(), extra])
+            self.run_contact([card(), extra])
         calls = json.loads((self.args.out / 'calls.json').read_text())
         self.assertEqual([call['phase'] for call in calls if call['inputAttempted']], ['return-to-contact-list'])
 
     def test_input_timeout_is_recorded_and_not_retried(self):
         with self.assertRaises(subprocess.TimeoutExpired):
-            self.run_contact([card(), card()], timeout_input=True)
+            self.run_contact([card()], timeout_input=True)
         calls = json.loads((self.args.out / 'calls.json').read_text())
-        self.assertEqual(len([call for call in calls if call['phase'] != 'screenshot']), 3)
+        self.assertEqual(len(calls), 2)
         self.assertTrue(calls[-1]['inputOutcomeUnknown'])
 
     def run_reminders(self, captures):
