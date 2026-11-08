@@ -236,6 +236,11 @@ class ContactPreparation:
         require(len(set(baseline)) == len(baseline), 'Baseline row labels must be unique.')
         expected_with_owned = sorted(baseline + [self.profile['rowLabel']])
         if sorted(self.list_rows()) not in (sorted(baseline), expected_with_owned):
+            # A list showing baseline rows is the list, not a restored card: name what differs.
+            unexpected = sorted(set(self.list_rows()) - set(baseline) - {self.profile['rowLabel']})
+            missing = sorted(set(baseline) - set(self.list_rows()))
+            require(not any(row in baseline for row in self.list_rows()),
+                    f'The contact list differs from the baseline; unexpected {unexpected}, missing {missing}.')
             # Relaunch can restore the saved card. Prove its identity before leaving it,
             # then verify the whole list before any destructive action.
             back = self.button('Back', required=False)

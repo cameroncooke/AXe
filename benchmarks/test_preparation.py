@@ -255,6 +255,15 @@ class PreparationTests(unittest.TestCase):
         self.assertEqual(clock[0], 10)
         self.assertEqual(reads[0], 42)
 
+    def test_list_with_a_stray_contact_names_it_before_input(self):
+        # The list's own Back button must not be taken for a restored card.
+        stray = raw('Contacts', [('Button', 'Back')] + [('GenericElement', label)
+                    for label in CONTACT['baselineRows'] + [CONTACT['rowLabel'], 'Probe']])
+        with self.assertRaisesRegex(ValueError, r"unexpected \['Probe'\], missing \[\]"):
+            self.run_contact([stray])
+        calls = json.loads((self.args.out / 'calls.json').read_text())
+        self.assertFalse(any(call['inputAttempted'] for call in calls))
+
     def test_restored_card_with_wrong_fields_stops_before_input(self):
         wrong = card()
         wrong[0]['children'][-1]['AXLabel'] = 'other@example.com'
