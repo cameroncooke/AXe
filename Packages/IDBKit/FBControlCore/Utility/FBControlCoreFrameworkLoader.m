@@ -55,7 +55,9 @@ void *FBGetSymbolFromHandleOptional(void *handle, const char *name)
   if (self.hasLoadedFrameworks) {
     return YES;
   }
-  BOOL result = [FBControlCoreFrameworkLoader loadPrivateFrameworks:self.frameworks logger:logger error:error];
+  // The logger is nullable here, but FBWeakFramework requires one.
+  id<FBControlCoreLogger> effectiveLogger = logger ?: [FBControlCoreGlobalConfiguration.defaultLogger withName:@"framework_loader"];
+  BOOL result = [FBControlCoreFrameworkLoader loadPrivateFrameworks:self.frameworks logger:effectiveLogger error:error];
   if (result) {
     _hasLoadedFrameworks = YES;
   }

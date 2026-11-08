@@ -131,6 +131,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `FBControlCoreFrameworkLoader loadPrivateFrameworks:error:` no longer crashes when its nullable logger is nil; it uses the default logger.
 - Deleting an input quarantine record now ends the quarantine. The quarantined broker retires without sending input once its persisted record is gone, so the next command starts a fresh broker; previously it kept rejecting input until the process was killed. Quarantine errors and next steps now name the record and say that no input was sent, instead of asking for an undocumented "explicit recovery". A quarantine that could not be saved still keeps its broker and lease.
 - `hinge set` now reads the hinge again when one readback read times out after the fold command, within the existing request timeout (8 seconds by default). Previously a single read that took longer than 3 seconds on a busy Mac failed the command as delivery uncertain and quarantined the device's input. A read that times out before the command is sent still fails with nothing delivered.
 - `list-simulators --displays` now waits for a Duo fold or unfold to finish instead of failing with `changedDuringRead`. On iOS 27.3 the display configuration reads as changing for up to about 4 seconds after closing. The wait shares the 8-second default display coherence budget of `hinge set`, and no catalogue read across the change is ever reported.
