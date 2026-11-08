@@ -272,6 +272,16 @@ final class SelectedHIDOwner {
         clear()
     }
 
+    /// A quarantined broker keeps its lease until the user deletes the persisted record after checking
+    /// the device. It then retires without sending input, so the next command starts a fresh broker.
+    /// A record that was never persisted keeps the lease, because nothing else would block input.
+    func retireIfQuarantineCleared() {
+        guard quarantined, quarantineReceipt?.persisted == true, !admission.inFlight, !batchRunning,
+              !maintainingRetainedInput, dependencies.quarantineCleared(simulatorUDID) else { return }
+        logger.info().log("Quarantine record removed; selected broker \(brokerID) retiring without input.")
+        shouldStop = true
+    }
+
     /// Call only after outstanding actions have completed; no new action is admitted.
     func shutdown() async {
         guard !quarantined else { return }
@@ -297,7 +307,7 @@ final class SelectedHIDOwner {
 
     func rejectBusy(_ request: SelectedHIDRequest) -> SelectedHIDResponse {
         var result = response(request, outcome: "rejectedBeforeInput",
-            error: quarantined ? SelectedHIDFailure.invalid("Device input is quarantined; explicit recovery is required") : SelectedHIDFailure.busy,
+            error: quarantined ? SelectedHIDFailure.invalid("Device input is quarantined; no input was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantineReceipt?.recordPath)) : SelectedHIDFailure.busy,
             includeToken: false)
         result.quarantine = quarantineReceipt
         result.ax?.failure = .ownershipRejected
@@ -394,7 +404,7 @@ final class SelectedHIDOwner {
             await transportOwner.close()
             let blocked = quarantine(result, request: nil)
             let persistence = blocked.quarantine?.persisted == true
-                ? "Input quarantine saved; explicit recovery is required."
+                ? "Input quarantine saved. " + HIDInputQuarantine.recoveryStep(recordPath: blocked.quarantine?.recordPath)
                 : "Input quarantine could not be saved; manual recovery is required. \(blocked.quarantine?.error ?? "")"
             throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(diagnostic). \(persistence)")
         }

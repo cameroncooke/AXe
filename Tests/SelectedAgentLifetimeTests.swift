@@ -83,6 +83,31 @@ struct SelectedAgentLifetimeTests {
         #expect(fixture.state.calls == 1 && fixture.state.persists == 1 && owner.isBusy)
     }
 
+    @Test("A quarantined broker retires without input only after its saved record is deleted")
+    func quarantinedBrokerRetiresWhenRecordIsDeleted() async throws {
+        let fixture = try RotationLifetimeFixture(cleanup: "uncertain")
+        let owner = fixture.owner()
+        let failed = await owner.perform(fixture.rotationRequest())
+        #expect(failed.quarantine?.persisted == true)
+        owner.retireIfQuarantineCleared()
+        #expect(!owner.shouldStop && owner.isBusy)
+        fixture.state.recordDeleted = true
+        owner.retireIfQuarantineCleared()
+        #expect(owner.shouldStop && fixture.state.calls == 1)
+    }
+
+    @Test("A quarantine that could not be saved keeps its broker even without a record")
+    func unsavedQuarantineKeepsBroker() async throws {
+        let fixture = try RotationLifetimeFixture(cleanup: "uncertain")
+        fixture.state.persistFails = true
+        fixture.state.recordDeleted = true
+        let owner = fixture.owner()
+        let failed = await owner.perform(fixture.rotationRequest())
+        #expect(failed.quarantine?.persisted == false)
+        owner.retireIfQuarantineCleared()
+        #expect(!owner.shouldStop && owner.isBusy)
+    }
+
     @Test("Agent requests accept an omitted PID and reject explicit nonpositive assertions")
     func optionalAgentPIDValidation() throws {
         let snapshot = UUID()
@@ -179,6 +204,8 @@ private struct RotationLifetimeFixture {
     final class State {
         var calls = 0
         var persists = 0
+        var persistFails = false
+        var recordDeleted = false
     }
     let udid = UUID().uuidString
     let screen = UUID()
@@ -228,7 +255,10 @@ private struct RotationLifetimeFixture {
             return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: broker, outcome: "ready", token: nil, enqueuedEventCount: 0,
                 cleanup: "notNeeded", error: nil, context: after, ax: ax)
-        }, persist: { _, _, _ in state.persists += 1 }, now: { 0 })
+        }, persist: { _, _, _ in
+            state.persists += 1
+            if state.persistFails { throw SelectedHIDFailure.invalid("Persistence failed") }
+        }, now: { 0 }, quarantineCleared: { _ in state.recordDeleted })
         return SelectedHIDOwner(simulatorUDID: udid, logger: AxeLogger(), dependencies: dependencies)
     }
 }

@@ -28,6 +28,20 @@ enum HIDInputQuarantine {
             developerDirectory: "/candidate-device-input", version: 3)
         return URL(fileURLWithPath: endpoint + ".quarantine.json")
     }
+    /// The one recovery step: the record blocks every new input lease, and a quarantined broker
+    /// retires once the record is gone.
+    static let recoveryStep = "Check the simulator, then delete the file at quarantine.recordPath to allow input again."
+    static func recoveryStep(recordPath: String?) -> String {
+        guard let recordPath else { return recoveryStep }
+        return "Check the simulator, then delete " + recordPath + " to allow input again."
+    }
+
+    /// True only when no record exists. An unreadable directory or any entry at the path counts as present.
+    static func recordIsAbsent(simulatorUDID: String) -> Bool {
+        guard let url = try? fileURL(simulatorUDID: simulatorUDID) else { return false }
+        var info = stat()
+        return lstat(url.path, &info) != 0 && errno == ENOENT
+    }
     static func requireClear(simulatorUDID: String) throws {
         let url = try fileURL(simulatorUDID: simulatorUDID)
         let fd = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
@@ -55,7 +69,8 @@ enum HIDInputQuarantine {
               valid(record, simulatorUDID: simulatorUDID) else {
             throw SelectedHIDFailure.invalid("Malformed input quarantine; device remains blocked: " + url.path)
         }
-        throw SelectedHIDFailure.invalid("Device input is quarantined after " + record.reason + "; inspect " + url.path)
+        throw SelectedHIDFailure.invalid("Device input is quarantined after " + record.reason + "; no input was sent. "
+            + recoveryStep(recordPath: url.path))
     }
     static func valid(_ record: Record, simulatorUDID: String) -> Bool {
         guard record.simulatorUDID == UUID(uuidString: simulatorUDID),

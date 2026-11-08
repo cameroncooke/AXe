@@ -244,7 +244,7 @@ enum LegacyDuoInput {
         if request.legacyKeyboard != nil {
             if response.cleanup == "uncertain" || response.quarantine != nil {
                 let persistence = response.quarantine?.persisted == true
-                    ? "Input quarantine saved; explicit recovery is required."
+                    ? "Input quarantine saved. " + HIDInputQuarantine.recoveryStep(recordPath: response.quarantine?.recordPath)
                     : "Input quarantine could not be saved; manual recovery is required. \(response.quarantine?.error ?? "")"
                 throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(response.error ?? "Batch completion"). \(persistence)")
             }

@@ -10,6 +10,8 @@ struct SelectedAXDependencies {
     let execute: Execute
     let persist: Persist
     let now: @MainActor () -> TimeInterval
+    /// True once the user has removed the persisted quarantine record for this device.
+    var quarantineCleared: @MainActor (String) -> Bool = { HIDInputQuarantine.recordIsAbsent(simulatorUDID: $0) }
 
     static var live: Self { live(transportOwner: nil) }
 

@@ -57,7 +57,7 @@ final class AgentModeController {
                 native.error ?? "The runtime is busy. Retry after the current action finishes."), native: native,
             cache: AgentModeCacheState(status: quarantined ? "quarantined" : "busy", reason: code, requiresRefresh: true),
             nextSteps: quarantined
-                ? ["Inspect the quarantine receipt and complete explicit input recovery before retrying."]
+                ? ["Inspect the quarantine receipt. " + HIDInputQuarantine.recoveryStep]
                 : ["Wait for the current action to finish, then request a fresh agent snapshot."])
     }
 
@@ -674,7 +674,7 @@ final class AgentModeController {
             nextSteps: failure == nil ? [] : [
                 "Inspect both phase receipts. Completed input was not undone or replayed.",
                 quarantine == nil ? "Read a fresh snapshot. Do not resubmit the focus-and-type command."
-                    : "Complete explicit input recovery. Do not resubmit the focus-and-type command.",
+                    : HIDInputQuarantine.recoveryStep + " Do not resubmit the focus-and-type command.",
             ])
         return response
     }
@@ -804,7 +804,7 @@ final class AgentModeController {
                 observation: prior?.observation, nextSteps: error == nil ? [] : [
                     "Inspect each step receipt. Completed steps were not undone; no step was replayed.",
                     quarantine == nil ? "Read a fresh snapshot before deciding the next action. Do not resubmit the batch."
-                        : "Complete explicit input recovery before another action. Do not resubmit the batch.",
+                        : HIDInputQuarantine.recoveryStep + " Do not resubmit the batch.",
                 ])
             return response
         }
@@ -1382,7 +1382,7 @@ final class AgentModeController {
         let observation = AgentModeObservationEvidence(native)
         let recoverySteps: [String]
         if native?.quarantine != nil {
-            recoverySteps = ["Inspect the quarantine receipt and complete explicit input recovery before retrying. Input was not replayed."]
+            recoverySteps = ["Inspect the quarantine receipt. " + HIDInputQuarantine.recoveryStep + " Input was not replayed."]
         } else if let instruction = observation?.captureInstruction(udid: simulatorUDID) {
             recoverySteps = [instruction]
         } else {

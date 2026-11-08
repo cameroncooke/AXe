@@ -62,7 +62,7 @@ enum SelectedAXWire {
                         "Input was not replayed. Do not repeat the action.",
                         quarantine == nil
                             ? "Inspect the action and cleanup receipt. Run describe-ui --agent before another reference action."
-                            : "Inspect the action and quarantine receipts. Complete explicit input recovery before requesting a fresh agent snapshot.",
+                            : "Inspect the action and quarantine receipts. " + HIDInputQuarantine.recoveryStep,
                     ])
                 // Preserve the receipt or fail explicitly; never drop it to make a response fit.
                 return try encodeResponse(summary, maximumBytes: maximumBytes)

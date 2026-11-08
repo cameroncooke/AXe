@@ -114,6 +114,8 @@ enum SelectedHIDBroker {
         var tasks: [UUID: Task<Void, Never>] = [:]
         do {
             while !owner.shouldStop {
+                owner.retireIfQuarantineCleared()
+                if owner.shouldStop { break }
                 await agentController.maintain()
                 if owner.shouldStop { break }
                 let client = try await offMain {
