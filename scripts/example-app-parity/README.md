@@ -1,10 +1,10 @@
 # Example app replay with AXe
 
-This helper checks visible app tasks through AXe agent mode. It uses only the Python standard library (Python 3.9 or later; verified with system Python 3.9.6). It does not build, install or launch an app, delete its data, or change its source. Use one existing warm simulator and prepare the required normal app screen first.
+This helper checks visible app tasks through AXe agent mode. It uses only the Python standard library (Python 3.9 or later). It does not build, install or launch an app, delete its data, or change its source. Use one existing warm simulator and prepare the required normal app screen first.
 
 ## Run a plan
 
-From the AXe checkout, use the verified fresh-observation Calculator baseline:
+From the AXe checkout, run the fresh-observation Calculator plan:
 
 ```sh
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/evidence-directory --plan scripts/example-app-parity/calculator-refresh.json
@@ -24,17 +24,18 @@ Supply both monitoring arguments together. The guard must accept --resource-prob
 
 ## Included plans
 
-- calculator.json is the known returned-reference regression case. It reuses the public replacement references and is not the verified baseline. It requires the ordinary Calculator to be in the foreground on the warm simulator. It first taps the normal C button through a compact reference and checks that the display is 0. It then checks all 19 buttons, tap, touch, a 500 ms hold and 5 + 3 = 8. A process restart is not required between runs. Static display text must match the text role; a button labelled 7 cannot satisfy the display assertion.
+- calculator.json reuses the public replacement references returned by each action. It requires the ordinary Calculator to be in the foreground on the warm simulator. It first taps the normal C button through a compact reference and checks that the display is 0. It then checks all 19 buttons, tap, touch, a 500 ms hold and 5 + 3 = 8. A process restart is not required between runs. Static display text must match the text role; a button labelled 7 cannot satisfy the display assertion.
 - calculator-refresh.json performs the same visible checks as calculator.json, but requests a fresh public agent capture before each input. This is a separate baseline with an extra read/token cost; it does not replay a failed input.
 - calculator-arithmetic.json checks Clear, display 0, 5 + 3 and display 8 through fresh agent references. It keeps arithmetic app-effect proof separate from the larger controls plan.
 - calculator-scroll.json starts after launching the same Calculator with its existing --snapshot-scroll-surface argument. It repeats the original small semantic swipe. Its text assertions establish the screen content, not the amount of scrolling.
 - weather-locations.json starts at the default Weather screen and checks that the Locations sheet opens.
 - weather-settings.json starts at the default Weather screen and checks that the Settings sheet opens.
-- weather-precipitation.json recovers the Weather precipitation UI test. It starts on the normal San Francisco main screen, performs at most five completed upward swipes within the public main-scroll reference until a tap-capable PRECIP. button is visible, then taps it using a fresh reference and reads PRECIPITATION and LIGHTNING text.
+- weather-precipitation.json checks the Weather precipitation detail. It starts on the normal San Francisco main screen, performs at most five completed upward swipes within the public main-scroll reference until a tap-capable PRECIP. button is visible, then taps it using a fresh reference and reads PRECIPITATION and LIGHTNING text.
+- weather-expanded-setting.json starts on the expanded Weather Settings sheet with London selected, turns Reduce transparency on, closes the sheet and checks that London still shows.
 
 The Calculator source is example_projects/iOS_Calculator and Weather is example_projects/Weather in XcodeBuildMCP. Their bundle IDs are io.sentry.calculatorapp and com.sentry.weather.Weather. Weather plans require the normal default screen before each run. The Calculator plan uses its normal Clear button and can run again on the existing foreground app. Use simctl install/launch outside this helper; do not add app-state injection or hidden test routes.
 
-The smaller plans recover separate parts of the earlier work. The complete functional plan below covers the original RS/1 manual task in XcodeBuildMCP benchmarks/claude-ui/prompts/weather.md: change units and switches, type London, select it, then read the required weather and precipitation values. That complete task is distinct from the later UI output-contract suite. Add its visible steps to a plan only when their public agent targets are known. Do not add accessibility IDs to the sample app just to hide a tool limitation.
+The complete functional plan below covers the Weather task in XcodeBuildMCP benchmarks/claude-ui/prompts/weather.md: change units and switches, type London, select it, then read the required weather and precipitation values. Add its visible steps to a plan only when their public agent targets are known. Do not add accessibility IDs to the sample app just to hide a tool limitation.
 
 ## Repeatable agent batch checks
 
@@ -50,7 +51,7 @@ The helper imports Replay from verify-example-apps.py. It reuses whole-stdout JS
 
 The current helpers check the public adaptive success contract: completed count, ordered step action/status, input outcome, event count, cleanup and batch-level no-replay evidence. After complete success with a fresh final capture, duplicate totals, rollback false, request IDs and per-receipt replay false are omitted. A receipt kind equal to its action is also omitted; typeText stays distinct from type. Failure receipts retain those fields. The Weather switch helper requests full view and still requires the complete base fields.
 
-These are helper assertions, not recorded pass results. Unexpected failure stops the run. Expected refusals must have complete actual JSON, a nonzero child exit, the exact error code, zero completed steps and no action receipts. The original failed call record remains. This establishes public prevalidation evidence plus unchanged visible state, not an independent OS event inventory. No input is retried.
+Unexpected failure stops the run. Expected refusals must have complete actual JSON, a nonzero child exit, the exact error code, zero completed steps and no action receipts. The original failed call record remains. This establishes public prevalidation evidence plus unchanged visible state, not an independent OS event inventory. No input is retried.
 
 Each run saves both helper sources and hashes, its fixed check plan, every actual batch document and hash, all CLI argv/stdout/stderr, and the result. `PASS_WITH_SKIPS` keeps the native ID gap visible. A failed strict layout check remains a failure; the helper does not refresh and replay that input. It performs no build, install, launch or app-state change outside the named public batch actions.
 
@@ -94,8 +95,6 @@ Start after the search check with London selected and the Locations sheet open. 
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/weather-seven-settings-evidence --plan scripts/example-app-parity/weather-seven-settings.json
 ```
 
-Its SHA-256 is bf3833cd4211bc88b21a26299e3770115c6973b9439b8c22baf1d4beee493507.
-
 ## Run the complete original Weather UI task
 
 Use the unchanged Weather app on one existing warm ordinary portrait iPhone simulator at 402 × 874 logical points. Terminate and relaunch only the app through its normal lifecycle to restore its in-memory defaults. Do not continue the already changed London session. Confirm a usable first agent capture before the replay. The required starting screen is the top of San Francisco/current location, with °F, mph, mb and mi, both first switches on, Reduce transparency off and an empty Locations query. No simulator creation or app-data injection is needed.
@@ -104,11 +103,11 @@ Use the unchanged Weather app on one existing warm ordinary portrait iPhone simu
 python3 -B scripts/verify-example-apps.py --axe /absolute/path/to/axe --udid SIM_UUID --out /absolute/new/weather-original-evidence --plan scripts/example-app-parity/weather-original-functional.json
 ```
 
-The plan SHA-256 is f0ea431802f9def65db5a057b19d7690a854d7b8c0c0fbab6af975e71bc7a12a. Use the same optional resource tools described above.
+Use the same optional resource tools described above.
 
 ## Check app switching and a failed final capture
 
-Prepare Home with one unique visible app icon. For the verified failure path, open Safari normally first, then return to Home so Safari is warm. The helper defaults to Settings; --app-icon selects the exact visible icon label. For the recorded Safari case, use:
+Prepare Home with one unique visible app icon. To exercise the failed-final-capture path, open Safari normally first, then return to Home so Safari is warm. The helper defaults to Settings; --app-icon selects the exact visible icon label. For Safari, use:
 
 ```sh
 python3 -B scripts/verify-agent-handoff.py --axe /absolute/path/to/axe --udid SIM_UUID --app-icon Safari --out /absolute/new/safari-handoff-evidence
@@ -147,6 +146,6 @@ Each run saves its exact helper file as helper.py before execution, a copy of it
 
 The result records hashes for the invoked executable file, helper, plan and optional monitoring tools. If --axe names a shell wrapper, the file hash is the wrapper hash; record the payload hash separately. Nothing is committed or published by the helper.
 
-A successful input receipt alone does not prove the app changed. Keep visible display, sheet or value assertions after actions. This script does not run XcodeBuildMCP, launch Claude, provision a simulator or certify the entire historical suite.
+A successful input receipt alone does not prove the app changed. Keep visible display, sheet or value assertions after actions. This script does not run XcodeBuildMCP, launch Claude, or provision a simulator.
 
 For token comparisons, count every agent-visible stdout result in the manifest, including paging, failed attempts and readback. Keep setup/build output outside the interaction boundary and name the tokenizer. Do not compare only the first screen capture.

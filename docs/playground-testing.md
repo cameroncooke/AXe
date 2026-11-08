@@ -84,7 +84,7 @@ Held-input checks wait for actual contacts or text effects before changing the d
 
 The matrix sets `FBSIMULATORCONTROL_LOG_HID_DETAILS=1` before its first owned command. Exact held-button release checks need the real button name and UP direction in the receipt. Set the same variable before the test process starts for direct or copied-suite runs. Reuse warm audit devices, but confirm that an earlier owned broker has exited on its normal idle path before this proof. An existing broker keeps its initial environment; the flag does not change it. This is a test diagnostic, not a product logging default.
 
-Agent checks require valid RS/1 output, real app effects, reference/cache reuse when valid and refusal when the app, focus, layout or selected target changes. They include all prior accepted comparison behaviours and preserve strict negative cases. A successful command or screenshot alone is not an app-effect proof.
+Agent checks require valid RS/1 output, real app effects, reference/cache reuse when valid and refusal when the app, focus, layout or selected target changes. A successful command or screenshot alone is not an app-effect proof.
 
 The normal app's Documents readback is checked against its real PID and generation. Contact, callback, layout and text data come from normal visible pages. External state tools fold or rotate the guest; AXe sends the input under test. No hidden state route is used.
 
@@ -94,7 +94,7 @@ Both runners use `scripts/playground-suite-counts.json` and `scripts/playground-
 
 **Completed case instances come from the structured Swift Testing version-0 event stream.** This includes each parameter argument. The reader requires one complete serial run, matching start/end events, the exact expected count and zero issues, skips or cancellation. It also checks XML for failed/skipped declarations. XML alone is not an executed-case count on this toolchain.
 
-Each result has JSON, XML, structured events, full command logs and a per-suite artifact directory. The result stores started and completed cases, errors and cases without completed results. Missing completed XML/event records do not prove that no native action started. The reader has 16 pure tests with a genuine 27-case/4-declaration trace and damaged/failing variants; those tests are separate from the 693 simulator cases.
+Each result has JSON, XML, structured events, full command logs and a per-suite artifact directory. The result stores started and completed cases, errors and cases without completed results. Missing completed XML/event records do not prove that no native action started. The reader has 16 pure tests with a genuine 27-case/4-declaration trace and damaged/failing variants; those tests are separate from the simulator cases.
 
 A failed case is not replayed. An input quarantine stops later work on that guest and stays in place. The runner does not clear it, restart a guest or add a production setup path. Preserve the failed result and inspect it before a new run.
 
@@ -124,7 +124,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
 
 For Duo, set its UUID and `AXE_DUO_E2E=1`. This focused case does not replace the full suite.
 
-The one-case `PlaygroundDuoRawLongTextTests` suite is part of the full Duo profile and its `keyboard-hardware` group. It tests 300 bytes of raw mixed-case text on the inner screen in landscape, after normal agent focus taps. It requires exact text and callback counts, unchanged control and touch state, then a lowercase key and a fresh native field read. It uses the existing command deadline. It is separate from the 133-case `PlaygroundAgent` run.
+The one-case `PlaygroundDuoRawLongTextTests` suite is part of the full Duo profile and its `keyboard-hardware` group. It tests 300 bytes of raw mixed-case text on the inner screen in landscape, after normal agent focus taps. It requires exact text and callback counts, unchanged control and touch state, then a lowercase key and a fresh native field read. It uses the existing command deadline.
 
 Run only that case on an existing warm Duo with the matched full-package test host:
 
@@ -176,7 +176,7 @@ Each result contains the actual CLI, native framework, app and script hashes; co
 
 ## Reference and raw-input follow-up checks
 
-These checks use the full AXe Swift package through `test-runner.sh`. The four new direct-suite sources are registered separately from the matrix source list. The raw suites import AXe internals and must not be copied into the matrix standalone package.
+These checks use the full AXe Swift package through `test-runner.sh`. Their sources are registered under `directSuiteSources` in `scripts/playground-acceptance.json`, separately from the matrix source list. The raw suites import AXe internals and must not be copied into the matrix standalone package.
 
 | Direct suite | Cases | Device |
 | --- | ---: | --- |
@@ -188,7 +188,7 @@ These checks use the full AXe Swift package through `test-runner.sh`. The four n
 
 Use an existing warm simulator with the normal Playground installed. First build the full-package test host from the same source and matching native frameworks. `--tests-only` does not build that host. Set `AXE_BIN_PATH` to the actual matched CLI executable, not an installation wrapper. The broker-restart case checks that executable, simulator, user and process start time before it stops its own idle worker.
 
-Run one command at a time. Read each saved result before the next command. These commands describe 19 cases on one ordinary iPhone; they are not passing results:
+Run one command at a time. Read each saved result before the next command. These commands describe 20 cases on one ordinary iPhone; they are not passing results:
 
 ```sh
 export DEVELOPER_DIR=/absolute/path/to/Xcode.app/Contents/Developer
@@ -202,7 +202,7 @@ export AXE_DUO_E2E=0
 ./test-runner.sh --tests-only PlaygroundAgentNativeStateTests
 ```
 
-Then use the warm Duo for the three shared suites, 12 cases. The ordinary-only raw suites reject Duo mode before simulator work:
+Then use the warm Duo for the three shared suites, 13 cases. The ordinary-only raw suites reject Duo mode before simulator work:
 
 ```sh
 export SIMULATOR_UDID=DUO_UUID
@@ -239,12 +239,12 @@ export AXE_DUO_E2E=1
 ./test-runner.sh --tests-only PlaygroundDuoAgentFocusAndTypeTests
 ```
 
-Run these jobs serially. The runner supplies a new artifact directory and checks the registered case counts: two and four, with no skipped or missing cases. The normal matrix and agent-controls/keyboard-hardware groups also register the suites. Keep the prior 17 host focus tests; these six cases add real simulator evidence. Preserve failed outputs and do not replay input. Public accessibility output still does not prove exact native UID continuity. Shared-ID and anonymous fields remain separate checks.
+Run these jobs serially. The runner supplies a new artifact directory and checks the registered case counts: two and four, with no skipped or missing cases. The normal matrix and agent-controls/keyboard-hardware groups also register the suites. Preserve failed outputs and do not replay input. Public accessibility output still does not prove exact native UID continuity. Shared-ID and anonymous fields remain separate checks.
 
 ## Resources, delivery and boundaries
 
 The matrix builds the public process probe and records CPU and memory every 15 seconds in `resources.jsonl`, starting before the Playground build. It records Codex, Device Hub, simulator services and the largest/highest-CPU processes. There is no 8 GB cap. Run heavy work one job at a time and inspect for sustained growth. Stop owned work if it runs away; preserve the evidence.
 
-Build, signing, packaging and local installation use a separate exact-payload recipe. The current recipe uses the ordinary iPhone, which the full matrix leaves warm. It verifies archive contents, strict signatures, an unlinked installed wrapper, a real app action and complete removal/restoration. It must use the final runtime and completed build receipts. These checks do not add to 693 and do not authorise uploads, pushes, publication or deployment.
+Build, signing, packaging and local installation use a separate exact-payload recipe. The current recipe uses the ordinary iPhone, which the full matrix leaves warm. It verifies archive contents, strict signatures, an unlinked installed wrapper, a real app action and complete removal/restoration. It must use the final runtime and completed build receipts. These checks are not part of the matrix count and do not authorise uploads, pushes, publication or deployment.
 
-The current hosted workflow runs non-E2E checks. Local results do not prove hosted simulator coverage. Repeated cold-start stress, conditional empty-tree recovery without a reproduced fault, Intel hardware and Apple Pay payment UI are outside this run. Apple Pay hardware delivery remains in scope. The suite repeats the documented prior behaviours; it does not claim every possible app, option or new OS state.
+The hosted workflow runs non-E2E checks. Local results do not prove hosted simulator coverage. The suite does not cover repeated cold-start stress, conditional empty-tree recovery without a reproduced fault, Intel hardware or the Apple Pay payment UI; it does cover Apple Pay hardware button delivery. It does not claim every possible app, option or new OS state.

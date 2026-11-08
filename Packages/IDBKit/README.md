@@ -7,15 +7,12 @@ frameworks. Edit the sources here directly; there is no upstream checkout or pat
 ## Origin
 
 The sources started from Meta's [IDB](https://github.com/facebook/idb) at upstream commit
-`e682506725e9efefb9c43b8b917c0b12eb2a5939`, by way of AXe's former fork at
-`604c51013438f0c3603b720a05a44b7c5b8f286d`, with AXe's Duo foundation changes applied. The repository
-history up to the removal of `patches/idb-duo-foundation.patch` records how those changes evolved.
+`e682506725e9efefb9c43b8b917c0b12eb2a5939`, with AXe's Duo changes applied.
 
 Only what AXe uses is kept:
 
-- `FBControlCore` and `FBSimulatorControl`. `FBDeviceControl`, `XCTestBootstrap` and the IDB companion,
-  CLI and Python client are not included. The simulator REPL and XCTest commands were removed with
-  `XCTestBootstrap`.
+- `FBControlCore` and `FBSimulatorControl`. `FBDeviceControl`, `XCTestBootstrap`, the simulator REPL and
+  XCTest commands, and the IDB companion, CLI and Python client are not included.
 - `PrivateHeaders` for the private Apple frameworks these two compile against.
 - `FBSimulatorHIDEventTransportTests`, AXe's test target for this code.
 

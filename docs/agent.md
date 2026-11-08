@@ -51,9 +51,9 @@ e36|swipe|scroll-view|||
 e96|text|text|Sunday – 16 Aug 2026||current-day
 ```
 
-Target questions use refs as choice keys and rows as criteria. On a Calendar day view this reduces the request from about 12.4 KB to 5.0 KB while covering the whole hierarchy.
+Target questions use refs as choice keys and rows as criteria.
 
-One deliberate difference from XcodeBuildMCP: the screen hash ignores traversal order. rs/1 hashes elements in hierarchy order, but SpringBoard reorders sibling icons between reads, which made every decision look stale.
+Unlike XcodeBuildMCP's rs/1, the screen hash ignores the traversal order of elements.
 
 ## Observation and freshness
 

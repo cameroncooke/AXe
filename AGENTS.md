@@ -18,10 +18,9 @@ When reading issues:
 ## Tools
 - GitHub CLI for issues/PRs
 - When working on the skill sources in `Skills/CLI/axe/`, use the `skill-creator` skill workflow.
-- After modifying any skill source, run `npx skill-check <skill-directory>` and address all errors/warnings before handoff.
 
 ## Build and test
-- `scripts/build.sh` (default, `dev`, `clean`) and the `./test-runner.sh` modes that build frameworks (including `--unit-tests`) run `rm -rf build_products build_derived_data`. Never keep anything that must survive under `build_products/`.
+- `scripts/build.sh` (default, `dev`, `clean`) runs `rm -rf build_products build_derived_data`, and so does `scripts/build.sh frameworks-if-needed` (used by `make build`, `make test`, `make e2e`, `./test-runner.sh` and the benchmarks) whenever it rebuilds stale IDBKit frameworks. Never keep anything that must survive under `build_products/`.
 
 ## Performance
 - An ordinary simulator interaction must be as fast as in the current release (the latest release tag). This applies to every input route, including selected and agent modes.
