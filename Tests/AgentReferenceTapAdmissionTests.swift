@@ -308,6 +308,25 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.ownedTaps == 1)
     }
 
+    @Test("An invalid request, a wrong PID assertion or display does not invalidate the current table")
+    func invalidRequestKeepsTable() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var malformed = harness.tap(snapshot: snapshot, ref: ref)
+        malformed.agent?.duration = 0
+        #expect(await harness.controller.perform(malformed).agent?.error?.code == "invalidBounds")
+        var wrongPID = harness.tap(snapshot: snapshot, ref: ref)
+        wrongPID.agent?.expectedPID = 999
+        #expect(await harness.controller.perform(wrongPID).agent?.error?.code == "contextChanged")
+        let base = harness.tap(snapshot: snapshot, ref: ref)
+        let wrongDisplay = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: 2, screenUUID: UUID(), operation: .complete, token: nil, primitives: [], agent: base.agent)
+        #expect(await harness.controller.perform(wrongDisplay).agent?.error?.code == "inactiveDisplay")
+        #expect(harness.state.ownedTaps == 0)
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
+        #expect(!result.didError && result.data.action?.enqueuedEventCount == 2)
+    }
+
     @Test("Paging a snapshot whose screen changed is refused with the new snapshot's first page")
     func stalePageIsRefused() async throws {
         let harness = try Harness()

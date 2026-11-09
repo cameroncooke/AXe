@@ -103,6 +103,7 @@ final class AgentModeController {
         var refusalContext: SelectedHIDContext?
         var refusalPID: Int32?
         var refusalOriginal: AgentModeSnapshot?
+        var observedScreen = false
         do {
             try request.validate()
             guard let mode = request.agent else {
@@ -191,6 +192,7 @@ final class AgentModeController {
             let snapshot: AgentModeSnapshot
             var fresh: SelectedHIDResponse?
             if let preread, focusPlan != nil, mode.kind == .typeText {
+                observedScreen = true
                 context = preread.context
                 pid = preread.expectedPID
                 snapshot = preread.snapshot
@@ -202,6 +204,8 @@ final class AgentModeController {
                 } else {
                     display = try await discover(request)
                 }
+                // From here a failure is evidence about the current screen.
+                observedScreen = true
                 let observed = try await observe(display: display, pid: expectedPID)
                 guard let observedContext = observed.context, let roots = observed.ax?.roots,
                       let observedPID = observed.ax?.expectedPID else {
@@ -335,8 +339,14 @@ final class AgentModeController {
             // A stale caller cannot erase another caller's newer reference table.
             return failure(request, error, action: action)
         } catch {
-            record = nil
             let nativeFailure = error as? AgentModeNativeFailure
+            // The shared table is cleared only on evidence that it no longer describes the screen:
+            // a native failure, a refusal after a fresh read, or its own expiry. A malformed
+            // request, a wrong PID assertion or display, or an old snapshot ID leaves another
+            // caller's current table in place. Input paths cleared it before their first event.
+            if nativeFailure != nil || observedScreen || (error as? AgentModeFailure)?.code == "snapshotExpired" {
+                record = nil
+            }
             let reason = error as? AgentModeFailure
                 ?? AgentModeFailure("observationFailed", "The simulator observation failed.")
             if nativeFailure == nil, focusPlan == nil, request.agent?.kind != .describe {
