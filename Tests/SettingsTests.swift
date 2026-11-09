@@ -104,10 +104,18 @@ struct SettingsTests {
         #expect(command.change.voiceOverArguments(device: "D") == nil)
     }
 
-    @Test func standardTextSizeLeavesLargerSizesAlone() {
+    @Test func standardTextSizeTurnsLargerSizesOff() {
         let change = SettingsChange(textSize: .extraLarge, colorFilter: .off)
         #expect(change.appearanceArguments(device: "D") == [
-            "device", "settings", "appearance", "--device", "D", "--text-size", "extra-large", "--color-filter", "off"])
+            "device", "settings", "appearance", "--device", "D", "--larger-accessibility-sizes", "off",
+            "--text-size", "extra-large", "--color-filter", "off"])
+        for size in SettingTextSize.allCases {
+            let arguments = SettingsChange(textSize: size).appearanceArguments(device: "D") ?? []
+            let index = try? #require(arguments.firstIndex(of: "--larger-accessibility-sizes"))
+            #expect(index.map { arguments[$0 + 1] } == (size.isAccessibility ? "on" : "off"), "\(size)")
+        }
+        #expect(SettingsChange(appearance: .dark).appearanceArguments(device: "D")?
+            .contains("--larger-accessibility-sizes") == false)
     }
 
     @Test func voiceOverAloneMakesOnlyTheVoiceOverCall() {

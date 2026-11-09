@@ -41,7 +41,7 @@ struct SettingsSet: AsyncParsableCommand {
 
     @OptionGroup var target: SettingsTarget
     @Option(help: "Interface style.") var appearance: SettingAppearance?
-    @Option(help: "Text size. An accessibility size also turns on Larger Accessibility Sizes.")
+    @Option(help: "Text size. An accessibility size turns Larger Accessibility Sizes on; a standard size turns it off.")
     var textSize: SettingTextSize?
     @Option(help: "Increase Contrast.") var increaseContrast: SettingSwitch?
     @Option(help: "Reduce Motion.") var reduceMotion: SettingSwitch?

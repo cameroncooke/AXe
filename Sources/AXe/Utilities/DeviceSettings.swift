@@ -64,14 +64,15 @@ struct SettingsChange: Equatable, Sendable {
         }
     }
 
-    /// nil when no appearance option is set. An accessibility text size turns on Larger Accessibility
-    /// Sizes in the same call, because devicectl refuses one without the other.
+    /// nil when no appearance option is set. The text size alone sets Larger Accessibility Sizes in the
+    /// same call: an accessibility size turns it on, because devicectl refuses one without the other,
+    /// and a standard size turns it off, so a later `set` can restore a device.
     func appearanceArguments(device: String) -> [String]? {
         var options: [String] = []
         if let appearance { options += ["--mode", appearance.rawValue] }
         if let liquidGlass { options += ["--look-and-feel", liquidGlass.rawValue] }
         if let textSize {
-            if textSize.isAccessibility { options += ["--larger-accessibility-sizes", "on"] }
+            options += ["--larger-accessibility-sizes", textSize.isAccessibility ? "on" : "off"]
             options += ["--text-size", textSize.rawValue]
         }
         if let increaseContrast { options += ["--increase-contrast", increaseContrast.rawValue] }
