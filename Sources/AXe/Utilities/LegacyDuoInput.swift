@@ -136,7 +136,7 @@ enum LegacyDuoInput {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
             primitives: [], expectedContext: context, legacyKeyboard: keyboard)
-        try await LegacyDuoBatchLifetime.run {
+        try await SignalScope.cancellingOnSignal {
             try await send(request, simulatorUDID: simulatorUDID, postDelay: nil)
         }
     }

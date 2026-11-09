@@ -121,46 +121,30 @@ struct KeySequence: AsyncParsableCommand {
         
         try await performGlobalSetup(logger: logger)
 
-        let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
-        let keyDelay = delay ?? 0.1  // Default 100ms delay between keys
-        
-        logger.info().log("Pressing key sequence: \(parsedKeycodes)")
-        logger.info().log("Delay between keys: \(keyDelay) seconds")
+        logger.info().log("Pressing key sequence: \(keycodesString)")
+        logger.info().log("Delay between keys: \(delay ?? 0.1) seconds")
 
-        // Create sequence of key events
-        var events: [FBSimulatorHIDEvent] = []
-        
-        for (index, keycode) in parsedKeycodes.enumerated() {
-            // Add key press event
-            let keyEvent = FBSimulatorHIDEvent.shortKeyPress(UInt32(keycode))
-            events.append(keyEvent)
-            
-            // Add delay between keys (except after the last key)
-            if index < parsedKeycodes.count - 1 && keyDelay > 0 {
-                let delayEvent = FBSimulatorHIDEvent.delay(keyDelay)
-                events.append(delayEvent)
-            }
-        }
-        
-        // Create composite event
-        let sequenceEvent = FBSimulatorHIDEvent.composite(events)
-        
-        // Perform the key sequence event
         try await LegacyDuoInput.performKeyboard(
-            sequenceEvent, simulatorUDID: simulatorUDID, logger: logger
+            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger
         )
         
         logger.info().log("Key sequence completed successfully")
     }
 
-    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
-        try validate()
+    /// Each key pressed and released, with the delay (default 0.1 s) between keys.
+    func hidEvent() throws -> FBSimulatorHIDEvent {
         let codes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
+        let keyDelay = delay ?? 0.1
         var events: [FBSimulatorHIDEvent] = []
         for (index, code) in codes.enumerated() {
             events.append(.shortKeyPress(UInt32(code)))
-            if index < codes.count - 1, (delay ?? 0.1) > 0 { events.append(.delay(delay ?? 0.1)) }
+            if index < codes.count - 1, keyDelay > 0 { events.append(.delay(keyDelay)) }
         }
         return .composite(events)
+    }
+
+    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
+        try validate()
+        return try hidEvent()
     }
 } 

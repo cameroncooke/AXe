@@ -193,7 +193,6 @@ struct Swipe: AsyncParsableCommand {
         if let context = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
-            notifySwipe(startX: startX, startY: startY, endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
             let path = LegacyDuoPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
             try await LegacyDuoInput.perform(path: path, context: context,
@@ -214,73 +213,19 @@ struct Swipe: AsyncParsableCommand {
             for: simulatorUDID,
             logger: logger
         )
-        let physicalStart = physicalPoints[0]
-        let physicalEnd = physicalPoints[1]
+        try await HIDInteractor.performHIDEvent(
+            hidEvent(from: physicalPoints[0], to: physicalPoints[1], duration: swipeDuration, delta: swipeDelta),
+            for: simulatorUDID, logger: logger)
+    }
 
-        notifySwipe(startX: startX, startY: startY, endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
-
-        // Create swipe events with timing controls
+    /// The ordinary swipe between physical points with its pre and post delays, for the
+    /// standalone command and batch steps.
+    func hidEvent(from start: (x: Double, y: Double), to end: (x: Double, y: Double),
+                  duration: Double, delta: Double) -> FBSimulatorHIDEvent {
         var events: [FBSimulatorHIDEvent] = []
-        
-        // Add pre-delay if specified
-        if let preDelay = preDelay, preDelay > 0 {
-            logger.info().log("Pre-delay: \(preDelay)s")
-            events.append(FBSimulatorHIDEvent.delay(preDelay))
-        }
-        
-        // Create main swipe HID event
-        let swipeEvent = FBSimulatorHIDEvent.swipe(
-            physicalStart.x,
-            yStart: physicalStart.y,
-            xEnd: physicalEnd.x,
-            yEnd: physicalEnd.y,
-            delta: swipeDelta,
-            duration: swipeDuration
-        )
-        events.append(swipeEvent)
-        
-        // Add post-delay if specified
-        if let postDelay = postDelay, postDelay > 0 {
-            logger.info().log("Post-delay: \(postDelay)s")
-            events.append(FBSimulatorHIDEvent.delay(postDelay))
-        }
-        
-        // Execute the swipe sequence
-        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent.composite(events)
-        
-        // Perform the swipe event
-        try await HIDInteractor
-            .performHIDEvent(
-                finalEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
-        
+        if let preDelay, preDelay > 0 { events.append(.delay(preDelay)) }
+        events.append(.swipe(start.x, yStart: start.y, xEnd: end.x, yEnd: end.y, delta: delta, duration: duration))
+        if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
+        return events.count == 1 ? events[0] : .composite(events)
     }
-
-    private func notifySwipe(
-        startX: Double, startY: Double, endX: Double, endY: Double,
-        duration: Double, delta: Double
-    ) {
-        // Broadcast swipe notification for external listeners
-        NotificationCenter.default.post(
-            name: .hidSwipePerformed,
-            object: nil,
-            userInfo: [
-                "startX": startX,
-                "startY": startY,
-                "endX": endX,
-                "endY": endY,
-                "duration": duration,
-                "delta": delta
-            ]
-        )
-
-    }
-
 }
-
-// MARK: - Notification Extension
-extension Notification.Name {
-    static let hidSwipePerformed = Notification.Name("hidSwipePerformed")
-} 

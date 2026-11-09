@@ -28,33 +28,6 @@ struct SelectedKeyboardRequest: Codable, Sendable {
         SelectedKeyboardRequest(expectedPID: pid, fieldTarget: fieldTarget, events: events)
     }
 
-    private enum CodingKeys: String, CodingKey { case expectedPID, focusID, fieldTarget, events }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        expectedPID = try values.decodeIfPresent(Int32.self, forKey: .expectedPID)
-        events = try values.decode([SelectedKeyboardPrimitive].self, forKey: .events)
-        let identifier = try values.decodeIfPresent(String.self, forKey: .focusID)
-        let target = try values.decodeIfPresent(SelectedNativeTarget.self, forKey: .fieldTarget)
-        guard (identifier == nil) != (target == nil) else {
-            throw SelectedHIDFailure.invalid("Selected keyboard requires one field identity")
-        }
-        if let target { fieldTarget = target }
-        else if let identifier {
-            fieldTarget = .semantic(kind: .id, value: identifier, elementType: "TextField")
-        } else { throw SelectedHIDFailure.invalid("Selected keyboard field identity is missing") }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encodeIfPresent(expectedPID, forKey: .expectedPID)
-        try values.encode(events, forKey: .events)
-        if case let .semantic(kind, value, type) = fieldTarget,
-           kind == .id, type == nil || type == "TextField" {
-            try values.encode(value, forKey: .focusID)
-        } else { try values.encode(fieldTarget, forKey: .fieldTarget) }
-    }
-
     func validate() throws {
         try fieldTarget.validate()
         if let expectedPID, expectedPID <= 0 {
@@ -149,11 +122,6 @@ enum SelectedKeyboardPrimitive: Codable, Sendable {
 
 /// These checks admit one observed field, not an atomic OS keyboard recipient.
 enum SelectedKeyboardFocusPolicy {
-    static func validate(_ node: FBSimulatorAXNode, expectedPID: Int32, focusID: String) throws {
-        try validate(node, expectedPID: expectedPID,
-            fieldTarget: .semantic(kind: .id, value: focusID, elementType: "TextField"))
-    }
-
     static func validate(_ node: FBSimulatorAXNode, expectedPID: Int32,
                          fieldTarget: SelectedNativeTarget) throws {
         try validateIdentity(node, expectedPID: expectedPID, fieldTarget: fieldTarget)
@@ -187,5 +155,4 @@ struct SelectedKeyboardResult: Codable, Sendable {
     var initialTarget: FBSimulatorAXNode?
     var lastValidatedTarget: FBSimulatorAXNode?
     var validatedKeyDownCount = 0
-    let atomicRecipientGuarantee = false
 }

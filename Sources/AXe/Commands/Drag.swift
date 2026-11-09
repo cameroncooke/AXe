@@ -9,8 +9,9 @@ struct Drag: AsyncParsableCommand {
     private static let defaultDuration: TimeInterval = 0.6
     private static let defaultSteps = 60
     private static let maxSteps = 1_000
-    private static let initialHold: TimeInterval = 0.05
-    private static let finalHold: TimeInterval = 0.05
+    /// Every drag route holds the contact this long before and after its movement.
+    static let initialHold: TimeInterval = 0.05
+    static let finalHold: TimeInterval = 0.05
 
     @Option(name: .customLong("start-x"), help: "The X coordinate of the starting point.")
     var startX: Double?

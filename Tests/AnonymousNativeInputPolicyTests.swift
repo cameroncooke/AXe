@@ -28,25 +28,23 @@ struct AnonymousNativeInputPolicyTests {
         }
     }
 
-    @Test("Keyboard keeps one explicit field target and preserves the old focus-ID wire")
+    @Test("Keyboard carries one explicit field target on the wire")
     func keyboardWireHasNoFakeFocusID() throws {
         let events: [SelectedKeyboardPrimitive] = [.down(4), .up(4)]
-        let old = SelectedKeyboardRequest(expectedPID: 1234, focusID: "field", events: events)
-        let oldBytes = try JSONEncoder().encode(old)
-        #expect(String(decoding: oldBytes, as: UTF8.self).contains("\"focusID\":\"field\""))
-        #expect(!String(decoding: oldBytes, as: UTF8.self).contains("fieldTarget"))
-        let restored = try JSONDecoder().decode(SelectedKeyboardRequest.self, from: oldBytes)
+        let semantic = SelectedKeyboardRequest(expectedPID: 1234, focusID: "field", events: events)
+        let semanticBytes = try JSONEncoder().encode(semantic)
+        #expect(!String(decoding: semanticBytes, as: UTF8.self).contains("focusID"))
+        let restored = try JSONDecoder().decode(SelectedKeyboardRequest.self, from: semanticBytes)
         try restored.validate()
-        #expect(restored.focusID == "field")
+        #expect(restored.focusID == "field" && restored.fieldTarget == semantic.fieldTarget)
         let object = SelectedKeyboardRequest(expectedPID: 1234,
             fieldTarget: .nativeObject(identity: key, elementType: "TextField"), events: events)
         try object.validate()
         let bytes = try JSONEncoder().encode(object)
         #expect(!String(decoding: bytes, as: UTF8.self).contains("focusID"))
         #expect(try JSONDecoder().decode(SelectedKeyboardRequest.self, from: bytes).fieldTarget == object.fieldTarget)
-        let targetBytes = try JSONEncoder().encode(object.fieldTarget)
-        let mixed = Data("{\"expectedPID\":1234,\"focusID\":\"field\",\"fieldTarget\":\(String(decoding: targetBytes, as: UTF8.self)),\"events\":[]}".utf8)
-        #expect(throws: (any Error).self) { try JSONDecoder().decode(SelectedKeyboardRequest.self, from: mixed) }
+        let focusIDOnly = Data("{\"expectedPID\":1234,\"focusID\":\"field\",\"events\":[]}".utf8)
+        #expect(throws: (any Error).self) { try JSONDecoder().decode(SelectedKeyboardRequest.self, from: focusIDOnly) }
         for target in [SelectedNativeTarget.semantic(kind: .label, value: "Title", elementType: "TextField"),
                        .nativeObject(identity: key, elementType: "TextView"),
                        .nativeObject(identity: key, elementType: "SecureTextField"),

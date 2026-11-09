@@ -224,7 +224,7 @@ struct Batch: AsyncParsableCommand {
 
         if let owner, let measured {
             let runner = BatchPlanRunner(duoOwner: owner, logger: logger)
-            try await LegacyDuoBatchLifetime.run {
+            try await SignalScope.cancellingOnSignal {
                 try await owner.withLegacyBatch(context: measured) {
                     try await runSteps(lines, context: context, runner: runner, logger: logger)
                 }

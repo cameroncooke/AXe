@@ -1,4 +1,3 @@
-import Darwin
 import Foundation
 
 struct SelectedBatchHostWaitReceipt: Encodable, Sendable {
@@ -42,30 +41,16 @@ enum SelectedBatchHostWait {
     /// Observe signals only while waiting. Await the owned task before restoring handlers.
     /// No child can start within this scope, and no whole-batch signal guarantee is made.
     static func runWithSignals(seconds: Double) async -> SelectedBatchHostWaitReceipt {
-        var previousINT = sigaction()
-        var previousTERM = sigaction()
-        guard sigaction(SIGINT, nil, &previousINT) == 0,
-              sigaction(SIGTERM, nil, &previousTERM) == 0 else {
+        guard let outcome = await SignalScope.run({ await wait(seconds: seconds) }),
+              case let .success(result) = outcome.result else {
             return .init(requestedSeconds: seconds, elapsedSeconds: 0, outcome: .failed,
                          error: "Could not read host-wait signal dispositions.")
         }
-        let task = Task { @MainActor in await wait(seconds: seconds) }
-        var observer: SignalObserver? = SignalObserver(signals: [SIGINT, SIGTERM]) { task.cancel() }
-        let result = await withTaskCancellationHandler {
-            await task.value
-        } onCancel: {
-            task.cancel()
-        }
-        let interrupted = task.isCancelled || Task.isCancelled
-        observer?.invalidate()
-        observer = nil // Deinit resets defaults; restore saved dispositions only after it.
-        let restoredINT = sigaction(SIGINT, &previousINT, nil) == 0
-        let restoredTERM = sigaction(SIGTERM, &previousTERM, nil) == 0
-        guard restoredINT && restoredTERM else {
+        guard outcome.restored else {
             return .init(requestedSeconds: seconds, elapsedSeconds: result.elapsedSeconds, outcome: .failed,
                          error: "Could not restore host-wait signal dispositions.")
         }
-        if interrupted && result.outcome == .completed {
+        if outcome.interrupted && result.outcome == .completed {
             return .init(requestedSeconds: seconds, elapsedSeconds: result.elapsedSeconds, outcome: .interrupted,
                          error: "The host wait was cancelled.")
         }

@@ -61,7 +61,7 @@ struct LegacyDuoPath: Codable, Sendable {
         case .drag:
             return try HIDInteractor.makeCompositeDragEvent(
                 from: (x: startX, y: startY), to: (x: endX, y: endY),
-                duration: duration, steps: steps!, initialHold: 0.05, finalHold: 0.05
+                duration: duration, steps: steps!, initialHold: Drag.initialHold, finalHold: Drag.finalHold
             )
         }
     }

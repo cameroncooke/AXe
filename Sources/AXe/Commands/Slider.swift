@@ -227,13 +227,8 @@ struct Slider: AsyncParsableCommand {
             guard let expectedPID = initialMatch.applicationPID, expectedPID > 0 else {
                 throw CLIError(errorDescription: "Slider requires one current frontmost application PID before input.")
             }
-            if let endpoint {
-                try await performOwnedSliderEndpoint(endpoint, display: display, expectedPID: expectedPID,
-                    resolvedIdentifier: resolvedIdentifier, logger: logger)
-            } else {
-                try await performOwnedSliderValue(display: display, targetNormalized: targetNormalized,
-                    expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
-            }
+            try await performOwnedSlider(endpoint: endpoint, targetNormalized: targetNormalized,
+                display: display, expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
         } else {
             let dragPlan = try makeDragPlan(
                 for: initialMatch.element,
@@ -262,35 +257,11 @@ struct Slider: AsyncParsableCommand {
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
     }
 
-    private func performOwnedSliderEndpoint(
-        _ endpoint: FBSimulatorSliderEndpoint,
-        display: ActivePanelIdentity,
-        expectedPID: Int32,
-        resolvedIdentifier: String?,
-        logger: AxeLogger
-    ) async throws {
-        let selectorKind: SelectedAXRequest.SelectorKind = resolvedIdentifier != nil || elementID != nil ? .id : .label
-        let selectorValue = resolvedIdentifier ?? elementID ?? elementLabel
-        let ax = SelectedAXRequest(kind: .sliderEndpoint, expectedPID: expectedPID, endpoint: endpoint,
-            selectorKind: selectorKind, selectorValue: selectorValue,
-            preDelay: 0, postDelay: 0, elementType: elementType)
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
-            primitives: [], ax: ax)
-        logger.info().log("Slider uses the native \(endpoint.rawValue) endpoint route on its measured active display")
-        let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
-        // The plain result line follows; the owned-route receipt stays behind --verbose.
-        if selectedOutput.verbose { try CLIOutput.writeJSON(response) }
-        guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
-              let receipt = response.ax?.slider,
-              receipt.outcome == "endpointObserved" || receipt.outcome == "alreadyAtEndpoint" else {
-            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
-        }
-    }
-
-    private func performOwnedSliderValue(
-        display: ActivePanelIdentity,
+    /// One owned-route request: a semantic endpoint, or an interior value with native feedback.
+    private func performOwnedSlider(
+        endpoint: FBSimulatorSliderEndpoint?,
         targetNormalized: Double,
+        display: ActivePanelIdentity,
         expectedPID: Int32,
         resolvedIdentifier: String?,
         logger: AxeLogger
@@ -298,19 +269,26 @@ struct Slider: AsyncParsableCommand {
         // Keep the raw selector for discovery and polling. Bind native input to its resolved ID.
         let selectorKind: SelectedAXRequest.SelectorKind = resolvedIdentifier != nil || elementID != nil ? .id : .label
         let selectorValue = resolvedIdentifier ?? elementID ?? elementLabel
-        let ax = SelectedAXRequest(kind: .sliderPercentage, expectedPID: expectedPID, endpoint: nil,
+        let ax = SelectedAXRequest(kind: endpoint == nil ? .sliderPercentage : .sliderEndpoint,
+            expectedPID: expectedPID, endpoint: endpoint,
             selectorKind: selectorKind, selectorValue: selectorValue,
-            preDelay: 0, postDelay: 0, elementType: elementType, percentage: targetNormalized * 100)
+            preDelay: 0, postDelay: 0, elementType: elementType,
+            percentage: endpoint == nil ? targetNormalized * 100 : nil)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
             primitives: [], ax: ax)
-        logger.info().log("Slider uses current native value feedback on its measured active display")
+        if let endpoint {
+            logger.info().log("Slider uses the native \(endpoint.rawValue) endpoint route on its measured active display")
+        } else {
+            logger.info().log("Slider uses current native value feedback on its measured active display")
+        }
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
         // The plain result line follows; the owned-route receipt stays behind --verbose.
         if selectedOutput.verbose { try CLIOutput.writeJSON(response) }
+        let outcome = endpoint == nil ? response.ax?.sliderValue?.outcome : response.ax?.slider?.outcome
+        let accepted: Set<String> = endpoint == nil ? ["reached", "alreadyAtValue"] : ["endpointObserved", "alreadyAtEndpoint"]
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
-              let receipt = response.ax?.sliderValue,
-              receipt.outcome == "reached" || receipt.outcome == "alreadyAtValue" else {
+              let outcome, accepted.contains(outcome) else {
             throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
         }
     }

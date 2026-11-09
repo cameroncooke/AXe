@@ -152,18 +152,8 @@ extension Swipe: BatchConvertible {
             duration: swipeDuration, delta: swipeDelta)
         let physicalPoints = try await context.inputPoints(
             [(x: startX, y: startY), (x: endX, y: endY)], logger: logger)
-        let physicalStart = physicalPoints[0]
-        let physicalEnd = physicalPoints[1]
-
-        let swipeEvent = FBSimulatorHIDEvent.swipe(
-            physicalStart.x,
-            yStart: physicalStart.y,
-            xEnd: physicalEnd.x,
-            yEnd: physicalEnd.y,
-            delta: swipeDelta,
-            duration: swipeDuration
-        )
-        return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: swipeEvent, postDelay: postDelay))]
+        return [.hidMergeable(hidEvent(from: physicalPoints[0], to: physicalPoints[1],
+            duration: swipeDuration, delta: swipeDelta))]
     }
 }
 
@@ -232,16 +222,7 @@ extension Button: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        if let duration {
-            let composite = FBSimulatorHIDEvent.composite([
-                .button(direction: .down, button: buttonType.hidButton),
-                .delay(duration),
-                .button(direction: .up, button: buttonType.hidButton)
-            ])
-            return [.hidMergeable(composite)]
-        }
-
-        return [.hidMergeable(.shortButtonPress(buttonType.hidButton))]
+        [.hidMergeable(hidEvent)]
     }
 }
 
@@ -250,16 +231,7 @@ extension Key: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        if let duration {
-            let composite = FBSimulatorHIDEvent.composite([
-                .keyboard(direction: .down, keyCode: UInt32(keycode)),
-                .delay(duration),
-                .keyboard(direction: .up, keyCode: UInt32(keycode))
-            ])
-            return [.hidMergeable(composite)]
-        }
-
-        return [.hidMergeable(.shortKeyPress(UInt32(keycode)))]
+        [.hidMergeable(hidEvent)]
     }
 }
 
@@ -268,18 +240,7 @@ extension KeySequence: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let parsedKeycodes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
-        let keyDelay = delay ?? 0.1
-        var events: [FBSimulatorHIDEvent] = []
-
-        for (index, keycode) in parsedKeycodes.enumerated() {
-            events.append(.shortKeyPress(UInt32(keycode)))
-            if index < parsedKeycodes.count - 1 && keyDelay > 0 {
-                events.append(.delay(keyDelay))
-            }
-        }
-
-        return [.hidMergeable(FBSimulatorHIDEvent.composite(events))]
+        [.hidMergeable(try hidEvent())]
     }
 }
 
@@ -288,18 +249,7 @@ extension KeyCombo: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 
     func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
-        let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
-
-        var events: [FBSimulatorHIDEvent] = []
-        for modifier in parsedModifiers {
-            events.append(.keyboard(direction: .down, keyCode: UInt32(modifier)))
-        }
-        events.append(.shortKeyPress(UInt32(key)))
-        for modifier in parsedModifiers.reversed() {
-            events.append(.keyboard(direction: .up, keyCode: UInt32(modifier)))
-        }
-
-        return [.hidMergeable(FBSimulatorHIDEvent.composite(events))]
+        [.hidMergeable(try hidEvent())]
     }
 }
 

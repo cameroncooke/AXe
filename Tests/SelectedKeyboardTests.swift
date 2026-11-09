@@ -116,7 +116,7 @@ struct SelectedKeyboardTests {
     }
 
     @Test func focusPolicyRequiresEveryTypedFieldAndExactIdentity() throws {
-        try SelectedKeyboardFocusPolicy.validate(Field().node(), expectedPID: 123, focusID: "field")
+        try SelectedKeyboardFocusPolicy.validate(Field().node(), expectedPID: 123, fieldTarget: .semantic(kind: .id, value: "field", elementType: "TextField"))
         var variants: [Field] = []
         var field = Field(); field.focused = false; variants.append(field)
         field = Field(); field.focused = nil; variants.append(field)
@@ -129,7 +129,8 @@ struct SelectedKeyboardTests {
         field = Field(); field.type = "Group"; variants.append(field)
         for invalid in variants {
             #expect(throws: (any Error).self) {
-                try SelectedKeyboardFocusPolicy.validate(invalid.node(), expectedPID: 123, focusID: "field")
+                try SelectedKeyboardFocusPolicy.validate(invalid.node(), expectedPID: 123,
+                    fieldTarget: .semantic(kind: .id, value: "field", elementType: "TextField"))
             }
         }
     }

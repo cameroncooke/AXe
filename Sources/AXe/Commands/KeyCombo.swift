@@ -120,34 +120,21 @@ struct KeyCombo: AsyncParsableCommand {
 
         try await performGlobalSetup(logger: logger)
 
-        let parsedModifiers = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
-
-        logger.info().log("Pressing key combo: modifiers=\(parsedModifiers), key=\(key)")
-
-        // Build composite event:
-        //   modifierDown1, modifierDown2, ..., shortKeyPress(key), ..., modifierUp2, modifierUp1
-        var events: [FBSimulatorHIDEvent] = []
-
-        // Press modifiers down in order
-        for modifier in parsedModifiers {
-            events.append(FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: UInt32(modifier)))
-        }
-
-        // Press and release the target key
-        events.append(FBSimulatorHIDEvent.shortKeyPress(UInt32(key)))
-
-        // Release modifiers in reverse order
-        for modifier in parsedModifiers.reversed() {
-            events.append(FBSimulatorHIDEvent.keyboard(direction: .up, keyCode: UInt32(modifier)))
-        }
-
-        let comboEvent = FBSimulatorHIDEvent.composite(events)
+        logger.info().log("Pressing key combo: modifiers=\(modifiersString), key=\(key)")
 
         try await LegacyDuoInput.performKeyboard(
-            comboEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true
+            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true
         )
 
         logger.info().log("Key combo completed successfully")
+    }
+
+    /// Modifiers down in order, the key pressed and released, then modifiers up in reverse order.
+    func hidEvent() throws -> FBSimulatorHIDEvent {
+        let codes = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
+        return .composite(codes.map { .keyboard(direction: .down, keyCode: UInt32($0)) }
+            + [.shortKeyPress(UInt32(key))]
+            + codes.reversed().map { .keyboard(direction: .up, keyCode: UInt32($0)) })
     }
 
     func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
@@ -156,8 +143,6 @@ struct KeyCombo: AsyncParsableCommand {
         guard codes.allSatisfy({ (224...231).contains($0) }) else {
             throw ValidationError("Selected key-combo modifiers must be HID modifier keys 224...231.")
         }
-        return .composite(codes.map { .keyboard(direction: .down, keyCode: UInt32($0)) }
-            + [.shortKeyPress(UInt32(key))]
-            + codes.reversed().map { .keyboard(direction: .up, keyCode: UInt32($0)) })
+        return try hidEvent()
     }
 }

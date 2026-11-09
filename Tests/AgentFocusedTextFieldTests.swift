@@ -16,7 +16,8 @@ struct AgentFocusedTextFieldTests {
         let ref = try snapshot.reference(id: "shared", action: .typeText)
         let native = try snapshot.node(ref: ref, requiredAction: .typeText)
         #expect(native.type == "TextField" && native.identifier == "shared")
-        try SelectedKeyboardFocusPolicy.validate(native, expectedPID: 1234, focusID: "shared")
+        try SelectedKeyboardFocusPolicy.validate(native, expectedPID: 1234,
+            fieldTarget: .semantic(kind: .id, value: "shared", elementType: "TextField"))
         let selector = try snapshot.uniqueSelector(for: native)
         #expect(selector.kind == .id && selector.value == "shared")
         let capture = snapshot.capture(id: UUID(), sequence: 1, udid: "fixture",

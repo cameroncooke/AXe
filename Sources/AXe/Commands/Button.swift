@@ -124,6 +124,13 @@ struct Button: AsyncParsableCommand {
         return SelectedButtonRequest(kind: kind, duration: duration, expectedBoot: expectedBoot)
     }
 
+    /// The ordinary button event, for the standalone command and batch steps.
+    var hidEvent: FBSimulatorHIDEvent {
+        guard let duration else { return .shortButtonPress(buttonType.hidButton) }
+        return .composite([.button(direction: .down, button: buttonType.hidButton), .delay(duration),
+            .button(direction: .up, button: buttonType.hidButton)])
+    }
+
     private func physicalButtonTarget() throws -> PhysicalDeviceButton {
         guard selectedInput.mode != .selected else {
             throw AutomationTarget.unsupportedOnDevice("Physical buttons do not support selected display options.")
@@ -171,33 +178,7 @@ struct Button: AsyncParsableCommand {
             logger.info().log("Duration: \(duration) seconds")
         }
 
-        // Create button HID event
-        let buttonEvent: FBSimulatorHIDEvent
-        
-        if let duration = duration {
-            // For duration-based presses, we need to create separate down/up events with delay
-            let buttonDownEvent = FBSimulatorHIDEvent.button(direction: .down, button: buttonType.hidButton)
-            let delayEvent = FBSimulatorHIDEvent.delay(duration)
-            let buttonUpEvent = FBSimulatorHIDEvent.button(direction: .up, button: buttonType.hidButton)
-
-            buttonEvent = FBSimulatorHIDEvent.composite([
-                buttonDownEvent,
-                delayEvent,
-                buttonUpEvent
-            ])
-        } else {
-            // Simple short button press
-            buttonEvent = FBSimulatorHIDEvent.shortButtonPress(buttonType.hidButton)
-        }
-        
-        // Perform the button event
-        try await HIDInteractor
-            .performHIDEvent(
-                buttonEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
-        
+        try await HIDInteractor.performHIDEvent(hidEvent, for: simulatorUDID, logger: logger)
         logger.info().log("\(buttonType.description) press completed successfully")
     }
 } 

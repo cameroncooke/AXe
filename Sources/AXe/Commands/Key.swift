@@ -109,39 +109,24 @@ struct Key: AsyncParsableCommand {
             logger.info().log("Duration: \(duration) seconds")
         }
 
-        // Create key HID event
-        let keyEvent: FBSimulatorHIDEvent
-        
-        if let duration = duration {
-            // For duration-based presses, we need to create separate down/up events with delay
-            let keyDownEvent = FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: UInt32(keycode))
-            let delayEvent = FBSimulatorHIDEvent.delay(duration)
-            let keyUpEvent = FBSimulatorHIDEvent.keyboard(direction: .up, keyCode: UInt32(keycode))
-
-            keyEvent = FBSimulatorHIDEvent.composite([
-                keyDownEvent,
-                delayEvent,
-                keyUpEvent
-            ])
-        } else {
-            // Simple short key press
-            keyEvent = FBSimulatorHIDEvent.shortKeyPress(UInt32(keycode))
-        }
-        
-        // Perform the key event
         try await LegacyDuoInput.performKeyboard(
-            keyEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: duration == nil
+            hidEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: duration == nil
         )
         
         logger.info().log("Key press completed successfully")
     }
 
-    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
-        try validate()
+    /// The one key event for every route: ordinary, selected, agent and batch.
+    var hidEvent: FBSimulatorHIDEvent {
         if let duration {
             return .composite([.keyboard(direction: .down, keyCode: UInt32(keycode)),
                 .delay(duration), .keyboard(direction: .up, keyCode: UInt32(keycode))])
         }
         return .shortKeyPress(UInt32(keycode))
+    }
+
+    func selectedKeyboardEvent() throws -> FBSimulatorHIDEvent {
+        try validate()
+        return hidEvent
     }
 } 

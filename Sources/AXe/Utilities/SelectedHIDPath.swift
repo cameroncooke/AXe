@@ -31,7 +31,7 @@ struct SelectedHIDPath: Codable, Sendable {
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw SelectedHIDFailure.invalid("Selected path duration must be in (0,10]; delays must be in [0,10]")
         }
-        let holds = kind == .drag ? 0.1 : 0
+        let holds = kind == .drag ? Drag.initialHold + Drag.finalHold : 0
         guard preDelay + duration + holds + postDelay <= 20 else {
             throw SelectedHIDFailure.invalid("Selected path total delay exceeds 20 seconds")
         }
@@ -103,7 +103,7 @@ struct SelectedHIDPath: Codable, Sendable {
         var result: [SelectedHIDPrimitive] = []
         if preDelay > 0 { result.append(.delay(preDelay)) }
         result.append(.touch(.down, x: start.x, y: start.y))
-        if kind == .drag { result.append(.delay(0.05)) }
+        if kind == .drag { result.append(.delay(Drag.initialHold)) }
         for index in 1...count {
             result.append(.delay(duration / Double(count)))
             let linear = Double(index) / Double(count)
@@ -114,7 +114,7 @@ struct SelectedHIDPath: Codable, Sendable {
                 y: start.y + (end.y - start.y) * fraction)
             result.append(.touch(.down, x: point.x, y: point.y))
         }
-        if kind == .drag { result.append(.delay(0.05)) }
+        if kind == .drag { result.append(.delay(Drag.finalHold)) }
         result.append(.touch(.up, x: end.x, y: end.y))
         if postDelay > 0 { result.append(.delay(postDelay)) }
         // Geometry and complete contact lifecycle are preflighted by the owned V12 session.
