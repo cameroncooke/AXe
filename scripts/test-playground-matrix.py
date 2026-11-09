@@ -506,6 +506,17 @@ let package = Package(name: "PlaygroundChecks", platforms: [.macOS(.v14)],
                 raise RuntimeError('A check source changed while it was copied: ' + relative)
             copied_sources[relative] = expected
             origins[relative] = dict(source=str(file), sha256=expected)
+        # OutputSchemaValidator.swift finds the published schemas beside its Tests directory.
+        (package / 'schemas').mkdir()
+        for file in sorted((ROOT / 'schemas').glob('*.schema.json')):
+            relative = 'schemas/' + file.name
+            expected = digest(file)
+            report['sourceHashes'][relative] = expected
+            shutil.copyfile(file, package / relative)
+            if digest(package / relative) != expected:
+                raise RuntimeError('A schema changed while it was copied: ' + relative)
+            copied_sources[relative] = expected
+            origins[relative] = dict(source=str(file), sha256=expected)
         package_inputs = dict(schemaVersion=1, status='COPIED_SOURCE_INPUTS_NOT_BUILD_OR_TEST_RESULTS',
                               files=copied_sources)
         (package / 'source-pins.json').write_text(json.dumps(package_inputs, indent=2, sort_keys=True) + '\n')

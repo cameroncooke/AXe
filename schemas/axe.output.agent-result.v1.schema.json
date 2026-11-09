@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cameroncooke/AXe/main/schemas/axe.output.agent-result.v1.schema.json",
+  "title": "AXe agent result, base schema version 1",
+  "description": "The canonical --agent result returned with --view full. Fields can be added within a schema version, so consumers should ignore properties they do not know. Strings such as outcome, cleanup and cache status are open sets; branch on didError, error.code and data.cache.requiresRefresh. nextSteps entries are guidance for a language model, not a stable contract.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "didError", "data", "nextSteps"],
+  "properties": {
+    "schema": { "const": "axe.output.agent-result" },
+    "schemaVersion": { "const": "1" },
+    "didError": { "type": "boolean" },
+    "error": { "$ref": "#/$defs/failure" },
+    "data": {
+      "type": "object",
+      "required": ["cache"],
+      "properties": {
+        "capture": { "$ref": "#/$defs/capture" },
+        "action": { "$ref": "#/$defs/actionReceipt" },
+        "batch": { "$ref": "#/$defs/batch" },
+        "cache": { "$ref": "#/$defs/cache" },
+        "context": { "$ref": "#/$defs/context" },
+        "quarantine": { "$ref": "#/$defs/quarantine" },
+        "observation": { "$ref": "#/$defs/observation" },
+        "detail": { "$ref": "#/$defs/detail" }
+      }
+    },
+    "nextSteps": {
+      "description": "Plain-language recovery and continuation guidance. The wording can change in any release.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    },
+    "failure": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "description": "Typed failure code, for example screenChanged, targetChanged, busy or quarantined.", "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "required": ["status", "requiresRefresh"],
+      "properties": {
+        "status": { "description": "For example refreshed, reused, invalidated, busy, quarantined or unobserved.", "type": "string" },
+        "reason": { "type": "string" },
+        "requiresRefresh": { "type": "boolean" }
+      }
+    },
+    "context": {
+      "description": "The selected display observation that every reference action is checked against.",
+      "type": "object",
+      "required": ["bootIdentity", "screenID", "screenUUID", "logicalWidth", "logicalHeight", "rotationDegrees",
+        "nativePixelWidth", "nativePixelHeight", "scale", "poseRevision"],
+      "properties": {
+        "bootIdentity": { "type": "string" },
+        "screenID": { "type": "integer", "minimum": 0 },
+        "screenUUID": { "$ref": "#/$defs/uuid" },
+        "logicalWidth": { "type": "number" },
+        "logicalHeight": { "type": "number" },
+        "rotationDegrees": { "enum": [0, 90, 180, 270] },
+        "nativePixelWidth": { "type": "number" },
+        "nativePixelHeight": { "type": "number" },
+        "scale": { "type": "number" },
+        "poseRevision": { "type": "string" }
+      }
+    },
+    "row": {
+      "description": "One RS/1 row: ref|action|role|label|value|id. A literal pipe inside a cell is shown as a slash.",
+      "type": "string",
+      "pattern": "^[^|]+(\\|[^|]*){5}$"
+    },
+    "keyboard": {
+      "description": "Heuristic keyboard evidence from the selected application's accessibility tree. unknown does not prove the keyboard is hidden.",
+      "type": "object",
+      "required": ["state", "source", "scope", "signals"],
+      "properties": {
+        "state": { "enum": ["likelyVisible", "unknown"] },
+        "source": { "type": "string" },
+        "scope": { "type": "string" },
+        "signals": {
+          "type": "object",
+          "required": ["idChromeCount", "globeSeen", "letterKeyCount", "chromeKeyCount"],
+          "properties": {
+            "idChromeCount": { "type": "integer", "minimum": 0 },
+            "globeSeen": { "type": "boolean" },
+            "letterKeyCount": { "type": "integer", "minimum": 0 },
+            "chromeKeyCount": { "type": "integer", "minimum": 0 },
+            "numericKeyCount": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "required": ["type", "rs", "snapshotID", "screenHash", "seq", "count", "targets", "scroll", "text", "udid",
+        "applicationPID", "context", "rowOffset", "rowLimit", "targetCount", "scrollCount", "textCount", "truncated",
+        "expiresInSeconds"],
+      "properties": {
+        "type": { "enum": ["runtime-snapshot", "runtime-snapshot-unchanged"] },
+        "rs": { "const": "1" },
+        "snapshotID": { "$ref": "#/$defs/uuid" },
+        "screenHash": { "type": "string" },
+        "seq": { "type": "integer" },
+        "count": { "type": "integer", "minimum": 0 },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "scroll": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "text": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "udid": { "type": "string" },
+        "applicationPID": { "type": "integer" },
+        "context": { "$ref": "#/$defs/context" },
+        "rowOffset": { "type": "integer", "minimum": 0 },
+        "rowLimit": { "type": "integer", "minimum": 1 },
+        "targetCount": { "type": "integer", "minimum": 0 },
+        "scrollCount": { "type": "integer", "minimum": 0 },
+        "textCount": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "boolean" },
+        "expiresInSeconds": { "type": "number" },
+        "keyboard": { "$ref": "#/$defs/keyboard" },
+        "totalRows": { "type": "integer", "minimum": 0 },
+        "nextRowOffset": { "description": "Pass as --row-offset to read the next page of the same snapshot.", "type": "integer", "minimum": 0 },
+        "redundantTextRefs": { "type": "array", "items": { "type": "string" } },
+        "unavailableReferences": {
+          "description": "Refs that cannot take input, mapped to the reason, for example nativeIdentityIncomplete.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "customActions": {
+          "description": "Ref to a preview of at most four custom-action names. Names are information, not input actions.",
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        },
+        "truncatedCustomActionRefs": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "quarantine": {
+      "description": "Present when input could not be released cleanly. All input on the simulator is blocked until the record is checked and deleted.",
+      "type": "object",
+      "required": ["persisted"],
+      "properties": {
+        "recordPath": { "type": "string" },
+        "persisted": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    },
+    "actionKind": {
+      "enum": ["describe", "read", "tap", "typeText", "focusAndType", "swipe", "drag", "hold", "doubleTap", "keyPress",
+        "keyCombo", "keySequence", "sliderEndpoint", "sliderPercentage", "pinch", "complete"]
+    },
+    "actionReceipt": {
+      "description": "Transport evidence for one action. It is not proof of the app's response.",
+      "type": "object",
+      "required": ["kind", "outcome", "enqueuedEventCount", "cleanup", "replayed"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/actionKind" },
+        "outcome": { "description": "For example enqueuedAndDrained, rejectedBeforeInput or failedNoReplay.", "type": "string" },
+        "enqueuedEventCount": { "type": "integer", "minimum": 0 },
+        "cleanup": { "description": "For example notNeeded, released or uncertain.", "type": "string" },
+        "replayed": { "const": false },
+        "quarantine": { "$ref": "#/$defs/quarantine" },
+        "slider": { "$ref": "#/$defs/sliderEndpointResult" },
+        "sliderValue": { "$ref": "#/$defs/sliderValueResult" },
+        "retried": { "description": "True when a refusal before input was recovered inside this call from a fresh read.", "type": "boolean" }
+      }
+    },
+    "sliderEndpointResult": {
+      "type": "object",
+      "required": ["outcome", "reasonTruncated", "delivery", "endpoint", "actionAttempts", "actionsReturned",
+        "startedUptime", "deadlineUptime", "elapsedSeconds", "samples", "actions", "physicalGeometry"],
+      "properties": {
+        "outcome": { "type": "string" },
+        "reason": { "type": "string" },
+        "reasonTruncated": { "type": "boolean" },
+        "delivery": { "type": "string" },
+        "endpoint": { "enum": ["minimum", "maximum"] },
+        "actionAttempts": { "type": "integer", "minimum": 0 },
+        "actionsReturned": { "type": "integer", "minimum": 0 },
+        "startedUptime": { "type": "number" },
+        "deadlineUptime": { "type": "number" },
+        "elapsedSeconds": { "type": "number" },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["phase", "elapsedSeconds", "snapshotID"],
+            "properties": {
+              "phase": { "type": "string" },
+              "elapsedSeconds": { "type": "number" },
+              "snapshotID": { "$ref": "#/$defs/uuid" },
+              "elementType": { "const": "Slider" },
+              "minimum": { "type": "number" },
+              "maximum": { "type": "number" },
+              "tolerance": { "type": "number" },
+              "value": { "type": "number" }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action", "callStartedUptime", "callReturnedUptime", "guestAcknowledged"],
+            "properties": {
+              "action": { "enum": ["increment", "decrement"] },
+              "valueBeforeAction": { "type": "number" },
+              "elementType": { "const": "Slider" },
+              "callStartedUptime": { "type": "number" },
+              "callReturnedUptime": { "type": "number" },
+              "guestAcknowledged": { "type": "boolean" }
+            }
+          }
+        },
+        "physicalGeometry": { "const": "unknown" }
+      }
+    },
+    "sliderValueResult": {
+      "type": "object",
+      "required": ["phase", "outcome", "delivery", "requestedPercent", "moves", "pickupReadPhases", "elapsedSeconds",
+        "replayed"],
+      "properties": {
+        "phase": { "const": "physicalOwnedValue" },
+        "outcome": { "type": "string" },
+        "reason": { "type": "string" },
+        "delivery": { "type": "string" },
+        "requestedPercent": { "type": "number" },
+        "initialValue": { "type": "number" },
+        "finalValue": { "type": "number" },
+        "nativeTarget": { "type": "number" },
+        "domainMinimum": { "type": "number" },
+        "domainMaximum": { "type": "number" },
+        "tolerance": { "type": "number" },
+        "moves": { "type": "integer", "minimum": 0 },
+        "pickupReadPhases": { "type": "integer", "minimum": 0 },
+        "elapsedSeconds": { "type": "number" },
+        "nativeReadDiagnostic": { "description": "Bounded native read diagnostics. Its fields are not a stable contract.", "type": "object" },
+        "replayed": { "const": false }
+      }
+    },
+    "batchStep": {
+      "type": "object",
+      "required": ["index", "action", "status", "requestID", "cache"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 1 },
+        "action": { "enum": ["tap", "type"] },
+        "status": { "type": "string" },
+        "requestID": { "$ref": "#/$defs/uuid" },
+        "receipt": { "$ref": "#/$defs/actionReceipt" },
+        "error": { "$ref": "#/$defs/failure" },
+        "cache": { "$ref": "#/$defs/cache" },
+        "context": { "$ref": "#/$defs/context" }
+      }
+    },
+    "batch": {
+      "description": "Ordered step receipts. Completed steps are never undone or replayed.",
+      "type": "object",
+      "required": ["totalSteps", "completedSteps", "steps", "replayed", "rolledBack"],
+      "properties": {
+        "totalSteps": { "type": "integer", "minimum": 0 },
+        "completedSteps": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/batchStep" } },
+        "stoppedAt": { "type": "integer", "minimum": 1 },
+        "replayed": { "const": false },
+        "rolledBack": { "const": false }
+      }
+    },
+    "acquisitionOutcome": {
+      "enum": ["ready", "notReady", "cancelled", "deadlineExceeded", "requestTimedOut", "processChanged", "contextChanged",
+        "failed", "noElementAtPoint"]
+    },
+    "observation": {
+      "description": "Evidence from a failed accessibility read.",
+      "type": "object",
+      "required": ["outcome", "attempts"],
+      "properties": {
+        "expectedPID": { "type": "integer" },
+        "observedPID": { "type": "integer" },
+        "outcome": { "$ref": "#/$defs/acquisitionOutcome" },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "startUptime", "endUptime", "rootPID", "outcome"],
+            "properties": {
+              "index": { "type": "integer" },
+              "startUptime": { "type": "number" },
+              "endUptime": { "type": "number" },
+              "rootPID": { "type": "integer" },
+              "outcome": { "$ref": "#/$defs/acquisitionOutcome" }
+            }
+          }
+        }
+      }
+    },
+    "detail": {
+      "description": "One exact field chunk from describe-ui --read-ref. Offsets count Unicode scalars.",
+      "type": "object",
+      "required": ["ref", "field", "offset", "totalLength", "text", "actions"],
+      "properties": {
+        "ref": { "type": "string" },
+        "field": { "enum": ["label", "value", "id", "custom-actions"] },
+        "offset": { "type": "integer", "minimum": 0 },
+        "nextOffset": { "type": "integer", "minimum": 0 },
+        "totalLength": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" },
+        "frame": {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number" },
+            "height": { "type": "number" }
+          }
+        },
+        "actions": { "type": "array", "items": { "enum": ["tap", "typeText", "longPress", "touch", "swipeWithin"] } }
+      }
+    }
+  }
+}

@@ -92,6 +92,8 @@ struct CommandRunner {
             )
         }
 
+        // Every AXe JSON result an e2e test sees must match its published schema.
+        try OutputSchemas.validate(output: stdoutText)
         return (combinedOutput, process.terminationStatus)
     }
 }

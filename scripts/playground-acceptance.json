@@ -70,6 +70,7 @@
     "PlaygroundSimulatorLifecycleTests.swift",
     "PlaygroundStdinProcess.swift",
     "PlaygroundTouchMonitorSupport.swift",
+    "OutputSchemaValidator.swift",
     "TestUIState.swift",
     "TestUtilities.swift"
   ],

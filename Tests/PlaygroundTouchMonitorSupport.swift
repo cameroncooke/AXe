@@ -156,7 +156,10 @@ final class PlaygroundTestProcess {
     }
 
     func output() throws -> String {
-        try String(contentsOf: stdoutURL, encoding: .utf8)
+        let text = try String(contentsOf: stdoutURL, encoding: .utf8)
+        // Every AXe JSON result an e2e test sees must match its published schema.
+        try OutputSchemas.validate(output: text)
+        return text
     }
 
     func diagnostics() throws -> String {

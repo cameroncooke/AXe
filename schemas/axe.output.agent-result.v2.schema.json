@@ -1,0 +1,371 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cameroncooke/AXe/main/schemas/axe.output.agent-result.v2.schema.json",
+  "title": "AXe agent result, adaptive schema version 2",
+  "description": "The compact --agent result returned by the default reading view and by --view navigation. It is a projection of base schema version 1 over the same snapshot and references. Fields can be added within a schema version, so consumers should ignore properties they do not know. Strings such as outcome, cleanup and cache status are open sets; branch on didError, error.code and data.cache.requiresRefresh. nextSteps entries are guidance for a language model, not a stable contract.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "didError", "data", "nextSteps"],
+  "properties": {
+    "schema": { "const": "axe.output.agent-result" },
+    "schemaVersion": { "const": "2" },
+    "didError": { "type": "boolean" },
+    "error": { "$ref": "#/$defs/failure" },
+    "data": {
+      "type": "object",
+      "required": ["cache"],
+      "properties": {
+        "capture": { "$ref": "#/$defs/capture" },
+        "screen": {
+          "description": "The selected display when a successful reply has no capture.",
+          "$ref": "#/$defs/screen"
+        },
+        "action": { "$ref": "#/$defs/actionReceipt" },
+        "batch": { "$ref": "#/$defs/batch" },
+        "cache": { "$ref": "#/$defs/cache" },
+        "context": {
+          "description": "The complete selected display, kept on a failed reply that has no capture.",
+          "$ref": "#/$defs/context"
+        },
+        "quarantine": { "$ref": "#/$defs/quarantine" },
+        "observation": { "$ref": "#/$defs/observation" },
+        "detail": { "$ref": "#/$defs/detail" }
+      }
+    },
+    "nextSteps": {
+      "description": "Plain-language recovery and continuation guidance. The wording can change in any release.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+    },
+    "failure": {
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "description": "Typed failure code, for example screenChanged, targetChanged, busy or quarantined.", "type": "string" },
+        "message": { "description": "At most 1024 Unicode scalars. A longer message keeps its prefix and suffix around an omission separator.", "type": "string" },
+        "messageTruncated": { "const": true },
+        "originalScalarLength": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "required": ["status", "requiresRefresh"],
+      "properties": {
+        "status": { "description": "For example refreshed, reused, invalidated, busy, quarantined or unobserved.", "type": "string" },
+        "reason": { "type": "string" },
+        "requiresRefresh": { "type": "boolean" }
+      }
+    },
+    "screen": {
+      "description": "[screenID, logicalWidth, logicalHeight, rotationDegrees] of the selected display.",
+      "type": "array",
+      "prefixItems": [
+        { "type": ["integer", "null"] },
+        { "type": ["number", "null"] },
+        { "type": ["number", "null"] },
+        { "type": ["integer", "null"] }
+      ],
+      "items": false,
+      "minItems": 4
+    },
+    "context": {
+      "type": "object",
+      "required": ["bootIdentity", "screenID", "screenUUID", "logicalWidth", "logicalHeight", "rotationDegrees",
+        "nativePixelWidth", "nativePixelHeight", "scale", "poseRevision"],
+      "properties": {
+        "bootIdentity": { "type": "string" },
+        "screenID": { "type": "integer", "minimum": 0 },
+        "screenUUID": { "$ref": "#/$defs/uuid" },
+        "logicalWidth": { "type": "number" },
+        "logicalHeight": { "type": "number" },
+        "rotationDegrees": { "enum": [0, 90, 180, 270] },
+        "nativePixelWidth": { "type": "number" },
+        "nativePixelHeight": { "type": "number" },
+        "scale": { "type": "number" },
+        "poseRevision": { "type": "string" }
+      }
+    },
+    "row": {
+      "description": "One compact row: ref|actions|role|label|value. Actions are comma-separated. A literal pipe inside a cell is shown as a slash; a cell longer than 160 Unicode scalars is clipped and listed in truncatedFields.",
+      "type": "string",
+      "pattern": "^[^|]+(\\|[^|]*){4}$"
+    },
+    "unchangedCapture": {
+      "description": "Reply to --since-screen-hash when the screen still matches. Keep the screen hash from the matching capture.",
+      "type": "object",
+      "required": ["snapshotID", "seq", "expiresInSeconds", "unchanged"],
+      "properties": {
+        "snapshotID": { "$ref": "#/$defs/uuid" },
+        "seq": { "type": "integer" },
+        "expiresInSeconds": { "type": "integer", "minimum": 0 },
+        "unchanged": { "const": true }
+      }
+    },
+    "snapshotCapture": {
+      "type": "object",
+      "required": ["snapshotID", "seq", "expiresInSeconds", "screenHash", "pid", "screen", "view", "rows"],
+      "properties": {
+        "snapshotID": { "$ref": "#/$defs/uuid" },
+        "seq": { "type": "integer" },
+        "expiresInSeconds": { "description": "Rounded down. Validation, paging and reads do not renew it.", "type": "integer", "minimum": 0 },
+        "screenHash": { "type": "string" },
+        "pid": { "type": "integer" },
+        "screen": { "$ref": "#/$defs/screen" },
+        "keyboard": {
+          "description": "Heuristic keyboard evidence. unknown does not prove the keyboard is hidden.",
+          "enum": ["likelyVisible", "unknown"]
+        },
+        "view": { "enum": ["reading", "navigation"] },
+        "rows": { "type": "array", "items": { "$ref": "#/$defs/row" } },
+        "page": {
+          "description": "Absent when no page metadata is needed. Pass nextOffset as --row-offset to continue the same snapshot.",
+          "type": "object",
+          "properties": {
+            "offset": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 0 },
+            "nextOffset": { "type": "integer", "minimum": 0 },
+            "extraReads": { "type": "integer", "minimum": 0 },
+            "incomplete": { "type": "boolean" },
+            "reason": { "type": "string" },
+            "requiresRefresh": { "type": "boolean" }
+          }
+        },
+        "unavailableReferences": {
+          "description": "Refs on this page that cannot take input, mapped to nativeIdentityIncomplete.",
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "customActionGroups": {
+          "description": "Read-only custom-action name previews, grouped by identical ordered names. Names are information, not input actions.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["refs", "names"],
+            "properties": {
+              "refs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+              "names": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        },
+        "truncatedCustomActionRefs": { "type": "array", "items": { "type": "string" } },
+        "truncatedFields": {
+          "description": "Display cells clipped to 160 Unicode scalars. Read the exact field with --read-ref.",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["ref", "field", "displayScalarLength"],
+            "properties": {
+              "ref": { "type": "string" },
+              "field": { "enum": ["label", "value", "id"] },
+              "displayScalarLength": { "type": "integer", "minimum": 0 }
+            }
+          }
+        },
+        "areas": {
+          "description": "Read-only preview of scroll areas from the same snapshot when the first page has no scroll rows.",
+          "type": "object",
+          "required": ["preview", "hasMore", "rows"],
+          "properties": {
+            "preview": { "const": true },
+            "hasMore": { "type": "boolean" },
+            "rows": { "type": "array", "maxItems": 4, "items": { "$ref": "#/$defs/row" } }
+          }
+        }
+      }
+    },
+    "capture": {
+      "oneOf": [
+        { "$ref": "#/$defs/snapshotCapture" },
+        { "$ref": "#/$defs/unchangedCapture" }
+      ]
+    },
+    "quarantine": {
+      "description": "Present when input could not be released cleanly. All input on the simulator is blocked until the record is checked and deleted.",
+      "type": "object",
+      "required": ["persisted"],
+      "properties": {
+        "recordPath": { "type": "string" },
+        "persisted": { "type": "boolean" },
+        "error": { "type": "string" }
+      }
+    },
+    "actionKind": {
+      "enum": ["describe", "read", "tap", "typeText", "focusAndType", "swipe", "drag", "hold", "doubleTap", "keyPress",
+        "keyCombo", "keySequence", "sliderEndpoint", "sliderPercentage", "pinch", "complete"]
+    },
+    "actionReceipt": {
+      "description": "Transport evidence for one action. It is not proof of the app's response. A completed batch step omits kind when it equals the step action, and omits replayed.",
+      "type": "object",
+      "required": ["outcome", "enqueuedEventCount", "cleanup"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/actionKind" },
+        "outcome": { "description": "For example enqueuedAndDrained, rejectedBeforeInput or failedNoReplay.", "type": "string" },
+        "enqueuedEventCount": { "type": "integer", "minimum": 0 },
+        "cleanup": { "description": "For example notNeeded, released or uncertain.", "type": "string" },
+        "replayed": { "const": false },
+        "quarantine": { "$ref": "#/$defs/quarantine" },
+        "slider": { "$ref": "#/$defs/sliderEndpointResult" },
+        "sliderValue": { "$ref": "#/$defs/sliderValueResult" },
+        "retried": { "description": "True when a refusal before input was recovered inside this call from a fresh read.", "type": "boolean" }
+      }
+    },
+    "sliderEndpointResult": {
+      "type": "object",
+      "required": ["outcome", "reasonTruncated", "delivery", "endpoint", "actionAttempts", "actionsReturned",
+        "startedUptime", "deadlineUptime", "elapsedSeconds", "samples", "actions", "physicalGeometry"],
+      "properties": {
+        "outcome": { "type": "string" },
+        "reason": { "type": "string" },
+        "reasonTruncated": { "type": "boolean" },
+        "delivery": { "type": "string" },
+        "endpoint": { "enum": ["minimum", "maximum"] },
+        "actionAttempts": { "type": "integer", "minimum": 0 },
+        "actionsReturned": { "type": "integer", "minimum": 0 },
+        "startedUptime": { "type": "number" },
+        "deadlineUptime": { "type": "number" },
+        "elapsedSeconds": { "type": "number" },
+        "samples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["phase", "elapsedSeconds", "snapshotID"],
+            "properties": {
+              "phase": { "type": "string" },
+              "elapsedSeconds": { "type": "number" },
+              "snapshotID": { "$ref": "#/$defs/uuid" },
+              "elementType": { "const": "Slider" },
+              "minimum": { "type": "number" },
+              "maximum": { "type": "number" },
+              "tolerance": { "type": "number" },
+              "value": { "type": "number" }
+            }
+          }
+        },
+        "actions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["action", "callStartedUptime", "callReturnedUptime", "guestAcknowledged"],
+            "properties": {
+              "action": { "enum": ["increment", "decrement"] },
+              "valueBeforeAction": { "type": "number" },
+              "elementType": { "const": "Slider" },
+              "callStartedUptime": { "type": "number" },
+              "callReturnedUptime": { "type": "number" },
+              "guestAcknowledged": { "type": "boolean" }
+            }
+          }
+        },
+        "physicalGeometry": { "const": "unknown" }
+      }
+    },
+    "sliderValueResult": {
+      "type": "object",
+      "required": ["phase", "outcome", "delivery", "requestedPercent", "moves", "pickupReadPhases", "elapsedSeconds",
+        "replayed"],
+      "properties": {
+        "phase": { "const": "physicalOwnedValue" },
+        "outcome": { "type": "string" },
+        "reason": { "type": "string" },
+        "delivery": { "type": "string" },
+        "requestedPercent": { "type": "number" },
+        "initialValue": { "type": "number" },
+        "finalValue": { "type": "number" },
+        "nativeTarget": { "type": "number" },
+        "domainMinimum": { "type": "number" },
+        "domainMaximum": { "type": "number" },
+        "tolerance": { "type": "number" },
+        "moves": { "type": "integer", "minimum": 0 },
+        "pickupReadPhases": { "type": "integer", "minimum": 0 },
+        "elapsedSeconds": { "type": "number" },
+        "nativeReadDiagnostic": { "description": "Bounded native read diagnostics. Its fields are not a stable contract.", "type": "object" },
+        "replayed": { "const": false }
+      }
+    },
+    "batchStep": {
+      "description": "A completed batch with a refreshed final capture omits requestID and the intermediate batchInProgress cache.",
+      "type": "object",
+      "required": ["index", "action", "status"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 1 },
+        "action": { "enum": ["tap", "type"] },
+        "status": { "type": "string" },
+        "requestID": { "$ref": "#/$defs/uuid" },
+        "receipt": { "$ref": "#/$defs/actionReceipt" },
+        "error": { "$ref": "#/$defs/failure" },
+        "cache": { "$ref": "#/$defs/cache" },
+        "context": { "$ref": "#/$defs/context" }
+      }
+    },
+    "batch": {
+      "description": "Ordered step receipts. Completed steps are never undone or replayed. A completed batch with a refreshed final capture omits totalSteps and rolledBack.",
+      "type": "object",
+      "required": ["completedSteps", "steps", "replayed"],
+      "properties": {
+        "totalSteps": { "type": "integer", "minimum": 0 },
+        "completedSteps": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/batchStep" } },
+        "stoppedAt": { "type": "integer", "minimum": 1 },
+        "replayed": { "const": false },
+        "rolledBack": { "const": false }
+      }
+    },
+    "acquisitionOutcome": {
+      "enum": ["ready", "notReady", "cancelled", "deadlineExceeded", "requestTimedOut", "processChanged", "contextChanged",
+        "failed", "noElementAtPoint"]
+    },
+    "observation": {
+      "description": "Evidence from a failed accessibility read.",
+      "type": "object",
+      "required": ["outcome", "attempts"],
+      "properties": {
+        "expectedPID": { "type": "integer" },
+        "observedPID": { "type": "integer" },
+        "outcome": { "$ref": "#/$defs/acquisitionOutcome" },
+        "attempts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["index", "startUptime", "endUptime", "rootPID", "outcome"],
+            "properties": {
+              "index": { "type": "integer" },
+              "startUptime": { "type": "number" },
+              "endUptime": { "type": "number" },
+              "rootPID": { "type": "integer" },
+              "outcome": { "$ref": "#/$defs/acquisitionOutcome" }
+            }
+          }
+        }
+      }
+    },
+    "detail": {
+      "description": "One exact field chunk from describe-ui --read-ref. Offsets count Unicode scalars.",
+      "type": "object",
+      "required": ["ref", "field", "offset", "totalLength", "text", "actions"],
+      "properties": {
+        "ref": { "type": "string" },
+        "field": { "enum": ["label", "value", "id", "custom-actions"] },
+        "offset": { "type": "integer", "minimum": 0 },
+        "nextOffset": { "type": "integer", "minimum": 0 },
+        "totalLength": { "type": "integer", "minimum": 0 },
+        "text": { "type": "string" },
+        "frame": {
+          "type": "object",
+          "required": ["x", "y", "width", "height"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "width": { "type": "number" },
+            "height": { "type": "number" }
+          }
+        },
+        "actions": { "type": "array", "items": { "enum": ["tap", "typeText", "longPress", "touch", "swipeWithin"] } }
+      }
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cameroncooke/AXe/main/schemas/axe.output.command-result.v1.schema.json",
+  "title": "AXe command result, schema version 1",
+  "description": "The envelope an ordinary command (one without --agent) returns with --output json. Each command's payload in data.result or data.results keeps that command's own shape and is not described here. Fields can be added within a schema version, so consumers should ignore properties they do not know.",
+  "type": "object",
+  "required": ["schema", "schemaVersion", "command", "didError", "data", "nextSteps"],
+  "properties": {
+    "schema": { "const": "axe.output.command-result" },
+    "schemaVersion": { "const": "1" },
+    "command": { "description": "The command name, for example tap or list-simulators.", "type": "string" },
+    "didError": { "type": "boolean" },
+    "error": {
+      "description": "Present when didError is true.",
+      "type": "object",
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string" },
+        "message": { "type": "string" }
+      }
+    },
+    "data": {
+      "type": "object",
+      "properties": {
+        "result": { "description": "The command's single typed payload." },
+        "results": { "description": "The command's payloads, in output order, when it wrote more than one.", "type": "array", "minItems": 2 },
+        "messages": { "description": "Plain text the command printed.", "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "nextSteps": {
+      "description": "Reserved for guidance. Ordinary commands currently return an empty array.",
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}
