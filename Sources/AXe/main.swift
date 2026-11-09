@@ -89,6 +89,12 @@ struct Axe: AsyncParsableCommand {
                         message: "--output text|json is not supported for binary streaming or internal worker commands.")
                 }
                 try await run(&command)
+                if !invocation.agent, inputCommands.contains(where: { $0 == type(of: command) }),
+                   output.content().values.isEmpty {
+                    // Ordinary and physical input report what the selected route reports, minus
+                    // the bound screen, PID and contact token it adds.
+                    output.append(.object(["outcome": .string("completed")]))
+                }
                 return OutputCompletion(exitCode: EXIT_SUCCESS, failure: nil, cleanMessage: nil)
             } catch {
                 let code = CLIErrorMapping.interruptionExitCode(for: error) ?? exitCode(for: error).rawValue
@@ -125,6 +131,12 @@ struct Axe: AsyncParsableCommand {
         catch { Darwin.exit(EXIT_FAILURE) }
         Darwin.exit(completion.exitCode)
     }
+
+    /// Commands whose JSON success result is `SelectedInputSummary`'s shape on every route.
+    static let inputCommands: [ParsableCommand.Type] = [
+        Tap.self, Slider.self, Type.self, Swipe.self, Drag.self, Button.self, Key.self,
+        KeySequence.self, KeyCombo.self, Touch.self, Gesture.self,
+    ]
 
     private static func run(_ command: inout ParsableCommand) async throws {
         if var asynchronous = command as? AsyncParsableCommand {

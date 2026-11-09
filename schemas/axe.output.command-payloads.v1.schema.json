@@ -1,0 +1,814 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/cameroncooke/AXe/main/schemas/axe.output.command-payloads.v1.schema.json",
+  "title": "AXe command payloads, version 1",
+  "description": "The data.result of a successful axe.output.command-result envelope. Look up $defs by the envelope's command, for example $defs[\"hinge set\"], and validate data.result against it; the other $defs are shared parts. --verbose receipts and the axe agent command are not described here. Fields can be added within a schema version, so consumers should ignore properties they do not know.",
+  "$defs": {
+    "describe-ui": {
+      "description": "The accessibility tree, as released: an array of nodes. --point returns one node in the array.",
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "list-simulators": {
+      "type": "object",
+      "required": [
+        "simulators"
+      ],
+      "properties": {
+        "simulators": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "udid",
+              "name",
+              "state",
+              "model",
+              "osVersion"
+            ],
+            "properties": {
+              "udid": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "state": {
+                "description": "simctl's state, such as Booted or Shutdown.",
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "osVersion": {
+                "description": "The runtime, such as iOS 27.2.",
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "list-devices": {
+      "type": "object",
+      "required": [
+        "devices"
+      ],
+      "properties": {
+        "devices": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "udid",
+              "checks"
+            ],
+            "properties": {
+              "udid": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "osVersion": {
+                "type": "string"
+              },
+              "transport": {
+                "type": "string"
+              },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/readinessCheck"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "doctor": {
+      "description": "Also present beside the error when the target is not ready.",
+      "type": "object",
+      "required": [
+        "target",
+        "udid",
+        "checks",
+        "ready"
+      ],
+      "properties": {
+        "target": {
+          "enum": [
+            "simulator",
+            "device"
+          ]
+        },
+        "udid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "checks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/readinessCheck"
+          }
+        },
+        "ready": {
+          "type": "boolean"
+        }
+      }
+    },
+    "displays": {
+      "type": "object",
+      "required": [
+        "udid",
+        "name",
+        "activeScreen",
+        "otherScreens"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "hinge": {
+          "$ref": "#/$defs/hinge"
+        },
+        "activeScreen": {
+          "$ref": "#/$defs/screen"
+        },
+        "otherScreens": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/screen"
+          }
+        }
+      }
+    },
+    "settings show": {
+      "$ref": "#/$defs/settings"
+    },
+    "settings set": {
+      "$ref": "#/$defs/settings"
+    },
+    "settings location set": {
+      "type": "object",
+      "required": [
+        "udid",
+        "latitude",
+        "longitude"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "latitude": {
+          "type": "number"
+        },
+        "longitude": {
+          "type": "number"
+        }
+      }
+    },
+    "settings location clear": {
+      "type": "object",
+      "required": [
+        "udid",
+        "cleared"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "cleared": {
+          "const": true
+        }
+      }
+    },
+    "settings location scenarios": {
+      "type": "object",
+      "required": [
+        "udid",
+        "scenarios"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "scenarios": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "settings location scenario": {
+      "type": "object",
+      "required": [
+        "udid",
+        "scenario"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "scenario": {
+          "type": "string"
+        }
+      }
+    },
+    "settings status-bar show": {
+      "$ref": "#/$defs/statusBar"
+    },
+    "settings status-bar clear": {
+      "$ref": "#/$defs/statusBar"
+    },
+    "settings status-bar preset": {
+      "$ref": "#/$defs/statusBar"
+    },
+    "settings status-bar set": {
+      "$ref": "#/$defs/statusBar"
+    },
+    "shutdown": {
+      "type": "object",
+      "required": [
+        "udid",
+        "initialState",
+        "outcome"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "initialState": {
+          "description": "simctl's state before the request.",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "shutDown",
+            "alreadyShutDown"
+          ]
+        }
+      }
+    },
+    "clipboard copy": {
+      "type": "object",
+      "required": [
+        "udid",
+        "bytes",
+        "sha256"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "bytes": {
+          "type": "integer"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "init": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "installed"
+          ],
+          "properties": {
+            "installed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "client",
+                  "path"
+                ],
+                "properties": {
+                  "client": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "removed"
+          ],
+          "properties": {
+            "removed": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "client",
+                  "path"
+                ],
+                "properties": {
+                  "client": {
+                    "type": "string"
+                  },
+                  "path": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "content"
+          ],
+          "properties": {
+            "content": {
+              "description": "--print: the skill markdown.",
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "tap": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/input"
+        },
+        {
+          "description": "Physical tap --semantic-press: the switch value before and after.",
+          "type": "object",
+          "required": [
+            "identifier",
+            "before",
+            "after"
+          ],
+          "properties": {
+            "identifier": {
+              "type": "string"
+            },
+            "before": {
+              "type": "boolean"
+            },
+            "after": {
+              "type": "boolean"
+            }
+          }
+        }
+      ]
+    },
+    "slider": {
+      "$ref": "#/$defs/input"
+    },
+    "type": {
+      "$ref": "#/$defs/input"
+    },
+    "swipe": {
+      "$ref": "#/$defs/input"
+    },
+    "drag": {
+      "$ref": "#/$defs/input"
+    },
+    "button": {
+      "$ref": "#/$defs/input"
+    },
+    "key": {
+      "$ref": "#/$defs/input"
+    },
+    "key-sequence": {
+      "$ref": "#/$defs/input"
+    },
+    "key-combo": {
+      "$ref": "#/$defs/input"
+    },
+    "touch": {
+      "$ref": "#/$defs/input"
+    },
+    "gesture": {
+      "$ref": "#/$defs/input"
+    },
+    "hinge read": {
+      "type": "object",
+      "required": [
+        "udid",
+        "hinge"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "hinge": {
+          "$ref": "#/$defs/hinge"
+        }
+      }
+    },
+    "hinge set": {
+      "type": "object",
+      "required": [
+        "udid",
+        "previousDegrees",
+        "hinge"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "previousDegrees": {
+          "description": "The sensed angle before the move.",
+          "type": "number"
+        },
+        "hinge": {
+          "$ref": "#/$defs/hinge"
+        },
+        "activeScreen": {
+          "description": "Absent with --no-wait.",
+          "$ref": "#/$defs/screen"
+        }
+      }
+    },
+    "rotate": {
+      "type": "object",
+      "required": [
+        "udid",
+        "direction"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "direction": {
+          "enum": [
+            "left",
+            "right"
+          ]
+        },
+        "previousRotation": {
+          "description": "iPhone Duo only.",
+          "type": "integer"
+        },
+        "activeScreen": {
+          "description": "iPhone Duo only.",
+          "$ref": "#/$defs/screen"
+        }
+      }
+    },
+    "screenshot": {
+      "$ref": "#/$defs/media"
+    },
+    "record-video": {
+      "$ref": "#/$defs/media"
+    },
+    "batch": {
+      "type": "object",
+      "required": [
+        "steps",
+        "outcome"
+      ],
+      "properties": {
+        "steps": {
+          "type": "integer"
+        },
+        "outcome": {
+          "const": "completed"
+        }
+      }
+    },
+    "hinge": {
+      "description": "The iPhone Duo hinge.",
+      "type": "object",
+      "required": [
+        "degrees",
+        "mechanicalDegrees",
+        "posture"
+      ],
+      "properties": {
+        "degrees": {
+          "description": "The angle iOS senses, rounded to 0.1.",
+          "type": "number"
+        },
+        "mechanicalDegrees": {
+          "description": "The angle hinge set drives.",
+          "type": "number"
+        },
+        "posture": {
+          "enum": [
+            "closed",
+            "partiallyOpen",
+            "open"
+          ]
+        }
+      }
+    },
+    "screen": {
+      "description": "One built-in screen. Sizes are logical points.",
+      "type": "object",
+      "required": [
+        "id",
+        "uuid",
+        "role",
+        "width",
+        "height",
+        "scale",
+        "state"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "uuid": {
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+        },
+        "role": {
+          "enum": [
+            "main",
+            "outer",
+            "inner",
+            "screen"
+          ]
+        },
+        "width": {
+          "description": "Logical points; oriented for the active screen, unrotated otherwise.",
+          "type": "number"
+        },
+        "height": {
+          "description": "Logical points.",
+          "type": "number"
+        },
+        "scale": {
+          "type": "integer"
+        },
+        "rotation": {
+          "description": "Active screen only: 0, 90, 180 or 270.",
+          "type": "integer"
+        },
+        "orientation": {
+          "description": "Active screen only.",
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "state": {
+          "enum": [
+            "on",
+            "locked",
+            "off",
+            "starting",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "readinessCheck": {
+      "type": "object",
+      "required": [
+        "id",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "description": "Also the error code when this check blocks.",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "ready",
+            "blocked",
+            "unchecked"
+          ]
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    },
+    "input": {
+      "description": "Every input command, on every route. A failed input is an error, never a result.",
+      "type": "object",
+      "required": [
+        "outcome"
+      ],
+      "properties": {
+        "outcome": {
+          "const": "completed"
+        },
+        "screen": {
+          "description": "Selected input only: the screen the input was bound to.",
+          "type": "object",
+          "required": [
+            "id",
+            "uuid",
+            "width",
+            "height",
+            "rotation"
+          ],
+          "properties": {
+            "id": {
+              "type": "integer"
+            },
+            "uuid": {
+              "type": "string",
+              "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+            },
+            "width": {
+              "description": "Logical points.",
+              "type": "number"
+            },
+            "height": {
+              "description": "Logical points.",
+              "type": "number"
+            },
+            "rotation": {
+              "type": "integer"
+            }
+          }
+        },
+        "pid": {
+          "description": "Selected accessibility input only: the app the input was bound to.",
+          "type": "integer"
+        },
+        "token": {
+          "description": "touch --down with selected input: pass to --contact-token.",
+          "type": "string",
+          "pattern": "^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$"
+        }
+      }
+    },
+    "media": {
+      "description": "A saved file. Sizes are pixels.",
+      "type": "object",
+      "required": [
+        "path",
+        "pixelWidth",
+        "pixelHeight"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "pixelWidth": {
+          "type": "integer"
+        },
+        "pixelHeight": {
+          "type": "integer"
+        },
+        "frames": {
+          "description": "record-video only: the frames written.",
+          "type": "integer"
+        }
+      }
+    },
+    "settings": {
+      "description": "A setting the device does not report is omitted.",
+      "type": "object",
+      "required": [
+        "udid"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "appearance": {
+          "enum": [
+            "light",
+            "dark"
+          ]
+        },
+        "textSize": {
+          "description": "The spelling --text-size accepts.",
+          "enum": [
+            "extra-small",
+            "small",
+            "medium",
+            "large",
+            "extra-large",
+            "extra-extra-large",
+            "extra-extra-extra-large",
+            "accessibility-medium",
+            "accessibility-large",
+            "accessibility-extra-large",
+            "accessibility-extra-extra-large",
+            "accessibility-extra-extra-extra-large"
+          ]
+        },
+        "increaseContrast": {
+          "description": "On or off.",
+          "type": "boolean"
+        },
+        "reduceMotion": {
+          "description": "On or off.",
+          "type": "boolean"
+        },
+        "reduceTransparency": {
+          "description": "On or off.",
+          "type": "boolean"
+        },
+        "showBorders": {
+          "description": "On or off.",
+          "type": "boolean"
+        },
+        "liquidGlass": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "style": {
+              "enum": [
+                "clear",
+                "tinted"
+              ]
+            },
+            "opacity": {
+              "type": "number"
+            }
+          }
+        },
+        "colorFilter": {
+          "type": "object",
+          "required": [
+            "enabled"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "type": {
+              "enum": [
+                "off",
+                "grayscale",
+                "protanopia",
+                "deuteranopia",
+                "tritanopia"
+              ]
+            },
+            "intensity": {
+              "type": "number"
+            }
+          }
+        },
+        "voiceOver": {
+          "description": "On or off.",
+          "type": "boolean"
+        }
+      }
+    },
+    "statusBar": {
+      "description": "The active overrides; an absent field is not overridden.",
+      "type": "object",
+      "required": [
+        "udid",
+        "overridden"
+      ],
+      "properties": {
+        "udid": {
+          "type": "string"
+        },
+        "overridden": {
+          "type": "boolean"
+        },
+        "time": {
+          "type": "string"
+        },
+        "dataNetwork": {
+          "type": "string"
+        },
+        "wifiBars": {
+          "type": "integer"
+        },
+        "cellularBars": {
+          "type": "integer"
+        },
+        "batteryLevel": {
+          "type": "integer"
+        },
+        "batteryState": {
+          "enum": [
+            "draining",
+            "charging",
+            "charged"
+          ]
+        }
+      }
+    }
+  }
+}

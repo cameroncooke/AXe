@@ -74,6 +74,7 @@ struct OutputSchemaValidator: Sendable {
     private static let assertions: Set<String> = [
         "$ref", "type", "const", "enum", "properties", "required", "additionalProperties", "items",
         "prefixItems", "minItems", "maxItems", "minimum", "pattern", "oneOf", "anyOf",
+        "if", "then", "else", "not",
     ]
 
     let root: OutputSchemaJSON
@@ -105,7 +106,7 @@ struct OutputSchemaValidator: Sendable {
                     throw SchemaError(description: "\(path)/\(keyword) must be an object.")
                 }
                 for (name, child) in children { try checkKeywords(child, path: "\(path)/\(keyword)/\(name)") }
-            case "items", "additionalProperties":
+            case "items", "additionalProperties", "if", "then", "else", "not":
                 try checkKeywords(value, path: "\(path)/\(keyword)")
             case "prefixItems", "oneOf", "anyOf":
                 guard let children = value.arrayValue, !children.isEmpty else {
@@ -177,6 +178,19 @@ struct OutputSchemaValidator: Sendable {
             if passed > 1 { errors.append("\(path): matched \(passed) oneOf branches, expected 1.") }
             // Report the branch the value came closest to, not every branch's mismatches.
             if passed == 0 { errors += results.min { $0.count < $1.count } ?? [] }
+        }
+        // `if` and `not` only test a condition, so they never report undeclared fields.
+        if let condition = schema["if"] {
+            var conditionErrors: [String] = []
+            check(instance, against: condition, path: path, strict: false, errors: &conditionErrors)
+            if let branch = conditionErrors.isEmpty ? schema["then"] : schema["else"] {
+                check(instance, against: branch, path: path, strict: strict, errors: &errors)
+            }
+        }
+        if let negated = schema["not"] {
+            var negatedErrors: [String] = []
+            check(instance, against: negated, path: path, strict: false, errors: &negatedErrors)
+            if negatedErrors.isEmpty { errors.append("\(path): matches a schema it must not match.") }
         }
         if let branches = schema["anyOf"]?.arrayValue {
             let results = branches.map { branch -> [String] in
@@ -309,6 +323,36 @@ enum OutputSchemas {
             return .failure(OutputSchemaValidator.SchemaError(description: "Cannot load output schemas: \(error)"))
         }
     }()
+
+    /// Per-command `data.result` definitions, keyed by the envelope's `command`.
+    static let payloadFile = "axe.output.command-payloads.v1.schema.json"
+
+    private static let payloads: Result<[String: OutputSchemaJSON], OutputSchemaValidator.SchemaError> = {
+        do {
+            let schema = try OutputSchemaJSON(json: Data(contentsOf: directory.appendingPathComponent(payloadFile)))
+            _ = try OutputSchemaValidator(schema: schema)
+            guard case let .object(definitions)? = schema["$defs"] else {
+                throw OutputSchemaValidator.SchemaError(description: "The payload schema has no $defs.")
+            }
+            return .success(definitions)
+        } catch let error as OutputSchemaValidator.SchemaError {
+            return .failure(error)
+        } catch {
+            return .failure(OutputSchemaValidator.SchemaError(description: "Cannot load the payload schema: \(error)"))
+        }
+    }()
+
+    static func payloadDefinitions() throws -> [String: OutputSchemaJSON] { try payloads.get() }
+
+    /// Strictly validates one success payload against `$defs[command]`; returns the violations.
+    static func validatePayload(command: String, result: OutputSchemaJSON) throws -> [String] {
+        let definitions = try payloadDefinitions()
+        guard definitions[command] != nil else {
+            throw OutputSchemaValidator.SchemaError(description: "The payload schema does not describe \(command).")
+        }
+        let root = OutputSchemaJSON.object(["$defs": .object(definitions), "$ref": .string("#/$defs/" + command)])
+        return try OutputSchemaValidator(schema: root).validate(result, strict: true)
+    }
 
     static func validator(schema: String, version: String) throws -> OutputSchemaValidator? {
         try loaded.get()["\(schema)/\(version)"]

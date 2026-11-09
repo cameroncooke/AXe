@@ -190,7 +190,7 @@ struct Batch: AsyncParsableCommand {
         }
 
         try await runOrdinaryBatch(stepLines, logger: logger)
-        CLIOutput.message("✓ Batch completed successfully (\(stepLines.count) steps)")
+        try await SelectedBatchRunner.writeSummary(steps: stepLines.count)
     }
 
     @MainActor
@@ -204,7 +204,7 @@ struct Batch: AsyncParsableCommand {
         let lines = try loadStepLines()
         guard !lines.isEmpty else { throw ValidationError("No executable steps found.") }
         try await PhysicalDeviceBatch.run(lines, on: device, udid: simulatorUDID)
-        CLIOutput.message("Batch completed successfully (\(lines.count) steps)")
+        try SelectedBatchRunner.writeSummary(steps: lines.count)
     }
 
     @MainActor

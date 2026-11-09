@@ -67,7 +67,8 @@ struct Rotate: AsyncParsableCommand {
             try await PhysicalDeviceInput.withSession(for: device) { input in
                 try await runOnDevice(input)
             }
-            CLIOutput.message("Rotation request completed.")
+            let output = RotateOutput(udid: simulatorUDID, direction: direction, previousRotation: nil, activeScreen: nil)
+            try DeviceState.emit(output, text: output.textLines)
             return
         }
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: AxeLogger())
@@ -107,13 +108,15 @@ struct Rotate: AsyncParsableCommand {
     }
 }
 
+/// A physical device reports only the direction; the iPhone Duo adds its rotation before and the
+/// active screen after.
 struct RotateOutput: Encodable {
     let udid: String
     let direction: String
-    let previousRotation: Int
-    let activeScreen: ScreenStateOutput
+    let previousRotation: Int?
+    let activeScreen: ScreenStateOutput?
 
     var textLines: [String] {
-        ["Rotated \(direction)"] + DeviceStateText.screenLines(activeScreen, active: true)
+        ["Rotated \(direction)"] + (activeScreen.map { DeviceStateText.screenLines($0, active: true) } ?? [])
     }
 }

@@ -55,7 +55,9 @@ struct Init: AsyncParsableCommand {
         }
 
         if printSkill {
-            CLIOutput.message(try Self.loadSkillMarkdown(), terminator: "")
+            let content = try Self.loadSkillMarkdown()
+            if CLIOutput.isFormatted { try CLIOutput.writeJSON(InitOutput(content: content)) }
+            else { CLIOutput.message(content, terminator: "") }
             return
         }
 
@@ -104,7 +106,7 @@ struct Init: AsyncParsableCommand {
         // SKILL.md links to files in references/, so install the whole bundled skill directory.
         let sourceDirectory = try Self.bundledSkillFile().deletingLastPathComponent()
         let fileManager = FileManager.default
-        var installedPaths: [String] = []
+        var installed: [InitOutput.Entry] = []
 
         for target in targets {
             let targetDirectory = target.skillsDirectory.appendingPathComponent("axe", isDirectory: true)
@@ -132,7 +134,7 @@ struct Init: AsyncParsableCommand {
                 } else {
                     try fileManager.moveItem(at: stagingDirectory, to: targetDirectory)
                 }
-                installedPaths.append("\(target.name): \(targetFile.path)")
+                installed.append(InitOutput.Entry(client: target.name, path: targetFile.path))
             } catch {
                 try? fileManager.removeItem(at: stagingDirectory)
                 throw CLIError(
@@ -141,17 +143,16 @@ struct Init: AsyncParsableCommand {
             }
         }
 
-        if installedPaths.isEmpty {
+        if installed.isEmpty {
             throw CLIError(errorDescription: "No install targets resolved.", code: .invalidArguments)
         }
 
-        for entry in installedPaths {
-            CLIOutput.message("Installed AXe skill -> \(entry)")
-        }
+        try DeviceState.emit(InitOutput(installed: installed),
+            text: installed.map { "Installed AXe skill -> \($0.client): \($0.path)" })
     }
 
     private func uninstallSkill(from targets: [ClientInfo]) throws {
-        var removedPaths: [String] = []
+        var removed: [InitOutput.Entry] = []
 
         for target in targets {
             let targetDirectory = target.skillsDirectory.appendingPathComponent("axe", isDirectory: true)
@@ -161,7 +162,7 @@ struct Init: AsyncParsableCommand {
 
             do {
                 try FileManager.default.removeItem(at: targetDirectory)
-                removedPaths.append("\(target.name): \(targetDirectory.path)")
+                removed.append(InitOutput.Entry(client: target.name, path: targetDirectory.path))
             } catch {
                 throw CLIError(
                     errorDescription: "Failed to uninstall AXe skill for \(target.name): \(error.localizedDescription)", code: .outputFailed
@@ -169,14 +170,9 @@ struct Init: AsyncParsableCommand {
             }
         }
 
-        if removedPaths.isEmpty {
-            CLIOutput.message("No installed AXe skill directories were found.")
-            return
-        }
-
-        for entry in removedPaths {
-            CLIOutput.message("Removed AXe skill -> \(entry)")
-        }
+        let text = removed.isEmpty ? ["No installed AXe skill directories were found."]
+            : removed.map { "Removed AXe skill -> \($0.client): \($0.path)" }
+        try DeviceState.emit(InitOutput(removed: removed), text: text)
     }
 
     private func resolveTargets(for operation: Operation) throws -> [ClientInfo] {
@@ -281,4 +277,15 @@ struct Init: AsyncParsableCommand {
 
         return path
     }
+}
+
+/// One of `installed`, `removed` (possibly empty) or `content` (`--print`).
+struct InitOutput: Encodable {
+    struct Entry: Encodable {
+        let client: String
+        let path: String
+    }
+    var installed: [Entry]? = nil
+    var removed: [Entry]? = nil
+    var content: String? = nil
 }

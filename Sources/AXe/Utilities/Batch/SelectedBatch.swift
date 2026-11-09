@@ -152,6 +152,7 @@ struct SelectedBatchStepReceipt: Encodable {
 }
 
 /// The default result of a successful selected batch. Step receipts stay behind `--verbose`.
+/// The batch result on every route: `outcome` is always `completed`; a failed step is an error.
 struct SelectedBatchSummary: Encodable {
     let steps: Int
     let outcome: String

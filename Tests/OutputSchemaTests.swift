@@ -21,7 +21,12 @@ struct OutputSchemaTests {
             #expect(schema["properties"]?["schemaVersion"]?["const"]?.stringValue == parts[1])
         }
         let files = try FileManager.default.contentsOfDirectory(atPath: OutputSchemas.directory.path)
-        #expect(Set(files.filter { $0.hasSuffix(".schema.json") }) == Set(OutputSchemas.files.values))
+        #expect(Set(files.filter { $0.hasSuffix(".schema.json") })
+            == Set(OutputSchemas.files.values).union([OutputSchemas.payloadFile]))
+        let payloads = try OutputSchemaJSON(json: Data(contentsOf:
+            OutputSchemas.directory.appendingPathComponent(OutputSchemas.payloadFile)))
+        _ = try OutputSchemaValidator(schema: payloads)
+        #expect(payloads["$id"]?.stringValue?.hasSuffix("/schemas/" + OutputSchemas.payloadFile) == true)
     }
 
     @Test("Snapshot captures match the schema of every view", arguments: AgentOutputView.allCases)
@@ -143,14 +148,31 @@ struct OutputSchemaTests {
             ([], ["Partial output."], CLIOutputFailure(code: "commandFailed", message: "Simulator not found.")),
         ]
         for (values, messages, failure) in cases {
-            let context = CLIOutputContext(format: .json, command: "list-simulators", agent: false)
+            let context = CLIOutputContext(format: .json, command: "settings status-bar show", agent: false)
             for value in values { context.append(value) }
             for message in messages { context.append(message: message) }
             let output = try JSONDecoder().decode(CLIOutputValue.self,
                 from: CLIOutput.rendered(context, failure: failure))
             #expect(output["didError"]?.boolValue == (failure != nil))
+            #expect(output["command"]?.stringValue == "settings status-bar show")
             try OutputSchemas.validate(json(output))
         }
+
+        // error is present exactly when didError is true, and result and results never coexist.
+        let validator = try #require(try OutputSchemas.validator(schema: "axe.output.command-result", version: "1"))
+        let context = CLIOutputContext(format: .json, command: "tap", agent: false)
+        let failed = try JSONDecoder().decode(CLIOutputValue.self, from: CLIOutput.rendered(context,
+            failure: CLIOutputFailure(code: "busy", message: "Another AXe command is using the simulator.")))
+        #expect(try validator.validate(json(failed), strict: true).isEmpty)
+        #expect(try !validator.validate(json(replacing(failed, path: ["error"], with: nil)), strict: true).isEmpty)
+        let succeeded = try replacing(failed, path: ["didError"], with: .bool(false))
+        #expect(try !validator.validate(json(succeeded), strict: true).isEmpty)
+        #expect(try validator.validate(json(replacing(succeeded, path: ["error"], with: nil)), strict: true).isEmpty)
+        let both = try replacing(replacing(succeeded, path: ["error"], with: nil), path: ["data"],
+            with: .object(["result": payload, "results": .array([payload, payload])]))
+        #expect(try !validator.validate(json(both), strict: true).isEmpty)
+        let lowerCamel = try replacing(failed, path: ["error", "code"], with: .string("Command-Failed"))
+        #expect(try !validator.validate(json(lowerCamel), strict: true).isEmpty)
     }
 
     @Test("Strict validation rejects undeclared, missing and malformed fields")

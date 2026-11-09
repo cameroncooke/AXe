@@ -113,3 +113,22 @@ struct CLIErrorTests {
         #expect(Axe.commandPath(of: try Axe.parseAsRoot(arguments)) == expected)
     }
 }
+
+@Suite("Output selection")
+struct CLIOutputInvocationTests {
+    @Test("Root and leaf --output select the format; media --output stays a path; -- ends options")
+    func selection() {
+        let root = CLIOutputInvocation(arguments: ["--output", "json", "hinge", "read", "--udid", "U"])
+        #expect(root.format == .json && root.command == "hinge" && root.arguments == ["hinge", "read", "--udid", "U"])
+        let leaf = CLIOutputInvocation(arguments: ["describe-ui", "--udid", "U", "--output=text"])
+        #expect(leaf.format == .text && leaf.arguments == ["describe-ui", "--udid", "U"])
+        let media = CLIOutputInvocation(arguments: ["screenshot", "--udid", "U", "--output", "a.png"])
+        #expect(media.format == nil && media.arguments == ["screenshot", "--udid", "U", "--output", "a.png"])
+        let mediaJSON = CLIOutputInvocation(arguments: ["--output", "json", "screenshot", "--output", "a.png"])
+        #expect(mediaJSON.format == .json && mediaJSON.arguments == ["screenshot", "--output", "a.png"])
+        let terminated = CLIOutputInvocation(arguments: ["type", "--udid", "U", "--", "--output", "json"])
+        #expect(terminated.format == nil && terminated.arguments.suffix(3) == ["--", "--output", "json"])
+        #expect(CLIOutputInvocation(arguments: ["--output", "yaml", "tap"]).selectionError == "--output must be text or json.")
+        #expect(CLIOutputInvocation(arguments: ["tap", "--agent", "--udid", "U"]).format == .json)
+    }
+}
