@@ -56,10 +56,12 @@ actor PhysicalDeviceInputOwner {
         self.lease = lease
     }
 
+    /// Fresh CoreDevice details for a listed device, refusing unless every readiness check passes and it is
+    /// unlocked. Input leases and the native display stream use it.
     static func readyDevice(_ listedDevice: CoreDevice) async throws -> CoreDevice {
         let device = try await CoreDeviceInventory.details(for: listedDevice)
         if let check = DeviceInspection.inventoryChecks(for: device).first(where: { $0.status != .ready }) {
-            throw CLIOutputFailure(code: check.id, message: check.message ?? "The device is not ready for input.")
+            throw CLIOutputFailure(code: check.id, message: check.message ?? "The device is not ready.")
         }
         guard try await CoreDeviceInventory.lockState(for: device) == false else {
             throw CLIOutputFailure(code: "deviceLocked", message: "Unlock the device before sending input or reading its screen.")

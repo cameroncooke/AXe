@@ -45,13 +45,7 @@ actor PhysicalDeviceDisplayStream {
     }
 
     static func start(for listedDevice: CoreDevice) async throws -> PhysicalDeviceDisplayStream {
-        let device = try await CoreDeviceInventory.details(for: listedDevice)
-        if let check = DeviceInspection.inventoryChecks(for: device).first(where: { $0.status != .ready }) {
-            throw CLIOutputFailure(code: check.id, message: check.message ?? "The device is not ready for display streaming.")
-        }
-        guard try await CoreDeviceInventory.lockState(for: device) == false else {
-            throw CLIOutputFailure(code: "deviceLocked", message: "Unlock the device before streaming its display.")
-        }
+        let device = try await PhysicalDeviceInputOwner.readyDevice(listedDevice)
         guard let address = device.tunnelAddress, let udid = device.udid, let version = device.coreDeviceVersion else {
             throw DeviceServiceError.invalidProtocol("the device did not report display service connection details")
         }
