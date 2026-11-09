@@ -199,15 +199,6 @@ extension HIDBroker {
         }
     }
 
-    static func waitForStaleEndpointShutdown(_ path: String) throws {
-        try waitForStaleEndpointShutdown(
-            path,
-            connector: connect(to:),
-            sleeper: { _ = usleep($0) },
-            brokerIsAlive: { try isBrokerProcessAlive(endpoint: path) }
-        )
-    }
-
     static func waitForStaleEndpointShutdown(
         _ path: String,
         deadline: UInt64,

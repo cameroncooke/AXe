@@ -26,7 +26,7 @@ struct AccessibilityTargetResolverTests {
             """
         )
 
-        let point = try AccessibilityTargetResolver.resolveTapPoint(roots: roots, query: .label("Weather Alerts"))
+        let point = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .label("Weather Alerts")).point
 
         #expect(point.x == 325)
         #expect(point.y == 125)
@@ -53,7 +53,7 @@ struct AccessibilityTargetResolverTests {
             """
         )
 
-        let point = try AccessibilityTargetResolver.resolveTapPoint(roots: roots, query: .label("Weather Alerts"))
+        let point = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .label("Weather Alerts")).point
 
         #expect(point.x == 325)
         #expect(point.y == 125)
@@ -148,7 +148,7 @@ struct AccessibilityTargetResolverTests {
             """
         )
 
-        let point = try AccessibilityTargetResolver.resolveTapPoint(roots: roots, query: .label("SwiftUI Weather Alerts"))
+        let point = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .label("SwiftUI Weather Alerts")).point
 
         #expect(point.x == 355)
         #expect(point.y == 194)
@@ -169,7 +169,7 @@ struct AccessibilityTargetResolverTests {
             """
         )
 
-        let point = try AccessibilityTargetResolver.resolveTapPoint(roots: roots, query: .id("weather-alerts-switch"))
+        let point = try AccessibilityTargetResolver.resolveTap(roots: roots, query: .id("weather-alerts-switch")).point
 
         #expect(point.x == 30)
         #expect(point.y == 30)

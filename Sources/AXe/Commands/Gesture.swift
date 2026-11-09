@@ -125,8 +125,6 @@ enum GestureAction: ExpressibleByArgument {
         guard let preset = GesturePreset(rawValue: argument) else { return nil }
         self = .preset(preset)
     }
-
-    static var allValueStrings: [String] { GesturePreset.allCases.map(\.rawValue) + ["pinch", "double-tap", "rotate", "two-finger-tap", "two-finger-hold", "two-finger-swipe"] }
 }
 
 struct Gesture: AsyncParsableCommand {

@@ -52,9 +52,7 @@ final class BatchContext {
     func accessibilityRoots(logger: AxeLogger, forceRefresh: Bool = false) async throws -> [AccessibilityElement] {
         try await validateCurrentContext()
         switch axCachePolicy {
-        case .none:
-            return try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
-        case .perStep:
+        case .none, .perStep:
             return try await AccessibilityFetcher.fetchAccessibilityElements(for: simulatorUDID, logger: logger)
         case .perBatch:
             if !forceRefresh, let cachedRoots {

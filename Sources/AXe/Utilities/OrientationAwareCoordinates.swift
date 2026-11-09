@@ -204,15 +204,9 @@ struct OrientationAwareCoordinates {
 
             // Physical viewport in points: short side = portrait width, long side = portrait height.
             // Derived from the landscape AX frame by swapping axes (same as portraitDimensions).
-            let physW = appFrame.height  // portrait width  = landscape logical height
-            let physH = appFrame.width   // portrait height = landscape logical width
-            let logW  = appFrame.width   // logical landscape width
-            let logH  = appFrame.height  // logical landscape height
-
-            // Uniform scale to fit logical content into physical viewport.
-            let scale = min(physW / logW, physH / logH)
-            let offsetX = (physW - logW * scale) / 2
-            let offsetY = (physH - logH * scale) / 2
+            let (scale, offsetX, offsetY) = OrientationCoordinateMath.letterboxParameters(
+                logicalWidth: appFrame.width, logicalHeight: appFrame.height,
+                physicalWidth: appFrame.height, physicalHeight: appFrame.width)
 
             logger.info().log(
                 String(format: "Letterbox: scale=%.4f offsetX=%.1f offsetY=%.1f", scale, offsetX, offsetY)
@@ -538,51 +532,5 @@ struct OrientationAwareCoordinates {
     ) -> AccessibilityElement.Frame? {
         roots.first { $0.type == "Application" }?.frame
             ?? roots.first?.frame
-    }
-
-    // MARK: - Orientation Detection (legacy — preserved for callers that need it directly)
-
-    /// Determines the current logical orientation by inspecting the accessibility tree.
-    ///
-    /// Prefer `detectMapping(for:orientationOverride:logger:)` for full tap/touch/swipe
-    /// coordinate translation. This method only reads the AX frame and cannot distinguish
-    /// a rotated device from a letterboxed landscape-only app.
-    ///
-    /// - Parameters:
-    ///   - simulatorUDID: Target simulator UDID.
-    ///   - orientationOverride: When non-nil, skip detection and use this value.
-    ///   - logger: AXe logger instance.
-    /// - Returns: The detected (or overridden) orientation.
-    static func detectOrientation(
-        for simulatorUDID: String,
-        orientationOverride: SimulatorOrientation? = nil,
-        logger: AxeLogger
-    ) async throws -> SimulatorOrientation {
-        if let override = orientationOverride {
-            logger.info().log("Using explicit orientation override: \(override.rawValue)")
-            return override
-        }
-
-        let roots = try await AccessibilityFetcher.fetchAccessibilityElements(
-            for: simulatorUDID,
-            logger: logger
-        )
-
-        guard let appFrame = applicationFrame(from: roots) else {
-            logger.info().log("Could not read application frame; assuming portrait orientation")
-            return .portrait
-        }
-
-        if appFrame.width > appFrame.height {
-            logger.info().log(
-                "Detected landscape orientation from application frame \(Int(appFrame.width))x\(Int(appFrame.height))"
-            )
-            return .landscape
-        }
-
-        logger.info().log(
-            "Detected portrait orientation from application frame \(Int(appFrame.width))x\(Int(appFrame.height))"
-        )
-        return .portrait
     }
 }

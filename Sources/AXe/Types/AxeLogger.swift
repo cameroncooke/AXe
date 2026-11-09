@@ -17,12 +17,4 @@ final class AxeLogger: FBCompositeLogger {
     override convenience init() {
         self.init(debugLogging: false, writeToStdErr: false)
     }
-    
-    func makeDefault() {
-        FBControlCoreGlobalConfiguration.defaultLogger = self
-    }
-    
-    func warning() -> FBControlCoreLogger {
-        return self.debug()
-    }
 }

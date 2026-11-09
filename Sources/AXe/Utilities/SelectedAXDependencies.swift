@@ -13,8 +13,6 @@ struct SelectedAXDependencies {
     /// True once the user has removed the persisted quarantine record for this device.
     var quarantineCleared: @MainActor (String) -> Bool = { HIDInputQuarantine.recordIsAbsent(simulatorUDID: $0) }
 
-    static var live: Self { live(transportOwner: nil) }
-
     static func live(transportOwner: FBSimulatorHIDTransportOwner?) -> Self {
         Self(execute: { request, udid, brokerID, logger, batchTap in
             if request.keyboard != nil {
