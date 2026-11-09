@@ -129,6 +129,8 @@ export AXE_TEXT_MODEL=deepseek-chat
 
 Equivalent names are `TEXT_MODEL_API_KEY`, `TEXT_MODEL_BASE_URL` and `TEXT_MODEL`. When only a key is supplied, the defaults match the Jev ultrafast example: DeepSeek's OpenAI-compatible endpoint and `deepseek-chat`.
 
+Both API keys are sent with every request, so `--base-url`, `TYPESAFE_BASE_URL` and the text-model base URL must use `https`. Plain `http` is accepted only for a server on this Mac (`localhost`, `127.0.0.1` or `::1`).
+
 The executor never invents a missing value. Without an explicit value or configured helper, `TYPE_TEXT` fails before typing.
 
 ## Command options
