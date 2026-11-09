@@ -85,18 +85,25 @@ struct Rotate: AsyncParsableCommand {
         let response = try SelectedHIDBroker.send(
             try request(screenID: display.id, screenUUID: display.uuid, bootIdentity: boot),
             simulatorUDID: simulatorUDID)
-        if verbose { try SelectedHIDBroker.printResponse(response, verbose: true); return }
-        guard response.error == nil, let receipt = response.rotation?.receipt else {
-            throw DeviceStateFailure.rotation(response)
-        }
+        let receipt = try Self.receipt(from: response, verbose: verbose)
         let (discovery, displays) = try await DeviceState.displays(for: simulator)
         guard discovery.bootIdentity == boot else {
             throw CLIOutputFailure(code: "bootChanged",
                 message: "The simulator restarted after the rotation. Read its state again.")
         }
+        guard !verbose else { return }
         let output = RotateOutput(udid: simulatorUDID, direction: receipt.direction.rawValue,
             previousRotation: receipt.before.rotation, activeScreen: displays.activeScreen)
         try DeviceState.emit(output, text: output.textLines)
+    }
+
+    /// `verbose` prints the receipt; the checks and codes are the same with or without it.
+    static func receipt(from response: SelectedHIDResponse, verbose: Bool) throws -> FBSimulatorRotationReceipt {
+        if verbose { try SelectedHIDBroker.writeReceipt(response) }
+        guard response.error == nil, let receipt = response.rotation?.receipt else {
+            throw DeviceStateFailure.rotation(response)
+        }
+        return receipt
     }
 }
 

@@ -228,13 +228,6 @@ enum DeviceState {
         if CLIOutput.isFormatted { try CLIOutput.writeJSON(value) }
         else { text.forEach { CLIOutput.message($0) } }
     }
-
-    /// The broker reply, unchanged, for `--verbose`.
-    nonisolated static func printVerbose(_ response: SelectedHIDResponse) throws {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        try CLIOutput.writeJSONData(encoder.encode(response))
-    }
 }
 
 /// Plain errors for the hinge and rotation broker replies. The full reply is available with `--verbose`.

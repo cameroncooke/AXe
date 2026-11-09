@@ -30,11 +30,17 @@ struct Hinge: AsyncParsableCommand {
         func run() async throws {
             try AutomationTarget.refuseOnDevice(simulatorUDID, "The hinge is available on iPhone Duo simulators only.")
             let response = try SelectedHIDBroker.send(try request().brokerRequest(), simulatorUDID: simulatorUDID)
-            if verbose { try SelectedHIDBroker.printResponse(response, verbose: true); return }
+            try Self.report(response, udid: simulatorUDID, verbose: verbose)
+        }
+
+        /// `verbose` prints the receipt in place of the result; the checks and codes are the same.
+        static func report(_ response: SelectedHIDResponse, udid: String, verbose: Bool) throws {
+            if verbose { try SelectedHIDBroker.writeReceipt(response) }
             guard response.error == nil, let sample = response.hinge?.readback?.sample else {
                 throw DeviceStateFailure.hinge(response)
             }
-            let output = HingeReadOutput(udid: simulatorUDID, hinge: HingeStateOutput(sample))
+            guard !verbose else { return }
+            let output = HingeReadOutput(udid: udid, hinge: HingeStateOutput(sample))
             try DeviceState.emit(output, text: ["Hinge \(output.hinge.text)"])
         }
     }
@@ -109,12 +115,7 @@ struct Hinge: AsyncParsableCommand {
             let boot = try expectedBoot ?? DeviceState.currentBootIdentity(udid: simulatorUDID)
             let response = try SelectedHIDBroker.send(try request(bootIdentity: boot).brokerRequest(),
                 simulatorUDID: simulatorUDID)
-            if verbose {
-                try SelectedHIDBroker.printResponse(response, verbose: true)
-            }
-            guard response.error == nil, let receipt = response.hinge?.receipt else {
-                throw DeviceStateFailure.hinge(response)
-            }
+            let receipt = try Self.receipt(from: response, verbose: verbose)
             let previous = DeviceStateText.rounded(receipt.before.sensedDegrees)
             guard !noWait else {
                 if verbose { return }
@@ -134,6 +135,15 @@ struct Hinge: AsyncParsableCommand {
             let output = HingeSetOutput(udid: simulatorUDID, previousDegrees: previous, hinge: hinge,
                 activeScreen: displays.activeScreen)
             try DeviceState.emit(output, text: output.textLines)
+        }
+
+        /// `verbose` prints the receipt; the checks and codes are the same with or without it.
+        static func receipt(from response: SelectedHIDResponse, verbose: Bool) throws -> FBSimulatorHingeReceipt {
+            if verbose { try SelectedHIDBroker.writeReceipt(response) }
+            guard response.error == nil, let receipt = response.hinge?.receipt else {
+                throw DeviceStateFailure.hinge(response)
+            }
+            return receipt
         }
     }
 }

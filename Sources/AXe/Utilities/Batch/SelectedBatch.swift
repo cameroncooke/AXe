@@ -170,19 +170,18 @@ enum SelectedBatchRunner {
         let wait: (Double) async -> SelectedBatchHostWaitReceipt = {
             await SelectedBatchHostWait.runWithSignals(seconds: $0)
         }
-        if verbose {
-            try await run(lines: lines, input: input, simulatorUDID: simulatorUDID, send: send,
-                emit: { try writeReceipt($0) }, wait: wait, standardInput: .standardInput)
-            return
-        }
+        // `verbose` adds the step receipts; the failure and its code are the same either way.
         var last: SelectedBatchStepReceipt?
         do {
             try await run(lines: lines, input: input, simulatorUDID: simulatorUDID, send: send,
-                emit: { last = $0 }, wait: wait, standardInput: .standardInput)
+                emit: { receipt in
+                    last = receipt
+                    if verbose { try writeReceipt(receipt) }
+                }, wait: wait, standardInput: .standardInput)
         } catch {
             throw failure(last, stopError: error)
         }
-        try writeSummary(steps: lines.count)
+        if !verbose { try writeSummary(steps: lines.count) }
     }
 
     static func writeSummary(steps: Int) throws {

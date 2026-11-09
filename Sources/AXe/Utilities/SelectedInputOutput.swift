@@ -16,29 +16,30 @@ struct SelectedInputSummary: Encodable {
         let height: Double
         let rotation: Int
     }
-    let outcome: String
+    /// Always `completed`: a failed reply is an error, and the broker's transport outcome is
+    /// receipt detail.
+    let outcome = "completed"
     let screen: Screen?
     let pid: Int32?
-    let events: Int
     let token: UUID?
 
     init(_ response: SelectedHIDResponse) {
-        outcome = response.outcome
         screen = response.context.map {
             Screen(id: $0.screenID, uuid: $0.screenUUID, width: $0.logicalWidth, height: $0.logicalHeight,
                 rotation: $0.rotationDegrees)
         }
         pid = response.ax?.expectedPID ?? response.keyboard?.expectedPID
-        events = response.enqueuedEventCount
         token = response.token
     }
 }
 
 enum SelectedInputOutput {
+    static func failed(_ response: SelectedHIDResponse) -> Bool {
+        response.error != nil || response.quarantine != nil || response.cleanup == "uncertain"
+    }
+
     static func print(_ response: SelectedHIDResponse) throws {
-        if response.error != nil || response.quarantine != nil || response.cleanup == "uncertain" {
-            throw failure(response)
-        }
+        if failed(response) { throw failure(response) }
         if let ax = response.ax, ax.kind == .describe || ax.kind == .describePoint {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

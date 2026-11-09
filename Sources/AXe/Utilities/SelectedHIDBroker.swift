@@ -83,12 +83,18 @@ enum SelectedHIDBroker {
             throw CLIError(errorDescription: "Selected HID request outcome is unknown and was not replayed: \(error)")
         }
     }
-    /// `verbose` prints the full receipt; otherwise the plain-command result or a clear error.
+    /// `verbose` prints the full receipt in place of the plain-command result. The failure and its
+    /// code are the same either way.
     static func printResponse(_ response: SelectedHIDResponse, verbose: Bool) throws {
         guard verbose else { try SelectedInputOutput.print(response); return }
+        try writeReceipt(response)
+        if SelectedInputOutput.failed(response) { throw SelectedInputOutput.failure(response) }
+    }
+
+    /// The broker reply, unchanged, for `--verbose`.
+    static func writeReceipt(_ response: SelectedHIDResponse) throws {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         try CLIOutput.writeJSONData(encoder.encode(response))
-        if response.error != nil { throw CLIError(errorDescription: "Selected input failed; inspect the JSON receipt. No input was replayed.") }
     }
     private static func offMain<T: Sendable>(_ work: @escaping @Sendable () throws -> T) async throws -> T {
         try await withCheckedThrowingContinuation { continuation in
