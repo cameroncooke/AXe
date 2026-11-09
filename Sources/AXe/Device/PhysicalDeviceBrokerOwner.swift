@@ -111,10 +111,8 @@ actor PhysicalDeviceBrokerOwner {
         case let .keys(steps):
             try await input.keys(steps)
             return .done
-        case let .button(button, hold, allowLock):
-            guard button != .lock || allowLock else {
-                throw AutomationTarget.unsupportedOnDevice("Physical lock requires --allow-lock.")
-            }
+        case let .button(button, hold, _):
+            // The server validated the operation, including the lock refusal, before execute.
             try await input.pressButton(button, hold: hold)
             return .done
         case let .rotate(direction, timeout):
@@ -190,18 +188,16 @@ actor PhysicalDeviceBrokerOwner {
         guard before == after else {
             throw CLIOutputFailure(code: "screenChanged", message: "The device display changed during the accessibility read.")
         }
-        let snapshot = try PhysicalAccessibility.project(archive, display: before) { request in
-            try Self.forward(request, to: session, timeout: min(1.5, budget.remaining()))
+        let snapshot = try await Self.offPool(session) {
+            try PhysicalAccessibility.project(archive, display: before) { request in
+                try Self.forward(request, to: session, timeout: min(1.5, budget.remaining()))
+            }
         }
         _ = try budget.remaining()
         return snapshot
     }
 
     private func semanticPress(_ identifier: String, on input: PhysicalDeviceInputOwner) async throws -> PhysicalSemanticPressReceipt {
-        guard !identifier.isEmpty, identifier.utf8.count <= 4096,
-              identifier == identifier.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            throw CLIOutputFailure(code: "invalidArguments", message: "Supply one nonempty exact checkbox ID.")
-        }
         let budget = try ReadBudget(timeout: 16)
         let display = try await input.display(timeout: budget.remaining())
         let bounds = try CGRect(x: 0, y: 0, width: display.width, height: display.height)
@@ -230,8 +226,10 @@ actor PhysicalDeviceBrokerOwner {
         try Task.checkCancellation()
         let actionTimeout = try min(2.5, budget.remaining())
         do {
-            let data = try Self.forward(fresh.request, to: session, timeout: actionTimeout,
-                                        expectedSequence: snapshot.sequence)
+            let request = fresh.request, sequence = snapshot.sequence
+            let data = try await Self.offPool(session) {
+                try Self.forward(request, to: session, timeout: actionTimeout, expectedSequence: sequence)
+            }
             guard try FBPhysicalAXTreeProjection.acceptedPressReply(data) else {
                 throw CLIOutputFailure(code: "semanticPressUnconfirmed", message: "The device did not accept AXPress.")
             }
@@ -259,6 +257,20 @@ actor PhysicalDeviceBrokerOwner {
         }
         throw CLIOutputFailure(code: "semanticPressUnconfirmed",
             message: "The device accepted AXPress. AXe did not confirm the checkbox value change.")
+    }
+
+    /// Runs translator work on a dispatch queue instead of a cooperative-pool thread: each live lookup blocks
+    /// on a semaphore for up to 2.5 seconds. Cancellation closes the session, which fails a pending lookup at
+    /// once; the caller then drops the session.
+    private static func offPool<T: Sendable>(_ session: DeviceAccessibilitySession,
+                                             _ work: @escaping @Sendable () throws -> T) async throws -> T {
+        let value = try await withTaskCancellationHandler {
+            try await PhysicalDeviceBrokerSocket.offMain(work)
+        } onCancel: {
+            Task { await session.close() }
+        }
+        try Task.checkCancellation()
+        return value
     }
 
     private static func forward(_ request: FBPhysicalAXTreeProjection.LiveRequest, to session: DeviceAccessibilitySession,

@@ -2,12 +2,12 @@ import Foundation
 
 struct DeviceAccessibilitySnapshot: Sendable {
     let sequence: UInt64
-    let receivedAt: ContinuousClock.Instant
     let archive: PhysicalAXTreeArchive
 }
 
 /// Owns one live DTX subscription and serializes all requests and push admission.
 final class DeviceAccessibilitySession: @unchecked Sendable {
+    private static let service = "com.apple.accessibility.axAuditDaemon.remoteAXService"
     private let directory: DeviceServiceDirectory
     private let lock = NSLock()
     private var state: State
@@ -131,7 +131,7 @@ final class DeviceAccessibilitySession: @unchecked Sendable {
         do {
             while let generation = lock.withLock({ state.terminal == nil ? state.generation : nil }) {
                 let timeout = try Self.remaining(until: generation.deadline, failure: Self.treeUnavailable)
-                try await directory.withRawService(DeviceAccessibilityTransport.service, timeout: timeout) { socket in
+                try await directory.withRawService(Self.service, timeout: timeout) { socket in
                     try self.runChannel(socket, generation: generation)
                 }
             }
@@ -274,7 +274,7 @@ final class DeviceAccessibilitySession: @unchecked Sendable {
         lock.withLock {
             guard state.terminal == nil, state.generation.id == generation else { return }
             state.lastSequence += 1
-            state.snapshot = DeviceAccessibilitySnapshot(sequence: state.lastSequence, receivedAt: .now, archive: archive)
+            state.snapshot = DeviceAccessibilitySnapshot(sequence: state.lastSequence, archive: archive)
             state.refreshing = false
         }
     }
