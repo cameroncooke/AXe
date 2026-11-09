@@ -186,7 +186,7 @@ struct AgentPageEnrichmentTests {
         var capture: [String: CLIOutputValue] = [
             "type": .string("runtime-snapshot"), "rs": .string("1"), "snapshotID": .string(snapshotID),
             "screenHash": .string("0123456789abcdef"), "seq": .integer(1), "count": .integer(Int64(all.count)),
-            "udid": .string("419D3218-79E5-46DE-80C0-E58126A88252"), "applicationPID": .integer(1234),
+            "udid": .string("00000000-0000-0000-0000-000000000001"), "applicationPID": .integer(1234),
             "context": .object(["bootIdentity": .string("boot"), "screenID": .integer(3), "screenUUID": .string(screenID),
                 "logicalWidth": .integer(951), "logicalHeight": .integer(669), "rotationDegrees": .integer(90),
                 "nativePixelWidth": .integer(2853), "nativePixelHeight": .integer(2007), "scale": .integer(3),

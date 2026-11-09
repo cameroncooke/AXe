@@ -6,7 +6,7 @@ import FBSimulatorControl
 
 @Suite("Ordinary broker keyboard wire compatibility")
 struct HIDBrokerKeyboardRequestTests {
-    private let udid = "419D3218-79E5-46DE-80C0-E58126A88252"
+    private let udid = "00000000-0000-0000-0000-000000000001"
 
     @Test("A complete key survives encoding and decoding without event changes")
     func keyRoundTrip() throws {

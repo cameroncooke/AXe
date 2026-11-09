@@ -20,12 +20,6 @@ jobs:
         with:
           fetch-depth: 1
 
-      # - name: Preliminary Setup
-        # run: |
-          # echo "Setting up environment..."
-          # Add any preliminary setup commands here to setup Claude's dev environment
-          # e.g., npm install, etc.
-
       - name: Run Claude Code
         id: claude
         uses: anthropics/claude-code-action@eap

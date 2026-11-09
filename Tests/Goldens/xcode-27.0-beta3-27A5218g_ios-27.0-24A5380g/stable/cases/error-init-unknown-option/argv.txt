@@ -1,1 +1,0 @@
-axe init --axe-invalid-option 

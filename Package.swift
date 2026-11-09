@@ -62,9 +62,6 @@ let package = Package(
                 .unsafeFlags(["-parse-as-library"] + idbPrivateHeaderSearchFlags)
             ],
             linkerSettings: [
-                // For XCFrameworks, rpath can often be just @executable_path
-                // if SPM handles embedding correctly, or you might need to adjust
-                // if you manually copy them later for distribution.
                 .unsafeFlags([
                     "-Xlinker", "-dead_strip",
                     "-Xlinker", "-headerpad_max_install_names",
@@ -82,7 +79,6 @@ let package = Package(
             name: "AXeTests",
             dependencies: ["AXe", "AXeCore"],
             path: "Tests",
-            exclude: ["Goldens"],
             swiftSettings: [
                 .unsafeFlags(idbPrivateHeaderSearchFlags)
             ]

@@ -1,3 +1,0 @@
-Error: Unexpected argument 'unexpected'
-Usage: axe list-simulators
-  See 'axe list-simulators --help' for more information.

@@ -9,7 +9,7 @@ import Testing
 struct AgentSwipePathTests {
     @Test("The public coordinate agent swipe keeps its native swipe path")
     func coordinateAgentSwipeRetainsPathKind() throws {
-        let command = try Swipe.parse(["--agent", "--udid", "419D3218-79E5-46DE-80C0-E58126A88252",
+        let command = try Swipe.parse(["--agent", "--udid", "00000000-0000-0000-0000-000000000001",
             "--snapshot-id", UUID().uuidString, "--start-x", "200", "--start-y", "600",
             "--end-x", "200", "--end-y", "200"])
         try command.validate()
@@ -21,7 +21,7 @@ struct AgentSwipePathTests {
 
     @Test("A raw coordinate swipe keeps its linear release")
     func rawSwipeStaysLinear() throws {
-        let command = try Swipe.parse(["--udid", "419D3218-79E5-46DE-80C0-E58126A88252",
+        let command = try Swipe.parse(["--udid", "00000000-0000-0000-0000-000000000001",
             "--start-x", "200", "--start-y", "600", "--end-x", "200", "--end-y", "200"])
         try command.validate()
         #expect(command.selectedPath.endsAtRest == nil)

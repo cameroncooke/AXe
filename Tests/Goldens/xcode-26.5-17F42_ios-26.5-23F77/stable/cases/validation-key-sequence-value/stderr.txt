@@ -1,3 +1,0 @@
-Error: All keycodes must be valid integers. Invalid token(s): invalid
-Usage: axe key-sequence --keycodes <keycodes> [--delay <delay>] --udid <udid>
-  See 'axe key-sequence --help' for more information.

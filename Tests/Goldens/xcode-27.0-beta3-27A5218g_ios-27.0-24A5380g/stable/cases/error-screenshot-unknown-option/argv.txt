@@ -1,1 +1,0 @@
-axe screenshot --axe-invalid-option 
