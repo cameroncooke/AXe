@@ -27,7 +27,7 @@ enum BatchStandardInput {
                 throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
             }
             if source.revents & Int16(POLLERR | POLLNVAL) != 0 {
-                throw CLIError(errorDescription: "Could not read batch type input from stdin.")
+                throw CLIError(errorDescription: "Could not read batch type input from stdin.", code: .readFailed)
             }
             guard ready > 0 else {
                 try await Task.sleep(for: .milliseconds(25))

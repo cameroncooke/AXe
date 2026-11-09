@@ -256,25 +256,28 @@ struct Batch: AsyncParsableCommand {
                 try await context.validateInputBoundary()
                 try await runner.run(BatchPlan(primitives: primitives))
             } catch {
-                let stepError = error
-                let stepMessage = (stepError as? ValidationError)?.description ?? stepError.localizedDescription
+                // A failed step keeps its own code.
+                let stepFailure = CLIErrorMapping.failure(for: error)
                 if context.duoOwner != nil {
                     do { try await context.validateCurrentContext() }
                     catch {
-                        throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepMessage)\nDuo batch stopped; \(error.localizedDescription). Later input was not replayed.")
+                        let stopped = CLIErrorMapping.failure(for: error)
+                        throw CLIOutputFailure(code: stopped.code,
+                            message: "Step \(index + 1) failed: [\(stepName)]\n\(stepFailure.message)\nThe batch stopped: \(stopped.message)")
                     }
                 }
                 if continueOnError {
-                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(stepMessage)")
+                    failures.append("Step \(index + 1) failed: [\(stepName)] -> \(stepFailure.message)")
                 } else {
-                    throw CLIError(errorDescription: "Step \(index + 1) failed: [\(stepName)]\n\(stepMessage)")
+                    throw CLIOutputFailure(code: stepFailure.code,
+                        message: "Step \(index + 1) failed: [\(stepName)]\n\(stepFailure.message)")
                 }
             }
         }
 
         if !failures.isEmpty {
             let failureMessage = failures.joined(separator: "\n")
-            throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failureMessage)")
+            throw CLIError(errorDescription: "Batch completed with \(failures.count) failure(s):\n\(failureMessage)", code: .inputFailed)
         }
     }
 

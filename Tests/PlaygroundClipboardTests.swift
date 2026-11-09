@@ -24,7 +24,7 @@ struct PlaygroundClipboardTests {
         case .oversized: payload = Data(repeating: 65, count: 65_537)
         default: payload = Data(unicode.utf8)
         }
-        var args = ["clipboard", "copy", "--stdin", "--udid", variant == .invalidUDID ? "not-a-uuid" : session.agent.udid]
+        var args = ["--output", "json", "clipboard", "copy", "--stdin", "--udid", variant == .invalidUDID ? "not-a-uuid" : session.agent.udid]
         if variant == .unsupportedAgent { args += ["--agent"] }
         let cancelled = variant == .interrupt || variant == .terminate
         let input = try PlaygroundStdinProcess(executable: cli, arguments: args, data: cancelled ? nil : payload,
@@ -41,7 +41,9 @@ struct PlaygroundClipboardTests {
             if cancelled {
                 try #require(result.exitCode != 0 && !input.inputClosed)
                 let output = try input.stdoutBytes()
-                try #require(output.isEmpty)
+                // One coded JSON failure and no copy result.
+                try OutputSchemas.validate(output: String(decoding: output, as: UTF8.self))
+                try #require(!String(decoding: output, as: UTF8.self).contains("\"result\""))
                 let after = try session.document.read()
                 try #require(after.inputState == before.inputState)
             } else if [.empty, .invalidUTF8, .oversized, .invalidUDID, .unsupportedAgent].contains(variant) {
@@ -53,12 +55,13 @@ struct PlaygroundClipboardTests {
                 try #require(after.inputState == before.inputState)
             } else {
                 try #require(result.exitCode == 0)
-                let receipt = try JSONDecoder().decode(ClipboardAcceptanceReceipt.self, from: input.stdoutBytes())
-                try #require(receipt.source == "appleCoreDevicePasteboard" && receipt.operation == "copy"
-                    && receipt.outcome == "stagedAndVerified" && receipt.verified && !receipt.inserted
-                    && receipt.clipboardReplaced && receipt.sharedClipboardMayChange)
-                try #require(receipt.simulatorUDID == UUID(uuidString: session.agent.udid))
-                try #require(receipt.utf8Length == payload.count && receipt.sha256 == Self.digest(payload))
+                let stdout = try input.stdoutBytes()
+                try OutputSchemas.validate(output: String(decoding: stdout, as: UTF8.self))
+                let envelope = try JSONDecoder().decode(ClipboardAcceptanceEnvelope.self, from: stdout)
+                let receipt = envelope.data.result
+                try #require(envelope.command == "clipboard copy" && !envelope.didError)
+                try #require(UUID(uuidString: receipt.udid) == UUID(uuidString: session.agent.udid))
+                try #require(receipt.bytes == payload.count && receipt.sha256 == Self.digest(payload))
                 let staged = try session.document.read()
                 try #require(staged.inputState == before.inputState)
                 if variant == .unicodePaste {
@@ -92,15 +95,14 @@ struct PlaygroundClipboardTests {
     }
     private static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
 }
-private struct ClipboardAcceptanceReceipt: Decodable {
-    let source: String
-    let operation: String
-    let outcome: String
-    let simulatorUDID: UUID
-    let utf8Length: Int
-    let sha256: String
-    let verified: Bool
-    let inserted: Bool
-    let clipboardReplaced: Bool
-    let sharedClipboardMayChange: Bool
+private struct ClipboardAcceptanceEnvelope: Decodable {
+    struct Payload: Decodable { let result: Receipt }
+    struct Receipt: Decodable {
+        let udid: String
+        let bytes: Int
+        let sha256: String
+    }
+    let command: String
+    let didError: Bool
+    let data: Payload
 }

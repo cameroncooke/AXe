@@ -196,7 +196,7 @@ struct Swipe: AsyncParsableCommand {
             let path = LegacyDuoPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
             try await LegacyDuoInput.perform(path: path, context: context,
-                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger)
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
         } else {
             try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
                 swipeDuration: swipeDuration, swipeDelta: swipeDelta, logger: logger)

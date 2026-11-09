@@ -111,14 +111,14 @@ struct AccessibilityFetcher {
     /// report without backlight states is accepted, so devices that omit them read as before.
     static func requireStartedDisplay(_ rows: [FBSimulatorDisplayInfoRow]) throws {
         let integrated = rows.filter(\.integrated)
-        guard !integrated.isEmpty else { throw CLIError(errorDescription: "The simulator reported no built-in display.") }
+        guard !integrated.isEmpty else { throw CLIError(errorDescription: "The simulator reported no built-in display.", code: .treeUnavailable) }
         try requireStartedDisplay(backlightStates: integrated.map(\.backlightState))
     }
 
     static func requireStartedDisplay(backlightStates: [String?]) throws {
         let states = backlightStates.compactMap { $0 }
         guard states.isEmpty || states.contains(where: { $0 != "unknown" }) else {
-            throw CLIError(errorDescription: "No built-in display has started yet.")
+            throw CLIError(errorDescription: "No built-in display has started yet.", code: .notBooted)
         }
     }
 
@@ -146,7 +146,7 @@ struct AccessibilityFetcher {
                 throw CancellationError()
             } catch {
                 guard clock.now < deadline else {
-                    throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe displays --udid \(simulatorUDID)` succeeds, then read again.")
+                    throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe displays --udid \(simulatorUDID)` succeeds, then read again.", code: .notBooted)
                 }
                 if !logged {
                     logger.info().log("Waiting for the simulator displays before preparing accessibility")
@@ -220,7 +220,7 @@ struct AccessibilityFetcher {
             }
         }
         guard let latestData else {
-            throw CLIError(errorDescription: "Accessibility element at the requested point could not be serialized.")
+            throw CLIError(errorDescription: "Accessibility element at the requested point could not be serialized.", code: .treeUnavailable)
         }
         return latestData
     }
@@ -248,7 +248,7 @@ struct AccessibilityFetcher {
             }
         }
         guard let latestData else {
-            throw CLIError(errorDescription: "Accessibility hierarchy could not be serialized.")
+            throw CLIError(errorDescription: "Accessibility hierarchy could not be serialized.", code: .treeUnavailable)
         }
         return latestData
     }
@@ -324,7 +324,7 @@ struct AccessibilityFetcher {
         )
         guard status == 0 else {
             throw CLIError(
-                errorDescription: "AXe could not restore accessibility automation for simulator \(simulatorUDID). Restart the simulator and try again."
+                errorDescription: "AXe could not restore accessibility automation for simulator \(simulatorUDID). Restart the simulator and try again.", code: .treeUnavailable
             )
         }
         try await dependencies.wait(.milliseconds(250))
@@ -364,7 +364,7 @@ struct AccessibilityFetcher {
         }
         if process.isRunning {
             terminateProcess(process)
-            throw CLIError(errorDescription: "AXe timed out while restoring accessibility automation.")
+            throw CLIError(errorDescription: "AXe timed out while restoring accessibility automation.", code: .timeout)
         }
         process.waitUntilExit()
         return process.terminationStatus
@@ -496,7 +496,7 @@ struct AccessibilityFetcher {
 
     static func serializeAccessibilityInfo(_ accessibilityInfo: Any) throws -> Data {
         guard accessibilityInfo is [String: Any] || accessibilityInfo is [[String: Any]] else {
-            throw CLIError(errorDescription: "AXe received an unsupported accessibility response from the simulator.")
+            throw CLIError(errorDescription: "AXe received an unsupported accessibility response from the simulator.", code: .treeUnavailable)
         }
         return try JSONSerialization.data(withJSONObject: accessibilityInfo, options: [.prettyPrinted])
     }

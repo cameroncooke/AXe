@@ -123,7 +123,8 @@ struct KeyCombo: AsyncParsableCommand {
         logger.info().log("Pressing key combo: modifiers=\(modifiersString), key=\(key)")
 
         try await LegacyDuoInput.performKeyboard(
-            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true
+            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true,
+            verbose: selectedOutput.verbose
         )
 
         logger.info().log("Key combo completed successfully")

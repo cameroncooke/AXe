@@ -184,7 +184,7 @@ struct Touch: AsyncParsableCommand {
         )?.context {
             let touch = LegacyDuoTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
             try await LegacyDuoInput.perform(touch: touch, context: context,
-                simulatorUDID: simulatorUDID, logger: logger)
+                simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Touch events completed successfully")
             return
         }

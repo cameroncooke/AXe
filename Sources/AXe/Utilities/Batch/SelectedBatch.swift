@@ -248,7 +248,7 @@ enum SelectedBatchRunner {
             } catch {
                 try emit(.init(index: offset + 1, totalSteps: lines.count, command: name, requestID: nil,
                     status: .rejectedBeforeSend, response: nil, error: String(describing: error)))
-                throw CLIError(errorDescription: "Selected batch step \(offset + 1) failed before send. Earlier steps are not undone.")
+                throw CLIError(errorDescription: "Selected batch step \(offset + 1) failed before send. Earlier steps are not undone.", code: .rejectedBeforeInput)
             }
             let request: SelectedHIDRequest
             switch step {
@@ -263,7 +263,7 @@ enum SelectedBatchRunner {
                     status: completed ? .completed : (result.outcome == .failed ? .waitFailed : .waitInterrupted), response: nil,
                     error: completed ? nil : (result.error ?? "The host wait was interrupted."), hostWait: result))
                 guard completed else {
-                    throw CLIError(errorDescription: "Selected batch stopped during host wait at step \(offset + 1).")
+                    throw CLIError(errorDescription: "Selected batch stopped during host wait at step \(offset + 1).", code: .interrupted)
                 }
                 continue
             case .input(let value):
@@ -275,14 +275,14 @@ enum SelectedBatchRunner {
             } catch {
                 try emit(.init(index: offset + 1, totalSteps: lines.count, command: name, requestID: request.requestID,
                     status: .outcomeUnknown, response: nil, error: String(describing: error)))
-                throw CLIError(errorDescription: "Selected batch step \(offset + 1) has an unknown outcome. No request was replayed.")
+                throw CLIError(errorDescription: "Selected batch step \(offset + 1) has an unknown outcome. No request was replayed.", code: .inputFailed)
             }
             let accepted = completed(response, for: request, simulatorUDID: simulatorUDID)
             try emit(.init(index: offset + 1, totalSteps: lines.count, command: name, requestID: request.requestID,
                 status: accepted ? .completed : .failedResponse, response: response,
                 error: accepted ? nil : "The selected operation did not return a clean complete receipt."))
             guard accepted else {
-                throw CLIError(errorDescription: "Selected batch stopped at step \(offset + 1). Inspect its receipt; no input was replayed.")
+                throw CLIError(errorDescription: "Selected batch stopped at step \(offset + 1). Inspect its receipt; no input was replayed.", code: .inputFailed)
             }
         }
     }

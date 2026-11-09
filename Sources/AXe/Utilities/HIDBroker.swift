@@ -87,7 +87,7 @@ enum HIDBroker {
         var requestData = try JSONEncoder().encode(request)
         requestData.append(0x0A)
         guard requestData.count <= maximumMessageBytes else {
-            throw CLIError(errorDescription: "HID broker request exceeds the maximum size.")
+            throw CLIError(errorDescription: "The input request exceeds the maximum size.", code: .invalidArguments)
         }
 
         // Recovery is limited to broker readiness. Once exchange starts, a lost response has an
@@ -236,7 +236,7 @@ enum HIDBroker {
         var peerUID: uid_t = 0
         var peerGID: gid_t = 0
         guard getpeereid(client, &peerUID, &peerGID) == 0, peerUID == getuid() else {
-            try? await offMain { try writeResponse(error: "HID broker rejected a client owned by another user.", to: client) }
+            try? await offMain { try writeResponse(error: "The AXe input service belongs to another user.", to: client) }
             return true
         }
 
@@ -246,7 +246,7 @@ enum HIDBroker {
             let request = try JSONDecoder().decode(HIDBrokerRequest.self, from: data)
             if let keyboard = request.keyboard {
                 guard request.primitives.isEmpty else {
-                    throw CLIError(errorDescription: "HID broker keyboard request cannot include touch primitives.")
+                    throw CLIError(errorDescription: "A keyboard request cannot include touches.", code: .invalidArguments)
                 }
                 try keyboard.validate()
                 let activeSession = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
@@ -308,17 +308,17 @@ enum HIDBroker {
     /// The broker is the trust boundary: refuse the whole request before its first event.
     static func validate(_ primitives: [HIDBrokerPrimitive]) throws {
         guard primitives.count <= 1024 else {
-            throw CLIError(errorDescription: "HID broker request has too many touch primitives.")
+            throw CLIError(errorDescription: "The input request has too many touch events.", code: .invalidArguments)
         }
         for primitive in primitives {
             switch primitive.kind {
             case .down, .up:
                 guard let x = primitive.x, let y = primitive.y, x.isFinite, y.isFinite else {
-                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
+                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.", code: .invalidArguments)
                 }
             case .delay:
                 guard let duration = primitive.duration, duration >= 0, duration <= 10 else {
-                    throw CLIError(errorDescription: "HID broker delay is invalid.")
+                    throw CLIError(errorDescription: "The input delay is invalid.", code: .invalidArguments)
                 }
             }
         }
@@ -334,7 +334,7 @@ enum HIDBroker {
             switch primitive.kind {
             case .down, .up:
                 guard let x = primitive.x, let y = primitive.y else {
-                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
+                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.", code: .invalidArguments)
                 }
                 let direction: FBSimulatorHIDDirection = primitive.kind == .down ? .down : .up
                 try await send(.touch(direction: direction, x: x, y: y))
@@ -374,7 +374,7 @@ enum HIDBroker {
         let filename = "\(simulatorIdentity)-\(identity)-v\(version).sock"
         let path = root.appendingPathComponent(filename).path
         guard path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else {
-            throw CLIError(errorDescription: "HID broker socket path is too long.")
+            throw CLIError(errorDescription: "The AXe input service socket path is too long.", code: .inputUnavailable)
         }
         return path
     }
@@ -385,7 +385,7 @@ enum HIDBroker {
             guard (info.st_mode & S_IFMT) == S_IFDIR,
                   info.st_uid == uid,
                   info.st_mode & (S_IRWXG | S_IRWXO) == 0 else {
-                throw CLIError(errorDescription: "HID broker directory is not a private owned directory.")
+                throw CLIError(errorDescription: "The AXe input service directory is not private to this user.", code: .inputUnavailable)
             }
             return
         }
@@ -393,20 +393,20 @@ enum HIDBroker {
         guard mkdir(path, S_IRWXU) == 0 || errno == EEXIST else { throw posixError("mkdir") }
         guard lstat(path, &info) == 0 else { throw posixError("lstat") }
         guard (info.st_mode & S_IFMT) == S_IFDIR, info.st_uid == uid else {
-            throw CLIError(errorDescription: "HID broker directory is not a private owned directory.")
+            throw CLIError(errorDescription: "The AXe input service directory is not private to this user.", code: .inputUnavailable)
         }
         guard chmod(path, S_IRWXU) == 0 else { throw posixError("chmod") }
         guard lstat(path, &info) == 0 else { throw posixError("lstat") }
         guard (info.st_mode & S_IFMT) == S_IFDIR,
               info.st_uid == uid,
               info.st_mode & (S_IRWXG | S_IRWXO) == 0 else {
-            throw CLIError(errorDescription: "HID broker directory is not a private owned directory.")
+            throw CLIError(errorDescription: "The AXe input service directory is not private to this user.", code: .inputUnavailable)
         }
     }
 
     private static func spawnBroker(simulatorUDID: String) throws {
         guard let executable = Bundle.main.executableURL else {
-            throw CLIError(errorDescription: "Unable to locate the AXe executable for the HID broker.")
+            throw CLIError(errorDescription: "AXe could not locate its own executable to start its input service.", code: .inputUnavailable)
         }
         let process = Process()
         process.executableURL = executable

@@ -11,7 +11,7 @@ extension AsyncParsableCommand {
             if developerDirectory.isEmpty {
                 logger.error().log("No active Xcode developer directory was found")
                 throw CLIError(
-                    errorDescription: "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again."
+                    errorDescription: "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again.", code: .xcodeUnavailable
                 )
             }
         } catch let error as CLIError {
@@ -19,7 +19,7 @@ extension AsyncParsableCommand {
         } catch {
             logger.error().log("Failed to resolve the active Xcode installation: \(error.localizedDescription)")
             throw CLIError(
-                errorDescription: "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again."
+                errorDescription: "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again.", code: .xcodeUnavailable
             )
         }
         
@@ -29,7 +29,7 @@ extension AsyncParsableCommand {
         } catch {
             logger.error().log("Failed to load simulator support: \(error.localizedDescription)")
             throw CLIError(
-                errorDescription: "AXe could not load simulator support from the selected Xcode installation. Confirm Xcode 26 or later is selected and try again."
+                errorDescription: "AXe could not load simulator support from the selected Xcode installation. Confirm Xcode 26 or later is selected and try again.", code: .xcodeUnavailable
             )
         }
     }

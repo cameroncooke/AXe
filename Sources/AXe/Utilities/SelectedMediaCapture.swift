@@ -74,7 +74,7 @@ final class SelectedMediaCapture {
         try await captureOwned(simulator: simulator) {
             let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
             if let expectedBoot, discovery.bootIdentity != expectedBoot {
-                throw CLIError(errorDescription: "Follow-active recording stopped: simulator boot changed")
+                throw CLIOutputFailure(code: "bootChanged", message: "Follow-active recording stopped: simulator boot changed")
             }
             let panel = discovery.readback.snapshot.activePanel.identity
             let frame = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,

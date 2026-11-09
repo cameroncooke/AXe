@@ -16,11 +16,13 @@ struct PlaygroundDuoMediaSafetyTests {
             // The host observer signals only after it sees the actual owned child and its argv.
             try await process.wait(timeout: 35)
             let ownership = try PlaygroundMediaProcess.requireClean(directory: session.directory, name: "cancel", phase: phase)
-            try #require(process.exitCode == 1 && ownership.cliExitCode == 1)
+            // A signal cancellation exits with 128 + the signal and prints nothing.
+            let status: Int32 = phase == "capture-int" ? 128 + SIGINT : 128 + SIGTERM
+            try #require(process.exitCode == status && ownership.cliExitCode == status)
             let stdout = try process.output()
             let stderr = try session.stderr("cancel")
             try #require(stdout.isEmpty && !FileManager.default.fileExists(atPath: file.path))
-            try #require(stderr.contains("Selected screenshot cancelled; awaited operation returned."))
+            try #require(!stderr.contains("Error:"), "Cancellation printed an error: \(stderr)")
             await process.finish()
         } catch { await process.finish(); throw error }
         // A fresh public capture proves that the old invocation has released the shared input lease.
@@ -63,7 +65,7 @@ struct PlaygroundDuoMediaSafetyTests {
             let response = try await session.command(["screenshot", "--output", refused.path]
                 + session.selection(controls.catalogue), allowFailure: true)
             try #require(response.exitCode == 1)
-            try #require(response.output.contains("Simulator input is owned by another action or retained contact"))
+            try #require(response.output.contains("Error: Another AXe command is using the simulator."))
             try #require(!FileManager.default.fileExists(atPath: refused.path))
             let stillHeld = try controls.documents.read()
             try #require(stillHeld.activeWindowTouches == 1)
@@ -88,7 +90,7 @@ struct PlaygroundDuoMediaSafetyTests {
             throw error
         }
         let fresh = session.directory.appendingPathComponent("released.png")
-        let result = try await session.command(["screenshot", "--output", fresh.path] + session.selection(controls.catalogue))
+        let result = try await session.command(["screenshot", "--verbose", "--output", fresh.path] + session.selection(controls.catalogue))
         let line = result.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
         let receipt = try JSONDecoder().decode(ReleasedPNGReceipt.self, from: Data(line.utf8))
         try #require(receipt.output == fresh.path && receipt.child.exitConfirmed && receipt.child.terminationStatus == 0)

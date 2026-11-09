@@ -3,6 +3,7 @@ import FBSimulatorControl
 @preconcurrency import FBControlCore
 import AVFoundation
 import ImageIO
+import os
 import UniformTypeIdentifiers
 #if os(macOS)
 import AppKit
@@ -23,13 +24,20 @@ actor CancellationFlag {
 final class SignalObserver {
     private var sources: [DispatchSourceSignal] = []
     private let signals: [Int32]
+    private static let received = OSAllocatedUnfairLock<Int32?>(initialState: nil)
+
+    /// The last SIGINT or SIGTERM any observer handled, so the process can exit with 128 + signal.
+    static var lastReceivedSignal: Int32? { received.withLock { $0 } }
 
     init(signals: [Int32], handler: @escaping @Sendable () -> Void) {
         self.signals = signals
         for signalValue in signals {
             signal(signalValue, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: signalValue, queue: .main)
-            source.setEventHandler(handler: handler)
+            source.setEventHandler {
+                Self.received.withLock { $0 = signalValue }
+                handler()
+            }
             source.resume()
             sources.append(source)
         }
@@ -66,7 +74,25 @@ enum VideoProcessingError: LocalizedError, UserFacingError {
     }
 }
 
+/// The default result of a saved screenshot or video: the file and its size in pixels, plus the
+/// frame count for a video. Plain output is the path alone, as released; the full capture receipt
+/// stays behind `--verbose`.
+struct MediaOutput: Encodable, Sendable {
+    let path: String
+    let pixelWidth: Int
+    let pixelHeight: Int
+    var frames: Int64? = nil
+
+    func emit() throws { try DeviceState.emit(self, text: [path]) }
+}
+
 struct VideoFrameUtilities {
+    /// The image size; ImageIO creates the image lazily, so this does not decode the pixels.
+    static func pixelSize(of data: Data) -> (width: Int, height: Int) {
+        guard let image = makeCGImage(from: data) else { return (0, 0) }
+        return (image.width, image.height)
+    }
+
     static func captureScreenshotData(from simulator: FBSimulator) async throws -> Data {
         try await simulator.takeScreenshot(format: .png)
     }
@@ -229,12 +255,12 @@ final class H264StreamRecorder: @unchecked Sendable {
         )
 
         guard writer.canAdd(input) else {
-            throw CLIError(errorDescription: "Unable to configure video writer input")
+            throw CLIError(errorDescription: "Unable to configure video writer input", code: .captureFailed)
         }
         writer.add(input)
 
         if !writer.startWriting() {
-            throw CLIError(errorDescription: "Failed to start asset writer: \(writer.error?.localizedDescription ?? "Unknown error")")
+            throw CLIError(errorDescription: "Failed to start asset writer: \(writer.error?.localizedDescription ?? "Unknown error")", code: .captureFailed)
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -261,16 +287,16 @@ final class H264StreamRecorder: @unchecked Sendable {
         while !input.isReadyForMoreMediaData {
             try Task.checkCancellation()
             guard writer.status == .writing else {
-                throw CLIError(errorDescription: "Video writer is not writing: \(writer.error?.localizedDescription ?? "unknown error")")
+                throw CLIError(errorDescription: "Video writer is not writing: \(writer.error?.localizedDescription ?? "unknown error")", code: .captureFailed)
             }
             guard ProcessInfo.processInfo.systemUptime < deadline else {
-                throw CLIError(errorDescription: "Video writer readiness timed out")
+                throw CLIError(errorDescription: "Video writer readiness timed out", code: .timeout)
             }
             try await Task.sleep(nanoseconds: 5_000_000)
         }
         try Task.checkCancellation()
         guard writer.status == .writing else {
-            throw CLIError(errorDescription: "Video writer stopped before frame append")
+            throw CLIError(errorDescription: "Video writer stopped before frame append", code: .captureFailed)
         }
         try appendReady(image: image, presentationTime: presentationTime, aspectFit: aspectFit)
     }
@@ -281,7 +307,7 @@ final class H264StreamRecorder: @unchecked Sendable {
         try await finish()
         try Task.checkCancellation()
         guard writer.status == .completed else {
-            throw CLIError(errorDescription: "Video writer did not complete")
+            throw CLIError(errorDescription: "Video writer did not complete", code: .captureFailed)
         }
     }
 
@@ -302,7 +328,7 @@ final class H264StreamRecorder: @unchecked Sendable {
             space: CGColorSpaceCreateDeviceRGB(),
             bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
         ) else {
-            throw CLIError(errorDescription: "Failed to create drawing context")
+            throw CLIError(errorDescription: "Failed to create drawing context", code: .captureFailed)
         }
 
         context.interpolationQuality = .high
@@ -320,7 +346,7 @@ final class H264StreamRecorder: @unchecked Sendable {
         }
 
         guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
-            throw CLIError(errorDescription: "Failed to append frame: \(writer.error?.localizedDescription ?? "Unknown error")")
+            throw CLIError(errorDescription: "Failed to append frame: \(writer.error?.localizedDescription ?? "Unknown error")", code: .captureFailed)
         }
     }
 

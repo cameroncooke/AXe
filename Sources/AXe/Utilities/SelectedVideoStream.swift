@@ -20,13 +20,13 @@ enum SelectedVideoStream {
                                screenID: UInt32, screenUUID: UUID, expectedBoot: String?,
                                format: StreamVideo.OutputFormat, fps: Int, quality: Int, scale: Double) async throws {
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty") }
+        guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty", code: .invalidArguments) }
         let simulator = try await DeviceState.bootedSimulator(udid: udid,
             logger: AxeLogger(debugLogging: false, writeToStdErr: true))
         try Task.checkCancellation()
         guard let first = try await owner.capture(simulator: simulator, screenID: screenID,
             screenUUID: screenUUID, expectedBoot: expectedBoot, initial: nil) else {
-            throw CLIError(errorDescription: "Stream stopped before a complete selected frame")
+            throw CLIError(errorDescription: "Stream stopped before a complete selected frame", code: .captureFailed)
         }
         let initial = try first.before.observation.sessionObservation()
         var frame = first
@@ -76,7 +76,7 @@ enum SelectedVideoStream {
             }
             try Task.checkCancellation()
             guard count > 0, let firstWritten, let lastWritten, let last else {
-                throw CLIError(errorDescription: "Stream stopped before a complete output frame")
+                throw CLIError(errorDescription: "Stream stopped before a complete output frame", code: .captureFailed)
             }
             // A trailer is part of successful stream completion. Backpressure or EPIPE fails.
             _ = try await destination.write(SelectedStreamFrame.trailer(format))
@@ -96,7 +96,7 @@ enum SelectedVideoStream {
                 catch { restoreErrors.append(error.localizedDescription) }
             }
             if !restoreErrors.isEmpty {
-                throw CLIError(errorDescription: "Selected stream failed: \(error.localizedDescription); descriptor restoration failed: \(restoreErrors.joined(separator: "; "))")
+                throw CLIError(errorDescription: "Selected stream failed: \(error.localizedDescription); descriptor restoration failed: \(restoreErrors.joined(separator: "; "))", code: .outputFailed)
             }
             throw error
         }
@@ -112,10 +112,6 @@ enum SelectedVideoStream {
 
     struct Metadata: Encodable {
         let event = "selectedStreamMetadata"
-        let source = "appleSimctlSelectedPNG"
-        let surfaceIdentity = "unavailable"
-        let framePresentationTime = "unavailable"
-        let continuousTransitionCoverage = false
         let format: String
         let width: Int
         let height: Int
@@ -129,7 +125,6 @@ enum SelectedVideoStream {
     struct Summary: Encodable {
         let event = "selectedStreamComplete"
         let stopReason = "signal"
-        let continuousTransitionCoverage = false
         let format: String
         let completedFrames: Int64
         let requestedFPS: Int

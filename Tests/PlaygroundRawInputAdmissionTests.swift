@@ -48,12 +48,12 @@ struct PlaygroundRawInputAdmissionTests {
             }
             try #require(held.isRunning, "The owner finished before the concurrent command.")
             let rejected = try await session.command(arguments(action, coordinates: coordinates), allowFailure: true)
-            let knownBusy = "Error: Simulator input is owned by another action or retained contact"
+            let knownBusy = "Error: Another AXe command is using the simulator. Try again when it finishes."
             let legacyBusy = "Error: " + HIDBroker.inputDeliveryFailureDescription
             let refusal = rejected.output.trimmingCharacters(in: .whitespacesAndNewlines)
             let expectedRefusal: Bool
             if action == .key {
-                expectedRefusal = refusal == "Error: Input stopped: busy; cleanup=notNeeded. Input was not replayed."
+                expectedRefusal = refusal == knownBusy
             } else {
                 expectedRefusal = refusal == knownBusy || refusal == legacyBusy
             }

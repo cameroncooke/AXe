@@ -148,18 +148,10 @@ struct Hinge: AsyncParsableCommand {
     }
 }
 
+/// `hinge` has the same shape as in `displays`.
 struct HingeReadOutput: Encodable {
     let udid: String
     let hinge: HingeStateOutput
-
-    private enum CodingKeys: String, CodingKey { case udid, degrees, mechanicalDegrees, posture }
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(udid, forKey: .udid)
-        try values.encode(hinge.degrees, forKey: .degrees)
-        try values.encode(hinge.mechanicalDegrees, forKey: .mechanicalDegrees)
-        try values.encode(hinge.posture, forKey: .posture)
-    }
 }
 
 struct HingeSetOutput: Encodable {
@@ -172,18 +164,5 @@ struct HingeSetOutput: Encodable {
         var lines = ["Hinge \(hinge.text) (was \(DeviceStateText.degrees(previousDegrees)))"]
         if let activeScreen { lines += DeviceStateText.screenLines(activeScreen, active: true) }
         return lines
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case udid, previousDegrees, degrees, mechanicalDegrees, posture, activeScreen
-    }
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(udid, forKey: .udid)
-        try values.encode(previousDegrees, forKey: .previousDegrees)
-        try values.encode(hinge.degrees, forKey: .degrees)
-        try values.encode(hinge.mechanicalDegrees, forKey: .mechanicalDegrees)
-        try values.encode(hinge.posture, forKey: .posture)
-        try values.encodeIfPresent(activeScreen, forKey: .activeScreen)
     }
 }

@@ -37,10 +37,10 @@ enum SignalScope {
     /// Throws the operation's error, or CancellationError after a signal.
     static func cancellingOnSignal(_ operation: @escaping @MainActor () async throws -> Void) async throws {
         guard let outcome = await run(operation) else {
-            throw CLIError(errorDescription: "Could not read input signal dispositions.")
+            throw CLIError(errorDescription: "Could not read input signal dispositions.", code: .inputUnavailable)
         }
         guard outcome.restored else {
-            throw CLIError(errorDescription: "Could not restore input signal dispositions.")
+            throw CLIError(errorDescription: "Could not restore input signal dispositions.", code: .inputUnavailable)
         }
         try outcome.result.get()
         if outcome.interrupted { throw CancellationError() }

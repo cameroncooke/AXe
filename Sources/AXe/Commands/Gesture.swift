@@ -528,7 +528,7 @@ struct Gesture: AsyncParsableCommand {
             let path = LegacyDuoPath(kind: .swipe, startX: coords.startX, startY: coords.startY,
                 endX: coords.endX, endY: coords.endY, duration: gestureDuration, delta: gestureDelta)
             try await LegacyDuoInput.perform(path: path, context: context,
-                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger)
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Gesture completed successfully")
             return
         }

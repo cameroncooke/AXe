@@ -122,7 +122,7 @@ struct DisplayDiscoveryTests {
         #expect(hinge["posture"] as? String == "partiallyOpen")
         let read = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(
             HingeReadOutput(udid: "U", hinge: HingeStateOutput(sensed: 0, mechanical: 0)))) as? [String: Any])
-        #expect(Set(read.keys) == ["udid", "degrees", "mechanicalDegrees", "posture"])
+        #expect(Set(read.keys) == ["udid", "hinge"])
     }
 
     @Test func selectedFailuresSayWhetherInputWasSent() {
@@ -131,12 +131,17 @@ struct DisplayDiscoveryTests {
                 outcome: outcome, token: nil, enqueuedEventCount: events, cleanup: cleanup, error: error, context: nil)
         }
         let before = SelectedInputOutput.failure(response(outcome: "failedBeforeInput", events: 0, error: "Target moved"))
-        #expect(before.code == "rejectedBeforeInput" && before.message == "Target moved No input was sent.")
+        #expect(before.code == "rejectedBeforeInput" && before.message == "Target moved. No input was sent.")
         let partial = SelectedInputOutput.failure(response(outcome: "failedNoReplay", events: 2, error: "Context changed"))
-        #expect(partial.code == "inputFailed" && partial.message.hasSuffix("it was not repeated; read the screen before trying again."))
+        #expect(partial.code == "inputFailed" && partial.message.hasSuffix("it was not repeated. Read the screen before trying again."))
+        // The broker sends `String(describing:)` of its error, so a busy reply carries "busy".
         let busy = SelectedInputOutput.failure(response(outcome: "rejectedBeforeInput", events: 0,
-            error: SelectedHIDFailure.busy.errorDescription))
-        #expect(busy.code == "busy")
+            error: String(describing: SelectedHIDFailure.busy)))
+        #expect(busy.code == "busy" && busy.message == DeviceStateFailure.busy.message)
+        // Swift value dumps stay in the receipt; the message says what happened in words.
+        let stale = SelectedInputOutput.failure(response(outcome: "failedNoReplay", events: 3,
+            error: "interrupted(reason: staleContext, cleanup: notNeeded)"))
+        #expect(stale.code == "inputFailed" && stale.message.hasPrefix("Input stopped. Some input may have been sent"))
     }
 
     private struct ReadMetadata: Decodable {

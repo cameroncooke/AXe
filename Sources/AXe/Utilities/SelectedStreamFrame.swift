@@ -24,7 +24,7 @@ enum SelectedStreamFrame {
     static func encode(png: Data, format: StreamVideo.OutputFormat,
                        scale: Double, quality: Int) async throws -> Encoded {
         guard scale.isFinite, (0.1...1).contains(scale), (1...100).contains(quality) else {
-            throw CLIError(errorDescription: "Invalid selected stream encoding options")
+            throw CLIError(errorDescription: "Invalid selected stream encoding options", code: .invalidArguments)
         }
         let end: [UInt8] = [0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]
         guard png.suffix(end.count).elementsEqual(end),
@@ -65,7 +65,7 @@ enum SelectedStreamFrame {
             bytes.append(Data("\r\n".utf8))
         case .raw:
             guard let length = UInt32(exactly: jpeg.count) else {
-                throw CLIError(errorDescription: "Selected JPEG exceeds the raw frame length field")
+                throw CLIError(errorDescription: "Selected JPEG exceeds the raw frame length field", code: .captureFailed)
             }
             var lengthBE = length.bigEndian
             bytes = Data(bytes: &lengthBE, count: 4)
@@ -74,9 +74,9 @@ enum SelectedStreamFrame {
             // Concatenated JPEGs. No ffmpeg process is started.
             bytes = jpeg
         case .h264:
-            throw CLIError(errorDescription: "The native H.264 stream does not use screenshot framing.")
+            throw CLIError(errorDescription: "The native H.264 stream does not use screenshot framing.", code: .invalidArguments)
         case .bgra:
-            throw CLIError(errorDescription: "Unexpected selected BGRA encoding branch")
+            throw CLIError(errorDescription: "Unexpected selected BGRA encoding branch", code: .captureFailed)
         }
         return Encoded(bytes: bytes, width: width, height: height)
     }

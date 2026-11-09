@@ -343,12 +343,17 @@ struct Tap: AsyncParsableCommand {
             }
             if let identifier {
                 let receipt = try await PhysicalAccessibility.semanticPress(identifier: identifier, for: device)
-                try CLIOutput.writeJSON(receipt)
+                if selectedOutput.verbose { try CLIOutput.writeJSON(receipt) }
                 guard receipt.identifier == identifier, receipt.stateBefore != receipt.stateAfter,
                       (1...4).contains(receipt.readbackCount), receipt.outcome == "switchValueChangedObserved",
                       receipt.delivery == "nativeReplyAccepted" else {
                     throw CLIOutputFailure(code: "semanticPressUnconfirmed",
                         message: "The device did not confirm a Boolean switch value change after the press. Check the current switch state before another action.")
+                }
+                if !selectedOutput.verbose {
+                    let output = SemanticPressOutput(identifier: identifier, before: receipt.stateBefore,
+                        after: receipt.stateAfter)
+                    try DeviceState.emit(output, text: [output.text])
                 }
             } else {
                 try await PhysicalDeviceInput.withSession(for: device) { input in
@@ -394,22 +399,17 @@ struct Tap: AsyncParsableCommand {
             } else if let elementValue {
                 query = .value(elementValue)
             } else {
-                throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
+                throw CLIError(errorDescription: "Pass -x and -y, --id, --label or --value.", code: .invalidArguments)
             }
 
-            do {
-                resolution = try await AccessibilityPoller.resolveWithPolling(
-                    query: query,
-                    simulatorUDID: simulatorUDID,
-                    waitTimeout: waitTimeout,
-                    pollInterval: pollInterval,
-                    elementType: elementType,
-                    logger: logger
-                )
-            } catch let error as ElementResolutionError {
-                print("Warning: \(error.localizedDescription) No tap performed.", to: &standardError)
-                throw error
-            }
+            resolution = try await AccessibilityPoller.resolveWithPolling(
+                query: query,
+                simulatorUDID: simulatorUDID,
+                waitTimeout: waitTimeout,
+                pollInterval: pollInterval,
+                elementType: elementType,
+                logger: logger
+            )
 
             resolvedDescription = "resolved tap point at (\(resolution.point.x), \(resolution.point.y))"
         }
@@ -419,7 +419,7 @@ struct Tap: AsyncParsableCommand {
         if let duoContext {
             try await LegacyDuoInput.perform(
                 at: resolution.point, style: resolvedTapStyle(for: resolution), context: duoContext,
-                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose
             )
         } else {
             try await performLegacyTap(resolution: resolution, logger: logger)
@@ -451,7 +451,8 @@ struct Tap: AsyncParsableCommand {
               [target.frame.minX, target.frame.minY, target.frame.width, target.frame.height].allSatisfy(\.isFinite),
               target.frame.width > 0, target.frame.height > 0,
               CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(target.frame) else {
-            throw CLIError(errorDescription: "Semantic switch value change is unproved; --verbose prints the full receipt. No input was replayed.")
+            throw CLIOutputFailure(code: "semanticPressUnconfirmed",
+                message: "The switch value change was not confirmed. Check the switch before another action; --verbose prints the full receipt. The press was not repeated.")
         }
         try context.validate()
     }
@@ -487,7 +488,7 @@ struct Tap: AsyncParsableCommand {
             let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent.composite(events)
             try await HIDInteractor.performHIDEvent(finalEvent, for: simulatorUDID, logger: logger)
         case .automatic:
-            throw CLIError(errorDescription: "Unexpected tap style resolution.")
+            throw CLIError(errorDescription: "Pass --tap-style physical or simulator.", code: .invalidArguments)
         }
 
     }
@@ -502,4 +503,13 @@ struct Tap: AsyncParsableCommand {
             return .physical
         }
     }
+}
+
+/// The physical semantic press result: the switch and its value before and after.
+struct SemanticPressOutput: Encodable {
+    let identifier: String
+    let before: Bool
+    let after: Bool
+
+    var text: String { "Switch \(identifier): \(before ? "on" : "off") -> \(after ? "on" : "off")" }
 }

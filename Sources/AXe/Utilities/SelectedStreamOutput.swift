@@ -13,7 +13,7 @@ final class SelectedStreamOutput {
 
     init(descriptor: Int32, writeTimeout: Double = 5) throws {
         guard writeTimeout.isFinite, writeTimeout > 0, writeTimeout <= 5 else {
-            throw CLIError(errorDescription: "Invalid selected stream write timeout")
+            throw CLIError(errorDescription: "Invalid selected stream write timeout", code: .invalidArguments)
         }
         let flags = fcntl(descriptor, F_GETFL)
         guard flags >= 0 else { throw Self.posixError() }
@@ -23,7 +23,7 @@ final class SelectedStreamOutput {
         guard fcntl(descriptor, F_SETNOSIGPIPE, Int32(1)) == 0 else {
             let failure = Self.posixError()
             guard fcntl(descriptor, F_SETFL, flags) == 0 else {
-                throw CLIError(errorDescription: "Stream descriptor setup failed (\(failure)); flags could not be restored")
+                throw CLIError(errorDescription: "Stream descriptor setup failed (\(failure)); flags could not be restored", code: .outputFailed)
             }
             throw failure
         }
@@ -36,14 +36,14 @@ final class SelectedStreamOutput {
     /// False means stopped before any byte of this packet. Once started, finish the
     /// packet within the same finite deadline or throw; a partial packet is never success.
     func write(_ data: Data, stopRequested: @MainActor () -> Bool = { false }) async throws -> Bool {
-        guard !restored else { throw CLIError(errorDescription: "Stream output is already restored") }
+        guard !restored else { throw CLIError(errorDescription: "Stream output is already restored", code: .outputFailed) }
         let deadline = ProcessInfo.processInfo.systemUptime + writeTimeout
         var offset = 0
         while offset < data.count {
             try Task.checkCancellation()
             if offset == 0, stopRequested() { return false }
             guard ProcessInfo.processInfo.systemUptime < deadline else {
-                throw CLIError(errorDescription: "Selected stream output timed out after \(offset) of \(data.count) bytes")
+                throw CLIError(errorDescription: "Selected stream output timed out after \(offset) of \(data.count) bytes", code: .timeout)
             }
             let written = data.withUnsafeBytes { bytes in
                 Darwin.write(descriptor, bytes.baseAddress!.advanced(by: offset), min(65_536, data.count - offset))
@@ -54,7 +54,7 @@ final class SelectedStreamOutput {
                 await Task.yield()
                 continue
             }
-            if written == 0 { throw CLIError(errorDescription: "Selected stream output made no progress") }
+            if written == 0 { throw CLIError(errorDescription: "Selected stream output made no progress", code: .outputFailed) }
             let code = errno
             if code == EINTR { await Task.yield(); continue }
             guard code == EAGAIN || code == EWOULDBLOCK else {

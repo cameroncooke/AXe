@@ -40,7 +40,7 @@ struct HIDInteractor {
         } catch {
             logger.error().log("Failed to load private frameworks: \(error)")
             throw CLIError(
-                errorDescription: "AXe could not initialize simulator input using the selected Xcode installation. Confirm Xcode 26 or later is selected and try again."
+                errorDescription: "AXe could not initialize simulator input using the selected Xcode installation. Confirm Xcode 26 or later is selected and try again.", code: .xcodeUnavailable
             )
         }
 
@@ -57,7 +57,7 @@ struct HIDInteractor {
         guard simulator.state == .booted else {
             let stateDescription = FBiOSTargetStateStringFromState(simulator.state)
             throw CLIError(
-                errorDescription: "Simulator \(simulatorUDID) is not booted. Current state: \(stateDescription)."
+                errorDescription: "Simulator \(simulatorUDID) is not booted. Current state: \(stateDescription).", code: .notBooted
             )
         }
         logger.info().log("Simulator state verified: booted")
@@ -77,9 +77,7 @@ struct HIDInteractor {
         let connectedBootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
         guard bootIdentity == connectedBootIdentity else {
             hidConnections.removeValue(forKey: simulatorUDID)
-            throw CLIError(
-                errorDescription: "Simulator \(simulatorUDID) restarted while AXe was connecting. Try the command again."
-            )
+            throw CLIOutputFailure(code: "bootChanged", message: "Simulator \(simulatorUDID) restarted while AXe was connecting. Try the command again.")
         }
         try await HIDBroker.waitForHIDReadiness(
             bootIdentity: connectedBootIdentity,
@@ -119,13 +117,13 @@ struct HIDInteractor {
         finalHold: TimeInterval
     ) throws -> FBSimulatorHIDEvent {
         guard duration >= 0 else {
-            throw CLIError(errorDescription: "Drag duration must be non-negative.")
+            throw CLIError(errorDescription: "Drag duration must be non-negative.", code: .invalidArguments)
         }
         guard steps > 0 else {
-            throw CLIError(errorDescription: "Drag steps must be greater than 0.")
+            throw CLIError(errorDescription: "Drag steps must be greater than 0.", code: .invalidArguments)
         }
         guard initialHold >= 0, finalHold >= 0 else {
-            throw CLIError(errorDescription: "Drag hold durations must be non-negative.")
+            throw CLIError(errorDescription: "Drag hold durations must be non-negative.", code: .invalidArguments)
         }
 
         let movePoints = try compositeDragMovePoints(from: start, to: end, steps: steps)
@@ -152,7 +150,7 @@ struct HIDInteractor {
         steps: Int
     ) throws -> [(x: Double, y: Double)] {
         guard steps > 0 else {
-            throw CLIError(errorDescription: "Drag steps must be greater than 0.")
+            throw CLIError(errorDescription: "Drag steps must be greater than 0.", code: .invalidArguments)
         }
 
         return (1...steps).map { step in

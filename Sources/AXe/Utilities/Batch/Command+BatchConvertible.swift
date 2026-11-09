@@ -110,7 +110,7 @@ extension Tap: BatchConvertible {
             } else if let elementValue {
                 query = .value(elementValue)
             } else {
-                throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.")
+                throw CLIError(errorDescription: "Unexpected state: no coordinates and no element query.", code: .invalidArguments)
             }
 
             let resolved = try await resolveBatchTapPoint(
@@ -133,7 +133,7 @@ extension Tap: BatchConvertible {
             let tapEvent = FBSimulatorHIDEvent.tapAt(x: physicalPoint.x, y: physicalPoint.y)
             return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: tapEvent, postDelay: postDelay))]
         case .automatic:
-            throw CLIError(errorDescription: "Unexpected tap style resolution.")
+            throw CLIError(errorDescription: "Unexpected tap style resolution.", code: .invalidArguments)
         }
     }
 }
@@ -271,7 +271,7 @@ extension Type: BatchConvertible {
         case (nil, false, let file?):
             inputText = try readFromFile(file)
         default:
-            throw CLIError(errorDescription: "Invalid input configuration.")
+            throw CLIError(errorDescription: "Invalid input configuration.", code: .invalidArguments)
         }
 
         guard TextToHIDEvents.validateText(inputText) else {

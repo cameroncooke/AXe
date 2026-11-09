@@ -418,12 +418,14 @@ final class SelectedHIDOwner {
             let persistence = blocked.quarantine?.persisted == true
                 ? "Input quarantine saved. " + HIDInputQuarantine.recoveryStep(recordPath: blocked.quarantine?.recordPath)
                 : "Input quarantine could not be saved; manual recovery is required. \(blocked.quarantine?.error ?? "")"
-            throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(diagnostic). \(persistence)")
+            throw CLIError(errorDescription: "AXe could not confirm that every touch or key of the batch was released. \(persistence)",
+                code: .cleanupUncertain)
         }
         if actionError != nil { await transportOwner.invalidate() }
         clear()
         if let actionError {
-            throw CLIError(errorDescription: "Duo input stopped: \(String(describing: actionError)); cleanup=\(cleanup). Input was not replayed.")
+            let failure = CLIErrorMapping.failure(for: actionError)
+            throw CLIOutputFailure(code: failure.code, message: failure.message + " Input was not repeated.")
         }
     }
 

@@ -66,8 +66,8 @@ private struct KeyboardInterruptionSession {
         _ = try await app.run(["type", prefix])
         try await app.waitForValue("text-input-field", equals: prefix)
         let arguments = sequence
-            ? ["key-sequence", "--keycodes", "4,5", "--delay", "5", "--udid", udid]
-            : ["key", "4", "--duration", "6", "--udid", udid]
+            ? ["key-sequence", "--keycodes", "4,5", "--delay", "5", "--verbose", "--udid", udid]
+            : ["key", "4", "--duration", "6", "--verbose", "--udid", udid]
         try save(arguments, name: "held-key-argv")
         let input = try PlaygroundTestProcess(executable: cli, arguments: arguments, directory: directory, name: "held-key")
         let panel = before.activePanel.identity
@@ -107,22 +107,19 @@ private struct KeyboardInterruptionSession {
             }
             let diagnostics = try input.diagnostics()
             try #require(input.exitCode == 1, "The held key did not stop: \(diagnostics)")
-            // The native interruption must confirm release. Outer close can need no further release.
-            let nativeFailure = "Error: Input stopped: interrupted(reason: "
-                + "FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: "
-                + "FBSimulatorControl.FBSimulatorHIDCleanupOutcome.releaseEnqueuedAndDrained); "
-            var allowedErrors = [
-                nativeFailure + "cleanup=releaseEnqueuedAndDrained. Input was not replayed.",
-                nativeFailure + "cleanup=notNeeded. Input was not replayed.",
-            ]
+            // The native interruption must confirm release; the --verbose receipt carries it.
+            // Outer close can need no further release.
+            let receipt = try input.receipt(DuoCLIResponse.self)
+            let reason = receipt.error ?? ""
+            var nativeReleased = reason.contains("FBSimulatorHIDInterruption.staleContext")
+                && reason.contains("FBSimulatorHIDCleanupOutcome.releaseEnqueuedAndDrained)")
             if sequence {
-                let idleFailure = "Error: Input stopped: interrupted(reason: "
-                    + "FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: "
-                    + "FBSimulatorControl.FBSimulatorHIDCleanupOutcome.notNeeded); "
-                allowedErrors += [idleFailure + "cleanup=notNeeded. Input was not replayed."]
+                nativeReleased = nativeReleased || (reason.contains("FBSimulatorHIDInterruption.staleContext")
+                    && reason.contains("FBSimulatorHIDCleanupOutcome.notNeeded)") && receipt.cleanup == "notNeeded")
             }
             let errors = diagnostics.split(separator: "\n").map(String.init).filter { $0.hasPrefix("Error:") }
-            try #require(errors.count == 1 && allowedErrors.contains(errors[0]),
+            try #require(nativeReleased && ["releaseEnqueuedAndDrained", "notNeeded"].contains(receipt.cleanup)
+                && errors.count == 1 && errors[0].hasPrefix("Error: Input stopped."),
                 "Raw key input lacks confirmed native release and no-replay evidence: \(diagnostics)")
             try save(errors, name: "confirmed-native-release-error")
             if let foldControl {

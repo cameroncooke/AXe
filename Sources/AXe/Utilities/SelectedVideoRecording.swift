@@ -8,18 +8,20 @@ import FBSimulatorControl
 @MainActor
 enum SelectedVideoRecording {
     static func run(simulatorUDID: String, screenID: UInt32, screenUUID: UUID,
-                    expectedBoot: String?, output: String?, fps: Int, quality: Int, scale: Double) async throws {
+                    expectedBoot: String?, output: String?, fps: Int, quality: Int, scale: Double,
+                    verbose: Bool) async throws {
         try await SelectedMediaCapture.run { owner in
             try await record(owner: owner, simulatorUDID: simulatorUDID, screenID: screenID,
                 screenUUID: screenUUID, expectedBoot: expectedBoot, output: output,
-                fps: fps, quality: quality, scale: scale)
+                fps: fps, quality: quality, scale: scale, verbose: verbose)
         }
     }
 
     private static func record(owner: SelectedMediaCapture, simulatorUDID: String, screenID: UInt32, screenUUID: UUID,
-                        expectedBoot: String?, output: String?, fps: Int, quality: Int, scale: Double) async throws {
+                        expectedBoot: String?, output: String?, fps: Int, quality: Int, scale: Double,
+                        verbose: Bool) async throws {
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty") }
+        guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty", code: .invalidArguments) }
         let simulator = try await DeviceState.bootedSimulator(udid: udid, logger: AxeLogger())
         try Task.checkCancellation()
         let destination = try Self.outputURL(output)
@@ -27,10 +29,10 @@ enum SelectedVideoRecording {
             .appendingPathComponent(".axe-selected-video-" + UUID().uuidString + ".mp4")
         // No final file exists until successful writer completion and publication.
         defer { try? FileManager.default.removeItem(at: temporary) }
-        FileHandle.standardError.write(Data("Recording selected display; Ctrl+C stops and saves accepted frames.\n".utf8))
+        RecordVideo.progress("Recording selected display; Ctrl+C stops and saves accepted frames.")
         guard let first = try await owner.capture(simulator: simulator, screenID: screenID,
             screenUUID: screenUUID, expectedBoot: expectedBoot, initial: nil) else {
-            throw CLIError(errorDescription: "Recording stopped before a complete selected frame")
+            throw CLIError(errorDescription: "Recording stopped before a complete selected frame", code: .captureFailed)
         }
         let initial = try first.before.observation.sessionObservation()
         guard let image = VideoFrameUtilities.makeCGImage(from: first.png) else {
@@ -46,7 +48,7 @@ enum SelectedVideoRecording {
         var last = first
         var count: Int64 = 1
         try await writer.appendSelected(image: image, presentationTime: .zero)
-        FileHandle.standardError.write(Data("Selected recording accepted frames: \(count)\n".utf8))
+        RecordVideo.progress("Selected recording accepted frames: \(count)")
         while !owner.stopRequested {
             try Task.checkCancellation()
             let remaining = 1 / Double(fps) - (ProcessInfo.processInfo.systemUptime - lastAccepted)
@@ -65,7 +67,7 @@ enum SelectedVideoRecording {
             lastPresentation = time
             last = frame
             count += 1
-            FileHandle.standardError.write(Data("Selected recording accepted frames: \(count)\n".utf8))
+            RecordVideo.progress("Selected recording accepted frames: \(count)")
         }
         try Task.checkCancellation()
         try await writer.finishSelected()
@@ -77,15 +79,15 @@ enum SelectedVideoRecording {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(receipt)
         try Self.publish(temporary: temporary, destination: destination)
-        try CLIOutput.writeJSONData(bytes)
+        if verbose { try CLIOutput.writeJSONData(bytes) }
+        else {
+            try MediaOutput(path: destination.path, pixelWidth: dimensions.width, pixelHeight: dimensions.height,
+                frames: count).emit()
+        }
     }
 
+    /// The `--verbose` receipt. Sizes are pixels.
     struct Receipt: Encodable {
-        let source = "appleSimctlSelectedPNGToH264"
-        let surfaceIdentity = "unavailable"
-        let framePresentationTime = "unavailable"
-        let continuousTransitionCoverage = false
-        let stopReason = "signal"
         let output: String
         let width: Int
         let height: Int
@@ -101,7 +103,7 @@ enum SelectedVideoRecording {
     static func publish(temporary: URL, destination: URL) throws {
         try Task.checkCancellation()
         guard temporary.deletingLastPathComponent().standardizedFileURL == destination.deletingLastPathComponent().standardizedFileURL else {
-            throw CLIError(errorDescription: "Selected recording temporary must share the output directory")
+            throw CLIError(errorDescription: "Selected recording temporary must share the output directory", code: .outputFailed)
         }
         guard Darwin.link(temporary.path, destination.path) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
@@ -124,7 +126,7 @@ enum SelectedVideoRecording {
         }
         try manager.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         var info = stat()
-        if lstat(url.path, &info) == 0 { throw CLIError(errorDescription: "Selected recording will not replace an existing output") }
+        if lstat(url.path, &info) == 0 { throw CLIError(errorDescription: "Selected recording will not replace an existing output", code: .outputFailed) }
         guard errno == ENOENT else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
         return url
     }

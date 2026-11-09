@@ -80,7 +80,7 @@ enum SelectedHIDBroker {
             }
             return response
         } catch {
-            throw CLIError(errorDescription: "Selected HID request outcome is unknown and was not replayed: \(error)")
+            throw CLIError(errorDescription: "AXe lost contact with its input service, so the result is unknown. The request was not repeated; read the screen before trying again.", code: .inputFailed)
         }
     }
     /// `verbose` prints the full receipt in place of the plain-command result. The failure and its

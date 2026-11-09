@@ -91,7 +91,7 @@ extension HIDBroker {
             if handshake.rejection == "busy" { throw HIDBrokerAdmissionFailure.busy }
             guard handshake.ready else { throw HIDBrokerNotReadyError() }
             if let expectedVersion, handshake.version != expectedVersion {
-                throw CLIError(errorDescription: "HID broker protocol version mismatch")
+                throw CLIError(errorDescription: "The running AXe input service is from another AXe version. Quit other AXe processes and try again.", code: .inputUnavailable)
             }
             try configureReceiveTimeout(descriptor, milliseconds: clientResponseTimeoutMilliseconds)
             return descriptor
@@ -163,7 +163,7 @@ extension HIDBroker {
             guard (info.st_mode & S_IFMT) == S_IFREG,
                   info.st_uid == getuid(),
                   info.st_mode & (S_IRWXG | S_IRWXO) == 0 else {
-                throw CLIError(errorDescription: "HID broker " + operation + " is not a private owned file.")
+                throw CLIError(errorDescription: "The AXe input service " + operation + " is not private to this user.", code: .inputUnavailable)
             }
             let lockOperation = nonblocking ? LOCK_EX | LOCK_NB : LOCK_EX
             while flock(descriptor, lockOperation) != 0 {
@@ -192,10 +192,10 @@ extension HIDBroker {
             let responseData = try readMessage(from: descriptor)
             response = try JSONDecoder().decode(HIDBrokerResponse.self, from: responseData)
         } catch {
-            throw CLIError(errorDescription: "HID request outcome is unknown and was not replayed: \(error.localizedDescription)")
+            throw CLIError(errorDescription: "AXe lost contact with its input service, so the result is unknown. The request was not repeated; read the screen before trying again.", code: .inputFailed)
         }
         if let error = response.error {
-            throw CLIError(errorDescription: error)
+            throw CLIError(errorDescription: error, code: .inputUnavailable)
         }
     }
 
@@ -249,14 +249,14 @@ extension HIDBroker {
                 return
             }
         }
-        throw CLIError(errorDescription: "The stale HID broker did not shut down.")
+        throw CLIError(errorDescription: "An earlier AXe input service did not stop. Quit other AXe processes and try again.", code: .inputUnavailable)
     }
 
     static func socketIdentity(at path: String) throws -> HIDBrokerSocketIdentity {
         var info = stat()
         guard lstat(path, &info) == 0 else { throw posixError("lstat") }
         guard (info.st_mode & S_IFMT) == S_IFSOCK, info.st_uid == getuid() else {
-            throw CLIError(errorDescription: "Refusing to remove an unowned HID broker endpoint.")
+            throw CLIError(errorDescription: "AXe will not remove an input service endpoint it does not own.", code: .inputUnavailable)
         }
         return HIDBrokerSocketIdentity(device: info.st_dev, inode: info.st_ino)
     }
@@ -288,7 +288,7 @@ extension HIDBroker {
             if count < 0 {
                 if errno == EINTR { continue }
                 if errno == EAGAIN || errno == EWOULDBLOCK {
-                    throw CLIError(errorDescription: "HID broker read timed out.")
+                    throw CLIError(errorDescription: "The AXe input service did not reply in time.", code: .timeout)
                 }
                 throw posixError("read")
             }
@@ -299,7 +299,7 @@ extension HIDBroker {
             }
             data.append(contentsOf: buffer[..<count])
         }
-        throw CLIError(errorDescription: "HID broker message is missing or exceeds the maximum size.")
+        throw CLIError(errorDescription: "The AXe input service sent no reply, or one that is too large.", code: .inputUnavailable)
     }
 
     static func writeResponse(error: String?, to descriptor: Int32) throws {
@@ -322,7 +322,7 @@ extension HIDBroker {
                 if count < 0 {
                     if errno == EINTR { continue }
                     if errno == EAGAIN || errno == EWOULDBLOCK {
-                        throw CLIError(errorDescription: "HID broker write timed out.")
+                        throw CLIError(errorDescription: "AXe could not reach its input service in time.", code: .timeout)
                     }
                     throw posixError("write")
                 }
@@ -379,7 +379,7 @@ extension HIDBroker {
 
     static func posixError(_ operation: String) -> NSError {
         NSError(domain: NSPOSIXErrorDomain, code: Int(errno), userInfo: [
-            NSLocalizedDescriptionKey: "HID broker \(operation) failed: \(String(cString: strerror(errno)))"
+            NSLocalizedDescriptionKey: "The AXe input service \(operation) failed: \(String(cString: strerror(errno)))"
         ])
     }
 
@@ -389,7 +389,7 @@ extension HIDBroker {
         address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
         let bytes = Array(path.utf8) + [0]
         guard bytes.count <= MemoryLayout.size(ofValue: address.sun_path) else {
-            throw CLIError(errorDescription: "HID broker socket path is too long.")
+            throw CLIError(errorDescription: "The AXe input service socket path is too long.", code: .inputUnavailable)
         }
         withUnsafeMutableBytes(of: &address.sun_path) { destination in
             destination.copyBytes(from: bytes)

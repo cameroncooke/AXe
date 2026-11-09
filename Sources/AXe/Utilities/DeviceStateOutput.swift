@@ -130,7 +130,8 @@ enum DeviceState {
         try await performGlobalSetup(logger: logger)
         let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: udid) }) else {
-            throw CLIOutputFailure(code: "simulatorNotFound", message: "No simulator has UDID \(udid).")
+            throw CLIOutputFailure(code: "targetNotFound",
+                message: "No simulator has UDID \(udid). Run axe list-simulators to see the available simulators.")
         }
         guard simulator.state == .booted else {
             throw CLIOutputFailure(code: "notBooted",
@@ -248,11 +249,14 @@ enum DeviceStateFailure {
                 let target = hinge.requestedDegrees.map { " " + DeviceStateText.degrees($0) } ?? ""
                 failure = CLIOutputFailure(code: "timeout", message: "The hinge did not reach\(target) before the timeout.")
             case .invalidRequest:
-                failure = CLIOutputFailure(code: "invalidArguments", message: hinge.detail)
-            case .closed, .unavailable, .cancelled:
-                failure = CLIOutputFailure(code: "hingeUnavailable", message: "The hinge could not be read or set: \(hinge.detail)")
+                failure = CLIOutputFailure(code: "invalidArguments",
+                    message: CLIErrorMapping.readable(hinge.detail) ?? "The hinge request is invalid.")
+            case .cancelled:
+                failure = CLIErrorMapping.interrupted
+            case .closed, .unavailable:
+                failure = CLIOutputFailure(code: "hingeUnavailable", message: unavailableHinge(hinge.detail))
             @unknown default:
-                failure = CLIOutputFailure(code: "hingeUnavailable", message: "The hinge could not be read or set: \(hinge.detail)")
+                failure = CLIOutputFailure(code: "hingeUnavailable", message: unavailableHinge(hinge.detail))
             }
             if hinge.delivery == .uncertain {
                 failure = uncertain(failure, response: response)
@@ -268,21 +272,26 @@ enum DeviceStateFailure {
 
     static func rotation(_ response: SelectedHIDResponse) -> CLIOutputFailure {
         guard let rotation = response.rotation?.failure else { return generic(response) }
-        let failure = CLIOutputFailure(code: "rotationFailed", message: "The rotation did not complete: \(rotation.detail)")
+        let detail = CLIErrorMapping.readable(rotation.detail).map { " " + $0 } ?? ""
+        let failure = CLIOutputFailure(code: "rotationFailed", message: "The rotation did not complete.\(detail)")
         return rotation.delivery == .uncertain ? uncertain(failure, response: response) : failure
+    }
+
+    private static func unavailableHinge(_ detail: String) -> String {
+        "The hinge could not be read or set." + (CLIErrorMapping.readable(detail).map { " " + $0 } ?? "")
     }
 
     static let busy = CLIOutputFailure(code: "busy",
         message: "Another AXe command is using the simulator. Try again when it finishes.")
 
     private static func generic(_ response: SelectedHIDResponse) -> CLIOutputFailure {
-        let detail = response.error ?? response.outcome
-        if detail == SelectedHIDFailure.busy.errorDescription { return busy }
+        if response.error == SelectedHIDFailure.busyWireDescription { return busy }
         if let quarantine = response.quarantine {
             return CLIOutputFailure(code: "quarantined",
                 message: "Device input is quarantined; nothing was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantine.recordPath))
         }
-        return CLIOutputFailure(code: "commandFailed", message: detail)
+        return CLIOutputFailure(code: "commandFailed",
+            message: CLIErrorMapping.readable(response.error) ?? "The simulator did not complete the request.")
     }
 
     private static func uncertain(_ failure: CLIOutputFailure, response: SelectedHIDResponse) -> CLIOutputFailure {

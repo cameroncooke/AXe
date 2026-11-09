@@ -17,7 +17,7 @@ struct PlaygroundDuoAdditionalInterruptionTests {
             "--end-x", String(end.0), "--end-y", String(end.1), "--duration", "8"]
         arguments += gesture == .drag ? ["--steps", "160"] : ["--delta", "1"]
         let before = try app.documents.read()
-        let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: arguments + ["--udid", app.app.udid],
+        let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: arguments + ["--verbose", "--udid", app.app.udid],
             directory: app.artifacts, name: "raw-motion")
         func requireStoppedInput() async throws {
             try await process.wait(timeout: 15)
@@ -36,7 +36,8 @@ struct PlaygroundDuoAdditionalInterruptionTests {
                 // The physical release and no-late-input checks below remain required.
                 try #require(process.exitCode == SIGINT)
             } else {
-                try requireRawDuoRelease(diagnostics, changedLayout: stop != .interrupt)
+                try requireRawDuoRelease(try process.receipt(DuoCLIResponse.self), diagnostics: diagnostics,
+                    changedLayout: stop != .interrupt)
             }
             let released = try await app.documents.waitFor("raw contact released after interruption") { $0.activeWindowTouches == 0 }
             try requireReleasedContacts(released, before: before, count: 1)
@@ -117,14 +118,12 @@ struct PlaygroundDuoAdditionalInterruptionTests {
     }
 }
 
-private func requireRawDuoRelease(_ diagnostics: String, changedLayout: Bool) throws {
-    let expression = try NSRegularExpression(pattern: #"Input failed: (.+); events=([0-9]+); cleanup=releaseEnqueuedAndDrained\. Input was not replayed\."#)
-    let range = NSRange(diagnostics.startIndex..<diagnostics.endIndex, in: diagnostics)
-    let match = try #require(expression.firstMatch(in: diagnostics, range: range), "No native owned release receipt: \(diagnostics)")
-    let reasonRange = try #require(Range(match.range(at: 1), in: diagnostics))
-    let countRange = try #require(Range(match.range(at: 2), in: diagnostics))
-    let count = try #require(Int(diagnostics[countRange]))
-    try #require(count > 0)
-    if changedLayout { try #require(diagnostics[reasonRange].contains("staleContext")) }
-    else { try #require(diagnostics[reasonRange].contains("cancelled") || diagnostics[reasonRange].contains("CancellationError")) }
+/// The `--verbose` receipt proves the owned release; the plain error only says input stopped.
+private func requireRawDuoRelease(_ receipt: DuoCLIResponse, diagnostics: String, changedLayout: Bool) throws {
+    let reason = try #require(receipt.error, "No native owned release receipt: \(diagnostics)")
+    try #require(receipt.enqueuedEventCount > 0 && receipt.cleanup == "releaseEnqueuedAndDrained",
+        "No native owned release receipt: \(diagnostics)")
+    try #require(diagnostics.contains("Error: Input stopped.") || diagnostics.contains("Error: The screen changed during input."))
+    if changedLayout { try #require(reason.contains("staleContext")) }
+    else { try #require(reason.contains("cancelled") || reason.contains("CancellationError")) }
 }

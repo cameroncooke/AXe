@@ -7,19 +7,19 @@ import FBSimulatorControl
 @MainActor
 enum FollowActiveVideoRecording {
     static func run(simulatorUDID: String, expectedBoot: String?, output: String?,
-                    fps: Int, quality: Int, scale: Double) async throws {
+                    fps: Int, quality: Int, scale: Double, verbose: Bool) async throws {
         try await SelectedMediaCapture.run { owner in
             try await record(owner: owner, simulatorUDID: simulatorUDID, expectedBoot: expectedBoot,
-                output: output, fps: fps, quality: quality, scale: scale)
+                output: output, fps: fps, quality: quality, scale: scale, verbose: verbose)
         }
     }
 
     private static func record(owner: SelectedMediaCapture, simulatorUDID: String,
                                expectedBoot: String?, output: String?, fps: Int,
-                               quality: Int, scale: Double) async throws {
+                               quality: Int, scale: Double, verbose: Bool) async throws {
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard UUID(uuidString: udid) != nil else {
-            throw CLIError(errorDescription: "Follow-active recording requires a simulator UUID")
+            throw CLIError(errorDescription: "Follow-active recording requires a simulator UUID", code: .invalidArguments)
         }
         let simulator = try await DeviceState.bootedSimulator(udid: udid, logger: AxeLogger())
         try Task.checkCancellation()
@@ -31,7 +31,7 @@ enum FollowActiveVideoRecording {
         log("Recording the measured active display; Ctrl+C stops and saves accepted frames.")
         guard let first = try await recovery.capture(owner: owner, simulator: simulator,
             expectedBoot: expectedBoot) else {
-            throw CLIError(errorDescription: "Recording stopped before a complete active-display frame")
+            throw CLIError(errorDescription: "Recording stopped before a complete active-display frame", code: .captureFailed)
         }
         guard let image = VideoFrameUtilities.makeCGImage(from: first.png) else {
             throw VideoProcessingError.failedToDecodeImage
@@ -85,17 +85,15 @@ enum FollowActiveVideoRecording {
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let bytes = try encoder.encode(receipt)
         try SelectedVideoRecording.publish(temporary: temporary, destination: destination)
-        try CLIOutput.writeJSONData(bytes)
+        if verbose { try CLIOutput.writeJSONData(bytes) }
+        else {
+            try MediaOutput(path: destination.path, pixelWidth: dimensions.width, pixelHeight: dimensions.height,
+                frames: count).emit()
+        }
     }
 
+    /// The `--verbose` receipt. Sizes are pixels; later frames fit the first frame's size with black bars.
     private struct Receipt: Encodable {
-        let source = "appleSimctlActivePNGToH264"
-        let followsActiveDisplay = true
-        let canvas = "firstFrameAspectFitBlackBars"
-        let surfaceIdentity = "unavailable"
-        let framePresentationTime = "unavailable"
-        let smoothAnimationCapture = false
-        let stopReason = "signal"
         let output: String
         let width: Int
         let height: Int
@@ -127,7 +125,7 @@ enum FollowActiveVideoRecording {
                 try Task.checkCancellation()
                 guard !owner.stopRequested else { return nil }
                 if let firstFailure, ProcessInfo.processInfo.systemUptime - firstFailure >= Self.windowSeconds {
-                    throw CLIError(errorDescription: "Active-display transition recovery window expired")
+                    throw CLIOutputFailure(code: "screensDidNotSettle", message: "The active screen kept changing for \(Int(Self.windowSeconds)) s, so the recording stopped.")
                 }
                 do {
                     return try await owner.captureActive(simulator: simulator, expectedBoot: expectedBoot)
@@ -137,10 +135,10 @@ enum FollowActiveVideoRecording {
                     let started = firstFailure ?? now
                     firstFailure = started
                     guard now - started < Self.windowSeconds else {
-                        throw CLIError(errorDescription: "Active-display transition did not settle: \(error)")
+                        throw CLIOutputFailure(code: "screensDidNotSettle", message: "The active screen kept changing for \(Int(Self.windowSeconds)) s, so the recording stopped.")
                     }
                     attempts += 1
-                    log("Waiting for active-display capture after: \(error)")
+                    log("Waiting for the active screen to settle")
                     // captureActive has returned and released the common lease before this wait.
                     let waitStarted = ProcessInfo.processInfo.systemUptime
                     try await Task.sleep(nanoseconds: 250_000_000)
@@ -169,7 +167,5 @@ enum FollowActiveVideoRecording {
         }
     }
 
-    private static func log(_ text: String) {
-        FileHandle.standardError.write(Data((text + "\n").utf8))
-    }
+    private static func log(_ text: String) { RecordVideo.progress(text) }
 }

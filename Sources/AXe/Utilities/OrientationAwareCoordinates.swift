@@ -143,13 +143,13 @@ struct OrientationAwareCoordinates {
         logger: AxeLogger
     ) async throws -> CoordinateMapping {
         guard let appFrame = applicationFrame(from: roots) else {
-            throw CLIError(errorDescription: "Unable to determine coordinate mapping because the accessibility application frame is unavailable.")
+            throw CLIError(errorDescription: "Unable to determine coordinate mapping because the accessibility application frame is unavailable.", code: .readFailed)
         }
 
         if let orientationOverride {
             logger.info().log("Using explicit orientation override: \(orientationOverride.rawValue)")
             guard let portraitSize = portraitDimensions(from: roots, orientation: orientationOverride) else {
-                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.")
+                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.", code: .readFailed)
             }
             return .rotation(orientationOverride, portraitSize: portraitSize)
         }
@@ -164,7 +164,7 @@ struct OrientationAwareCoordinates {
         if let simulatorOrientation {
             logger.info().log("Detected simulator UI orientation: \(simulatorOrientation.rawValue)")
             guard let portraitSize = portraitDimensions(from: roots, orientation: simulatorOrientation) else {
-                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.")
+                throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.", code: .readFailed)
             }
 
             switch simulatorOrientation {
@@ -215,7 +215,7 @@ struct OrientationAwareCoordinates {
         }
 
         guard let screenshotDims else {
-            throw CLIError(errorDescription: "Unable to determine coordinate mapping because screenshot probing failed for a landscape accessibility frame.")
+            throw CLIError(errorDescription: "Unable to determine coordinate mapping because screenshot probing failed for a landscape accessibility frame.", code: .readFailed)
         }
 
         // Screenshot is landscape-shaped — hardware is rotated.
@@ -223,7 +223,7 @@ struct OrientationAwareCoordinates {
             "Screenshot \(screenshotDims.width)×\(screenshotDims.height)px is landscape-shaped; using rotation mapping"
         )
 
-        throw CLIError(errorDescription: "Unable to determine rotated simulator orientation. AXe can read landscape coordinates only when SimulatorKit reports the current UI orientation; the screenshot confirms the simulator is rotated, but the private orientation probe was unavailable.")
+        throw CLIError(errorDescription: "Unable to determine rotated simulator orientation. AXe can read landscape coordinates only when SimulatorKit reports the current UI orientation; the screenshot confirms the simulator is rotated, but the private orientation probe was unavailable.", code: .readFailed)
     }
 
     // MARK: - Screenshot Dimension Probe

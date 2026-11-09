@@ -149,7 +149,7 @@ struct Drag: AsyncParsableCommand {
             let path = LegacyDuoPath(kind: .drag, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: duration, steps: steps)
             try await LegacyDuoInput.perform(path: path, context: context,
-                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger)
+                simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Low-level drag completed successfully")
             return
         }

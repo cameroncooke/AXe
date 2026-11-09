@@ -114,7 +114,8 @@ enum LegacyDuoInput {
         _ event: FBSimulatorHIDEvent,
         simulatorUDID: String,
         logger: AxeLogger,
-        persistentOrdinaryKeyboard: Bool = false
+        persistentOrdinaryKeyboard: Bool = false,
+        verbose: Bool = false
     ) async throws {
         guard let context = try await captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger, forKeyboard: true
@@ -137,7 +138,7 @@ enum LegacyDuoInput {
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
             primitives: [], expectedContext: context, legacyKeyboard: keyboard)
         try await SignalScope.cancellingOnSignal {
-            try await send(request, simulatorUDID: simulatorUDID, postDelay: nil)
+            try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
         }
     }
 
@@ -147,7 +148,8 @@ enum LegacyDuoInput {
         context: SelectedHIDContext,
         simulatorUDID: String,
         postDelay: Double?,
-        logger: AxeLogger
+        logger: AxeLogger,
+        verbose: Bool = false
     ) async throws {
         let selectedStyle: SelectedTapStyle
         switch style {
@@ -165,7 +167,7 @@ enum LegacyDuoInput {
             expectedContext: context
         )
         logger.info().log("Tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
-        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)
     }
 
     static func perform(
@@ -173,7 +175,8 @@ enum LegacyDuoInput {
         context: SelectedHIDContext,
         simulatorUDID: String,
         postDelay: Double?,
-        logger: AxeLogger
+        logger: AxeLogger,
+        verbose: Bool = false
     ) async throws {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
             throw SelectedHIDFailure.invalid("Invalid measured display identity")
@@ -184,14 +187,15 @@ enum LegacyDuoInput {
             primitives: [], expectedContext: context, legacyPath: path
         )
         logger.info().log("\(path.kind.rawValue.capitalized) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
-        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)
     }
 
     static func perform(
         touch: LegacyDuoTouch,
         context: SelectedHIDContext,
         simulatorUDID: String,
-        logger: AxeLogger
+        logger: AxeLogger,
+        verbose: Bool = false
     ) async throws {
         try touch.validate()
         guard let uuid = UUID(uuidString: context.screenUUID) else {
@@ -208,13 +212,15 @@ enum LegacyDuoInput {
             if hold > 0 { logger.info().log("Delay: \(hold) seconds") }
         }
         if touch.up { logger.info().log("Touch up") }
-        try await send(request, simulatorUDID: simulatorUDID, postDelay: nil)
+        try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
     }
 
+    /// `verbose` prints the broker receipt before the result; the failure and its code are the same.
     private static func send(
         _ request: SelectedHIDRequest,
         simulatorUDID: String,
-        postDelay: Double?
+        postDelay: Double?,
+        verbose: Bool
     ) async throws {
         let response: SelectedHIDResponse
         if request.legacyKeyboard != nil {
@@ -222,19 +228,9 @@ enum LegacyDuoInput {
         } else {
             response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
         }
-        if request.legacyKeyboard != nil {
-            if response.cleanup == "uncertain" || response.quarantine != nil {
-                let persistence = response.quarantine?.persisted == true
-                    ? "Input quarantine saved. " + HIDInputQuarantine.recoveryStep(recordPath: response.quarantine?.recordPath)
-                    : "Input quarantine could not be saved; manual recovery is required. \(response.quarantine?.error ?? "")"
-                throw CLIError(errorDescription: "Input cleanup is uncertain. \(response.error ?? "Input completion"). \(persistence)")
-            }
-            if let error = response.error {
-                throw CLIError(errorDescription: "Input stopped: \(error); cleanup=\(response.cleanup). Input was not replayed.")
-            }
-        }
+        if verbose { try SelectedHIDBroker.writeReceipt(response) }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
-            throw CLIError(errorDescription: "Input failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+            throw SelectedInputOutput.failure(response)
         }
         try await wait(postDelay)
     }

@@ -1,5 +1,7 @@
 import Foundation
 import Testing
+import ArgumentParser
+import FBSimulatorControl
 @testable import AXe
 
 @Suite("CLI Error Tests")
@@ -59,6 +61,55 @@ struct CLIErrorTests {
 
         #expect(error.description == "No simulator with UDID EXAMPLE-UDID was found. Run `axe list-simulators` to see available simulators.")
         #expect(!error.description.contains("set"))
+        #expect(CLIErrorMapping.failure(for: error).code == "targetNotFound")
     }
 
+    private struct OpaqueFailure: Error { let receipt = [1, 2, 3] }
+
+    @Test("Every error becomes one code and a sentence, never a Swift value dump")
+    func errorsMapToCodedSentences() {
+        let cases: [(Error, String)] = [
+            (CancellationError(), "interrupted"),
+            (CLIError(errorDescription: "Not booted.", code: .notBooted), "notBooted"),
+            (ValidationError("Bad value."), "invalidArguments"),
+            (SelectedHIDFailure.busy, "busy"),
+            (SelectedHIDFailure.invalid("Measured context changed before input"), "rejectedBeforeInput"),
+            (FBSimulatorContextError.unavailable("Unsupported guest rotation"), "displayUnavailable"),
+            (FBSimulatorContextError.changedDuringRead, "screensDidNotSettle"),
+            (FBSimulatorSelectedScreenshotError.changedContext, "screenChanged"),
+            (ActivePanelReadError(childFailure: .cancelled), "interrupted"),
+            (ActivePanelReadError(childFailure: .deadline), "timeout"),
+            (FBSimulatorHIDSessionError.interrupted(reason: .staleContext, cleanup: .notNeeded), "screenChanged"),
+            (FBSimulatorHIDSessionError.interrupted(reason: .cancelled, cleanup: .uncertain), "cleanupUncertain"),
+            (ElementResolutionError.notFound(kind: "id", value: "x"), "elementNotFound"),
+            (OpaqueFailure(), "commandFailed"),
+        ]
+        for (error, code) in cases {
+            let failure = CLIErrorMapping.failure(for: error)
+            #expect(failure.code == code, "\(error)")
+            #expect(!failure.message.isEmpty && !failure.message.contains("("), "\(failure.message)")
+        }
+        #expect(CLIErrorMapping.failure(for: OpaqueFailure()).message == "The command failed unexpectedly.")
+        #expect(CLIErrorMapping.failure(for: SelectedHIDFailure.invalid("Context changed")).message
+            == "Context changed. No input was sent.")
+    }
+
+    @Test("Broker details that are Swift value dumps stay out of messages")
+    func readableFiltersValueDumps() {
+        #expect(CLIErrorMapping.readable("busy") == nil)
+        #expect(CLIErrorMapping.readable("interrupted(reason: staleContext, cleanup: notNeeded)") == nil)
+        #expect(CLIErrorMapping.readable(" ") == nil)
+        #expect(CLIErrorMapping.readable("Target moved") == "Target moved.")
+        #expect(CLIErrorMapping.readable("Selected siri boot identity differs; no input") == "Selected siri boot identity differs; no input.")
+    }
+
+    @Test("The envelope names the full command path", arguments: [
+        (["hinge", "set", "open", "--udid", "4A4D3F14-5E8B-4C5B-9D1E-4F2A5B6C7D8E"], "hinge set"),
+        (["settings", "status-bar", "show", "--udid", "4A4D3F14-5E8B-4C5B-9D1E-4F2A5B6C7D8E"], "settings status-bar show"),
+        (["clipboard", "copy", "--stdin", "--udid", "4A4D3F14-5E8B-4C5B-9D1E-4F2A5B6C7D8E"], "clipboard copy"),
+        (["list-simulators"], "list-simulators"),
+    ])
+    func commandPathNamesSubcommands(arguments: [String], expected: String) throws {
+        #expect(Axe.commandPath(of: try Axe.parseAsRoot(arguments)) == expected)
+    }
 }

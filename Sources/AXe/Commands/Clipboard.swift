@@ -17,7 +17,7 @@ private struct ClipboardCopy: AsyncParsableCommand {
         Requires 1...65536 UTF-8 bytes and one exact booted simulator UUID.
         Preserves all bytes, including line endings and combining characters.
         Replaces the general clipboard, which can be shared with the Mac or other devices.
-        Prints only a JSON transport receipt. No automatic Paste, fallback, retry or restore.
+        Prints the byte count and SHA-256 of the verified copy. No automatic Paste, fallback, retry or restore.
         """)
 
     @Flag(name: .customLong("stdin"), help: "Read exact UTF-8 bytes from stdin until EOF (1...64 KiB).")
@@ -39,29 +39,20 @@ private struct ClipboardCopy: AsyncParsableCommand {
         guard let udid = UUID(uuidString: simulatorUDID) else {
             throw ValidationError("clipboard copy requires one valid simulator UUID.")
         }
-        let receipt = try await SimulatorClipboard.withSignals {
+        let output = try await SimulatorClipboard.withSignals {
             try await SimulatorClipboard.copy(udid: udid)
         }
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        guard let output = String(data: try encoder.encode(receipt), encoding: .utf8) else {
-            throw CLIError(errorDescription: "Could not encode the clipboard copy receipt.")
-        }
-        try CLIOutput.writeJSONText(output)
+        try DeviceState.emit(output, text: [output.text])
     }
 }
 
-private struct ClipboardCopyReceipt: Encodable, Sendable {
-    let source = "appleCoreDevicePasteboard"
-    let operation = "copy"
-    let outcome = "stagedAndVerified"
-    let simulatorUDID: UUID
-    let utf8Length: Int
+/// What was staged and verified: the byte count and SHA-256 of the exact readback.
+struct ClipboardCopyOutput: Encodable, Sendable {
+    let udid: String
+    let bytes: Int
     let sha256: String
-    let verified = true
-    let inserted = false
-    let clipboardReplaced = true
-    let sharedClipboardMayChange = true
+
+    var text: String { "Copied \(bytes) bytes to the clipboard of \(udid) (sha256 \(sha256))" }
 }
 
 /// One standalone public-tool operation. Clipboard bytes and child streams never enter logs or files.
@@ -79,8 +70,8 @@ private enum SimulatorClipboard {
     }
 
     static func withSignals(
-        _ operation: @escaping @MainActor () async throws -> ClipboardCopyReceipt
-    ) async throws -> ClipboardCopyReceipt {
+        _ operation: @escaping @MainActor () async throws -> ClipboardCopyOutput
+    ) async throws -> ClipboardCopyOutput {
         var previousINT = sigaction()
         var previousTERM = sigaction()
         guard sigaction(SIGINT, nil, &previousINT) == 0,
@@ -107,7 +98,7 @@ private enum SimulatorClipboard {
         return receipt
     }
 
-    static func copy(udid: UUID) async throws -> ClipboardCopyReceipt {
+    static func copy(udid: UUID) async throws -> ClipboardCopyOutput {
         let bytes = try await readStdin()
         try await requireBooted(udid)
         // From this point any failure can follow a partial or completed clipboard change.
@@ -117,7 +108,7 @@ private enum SimulatorClipboard {
             let readback = try await run(["devicectl", "device", "pasteboard", "paste", "--device", udid.uuidString,
                 "--timeout", "8", "--quiet"], outputLimit: maximumBytes)
             guard readback == bytes else {
-                throw CLIError(errorDescription: "Clipboard readback does not match the supplied UTF-8 bytes.")
+                throw CLIError(errorDescription: "Clipboard readback does not match the supplied UTF-8 bytes.", code: .actionOutcomeUnknown)
             }
             try await requireBooted(udid)
         } catch {
@@ -127,20 +118,20 @@ private enum SimulatorClipboard {
             case is CancellationError: detail = "The command was cancelled."
             default: detail = "The public clipboard operation failed."
             }
-            throw CLIError(errorDescription: "Clipboard copy completion is unverified: \(detail) The shared clipboard may already have changed. No request is replayed.")
+            throw CLIError(errorDescription: "Clipboard copy completion is unverified: \(detail) The shared clipboard may already have changed. No request is replayed.", code: .actionOutcomeUnknown)
         }
-        return ClipboardCopyReceipt(simulatorUDID: udid, utf8Length: bytes.count,
+        return ClipboardCopyOutput(udid: udid.uuidString, bytes: bytes.count,
             sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
     }
 
     private static func requireBooted(_ udid: UUID) async throws {
         let data = try await run(["simctl", "list", "devices", "--json"], outputLimit: 4 * 1024 * 1024)
         guard let inventory = try? JSONDecoder().decode(DeviceList.self, from: data) else {
-            throw CLIError(errorDescription: "Could not decode the simulator inventory.")
+            throw CLIError(errorDescription: "Could not decode the simulator inventory.", code: .readFailed)
         }
         let matches = inventory.devices.values.flatMap { $0 }.filter { $0.udid == udid }
         guard matches.count == 1, matches[0].state == "Booted" else {
-            throw CLIError(errorDescription: "clipboard copy requires one existing simulator in the Booted state.")
+            throw CLIError(errorDescription: "clipboard copy requires one existing simulator in the Booted state.", code: .notBooted)
         }
     }
 
@@ -148,7 +139,7 @@ private enum SimulatorClipboard {
         let descriptor = FileHandle.standardInput.fileDescriptor
         let flags = fcntl(descriptor, F_GETFL)
         guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else {
-            throw CLIError(errorDescription: "Could not configure clipboard stdin.")
+            throw CLIError(errorDescription: "Could not configure clipboard stdin.", code: .readFailed)
         }
         var result = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
@@ -162,13 +153,13 @@ private enum SimulatorClipboard {
                 if count < 0 {
                     let code = errno
                     guard code == EINTR || code == EAGAIN || code == EWOULDBLOCK else {
-                        throw CLIError(errorDescription: "Could not read clipboard stdin.")
+                        throw CLIError(errorDescription: "Could not read clipboard stdin.", code: .readFailed)
                     }
                     try await Task.sleep(for: .milliseconds(10))
                     continue
                 }
                 guard result.count + count <= maximumBytes else {
-                    throw CLIError(errorDescription: "Clipboard stdin exceeds 64 KiB.")
+                    throw CLIError(errorDescription: "Clipboard stdin exceeds 64 KiB.", code: .invalidArguments)
                 }
                 result.append(contentsOf: buffer.prefix(count))
                 await Task.yield()
@@ -180,10 +171,10 @@ private enum SimulatorClipboard {
             throw error
         }
         guard fcntl(descriptor, F_SETFL, flags) == 0 else {
-            throw CLIError(errorDescription: "Could not restore clipboard stdin flags.")
+            throw CLIError(errorDescription: "Could not restore clipboard stdin flags.", code: .readFailed)
         }
         guard !result.isEmpty, String(data: result, encoding: .utf8) != nil else {
-            throw CLIError(errorDescription: "Clipboard stdin must contain 1...65536 valid UTF-8 bytes.")
+            throw CLIError(errorDescription: "Clipboard stdin must contain 1...65536 valid UTF-8 bytes.", code: .invalidArguments)
         }
         return result
     }
@@ -260,7 +251,7 @@ private enum SimulatorClipboard {
         while true {
             try Task.checkCancellation()
             guard ProcessInfo.processInfo.systemUptime < deadline else {
-                throw CLIError(errorDescription: "The public clipboard child exceeded its 30-second deadline.")
+                throw CLIError(errorDescription: "The public clipboard child exceeded its 30-second deadline.", code: .timeout)
             }
             try stdout.drain(output.fileHandleForReading)
             try stderr.drain(errors.fileHandleForReading)

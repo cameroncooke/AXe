@@ -59,10 +59,17 @@ struct Axe: AsyncParsableCommand {
         UncaughtExceptionGuard.install()
         let invocation = CLIOutputInvocation(arguments: arguments ?? Array(CommandLine.arguments.dropFirst()))
         guard let format = invocation.format else {
+            var command: ParsableCommand
             do {
-                try await runCommand(arguments: invocation.arguments)
+                command = try parseAsRoot(invocation.arguments)
             } catch {
                 exit(withError: error)
+            }
+            do {
+                try await run(&command)
+            } catch {
+                if let status = CLIErrorMapping.interruptionExitCode(for: error) { Darwin.exit(status) }
+                exit(withError: CLIErrorMapping.isArgumentParserError(error) ? error : CLIErrorMapping.failure(for: error))
             }
             return
         }
@@ -76,31 +83,25 @@ struct Axe: AsyncParsableCommand {
                 }
                 var command = try parseAsRoot(invocation.arguments)
                 parsed = true
+                output.command = commandPath(of: command)
                 if command is StreamVideo || command is HIDBrokerCommand || command is SliderReadWorkerCommand || command is PhysicalDeviceBrokerCommand {
                     throw CLIOutputFailure(code: "unsupportedOutput",
                         message: "--output text|json is not supported for binary streaming or internal worker commands.")
                 }
-                if var asynchronous = command as? AsyncParsableCommand {
-                    try await asynchronous.run()
-                } else {
-                    try command.run()
-                }
+                try await run(&command)
                 return OutputCompletion(exitCode: EXIT_SUCCESS, failure: nil, cleanMessage: nil)
             } catch {
-                let code = exitCode(for: error).rawValue
+                let code = CLIErrorMapping.interruptionExitCode(for: error) ?? exitCode(for: error).rawValue
                 if code == EXIT_SUCCESS {
                     return OutputCompletion(exitCode: code, failure: nil, cleanMessage: fullMessage(for: error))
                 }
                 let failure: CLIOutputFailure
-                if let known = error as? CLIOutputFailure {
-                    failure = known
-                } else if let known = error as? AgentModeFailure {
-                    failure = CLIOutputFailure(code: known.code, message: known.message)
+                if (!parsed || CLIErrorMapping.isArgumentParserError(error)) && !(error is CLIOutputFailure) {
+                    failure = CLIOutputFailure(code: "invalidArguments", message: message(for: error))
                 } else if error is ValidationError {
                     failure = CLIOutputFailure(code: "invalidArguments", message: message(for: error))
                 } else {
-                    failure = CLIOutputFailure(code: parsed ? "commandFailed" : "invalidArguments",
-                        message: message(for: error))
+                    failure = CLIErrorMapping.failure(for: error)
                 }
                 return OutputCompletion(exitCode: code, failure: failure, cleanMessage: nil)
             }
@@ -111,7 +112,7 @@ struct Axe: AsyncParsableCommand {
             bytes = try CLIOutput.rendered(output, failure: completion.failure, cleanMessage: completion.cleanMessage)
         } catch {
             // Encoding occurs before the first write. This failure cannot append a second result.
-            let fallback = CLIOutputContext(format: format, command: invocation.command, agent: invocation.agent)
+            let fallback = CLIOutputContext(format: format, command: output.command, agent: invocation.agent)
             let failure = CLIOutputFailure(code: "outputEncodingFailed", message: "Could not encode the command result.")
             guard let rendered = try? CLIOutput.rendered(fallback, failure: failure) else {
                 Darwin.exit(EXIT_FAILURE)
@@ -125,13 +126,26 @@ struct Axe: AsyncParsableCommand {
         Darwin.exit(completion.exitCode)
     }
 
-    private static func runCommand(arguments: [String]) async throws {
-        var command = try parseAsRoot(arguments)
+    private static func run(_ command: inout ParsableCommand) async throws {
         if var asynchronous = command as? AsyncParsableCommand {
             try await asynchronous.run()
+            command = asynchronous
         } else {
             try command.run()
         }
+    }
+
+    /// The full command path without the root, for example `hinge set` or `settings status-bar show`.
+    static func commandPath(of command: ParsableCommand) -> String {
+        let target = ObjectIdentifier(type(of: command))
+        func path(below parent: ParsableCommand.Type) -> [String]? {
+            for child in parent.configuration.subcommands {
+                if ObjectIdentifier(child) == target { return [child._commandName] }
+                if let rest = path(below: child) { return [child._commandName] + rest }
+            }
+            return nil
+        }
+        return path(below: Axe.self)?.joined(separator: " ") ?? "axe"
     }
 
     private struct OutputCompletion: Sendable {

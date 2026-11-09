@@ -124,7 +124,7 @@ struct DescribeUI: AsyncParsableCommand {
             logger: logger
         )
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
-            throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.")
+            throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.", code: .treeUnavailable)
         }
         try CLIOutput.writeJSONText(jsonString)
     }

@@ -69,7 +69,7 @@ struct BatchStepParser {
         logger: AxeLogger
     ) async throws -> [BatchPrimitive] {
         guard var parsed = try C.parseAsRoot(arguments) as? C else {
-            throw CLIError(errorDescription: "Failed to parse batch step arguments: \(arguments.joined(separator: " "))")
+            throw CLIError(errorDescription: "Failed to parse batch step arguments: \(arguments.joined(separator: " "))", code: .invalidArguments)
         }
         try parsed.validate()
         try parsed.validateBatchAdmission()

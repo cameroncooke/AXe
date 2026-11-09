@@ -50,7 +50,7 @@ struct Init: AsyncParsableCommand {
     func run() async throws {
         if !printSkill, !isInteractiveTTY(), dest == nil, client == .auto {
             throw CLIError(
-                errorDescription: "Non-interactive mode requires --client or --dest for init. Use --print to output the skill content."
+                errorDescription: "Non-interactive mode requires --client or --dest for init. Use --print to output the skill content.", code: .invalidArguments
             )
         }
 
@@ -86,7 +86,7 @@ struct Init: AsyncParsableCommand {
             withExtension: "md",
             subdirectory: "skills/axe"
         ) else {
-            throw CLIError(errorDescription: "Bundled AXe skill source was not found.")
+            throw CLIError(errorDescription: "Bundled AXe skill source was not found.", code: .readFailed)
         }
         return sourceURL
     }
@@ -96,7 +96,7 @@ struct Init: AsyncParsableCommand {
         do {
             return try String(contentsOf: sourceURL, encoding: .utf8)
         } catch {
-            throw CLIError(errorDescription: "Failed to read bundled AXe skill source: \(error.localizedDescription)")
+            throw CLIError(errorDescription: "Failed to read bundled AXe skill source: \(error.localizedDescription)", code: .readFailed)
         }
     }
 
@@ -112,12 +112,12 @@ struct Init: AsyncParsableCommand {
 
             if fileManager.fileExists(atPath: targetFile.path), !force {
                 throw CLIError(
-                    errorDescription: "Skill already installed at \(targetFile.path). Re-run with --force to overwrite."
+                    errorDescription: "Skill already installed at \(targetFile.path). Re-run with --force to overwrite.", code: .outputFailed
                 )
             }
             if fileManager.fileExists(atPath: targetDirectory.path), !force {
                 throw CLIError(
-                    errorDescription: "Skill directory already exists at \(targetDirectory.path). Re-run with --force to overwrite."
+                    errorDescription: "Skill directory already exists at \(targetDirectory.path). Re-run with --force to overwrite.", code: .outputFailed
                 )
             }
 
@@ -136,13 +136,13 @@ struct Init: AsyncParsableCommand {
             } catch {
                 try? fileManager.removeItem(at: stagingDirectory)
                 throw CLIError(
-                    errorDescription: "Failed to install AXe skill for \(target.name): \(error.localizedDescription)"
+                    errorDescription: "Failed to install AXe skill for \(target.name): \(error.localizedDescription)", code: .outputFailed
                 )
             }
         }
 
         if installedPaths.isEmpty {
-            throw CLIError(errorDescription: "No install targets resolved.")
+            throw CLIError(errorDescription: "No install targets resolved.", code: .invalidArguments)
         }
 
         for entry in installedPaths {
@@ -164,7 +164,7 @@ struct Init: AsyncParsableCommand {
                 removedPaths.append("\(target.name): \(targetDirectory.path)")
             } catch {
                 throw CLIError(
-                    errorDescription: "Failed to uninstall AXe skill for \(target.name): \(error.localizedDescription)"
+                    errorDescription: "Failed to uninstall AXe skill for \(target.name): \(error.localizedDescription)", code: .outputFailed
                 )
             }
         }
@@ -196,7 +196,7 @@ struct Init: AsyncParsableCommand {
             }
 
             throw CLIError(
-                errorDescription: "No supported AI clients detected. Use --client, --dest, or --print."
+                errorDescription: "No supported AI clients detected. Use --client, --dest, or --print.", code: .outputFailed
             )
         }
 
@@ -246,7 +246,7 @@ struct Init: AsyncParsableCommand {
                 skillsDirectory: URL(fileURLWithPath: homeDirectory).appendingPathComponent(".agents/skills", isDirectory: true)
             )
         case .auto:
-            throw CLIError(errorDescription: "Auto is not a concrete client target.")
+            throw CLIError(errorDescription: "Auto is not a concrete client target.", code: .invalidArguments)
         }
     }
 
@@ -263,7 +263,7 @@ struct Init: AsyncParsableCommand {
         let standardizedPath = URL(fileURLWithPath: expandedPath).standardizedFileURL.path
 
         guard standardizedPath != "/" else {
-            throw CLIError(errorDescription: "Refusing to use filesystem root as skills destination.")
+            throw CLIError(errorDescription: "Refusing to use filesystem root as skills destination.", code: .outputFailed)
         }
 
         return URL(fileURLWithPath: standardizedPath, isDirectory: true)

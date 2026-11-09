@@ -156,7 +156,7 @@ struct Slider: AsyncParsableCommand {
         if let elementLabel {
             return .label(elementLabel)
         }
-        throw CLIError(errorDescription: "Unexpected state: no slider selector.")
+        throw CLIError(errorDescription: "Unexpected state: no slider selector.", code: .invalidArguments)
     }
 
     private func makeDragPlan(
@@ -166,7 +166,7 @@ struct Slider: AsyncParsableCommand {
     ) throws -> SliderDragPlan {
         guard element.isSliderLikeControl else {
             let typeDescription = element.type ?? element.role ?? "unknown"
-            throw CLIError(errorDescription: "Matched element is not a slider (type: \(typeDescription)). Use --element-type Slider or a more specific --id/--label selector.")
+            throw CLIError(errorDescription: "Matched element is not a slider (type: \(typeDescription)). Use --element-type Slider or a more specific --id/--label selector.", code: .elementNotFound)
         }
         guard let frame = element.frame else {
             throw ElementResolutionError.invalidFrame(reason: "Matched slider has no frame.")
@@ -225,7 +225,7 @@ struct Slider: AsyncParsableCommand {
         }
         if let display = ownedDisplay {
             guard let expectedPID = initialMatch.applicationPID, expectedPID > 0 else {
-                throw CLIError(errorDescription: "Slider requires one current frontmost application PID before input.")
+                throw CLIError(errorDescription: "Slider requires one current frontmost application PID before input.", code: .rejectedBeforeInput)
             }
             try await performOwnedSlider(endpoint: endpoint, targetNormalized: targetNormalized,
                 display: display, expectedPID: expectedPID, resolvedIdentifier: resolvedIdentifier, logger: logger)
@@ -251,7 +251,7 @@ struct Slider: AsyncParsableCommand {
         )
         guard observedValue.isWithinTolerance else {
             throw CLIError(
-                errorDescription: "Slider value did not reach requested value \(formatPercent(targetNormalized * 100)) after direct drag. Observed AXValue: \(observedValue.rawValue ?? "none")."
+                errorDescription: "Slider value did not reach requested value \(formatPercent(targetNormalized * 100)) after direct drag. Observed AXValue: \(observedValue.rawValue ?? "none").", code: .inputFailed
             )
         }
         return observedValue.rawValue ?? formatNormalized(observedValue.normalizedValue)
@@ -289,7 +289,7 @@ struct Slider: AsyncParsableCommand {
         let accepted: Set<String> = endpoint == nil ? ["reached", "alreadyAtValue"] : ["endpointObserved", "alreadyAtEndpoint"]
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let outcome, accepted.contains(outcome) else {
-            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.", code: .inputFailed)
         }
     }
 
@@ -322,7 +322,7 @@ struct Slider: AsyncParsableCommand {
             elementType: elementType
         )
         guard match.element.isSliderLikeControl else {
-            throw CLIError(errorDescription: "Matched element is no longer a slider.")
+            throw CLIError(errorDescription: "Matched element is no longer a slider.", code: .screenChanged)
         }
         return match
     }
@@ -376,7 +376,7 @@ struct Slider: AsyncParsableCommand {
         if let lastObservedValue {
             return lastObservedValue
         }
-        throw CLIError(errorDescription: "Slider value could not be verified because AXValue was unavailable after dragging.")
+        throw CLIError(errorDescription: "Slider value could not be verified because AXValue was unavailable after dragging.", code: .readFailed)
     }
 
     private func dragStartX(
@@ -413,23 +413,23 @@ struct Slider: AsyncParsableCommand {
 
     private func parseNormalizedAXValue(_ rawValue: String?) throws -> Double {
         guard let rawValue else {
-            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.")
+            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.", code: .elementNotFound)
         }
 
         let trimmedValue = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedValue.isEmpty else {
-            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.")
+            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.", code: .elementNotFound)
         }
 
         let isPercent = trimmedValue.hasSuffix("%")
         let numericText = trimmedValue.replacingOccurrences(of: "%", with: "")
         guard let parsedValue = Double(numericText.trimmingCharacters(in: .whitespacesAndNewlines)), parsedValue.isFinite else {
-            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.")
+            throw CLIError(errorDescription: "Matched slider does not expose a numeric AXValue, so AXe cannot deterministically set it.", code: .elementNotFound)
         }
 
         let normalizedValue = isPercent || parsedValue > 1.0 ? parsedValue / 100.0 : parsedValue
         guard (0...1).contains(normalizedValue) else {
-            throw CLIError(errorDescription: "Matched slider AXValue is outside the supported 0...100 range: \(rawValue).")
+            throw CLIError(errorDescription: "Matched slider AXValue is outside the supported 0...100 range: \(rawValue).", code: .elementNotFound)
         }
         return normalizedValue
     }

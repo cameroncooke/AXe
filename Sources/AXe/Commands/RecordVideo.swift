@@ -38,6 +38,9 @@ struct RecordVideo: AsyncParsableCommand {
         help: ArgumentHelp("Selected or follow-active recording only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
+    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid or --follow-active-display: print the full recording receipt as JSON, including the first and last context reads.")
+    var verbose = false
+
     func validate() throws {
         if !AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
             if followActiveDisplay, screenID != nil || screenUUID != nil {
@@ -81,12 +84,13 @@ struct RecordVideo: AsyncParsableCommand {
 
         if followActiveDisplay {
             try await FollowActiveVideoRecording.run(simulatorUDID: simulatorUDID, expectedBoot: expectedBoot,
-                output: output, fps: fps, quality: quality, scale: scale)
+                output: output, fps: fps, quality: quality, scale: scale, verbose: verbose)
             return
         }
         if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
             try await SelectedVideoRecording.run(simulatorUDID: simulatorUDID, screenID: screenID,
-                screenUUID: uuid, expectedBoot: expectedBoot, output: output, fps: fps, quality: quality, scale: scale)
+                screenUUID: uuid, expectedBoot: expectedBoot, output: output, fps: fps, quality: quality, scale: scale,
+                verbose: verbose)
             return
         }
 
@@ -96,22 +100,22 @@ struct RecordVideo: AsyncParsableCommand {
 
         let trimmedUDID = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUDID.isEmpty else {
-            throw CLIError(errorDescription: "Simulator UDID cannot be empty. Use --udid to specify a simulator.")
+            throw CLIError(errorDescription: "Simulator UDID cannot be empty. Use --udid to specify a simulator.", code: .invalidArguments)
         }
 
         let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         guard let targetSimulator = simulatorSet.allSimulators.first(where: { $0.udid == trimmedUDID }) else {
-            throw CLIError(errorDescription: "Simulator with UDID \(trimmedUDID) not found.")
+            throw CLIError.simulatorNotFound(udid: trimmedUDID)
         }
 
         guard targetSimulator.state == .booted else {
             let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
-            throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)")
+            throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)", code: .notBooted)
         }
 
         let outputURL = try prepareOutputURL()
-        FileHandle.standardError.write(Data("Recording simulator \(targetSimulator.udid) to \(outputURL.path)\n".utf8))
-        FileHandle.standardError.write(Data("Press Ctrl+C to stop recording\n".utf8))
+        Self.progress("Recording simulator \(targetSimulator.udid) to \(outputURL.path)")
+        Self.progress("Press Ctrl+C to stop recording")
 
         let cancellationFlag = CancellationFlag()
         let signalObserver = SignalObserver(signals: [SIGINT, SIGTERM]) {
@@ -122,7 +126,7 @@ struct RecordVideo: AsyncParsableCommand {
         defer { signalObserver.invalidate() }
 
         do {
-            try await recordVideo(
+            let recorded = try await recordVideo(
                 simulator: targetSimulator,
                 outputURL: outputURL,
                 fps: fps,
@@ -130,10 +134,11 @@ struct RecordVideo: AsyncParsableCommand {
                 scale: scale,
                 cancellationFlag: cancellationFlag
             )
-            FileHandle.standardError.write(Data("Recording saved to \(outputURL.path)\n".utf8))
-            CLIOutput.message(outputURL.path)
+            Self.progress("Recording saved to \(outputURL.path)")
+            try MediaOutput(path: outputURL.path, pixelWidth: recorded.width, pixelHeight: recorded.height,
+                frames: recorded.frames).emit()
         } catch {
-            throw CLIError(errorDescription: "Failed to record video: \(error.localizedDescription)")
+            throw CLIError(errorDescription: "Failed to record video: \(error.localizedDescription)", code: .captureFailed)
         }
     }
 
@@ -144,10 +149,10 @@ struct RecordVideo: AsyncParsableCommand {
         quality: Int,
         scale: Double,
         cancellationFlag: CancellationFlag
-    ) async throws {
+    ) async throws -> (width: Int, height: Int, frames: Int64) {
         let initialFrameData = try await VideoFrameUtilities.captureScreenshotData(from: simulator)
         guard let initialImage = VideoFrameUtilities.makeCGImage(from: initialFrameData) else {
-            throw CLIError(errorDescription: "Failed to decode simulator screenshot")
+            throw CLIError(errorDescription: "Failed to decode simulator screenshot", code: .captureFailed)
         }
 
         let dimensions = VideoFrameUtilities.computeDimensions(for: initialImage, scale: scale)
@@ -200,7 +205,7 @@ struct RecordVideo: AsyncParsableCommand {
                     lastLogFrame = frameCount
                     let elapsed = Date().timeIntervalSince(startTime)
                     let actualFPS = Double(frameCount) / max(elapsed, 0.0001)
-                    FileHandle.standardError.write(Data(String(format: "Captured %lld frames (%.1f FPS actual)\n", frameCount, actualFPS).utf8))
+                    Self.progress(String(format: "Captured %lld frames (%.1f FPS actual)", frameCount, actualFPS))
                 }
             } catch {
                 FileHandle.standardError.write(Data("Error capturing frame: \(error.localizedDescription)\n".utf8))
@@ -214,6 +219,13 @@ struct RecordVideo: AsyncParsableCommand {
         }
 
         try await recorder.finish()
+        return (dimensions.width, dimensions.height, frameCount)
+    }
+
+    /// Progress on stderr in plain mode only, as `screenshot` does; `--output` keeps stderr for errors.
+    static func progress(_ text: String) {
+        guard !CLIOutput.isFormatted else { return }
+        FileHandle.standardError.write(Data((text + "\n").utf8))
     }
 
     private func prepareOutputURL() throws -> URL {
@@ -255,7 +267,7 @@ struct RecordVideo: AsyncParsableCommand {
             var existingIsDirectory: ObjCBool = false
             fileManager.fileExists(atPath: baseURL.path, isDirectory: &existingIsDirectory)
             if existingIsDirectory.boolValue {
-                throw CLIError(errorDescription: "Output path \(baseURL.path) is a directory. Provide a file name or point to a different location.")
+                throw CLIError(errorDescription: "Output path \(baseURL.path) is a directory. Provide a file name or point to a different location.", code: .outputFailed)
             }
             try fileManager.removeItem(at: baseURL)
         }

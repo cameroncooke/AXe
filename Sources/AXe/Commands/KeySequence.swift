@@ -125,7 +125,7 @@ struct KeySequence: AsyncParsableCommand {
         logger.info().log("Delay between keys: \(delay ?? 0.1) seconds")
 
         try await LegacyDuoInput.performKeyboard(
-            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger
+            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose
         )
         
         logger.info().log("Key sequence completed successfully")

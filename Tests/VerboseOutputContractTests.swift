@@ -32,7 +32,7 @@ struct VerboseOutputContractTests {
 
     @Test func selectedInputFailsTheSameWayWithVerbose() {
         let replies = [quarantined, response(outcome: "enqueuedAndDrained", events: 2, cleanup: "uncertain"),
-            response(events: 1, error: "Context changed"), response(error: SelectedHIDFailure.busy.errorDescription)]
+            response(events: 1, error: "Context changed"), response(error: String(describing: SelectedHIDFailure.busy))]
         for reply in replies {
             let plain = code { try SelectedHIDBroker.printResponse(reply, verbose: false) }
             let verbose = code { try SelectedHIDBroker.printResponse(reply, verbose: true) }
@@ -53,7 +53,7 @@ struct VerboseOutputContractTests {
         noHinge.hinge?.failure = try JSONDecoder().decode(SelectedHingeFailure.self, from: Data("""
             {"reason":"unsupported","detail":"No hinge","detailTruncated":false,"delivery":"notDispatched","latestSampleOmitted":false}
             """.utf8))
-        let busy = response(error: SelectedHIDFailure.busy.errorDescription)
+        let busy = response(error: String(describing: SelectedHIDFailure.busy))
         let expected: [(SelectedHIDResponse, String)] = [(noHinge, "noHinge"), (quarantined, "quarantined"), (busy, "busy")]
         for (reply, expectedCode) in expected {
             for verbose in [false, true] {

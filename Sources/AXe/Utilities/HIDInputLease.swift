@@ -7,7 +7,7 @@ final class HIDInputLease {
     private let descriptor: Int32
     private init(descriptor: Int32) { self.descriptor = descriptor }
     static func acquire(simulatorUDID: String) throws -> HIDInputLease {
-        guard let udid = UUID(uuidString: simulatorUDID) else { throw CLIError(errorDescription: "Invalid simulator UUID") }
+        guard let udid = UUID(uuidString: simulatorUDID) else { throw CLIError(errorDescription: "Invalid simulator UUID", code: .invalidArguments) }
         let endpoint = try HIDBroker.endpointPath(simulatorUDID: udid.uuidString, developerDirectory: "/candidate-device-input", version: 3)
         do {
             let lease = HIDInputLease(descriptor: try HIDBroker.acquireLifetimeLock(endpoint: endpoint))

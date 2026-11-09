@@ -49,8 +49,8 @@ struct SelectedScreenshotSignalTests {
     }
 
     @Test func uncertainCleanupIsNotReportedAsCancellation() {
-        #expect(SelectedScreenshotSignals.isCancellation(CancellationError()))
-        #expect(SelectedScreenshotSignals.isCancellation(ActivePanelReadError(childFailure: .cancelled)))
-        #expect(!SelectedScreenshotSignals.isCancellation(ActivePanelReadError(childFailure: .cleanupUnconfirmed)))
+        #expect(CLIErrorMapping.failure(for: CancellationError()).code == "interrupted")
+        #expect(CLIErrorMapping.failure(for: ActivePanelReadError(childFailure: .cancelled)).code == "interrupted")
+        #expect(CLIErrorMapping.failure(for: ActivePanelReadError(childFailure: .cleanupUnconfirmed)).code != "interrupted")
     }
 }

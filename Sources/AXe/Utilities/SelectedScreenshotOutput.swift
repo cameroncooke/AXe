@@ -4,10 +4,8 @@ import FBSimulatorControl
 
 /// Publish only bytes returned after selected capture validation and feed close.
 enum SelectedScreenshotOutput {
+    /// The `--verbose` receipt. Sizes are pixels.
     struct Receipt: Encodable {
-        let source = "appleSimctlSelectedPNG"
-        let surfaceIdentity = "unavailable"
-        let framePresentationTime = "unavailable"
         let output: String
         let width: Int
         let height: Int

@@ -12,20 +12,9 @@ enum SelectedScreenshotSignals {
             Task { @MainActor in owner.cancel() }
         }
         defer { observer.invalidate() }
-        do {
-            try await owner.run(operation: operation)
-        } catch {
-            if owner.cancellationRequested && isCancellation(error) {
-                FileHandle.standardError.write(Data(
-                    "Selected screenshot cancelled; awaited operation returned.\n".utf8))
-            }
-            // In particular, keep cleanupUnconfirmed intact.
-            throw error
-        }
-    }
-
-    static func isCancellation(_ error: Error) -> Bool {
-        error is CancellationError || (error as? ActivePanelReadError)?.childFailure == .cancelled
+        // The error is rethrown unchanged; in particular, cleanupUnconfirmed stays an error. A
+        // signal cancellation exits with 128 + the signal and prints nothing.
+        try await owner.run(operation: operation)
     }
 
     @MainActor

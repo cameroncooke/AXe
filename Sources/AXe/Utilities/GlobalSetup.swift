@@ -13,7 +13,7 @@ func performGlobalSetup(logger: AxeLogger) async throws {
         if xcodePath.isEmpty {
             let errorMessage = "AXe could not find an active Xcode installation. Select Xcode with `xcode-select` or set `DEVELOPER_DIR`, then try again."
             logger.error().log(errorMessage)
-            throw CLIError(errorDescription: errorMessage)
+            throw CLIError(errorDescription: errorMessage, code: .xcodeUnavailable)
         }
         logger.info().log("Xcode is available at: \(xcodePath)")
     } catch let error as CLIError {
@@ -21,7 +21,7 @@ func performGlobalSetup(logger: AxeLogger) async throws {
     } catch {
         let errorMessage = "AXe could not resolve the active Xcode installation: \(error.localizedDescription)"
         logger.error().log(errorMessage)
-        throw CLIError(errorDescription: errorMessage)
+        throw CLIError(errorDescription: errorMessage, code: .xcodeUnavailable)
     }
 
     // Load essential private frameworks
@@ -37,7 +37,7 @@ func performGlobalSetup(logger: AxeLogger) async throws {
     } catch {
         let errorMessage = "AXe could not load simulator support from the selected Xcode installation: \(error.localizedDescription)"
         logger.error().log(errorMessage)
-        throw CLIError(errorDescription: errorMessage)
+        throw CLIError(errorDescription: errorMessage, code: .xcodeUnavailable)
     }
     logger.info().log("Global setup complete.")
 } 

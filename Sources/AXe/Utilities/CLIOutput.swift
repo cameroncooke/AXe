@@ -21,16 +21,22 @@ struct CLIOutputContent: Sendable {
 /// The invocation owns this buffer. The lock protects synchronous output from child tasks.
 final class CLIOutputContext: @unchecked Sendable {
     let format: CLIOutputFormat
-    let command: String
     let agent: Bool
     private let lock = NSLock()
+    private var commandName: String
     private var values: [CLIOutputValue] = []
     private var messages: [String] = []
     private var view: AgentOutputView = .reading
 
+    /// The invocation's first command word until parsing names the full command path.
+    var command: String {
+        get { lock.lock(); defer { lock.unlock() }; return commandName }
+        set { lock.lock(); defer { lock.unlock() }; commandName = newValue }
+    }
+
     init(format: CLIOutputFormat, command: String, agent: Bool) {
         self.format = format
-        self.command = command
+        self.commandName = command
         self.agent = agent
     }
 

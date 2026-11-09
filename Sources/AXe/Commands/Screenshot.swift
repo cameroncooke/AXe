@@ -25,6 +25,9 @@ struct Screenshot: AsyncParsableCommand {
         help: ArgumentHelp("Selected capture only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
+    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid: print the full capture receipt as JSON, including the context read before and after.")
+    var verbose = false
+
     func validate() throws {
         guard (screenID == nil) == (screenUUID == nil) else {
             throw ValidationError("Selected screenshot requires both --screen-id and --screen-uuid.")
@@ -66,7 +69,7 @@ struct Screenshot: AsyncParsableCommand {
         let trimmedUDID = targetSimulator.udid
         guard targetSimulator.state == .booted else {
             let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
-            throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)")
+            throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription). Boot it first, for example with xcrun simctl boot \(trimmedUDID).", code: .notBooted)
         }
 
         if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
@@ -82,7 +85,8 @@ struct Screenshot: AsyncParsableCommand {
             let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
             let receiptBytes = try encoder.encode(receipt)
             try SelectedScreenshotOutput.publish(capture.png, to: outputURL)
-            try CLIOutput.writeJSONData(receiptBytes)
+            if verbose { try CLIOutput.writeJSONData(receiptBytes) }
+            else { try MediaOutput(path: outputURL.path, pixelWidth: capture.pixelWidth, pixelHeight: capture.pixelHeight).emit() }
             return
         }
 
@@ -92,7 +96,7 @@ struct Screenshot: AsyncParsableCommand {
 
         try screenshotData.write(to: outputURL)
 
-        reportSaved(to: outputURL)
+        try reportSaved(screenshotData, to: outputURL)
     }
 
     @MainActor
@@ -117,14 +121,15 @@ struct Screenshot: AsyncParsableCommand {
         let outputURL = try prepareOutputURL(targetName: targetName, filenamePrefix: "Device Screenshot",
                                              existingFile: .atomicReplacement)
         try screenshotData.write(to: outputURL, options: .atomic)
-        reportSaved(to: outputURL)
+        try reportSaved(screenshotData, to: outputURL)
     }
 
-    private func reportSaved(to outputURL: URL) {
+    private func reportSaved(_ png: Data, to outputURL: URL) throws {
         if !CLIOutput.isFormatted {
             FileHandle.standardError.write(Data("Screenshot saved to \(outputURL.path)\n".utf8))
         }
-        CLIOutput.message(outputURL.path)
+        let size = VideoFrameUtilities.pixelSize(of: png)
+        try MediaOutput(path: outputURL.path, pixelWidth: size.width, pixelHeight: size.height).emit()
     }
 
     private enum ExistingFile { case remove, refuse, atomicReplacement }
@@ -169,10 +174,10 @@ struct Screenshot: AsyncParsableCommand {
             var existingIsDirectory: ObjCBool = false
             fileManager.fileExists(atPath: baseURL.path, isDirectory: &existingIsDirectory)
             if existingIsDirectory.boolValue {
-                throw CLIError(errorDescription: "Output path \(baseURL.path) is a directory. Provide a file name or point to a different location.")
+                throw CLIError(errorDescription: "Output path \(baseURL.path) is a directory. Provide a file name or point to a different location.", code: .outputFailed)
             }
             guard existingFile != .refuse else {
-                throw CLIError(errorDescription: "Selected screenshot will not replace an existing output file: \(baseURL.path)")
+                throw CLIError(errorDescription: "Selected screenshot will not replace an existing output file: \(baseURL.path)", code: .outputFailed)
             }
             if existingFile == .remove { try fileManager.removeItem(at: baseURL) }
         }

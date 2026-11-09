@@ -11,7 +11,7 @@ struct PlaygroundDuoLegacyBatchInterruptionTests {
         let before = try app.documents.read()
         let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: batchArguments([
             "touch -x \(point.0) -y \(point.1) --down --up --delay 8", "tap --id feature.tap"])
-            + ["--udid", app.app.udid], directory: app.artifacts, name: "legacy-batch")
+            + ["--verbose", "--udid", app.app.udid], directory: app.artifacts, name: "legacy-batch")
         do {
             try process.start()
             _ = try await app.documents.waitFor("real held batch contact before layout change") { $0.activeWindowTouches == 1 }
@@ -20,13 +20,14 @@ struct PlaygroundDuoLegacyBatchInterruptionTests {
             try await process.wait(timeout: 15)
             try #require(process.exitCode != 0)
             let output = try process.diagnostics()
-            // Legacy localizedDescription drops the interruption payload. Native709 code2
-            // identifies interrupted; it does not preserve the staleContext reason text.
-            try #require(output.contains("Duo input stopped: Step 1 failed: [touch]")
-                && output.contains("(FBSimulatorControl.FBSimulatorHIDSessionError error 2.)")
-                && output.contains("Duo batch stopped;") && output.contains("Input was not replayed."))
+            // The error names the step and the change, without Swift type names.
+            try #require(output.contains("Error: Step 1 failed: [touch]")
+                && output.contains("The batch stopped:")
+                && output.contains("Input was not repeated.") && !output.contains("FBSimulatorControl"))
             // The operation can release first; the enclosing session then has no input left to release.
-            try #require(output.contains("cleanup=notNeeded") || output.contains("cleanup=releaseEnqueuedAndDrained"))
+            // --verbose writes the owner's cleanup log line to stderr.
+            try #require(output.contains("Duo batch closed; cleanup=notNeeded")
+                || output.contains("Duo batch closed; cleanup=releaseEnqueuedAndDrained"))
             try #require(!output.contains("cleanup=uncertain"))
             let released = try await app.documents.waitFor("old batch contact released") { $0.activeWindowTouches == 0 }
             try requireReleasedContacts(released, before: before, count: 1)

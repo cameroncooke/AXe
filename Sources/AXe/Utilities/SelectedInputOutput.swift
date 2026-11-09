@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 
 struct SelectedOutputOptions: ParsableArguments {
-    @Flag(name: .customLong("verbose"), help: "Selected input: print the full broker receipt as JSON, including context, target checks and cleanup evidence.")
+    @Flag(name: .customLong("verbose"), help: "Print the full input receipt as JSON, including context, target checks and cleanup evidence, where AXe owns the input (selected input, and ordinary input on the iPhone Duo and DTUHID simulators).")
     var verbose = false
 }
 
@@ -33,6 +33,11 @@ struct SelectedInputSummary: Encodable {
     }
 }
 
+extension SelectedHIDFailure {
+    /// The broker writes `String(describing:)` of its error into the reply; this is `busy`'s.
+    static let busyWireDescription = String(describing: SelectedHIDFailure.busy)
+}
+
 enum SelectedInputOutput {
     static func failed(_ response: SelectedHIDResponse) -> Bool {
         response.error != nil || response.quarantine != nil || response.cleanup == "uncertain"
@@ -53,21 +58,30 @@ enum SelectedInputOutput {
         }
     }
 
+    /// One code and a sentence that says whether input was sent. The broker's outcome, event
+    /// count and cleanup state stay in the `--verbose` receipt.
     static func failure(_ response: SelectedHIDResponse) -> CLIOutputFailure {
-        let detail = response.error ?? "The broker reported \(response.outcome)."
         if let quarantine = response.quarantine {
             return CLIOutputFailure(code: "quarantined",
-                message: "Device input is quarantined. \(detail) " + HIDInputQuarantine.recoveryStep(recordPath: quarantine.recordPath))
+                message: "Device input is quarantined; nothing was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantine.recordPath))
         }
-        if detail == SelectedHIDFailure.busy.errorDescription { return DeviceStateFailure.busy }
+        if response.error == SelectedHIDFailure.busyWireDescription { return DeviceStateFailure.busy }
         let code: String
-        if let ax = response.ax?.failure { code = ax.rawValue }
+        if let ax = response.ax?.failure {
+            switch ax {
+            case .waitTimedOut: code = "timeout"
+            case .waitCancelled: code = "interrupted"
+            default: code = ax.rawValue
+            }
+        }
         else if response.cleanup == "uncertain" { code = "cleanupUncertain" }
         else if response.enqueuedEventCount > 0 { code = "inputFailed" }
         else { code = "rejectedBeforeInput" }
         let sent = response.enqueuedEventCount == 0 && response.cleanup != "uncertain"
             ? "No input was sent."
-            : "Some input was sent and it was not repeated; read the screen before trying again."
+            : CLIErrorMapping.someInputSent
+        let detail = CLIErrorMapping.readable(response.error)
+            ?? (response.enqueuedEventCount == 0 ? "The input was refused." : "Input stopped.")
         return CLIOutputFailure(code: code, message: "\(detail) \(sent)")
     }
 }

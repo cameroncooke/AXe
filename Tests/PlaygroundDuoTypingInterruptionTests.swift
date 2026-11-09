@@ -16,7 +16,7 @@ struct PlaygroundDuoTypingInterruptionTests {
             let pair = catalogue.activePanel.identity
             let text = String(repeating: "a", count: 256)
             let input = try PlaygroundTestProcess(executable: cli,
-                arguments: ["type", text, "--udid", controls.app.udid], directory: controls.artifacts, name: "long-type")
+                arguments: ["type", text, "--verbose", "--udid", controls.app.udid], directory: controls.artifacts, name: "long-type")
             let external = try PlaygroundTestProcess(executable: stateOperator, arguments: ["fold", catalogue.bootIdentity,
                 String(pair.displayID), pair.uniqueID.uuidString, "0", controls.artifacts.appendingPathComponent("fold-marker.json").path,
                 controls.app.udid], directory: controls.artifacts, name: "external-fold")
@@ -44,15 +44,16 @@ struct PlaygroundDuoTypingInterruptionTests {
                 try await input.wait(timeout: 15)
                 let diagnostic = try input.diagnostics()
                 try #require(input.exitCode == 1, "Long typing did not stop: \(diagnostic)")
-                let base = "Error: Input stopped: interrupted(reason: FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: FBSimulatorControl.FBSimulatorHIDCleanupOutcome."
-                let suffix = ". Input was not replayed."
-                let accepted = [
-                    base + "releaseEnqueuedAndDrained); cleanup=releaseEnqueuedAndDrained" + suffix,
-                    base + "releaseEnqueuedAndDrained); cleanup=notNeeded" + suffix,
-                    base + "notNeeded); cleanup=notNeeded" + suffix,
-                ]
+                // The --verbose receipt carries the native stop and release; the error says input stopped.
+                let receipt = try input.receipt(DuoCLIResponse.self)
+                let reason = receipt.error ?? ""
+                let native = reason.contains("FBSimulatorHIDInterruption.staleContext")
+                    && (reason.contains("FBSimulatorHIDCleanupOutcome.releaseEnqueuedAndDrained)")
+                        || (reason.contains("FBSimulatorHIDCleanupOutcome.notNeeded)") && receipt.cleanup == "notNeeded"))
                 let errors = diagnostic.split(separator: "\n").map(String.init).filter { $0.hasPrefix("Error:") }
-                try #require(errors.count == 1 && accepted.contains(errors[0]), "Native stop/release is not confirmed: \(diagnostic)")
+                try #require(native && ["releaseEnqueuedAndDrained", "notNeeded"].contains(receipt.cleanup)
+                    && receipt.quarantine == nil && errors.count == 1 && errors[0].hasPrefix("Error: Input stopped."),
+                    "Native stop/release is not confirmed: \(diagnostic)")
                 let released = try controls.documents.read()
                 try #require(!released.text.isEmpty && released.text.count < text.count && released.text.allSatisfy { $0 == "a" })
                 try #require(released.count("textChanged") == released.text.count)

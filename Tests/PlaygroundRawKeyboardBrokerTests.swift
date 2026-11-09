@@ -37,7 +37,7 @@ struct PlaygroundRawKeyboardBrokerTests {
             // A held raw touch must prevent keyboard input through the shared owner.
             // Require its exact busy receipt; a generic transport error cannot pass.
             let refused = try await session.command(["key", "42"], allowFailure: true)
-            let expectedError = "Error: Input stopped: busy; cleanup=notNeeded. Input was not replayed."
+            let expectedError = "Error: Another AXe command is using the simulator. Try again when it finishes."
             try #require(refused.exitCode == 1
                 && refused.output.trimmingCharacters(in: .whitespacesAndNewlines) == expectedError,
                 "Raw key did not return the shared-owner busy refusal: \(refused.output)")

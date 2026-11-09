@@ -16,20 +16,18 @@ struct PlaygroundSimulatorLifecycleTests {
         try #require(before[target] == "Booted", "The last lifecycle check needs the existing booted Duo.")
         try #require(before.contains { $0.key != target && $0.value == "Booted" },
             "A second warm simulator is required to prove it is preserved.")
-        let first = try await command([cli, "shutdown", "--udid", udid], directory: directory, name: "shutdown")
+        let first = try await command([cli, "--output", "json", "shutdown", "--udid", udid], directory: directory, name: "shutdown")
         try #require(first.exitCode == 0, "Shutdown failed: \(first.output)")
-        let completed = try JSONDecoder().decode(ShutdownAcceptanceReceipt.self, from: Data(first.output.utf8))
-        try #require(completed.source == "simctl" && completed.udid == target)
-        try #require(completed.initialState == "Booted" && completed.finalState == "Shutdown")
-        try #require(completed.outcome == "shutdownCompleted")
+        try OutputSchemas.validate(output: first.output)
+        let completed = try JSONDecoder().decode(ShutdownAcceptanceEnvelope.self, from: Data(first.output.utf8)).data.result
+        try #require(UUID(uuidString: completed.udid) == target)
+        try #require(completed.initialState == "Booted" && completed.outcome == "shutDown")
         let after = try await inventory(directory: directory, name: "after")
         try #require(after[target] == "Shutdown")
         try requireOtherDevicesPreserved(before, after, target: target)
         let again = try await command([cli, "shutdown", "--udid", udid], directory: directory, name: "already-shutdown")
         try #require(again.exitCode == 0)
-        let unchanged = try JSONDecoder().decode(ShutdownAcceptanceReceipt.self, from: Data(again.output.utf8))
-        try #require(unchanged.udid == target && unchanged.initialState == "Shutdown")
-        try #require(unchanged.finalState == "Shutdown" && unchanged.outcome == "alreadyShutdown")
+        try #require(again.output.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "\(udid) was already shut down".lowercased())
         for invalid in ["all", "booted", "not-a-uuid"] {
             let rejected = try await command([cli, "shutdown", "--udid", invalid], directory: directory, name: invalid)
             try #require(rejected.exitCode != 0)
@@ -62,12 +60,14 @@ struct PlaygroundSimulatorLifecycleTests {
     }
 }
 
-private struct ShutdownAcceptanceReceipt: Decodable {
-    let source: String
-    let udid: UUID
-    let initialState: String
-    let finalState: String
-    let outcome: String
+private struct ShutdownAcceptanceEnvelope: Decodable {
+    struct Payload: Decodable { let result: Receipt }
+    struct Receipt: Decodable {
+        let udid: String
+        let initialState: String
+        let outcome: String
+    }
+    let data: Payload
 }
 
 private struct ShutdownDeviceInventory: Decodable {

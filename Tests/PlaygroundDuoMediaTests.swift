@@ -112,7 +112,7 @@ struct PlaygroundDuoMediaTests {
         let session = try MediaPlaygroundSession(name: "fixed-movie")
         let before = try await session.open(inner: inner, rotation: 90)
         let file = session.directory.appendingPathComponent("fixed.mp4")
-        let process = try session.start(["record-video", "--output", file.path, "--fps", "2", "--scale", "0.25"]
+        let process = try session.start(["record-video", "--verbose", "--output", file.path, "--fps", "2", "--scale", "0.25"]
             + session.selection(before.catalogue), name: "record")
         do {
             try await session.waitForFrames(process, name: "record", prefix: "Selected recording accepted frames: ", minimum: 2)
@@ -122,7 +122,7 @@ struct PlaygroundDuoMediaTests {
             let stopDiagnostics = try session.stderr("record")
             try #require(process.exitCode == 0, "Recording stop failed: \(stopDiagnostics)")
             let receipt: MovieReceipt = try process.receipt(MovieReceipt.self)
-            try #require(receipt.stopReason == "signal" && receipt.output == file.path && receipt.acceptedFrames >= 2)
+            try #require(receipt.output == file.path && receipt.acceptedFrames >= 2)
             try await PlaygroundMediaAssertions.movie(file, width: receipt.width, height: receipt.height, expectedFrames: receipt.acceptedFrames)
             try await session.requireUnchanged(before)
         } catch { await process.finish(); throw error }
@@ -162,7 +162,7 @@ struct PlaygroundDuoMediaTests {
         let before = try await session.open(inner: !opening, rotation: opening ? 0 : 90)
         var layouts = [try await session.markerLayout(catalogue: before.catalogue, pid: before.pid)]
         let file = session.directory.appendingPathComponent("follow.mp4")
-        let process = try session.start(["record-video", "--follow-active-display", "--expected-boot", before.catalogue.bootIdentity,
+        let process = try session.start(["record-video", "--verbose", "--follow-active-display", "--expected-boot", before.catalogue.bootIdentity,
             "--output", file.path, "--fps", "2", "--scale", "0.25"], name: "record")
         do {
             try await session.waitForFrames(process, name: "record", prefix: "Follow-active recording accepted frames: ", minimum: 2)
@@ -185,8 +185,7 @@ struct PlaygroundDuoMediaTests {
             let stopDiagnostics = try session.stderr("record")
             try #require(process.exitCode == 0, "Recording stop failed: \(stopDiagnostics)")
             let receipt: MovieReceipt = try process.receipt(MovieReceipt.self)
-            try #require(receipt.followsActiveDisplay == true && (receipt.observedContextChanges ?? 0) > 0)
-            try #require(receipt.canvas == "firstFrameAspectFitBlackBars")
+            try #require((receipt.observedContextChanges ?? 0) > 0)
             try await PlaygroundMediaAssertions.movie(file, width: receipt.width, height: receipt.height,
                 expectedFrames: receipt.acceptedFrames, layouts: layouts)
             try await session.requireSameApp(before.pid)
@@ -333,13 +332,11 @@ private struct StreamRecord: Decodable {
     let completedFrames: Int?
     let stopReason: String?
 }
+/// The `--verbose` recording receipt.
 private struct MovieReceipt: Decodable {
     let output: String
     let width: Int
     let height: Int
     let acceptedFrames: Int
-    let stopReason: String
-    let followsActiveDisplay: Bool?
     let observedContextChanges: Int?
-    let canvas: String?
 }
