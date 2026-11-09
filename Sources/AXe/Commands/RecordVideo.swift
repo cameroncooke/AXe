@@ -7,10 +7,10 @@ import AVFoundation
 struct RecordVideo: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "record-video",
-        abstract: "Record the simulator display to an MP4 file using H.264 encoding"
+        abstract: "Record a simulator or physical device display to an H.264 MP4 file."
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @Option(help: "Frames per second (1-30, default: 10)")
@@ -39,17 +39,19 @@ struct RecordVideo: AsyncParsableCommand {
     var expectedBoot: String?
 
     func validate() throws {
-        if followActiveDisplay, screenID != nil || screenUUID != nil {
-            throw ValidationError("--follow-active-display cannot be combined with --screen-id or --screen-uuid.")
-        }
-        guard (screenID == nil) == (screenUUID == nil) else {
-            throw ValidationError("Selected recording requires both --screen-id and --screen-uuid.")
-        }
-        if let screenUUID, UUID(uuidString: screenUUID) == nil {
-            throw ValidationError("Selected recording requires a valid display UUID.")
-        }
-        if let expectedBoot, (!followActiveDisplay && screenID == nil) || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw ValidationError("--expected-boot requires selected or follow-active recording and a nonempty boot identity.")
+        if !AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            if followActiveDisplay, screenID != nil || screenUUID != nil {
+                throw ValidationError("--follow-active-display cannot be combined with --screen-id or --screen-uuid.")
+            }
+            guard (screenID == nil) == (screenUUID == nil) else {
+                throw ValidationError("Selected recording requires both --screen-id and --screen-uuid.")
+            }
+            if let screenUUID, UUID(uuidString: screenUUID) == nil {
+                throw ValidationError("Selected recording requires a valid display UUID.")
+            }
+            if let expectedBoot, (!followActiveDisplay && screenID == nil) || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ValidationError("--expected-boot requires selected or follow-active recording and a nonempty boot identity.")
+            }
         }
 
         guard fps >= 1 && fps <= 30 else {
@@ -66,6 +68,17 @@ struct RecordVideo: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            guard !followActiveDisplay, screenID == nil, screenUUID == nil, expectedBoot == nil else {
+                throw AutomationTarget.unsupportedOnDevice("Physical recording does not accept simulator display, boot, or follow options.")
+            }
+            guard let device = try await AutomationTarget.physicalDeviceRecord(udid: simulatorUDID) else {
+                throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
+            }
+            try await PhysicalDeviceMedia.record(device: device, output: output, fps: fps, quality: quality, scale: scale)
+            return
+        }
+
         if followActiveDisplay {
             try await FollowActiveVideoRecording.run(simulatorUDID: simulatorUDID, expectedBoot: expectedBoot,
                 output: output, fps: fps, quality: quality, scale: scale)

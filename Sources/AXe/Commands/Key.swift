@@ -5,7 +5,7 @@ import FBSimulatorControl
 
 struct Key: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a single key by keycode on the simulator.",
+        abstract: "Press a single key by keycode on a simulator or physical device.",
         discussion: """
         Press individual keys using their HID keycode values.
         Agent mode sends one default down/up to a current focused TextField reference.
@@ -32,7 +32,7 @@ struct Key: AsyncParsableCommand {
     @Option(name: .customLong("duration"), help: "Duration to hold the key in seconds (optional; unavailable with --agent).")
     var duration: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -73,7 +73,23 @@ struct Key: AsyncParsableCommand {
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
+    func physicalKeys(on input: PhysicalDeviceInput) async throws {
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw AutomationTarget.unsupportedOnDevice("Physical key presses do not support agent or selected display options.")
+        }
+        let code = UInt64(keycode)
+        try await input.keys([PhysicalKeyStep(code: code, pressed: true, delayAfter: duration ?? 0.03),
+                              PhysicalKeyStep(code: code, pressed: false)])
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await physicalKeys(on: input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

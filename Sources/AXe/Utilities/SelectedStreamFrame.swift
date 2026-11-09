@@ -73,6 +73,8 @@ enum SelectedStreamFrame {
         case .ffmpeg:
             // Concatenated JPEGs. No ffmpeg process is started.
             bytes = jpeg
+        case .h264:
+            throw CLIError(errorDescription: "The native H.264 stream does not use screenshot framing.")
         case .bgra:
             throw CLIError(errorDescription: "Unexpected selected BGRA encoding branch")
         }

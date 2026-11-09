@@ -131,10 +131,10 @@ enum GestureAction: ExpressibleByArgument {
 
 struct Gesture: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform a preset or a complete selected gesture.",
+        abstract: "Perform a preset or a complete coordinate gesture.",
         discussion: """
-        Execute a preset, or one complete gesture with selected input (the active screen unless --screen-id/--screen-uuid guard it).
-        Selected gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
+        Execute a preset, or one complete gesture with selected input (the active screen unless --screen-id/--screen-uuid guard it) or on a physical device.
+        Complete gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
         Double-tap requires -x/-y; rotate also requires --radius/--degrees.
         With --agent, double-tap instead requires a current --snapshot-id/--ref; --expected-pid is optional.
         It uses the fresh target point; the app can change between the two taps.
@@ -149,7 +149,7 @@ struct Gesture: AsyncParsableCommand {
         The opposite endpoint remains 20 points from its edge. No Back action is inferred.
         With --edge-inset, legacy input requires the path span to be at least --delta.
         No retained token or app-recognizer completion is implied.
-        Coordinate pinch requires -x, -y, --radius, --scale and --input-mode selected.
+        Coordinate pinch requires -x, -y, --radius and --scale. Simulators also require selected input.
         Scale below 1 moves fingers inward; above 1 moves them outward. Scale 1 fails.
         Pinch defaults: duration 0.6 seconds, delta 5 logical points; no retained token.
         
@@ -228,7 +228,7 @@ struct Gesture: AsyncParsableCommand {
     @Option(name: .customLong("post-delay"), help: "Delay after completing the gesture in seconds.")
     var postDelay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -248,11 +248,12 @@ struct Gesture: AsyncParsableCommand {
             throw ValidationError("--expected-pid requires gesture double-tap or pinch --agent.")
         }
         try selectedInput.validate()
+        let physical = AutomationTarget.isPhysicalInputUDID(simulatorUDID)
         if let edgeInset {
             guard case let .preset(preset) = gesture else {
                 throw ValidationError("--edge-inset is available only for edge presets.")
             }
-            if selectedInput.mode == .selected {
+            if selectedInput.mode == .selected || physical {
                 try preset.validateEdgeInset(edgeInset)
             } else {
                 try preset.validateEdgeInset(edgeInset, screenWidth: screenWidth ?? 390, screenHeight: screenHeight ?? 844)
@@ -273,8 +274,8 @@ struct Gesture: AsyncParsableCommand {
             guard degrees == nil, secondX == nil, secondY == nil, hold == nil, interval == nil else {
                 throw ValidationError("Pinch does not accept rotation or contact-hold options.")
             }
-            guard selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
-                throw ValidationError("Pinch requires selected input and does not accept screen dimension overrides.")
+            guard physical || selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Simulator pinch requires selected input. Pinch does not accept screen dimension overrides.")
             }
             try selectedPinch().validate()
         case .preset:
@@ -284,8 +285,8 @@ struct Gesture: AsyncParsableCommand {
             }
             if selectedInput.mode == .selected { try selectedPath().validate() }
         case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
-            guard selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
-                throw ValidationError("Complete gestures require selected input without dimension overrides.")
+            guard physical || selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Complete simulator gestures require selected input. Complete gestures do not accept screen dimension overrides.")
             }
             try selectedCompleteGesture().validate()
         }
@@ -444,7 +445,40 @@ struct Gesture: AsyncParsableCommand {
             doubleTapTiming: .init(hold: hold ?? 0.06, interval: interval ?? 0.1)), input: selectedInput)
     }
 
+    private func validateDeviceOptions() throws {
+        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+        if case .preset(.swipeFromRightEdge) = gesture {
+            throw AutomationTarget.unsupportedOnDevice("Right edge swipe is not supported on a physical device.")
+        }
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
+        try validateDeviceOptions()
+        switch gesture {
+        case .preset(let preset):
+            let edge: PhysicalTouchEdge
+            switch preset {
+            case .swipeFromLeftEdge: edge = .left
+            case .swipeFromBottomEdge: edge = .bottom
+            default: edge = .none
+            }
+            try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input)
+        case .pinch:
+            try await PhysicalDeviceGestures.pinch(selectedPinch(), on: input)
+        case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
+            try await PhysicalDeviceGestures.complete(selectedCompleteGesture(), on: input)
+        }
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try validateDeviceOptions()
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await runOnDevice(input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

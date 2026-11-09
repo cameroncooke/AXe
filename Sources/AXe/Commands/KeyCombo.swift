@@ -5,7 +5,7 @@ import FBSimulatorControl
 
 struct KeyCombo: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a key while holding one or more modifier keys on the simulator.",
+        abstract: "Press a key while holding one or more modifier keys on a simulator or physical device.",
         discussion: """
         Hold modifier keys and press another key as one complete sequence.
         Agent mode requires a current focused TextField snapshot/ref; --expected-pid is optional.
@@ -37,7 +37,7 @@ struct KeyCombo: AsyncParsableCommand {
     @Option(name: .customLong("key"), help: "The HID keycode to press while modifiers are held (0-255).")
     var key: Int
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -83,7 +83,29 @@ struct KeyCombo: AsyncParsableCommand {
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
+    func physicalKeys(on input: PhysicalDeviceInput) async throws {
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw AutomationTarget.unsupportedOnDevice("Physical key combinations do not support agent or selected display options.")
+        }
+        let codes = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
+        guard codes.allSatisfy({ (224...231).contains($0) }), Set(codes).count == codes.count, !codes.contains(key) else {
+            throw ValidationError("Use distinct HID modifiers in 224...231 and a different target key.")
+        }
+        let modifiers = codes.map(UInt64.init)
+        let steps = modifiers.map { PhysicalKeyStep(code: $0, pressed: true) }
+            + [PhysicalKeyStep(code: UInt64(key), pressed: true), PhysicalKeyStep(code: UInt64(key), pressed: false)]
+            + modifiers.reversed().map { PhysicalKeyStep(code: $0, pressed: false) }
+        try await input.keys(steps)
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await physicalKeys(on: input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

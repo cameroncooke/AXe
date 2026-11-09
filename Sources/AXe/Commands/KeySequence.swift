@@ -5,7 +5,7 @@ import FBSimulatorControl
 
 struct KeySequence: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a sequence of keys by their keycodes on the simulator.",
+        abstract: "Press a sequence of keys by their keycodes on a simulator or physical device.",
         discussion: """
         Press multiple keys in sequence using their HID keycode values.
         Each key will be pressed and released before the next key is pressed.
@@ -25,7 +25,7 @@ struct KeySequence: AsyncParsableCommand {
     @Option(name: .customLong("delay"), help: "Delay between key presses in seconds (default: 0.1).")
     var delay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
     
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -86,7 +86,27 @@ struct KeySequence: AsyncParsableCommand {
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
+    func physicalKeys(on input: PhysicalDeviceInput) async throws {
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw AutomationTarget.unsupportedOnDevice("Physical key sequences do not support agent or selected display options.")
+        }
+        let codes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
+        let steps = codes.enumerated().flatMap { index, code in
+            let interval = index + 1 < codes.count ? delay ?? 0.1 : 0
+            return [PhysicalKeyStep(code: UInt64(code), pressed: true),
+                    PhysicalKeyStep(code: UInt64(code), pressed: false, delayAfter: interval)]
+        }
+        try await input.keys(steps)
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await physicalKeys(on: input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

@@ -18,13 +18,17 @@ struct Hinge: AsyncParsableCommand {
         @Flag(name: .customLong("verbose"), help: "Print the full broker reply as JSON: samples, capability and boot identity.")
         var verbose = false
 
-        func validate() throws { try request().validate() }
+        func validate() throws {
+            if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
+            try request().validate()
+        }
         func request() throws -> SelectedHingeRequest {
             guard UUID(uuidString: simulatorUDID) != nil else { throw ValidationError("Invalid simulator UDID") }
             return SelectedHingeRequest(kind: .read, expectedBootIdentity: expectedBoot,
                 degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil)
         }
         func run() async throws {
+            try AutomationTarget.refuseOnDevice(simulatorUDID, "The hinge is available on iPhone Duo simulators only.")
             let response = try SelectedHIDBroker.send(try request().brokerRequest(), simulatorUDID: simulatorUDID)
             if verbose { try SelectedHIDBroker.printResponse(response, verbose: true); return }
             guard response.error == nil, let sample = response.hinge?.readback?.sample else {
@@ -79,6 +83,7 @@ struct Hinge: AsyncParsableCommand {
         var verbose = false
 
         func validate() throws {
+            if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
             try request(bootIdentity: expectedBoot).validate()
             if noWait, waitForScreenID != nil {
                 throw ValidationError("--no-wait cannot be combined with --wait-for-screen-id")
@@ -100,6 +105,7 @@ struct Hinge: AsyncParsableCommand {
                 degrees: degrees, toleranceDegrees: tolerance, timeoutSeconds: timeout, readiness: readiness)
         }
         func run() async throws {
+            try AutomationTarget.refuseOnDevice(simulatorUDID, "The hinge is available on iPhone Duo simulators only.")
             let boot = try expectedBoot ?? DeviceState.currentBootIdentity(udid: simulatorUDID)
             let response = try SelectedHIDBroker.send(try request(bootIdentity: boot).brokerRequest(),
                 simulatorUDID: simulatorUDID)

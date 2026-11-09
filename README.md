@@ -55,7 +55,7 @@ AXe keeps its own copy of the two IDB frameworks it uses, `FBControlCore` and `F
 
 ## E2E development
 
-`make build`, `make test` and `make e2e` rebuild the IDBKit XCFrameworks first when `Packages/IDBKit`, the selected Xcode or the requested architectures changed since their last build; otherwise they reuse them. `make e2e` then builds AXe and runs the whole Playground suite with the Xcode selected by `DEVELOPER_DIR` or `xcode-select` on dedicated iPhone 18 Pro, iPad Air 11-inch (M4) and iPhone Duo simulators, creating any that are missing; the Duo reboots before each of its groups. The Playground app needs the iOS 27.1 SDK or later (Xcode 27.1+) for its Duo hinge view, and a failed Playground build prints its errors. XcodeGen is required to generate the IDBKit project. Without an iPhone Duo simulator it runs the iPhone and iPad groups and exits 2. See [Playground testing](docs/playground-testing.md) for the simulator overrides and for rerunning single groups.
+`make build`, `make test` and `make e2e` rebuild the IDBKit XCFrameworks first when `Packages/IDBKit`, the selected Xcode or the requested architectures changed since their last build; otherwise they reuse them. `make e2e` then builds AXe and runs the whole Playground suite with the Xcode selected by `DEVELOPER_DIR` or `xcode-select` on dedicated iPhone 18 Pro, iPad Air 11-inch (M4) and iPhone Duo simulators, creating any that are missing; the Duo reboots before each of its groups. The Playground app needs the iOS 27.1 SDK or later (Xcode 27.1+) for its Duo hinge view, and a failed Playground build prints its errors. XcodeGen is required to generate the IDBKit project. Without an iPhone Duo simulator it runs the iPhone and iPad groups and exits 2. See [Playground testing](docs/playground-testing.md) for the simulator overrides and for rerunning single groups. `make e2e-devices` is a separate, opt-in run on connected physical iPhones and iPads. It exits 1 before building when none is paired. For quick performance iteration, `make bench-quick` times direct commands against a baseline payload in a minute or a few; see [Quick performance check](docs/playground-testing.md#quick-performance-check). The benchmark suite stays the release gate.
 
 For repeated local Playground checks, reuse the requested warm simulator. Do not create a fresh simulator for each check. A warm-session pass does not prove cold-start readiness.
 
@@ -117,6 +117,49 @@ axe tap --label "Continue" --udid "$UDID"
 axe type 'Hello world' --udid "$UDID"
 axe screenshot --output ./screen.png --udid "$UDID"
 ```
+
+## Physical iPhone and iPad
+
+Use the UDID from `list-devices` for the connected device:
+
+```bash
+axe list-devices
+axe --output json list-devices
+axe doctor --udid "$DEVICE_UDID"
+axe screenshot --udid "$DEVICE_UDID" --output ./device.png
+```
+
+`list-devices` shows known physical devices and the checks it can make from Xcode's inventory. It reports an idle network connection as unchecked; `doctor` and device commands reconnect it. Run `doctor` for a fresh check of pairing, Developer Mode, connection, developer disk image services, lock state and screenshot service availability. It exits nonzero if the target is not ready. With a simulator UDID, `doctor` checks whether the simulator is booted. Use `--output json` to read the checks as structured data.
+
+Pair and prepare the device in Xcode, enable Developer Mode on the device, and keep it unlocked. Each command checks the lock state when it starts. A batch checks again before input that follows a quiet gap of 25 seconds or more, and it refuses input after its own `button lock` step. CoreDevice reports a device without a passcode as unlocked even on the lock screen. AXe uses the connection Xcode manages. It does not pair, enable Developer Mode, mount a developer disk image, or unlock the device. Physical device support covers listing, readiness checks, screenshots, accessibility reads and direct input. Use the hardware UDID from `list-devices`.
+
+```bash
+axe describe-ui --udid "$DEVICE_UDID"
+axe tap --udid "$DEVICE_UDID" -x 110 -y 240
+axe tap --udid "$DEVICE_UDID" --id "$ELEMENT_ID" --wait-timeout 15
+axe swipe --udid "$DEVICE_UDID" --start-x 110 --start-y 500 --end-x 110 --end-y 250
+axe rotate left --udid "$DEVICE_UDID"
+```
+
+Use logical screen points in the current orientation. A screenshot contains pixels. For typing, focus the field on the phone before sending text; device `type` accepts up to 256 UTF-8 bytes per command with the US key layout. The bottom-edge swipe preset is unavailable in landscape with the camera on the right, and the left-edge preset upside down. The physical lock button requires `--allow-lock`. Standalone `touch` requires `--down --up`; a physical batch can hold a contact between its steps and releases it on exit. For selector taps, use an ID, label or value from the current tree. AXe checks that the target is unique and still owns the tap point in a fresh read. A `--point x,y` read uses the tree's element frames. Use `axe tap --semantic-press --udid "$DEVICE_UDID" --id "$CHECKBOX_ID"` for a visible checkbox with an exact ID. A successful result records a native reply and the changed Boolean value. If an alert blocks the tree, close it on the device and retry. Agent mode, selected displays, side button, Apple Pay and the right-edge swipe preset are unavailable on physical devices, and so are `displays`, `shutdown`, `hinge`, `clipboard` and `slider`; each returns `unsupportedOnDevice`.
+
+Input, reads and video work on iPhone and iPad in every orientation, including with Orientation Lock on. `rotate` needs Orientation Lock off; otherwise it returns `rotationLocked`. It succeeds only when the display reaches the orientation the device reports, and returns `rotationUnconfirmed` once the display has stood still for 2.5 seconds without reaching it, for example when an iPhone is asked to turn upside down. After a software rotation, the tested iPad sometimes kept reporting its previous display orientation. AXe then returns `rotationUnconfirmed`, and touch commands return `displayOrientationMismatch` without sending input until another rotation brings the two back into agreement.
+
+Use `stream-video` or `record-video` with the same hardware UDID:
+
+```bash
+axe stream-video --udid "$DEVICE_UDID" --format raw --fps 3 --scale 0.5 > frames.bin
+axe record-video --udid "$DEVICE_UDID" --fps 3 --scale 0.5 --output device.mp4
+```
+
+Press Ctrl+C to finish. The screenshot stream supports `mjpeg`, `raw`, `ffmpeg` and `bgra`.
+The requested FPS is an upper limit. Recording writes H.264 in an MP4 file after a clean stop.
+Native `stream-video --format h264` sends Annex B to stdout and uses the phone's encoding settings. Its frames keep the display's native orientation, and AXe passes them through without re-encoding. When the interface is turned relative to that orientation, as on an iPad in portrait, stderr says how many degrees clockwise to rotate the frames, from the orientation at the start of the stream. If AXe cannot confirm that orientation, stderr says so instead.
+Leave out `--fps`, `--quality` and `--scale` for this format. When you stop, AXe waits for its
+stream to end. This can take about 20 seconds on the tested iPhone. The device sends one native
+display stream at a time. Native `h264` and Xcode Device Hub's screen view replace each other's
+stream; AXe then exits with `deviceStreamReplaced`. Screenshots, screenshot streams, recording,
+accessibility reads and input work while Device Hub shows the screen.
 
 ## Output format
 
@@ -430,7 +473,7 @@ Selected capture does not replace an existing output file. On success, stdout co
 
 For selected capture, `SIGINT` and `SIGTERM` request cancellation. AXe waits for the operation to return, including its cleanup path. Cancellation accepted before output publication produces no PNG. A late signal can arrive after publication. Unconfirmed cleanup remains an error; this does not guarantee cleanup after parent termination or `SIGKILL`.
 
-Without the screen pair, `screenshot` retains its legacy capture, output replacement and path-only stdout.
+Without the screen pair, simulator screenshots retain legacy capture, output replacement and path-only stdout.
 
 ## Selected video recording
 

@@ -50,6 +50,7 @@ struct Slider: AsyncParsableCommand {
     var simulatorUDID: String
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         try agentMode.validate()
         if let value, !value.isFinite || !(0...100).contains(value) {
             throw ValidationError("--value must be a finite number between 0 and 100.")
@@ -106,6 +107,7 @@ struct Slider: AsyncParsableCommand {
     }
 
     func run() async throws {
+        try AutomationTarget.refuseOnDevice(simulatorUDID, "Slider is available on simulators only.")
         if agentMode.enabled {
             try validate()
             let mode = AgentModeRequest(kind: value == nil ? .sliderEndpoint : .sliderPercentage, expectedPID: selectedAX.expectedPID,

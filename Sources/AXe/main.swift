@@ -11,7 +11,7 @@ struct Axe: AsyncParsableCommand {
     static let axeLogger = AxeLogger() // Corrected initializer
 
     static let configuration = CommandConfiguration(
-        abstract: "A utility to interact with iOS Simulators and extract accessibility information.",
+        abstract: "Automate iOS simulators or connected iPhones and iPads.",
         discussion: """
         Output: --output text|json selects one command result. Put it before the command for all
         commands. Non-media commands also accept it after the command. Screenshot and record-video
@@ -23,6 +23,8 @@ struct Axe: AsyncParsableCommand {
             DescribeUI.self,
             ListSimulators.self,
             Displays.self,
+            ListDevices.self,
+            Doctor.self,
             Shutdown.self,
             Clipboard.self,
             Init.self,
@@ -45,7 +47,8 @@ struct Axe: AsyncParsableCommand {
             Screenshot.self,
             Batch.self,
             SliderReadWorkerCommand.self,
-            HIDBrokerCommand.self
+            HIDBrokerCommand.self,
+            PhysicalDeviceBrokerCommand.self
         ]
     )
 
@@ -74,7 +77,7 @@ struct Axe: AsyncParsableCommand {
                 }
                 var command = try parseAsRoot(invocation.arguments)
                 parsed = true
-                if command is StreamVideo || command is HIDBrokerCommand || command is SliderReadWorkerCommand {
+                if command is StreamVideo || command is HIDBrokerCommand || command is SliderReadWorkerCommand || command is PhysicalDeviceBrokerCommand {
                     throw CLIOutputFailure(code: "unsupportedOutput",
                         message: "--output text|json is not supported for binary streaming or internal worker commands.")
                 }

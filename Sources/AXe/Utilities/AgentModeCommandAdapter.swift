@@ -24,6 +24,7 @@ enum AgentModeCommandAdapter {
     }
 
     static func send(_ originalRequest: SelectedHIDRequest, simulatorUDID: String) throws {
+        try AutomationTarget.refuseOnDevice(simulatorUDID, "Agent mode is available on simulators only.")
         guard UUID(uuidString: simulatorUDID) != nil else {
             throw ValidationError("--udid must be a nonempty simulator UUID. Set SIM_UUID or run axe list-simulators.")
         }

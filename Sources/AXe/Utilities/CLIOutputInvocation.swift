@@ -22,7 +22,7 @@ struct CLIOutputInvocation: Sendable {
         let flags: Set<String> = [
             "--agent", "--stdin", "--continue-on-error", "--verbose", "--force", "--uninstall",
             "--print", "--displays", "--follow-active-display", "--semantic-press", "--down",
-            "--up", "--json", "--selected", "--no-wait", "--help", "-h", "--help-hidden", "--version"
+            "--up", "--allow-lock", "--json", "--selected", "--no-wait", "--help", "-h", "--help-hidden", "--version"
         ]
         while index < original.count {
             let token = original[index]
@@ -38,6 +38,7 @@ struct CLIOutputInvocation: Sendable {
                 continue
             }
             let internalCommand = commandName == "hid-broker" || commandName == "slider-read-worker"
+                || commandName == "physical-device-broker"
             let mediaPath = commandName == "screenshot" || commandName == "record-video"
             let outputToken = token == "--output" || token.hasPrefix("--output=")
             if outputToken, !mediaPath, !internalCommand {

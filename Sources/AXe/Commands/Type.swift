@@ -42,7 +42,7 @@ struct Type: AsyncParsableCommand {
     @Option(name: .customLong("file"), help: "Read text from the specified file.")
     var inputFile: String?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @Flag(name: .customLong("focus"), help: "Agent only: physically tap the referenced TextField, verify its focus, then type. Returns two phase receipts; input is never replayed.")
@@ -109,7 +109,38 @@ struct Type: AsyncParsableCommand {
         return try selectedKeyboard.request(input: selectedInput, event: SelectedKeyboardRequest.textEvent(input))
     }
 
+    func physicalType(on input: PhysicalDeviceInput, standardInput: FileHandle = .standardInput) async throws {
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw AutomationTarget.unsupportedOnDevice("Physical typing sends keys to the current focus without agent or selected display options.")
+        }
+        let text = try AgentModeCommandAdapter.readText(text, useStdin: useStdin,
+            inputFile: inputFile, standardInput: standardInput)
+        guard !text.isEmpty, text.utf8.count <= SelectedKeyboardRequest.maximumTextBytes else {
+            throw ValidationError("Physical typing requires 1...256 UTF-8 bytes.")
+        }
+        let steps = try text.flatMap { character -> [PhysicalKeyStep] in
+            let event = KeyEvent.keyCodeForString(String(character))
+            guard event.keyCode != 0 else {
+                throw TextToHIDEvents.TextConversionError.unsupportedCharacter(character)
+            }
+            let code = UInt64(event.keyCode)
+            let press = [PhysicalKeyStep(code: code, pressed: true), PhysicalKeyStep(code: code, pressed: false)]
+            if event.shift {
+                return [PhysicalKeyStep(code: 225, pressed: true)] + press + [PhysicalKeyStep(code: 225, pressed: false)]
+            }
+            return press
+        }
+        try await input.keys(steps)
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await physicalType(on: input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

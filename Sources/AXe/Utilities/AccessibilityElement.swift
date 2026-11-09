@@ -1,6 +1,6 @@
 import Foundation
 
-struct AccessibilityElement: Decodable {
+struct AccessibilityElement: Decodable, Sendable {
     private static let actionableTypes: Set<String> = [
         "Button",
         "Cell",
@@ -19,7 +19,7 @@ struct AccessibilityElement: Decodable {
         "Toggle"
     ]
 
-    struct Frame: Decodable {
+    struct Frame: Decodable, Sendable {
         let x: Double
         let y: Double
         let width: Double
@@ -41,6 +41,7 @@ struct AccessibilityElement: Decodable {
     let title: String?
     let help: String?
     let enabled: Bool?
+    let hidden: Bool?
     let customActions: [String]?
 
     enum CodingKeys: String, CodingKey {
@@ -58,6 +59,7 @@ struct AccessibilityElement: Decodable {
         case title
         case help
         case enabled
+        case hidden
         case customActions = "custom_actions"
     }
 
@@ -85,6 +87,7 @@ struct AccessibilityElement: Decodable {
         } else {
             enabled = nil
         }
+        hidden = try? container.decodeIfPresent(Bool.self, forKey: .hidden)
         customActions = try? container.decodeIfPresent([String].self, forKey: .customActions)
     }
 

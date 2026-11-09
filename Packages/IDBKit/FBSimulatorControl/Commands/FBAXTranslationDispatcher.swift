@@ -42,6 +42,7 @@ final class FBAXTranslationDispatcher: NSObject, AXPTranslationTokenDelegateHelp
   private let callbackQueue: DispatchQueue
   private let lock = NSLock()
   private var tokenToRequest: [String: FBAXTranslationRequest] = [:]
+  private var physicalCallbacks: [String: AXPTranslationCallback] = [:]
 
   init(translator: AXPTranslator, logger: FBControlCoreLogger?) {
     self.translator = translator
@@ -81,6 +82,27 @@ final class FBAXTranslationDispatcher: NSObject, AXPTranslationTokenDelegateHelp
     element.axSetBridgeDelegateToken(request.token)
     transferred = true
     return element
+  }
+
+  func withPhysicalTree<T>(answer: @escaping AXPTranslationCallback,
+                           _ project: (AXPTranslator, String) throws -> T) throws -> T {
+    guard let translator else { throw FBAccessibilityError.dispatcherUnavailable }
+    let token = UUID().uuidString
+    lock.lock()
+    physicalCallbacks[token] = answer
+    lock.unlock()
+    defer {
+      lock.lock()
+      physicalCallbacks.removeValue(forKey: token)
+      lock.unlock()
+    }
+    return try project(translator, token)
+  }
+
+  private func physicalCallback(forToken token: String) -> AXPTranslationCallback? {
+    lock.lock()
+    defer { lock.unlock() }
+    return physicalCallbacks[token]
   }
 
   // MARK: - Private
@@ -123,6 +145,7 @@ final class FBAXTranslationDispatcher: NSObject, AXPTranslationTokenDelegateHelp
   // result. The wait must never run on the main queue.
   func accessibilityTranslationDelegateBridgeCallback(withToken token: String) -> AXPTranslationCallback {
     guard let request = request(forToken: token) else {
+      if let callback = physicalCallback(forToken: token) { return callback }
       return { [weak self] _ in
         self?.logger?.log("Request with token \(token) is gone. Returning empty response")
         return Self.emptyResponse()

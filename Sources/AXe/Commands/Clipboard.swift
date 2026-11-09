@@ -27,12 +27,14 @@ private struct ClipboardCopy: AsyncParsableCommand {
     var simulatorUDID: String
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         guard useStdin, UUID(uuidString: simulatorUDID) != nil else {
             throw ValidationError("clipboard copy requires --stdin and --udid with one valid simulator UUID.")
         }
     }
 
     func run() async throws {
+        try AutomationTarget.refuseOnDevice(simulatorUDID, "The clipboard is available on simulators only.")
         try validate()
         guard let udid = UUID(uuidString: simulatorUDID) else {
             throw ValidationError("clipboard copy requires one valid simulator UUID.")

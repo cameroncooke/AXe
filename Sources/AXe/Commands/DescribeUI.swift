@@ -3,16 +3,16 @@ import Foundation
 
 struct DescribeUI: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Describes the UI hierarchy of a booted simulator using accessibility information."
+        abstract: "Describe the accessibility hierarchy of a booted simulator or physical device."
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @Option(
         name: .customLong("point"),
         help: ArgumentHelp(
-            "Describe one element at x,y. Selected mode uses oriented logical display points.",
+            "Describe one element at x,y. Physical devices and selected mode use oriented logical display points.",
             valueName: "x,y"
         )
     )
@@ -45,6 +45,7 @@ struct DescribeUI: AsyncParsableCommand {
     var textLimit: Int?
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID), hasSimulatorOnlyOptions { return }
         try agentMode.validate()
         if agentMode.enabled {
             guard point == nil, agentMode.elementRef == nil else {
@@ -81,7 +82,29 @@ struct DescribeUI: AsyncParsableCommand {
         _ = try parsedPoint()
     }
 
+    private var hasSimulatorOnlyOptions: Bool {
+        PhysicalAccessibilityCommands.usesSimulatorOptions(input: selectedInput, ax: selectedAX, agent: agentMode)
+            || sinceScreenHash != nil || rowOffset != nil || rowLimit != nil || readRef != nil
+            || textField != nil || textOffset != nil || textLimit != nil
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            guard !hasSimulatorOnlyOptions else {
+                throw AutomationTarget.unsupportedOnDevice("Physical describe-ui does not accept agent mode or simulator display and process options.")
+            }
+            if let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+                let snapshot = try await PhysicalAccessibility.read(for: device)
+                let data: Data
+                if let point = try parsedPoint() {
+                    data = try PhysicalAccessibilityCommands.pointJSON(at: point.cgPoint, in: snapshot)
+                } else {
+                    data = snapshot.json
+                }
+                try CLIOutput.writeJSONData(data)
+                return
+            }
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

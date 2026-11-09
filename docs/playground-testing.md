@@ -74,6 +74,90 @@ The focus-and-type suites belong to both the agent and keyboard groups and run o
 
 The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases and three raw/selected input handover cases. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
 
+## Physical devices
+
+The physical-device checks are opt-in and separate from `make e2e`:
+
+```sh
+DEVELOPER_DIR=/absolute/path/to/Xcode.app/Contents/Developer make e2e-devices
+```
+
+`make e2e-devices` runs `scripts/run-e2e-devices.sh`. It reads CoreDevice's device list first and
+exits 1 before building anything when it lists no paired physical iPhone or iPad. It checks pairing only:
+an offline device that CoreDevice still remembers passes this step and fails at install. It then builds
+the AXe runtime payload and the Playground for iOS devices with automatic signing, installs the
+Playground on each device, compiles `scripts/fixtures/MediaPatternCheck.swift` and runs
+`scripts/test-physical-devices.py`. Build logs and payloads go to `e2e-results/devices-<UTC time>/`,
+and the check results to its `checks/` folder: every command in `commands.log` (long-running stream
+commands are logged when they start) and `results.json`, which also counts tree reads retried after a
+failure. Each tree read is tried up to three times. The Playground needs the iOS 27.1 SDK or later.
+
+Keep each device unlocked, awake and in Developer Mode. Set `AXE_E2E_DEVICES` to a space-separated
+list of hardware UDIDs to test only those, `AXE_E2E_SKIP_ROTATION=1` to leave orientation unchanged,
+and `AXE_E2E_ALLOW_PROVISIONING_UPDATES=1` to let Xcode register a new device while signing.
+
+| Check | Read back from |
+| --- | --- |
+| `doctor` | All readiness checks ready |
+| Coordinate taps | Tap Test records each tap at the exact point |
+| Typing and keys | The text field holds `axe e2e`, then `axe e2` after backspace |
+| Element tap and point lookup | `describe-ui --point` finds `media-pattern-next`; `tap --id` advances the marker phase |
+| Screenshot | Upright: four squares, eight edge samples and the app's current phase |
+| Raw stream and MP4 recording | Upright decoded frames across one marker change; SIGINT exits 0 |
+| Native H.264 | Frames across two changes 24 seconds apart, past the 20-second RTCP timeout, turned by the rotation AXe announces, with few decode failures |
+| Rotation | Four `rotate right` turns; each confirmed turn places the next tap exactly, and swaps the app frame when the turn before it was confirmed too |
+| All devices at once (two or more devices) | Parallel screenshots and native streams with a marker change on each |
+
+The rotation check accepts `rotationUnconfirmed` because an iPad can keep reporting its previous
+display orientation after a software rotation, and an iPhone does not turn its interface upside down.
+After an unconfirmed turn the next tap may refuse with `displayOrientationMismatch` (iPad) or land
+(iPhone); it fails if a refused tap reaches the app or a landed tap misses, and the result counts the
+two outcomes apart. It requires at least two confirmed turns.
+
+The suite does not exercise swipes, drags, gestures, two-finger input, edge presets, standalone `touch`,
+batches with held contacts, key sequences and combinations, hardware buttons, semantic press, the lock
+refusal or `deviceStreamReplaced`. See [device-support.md](device-support.md) for which of these have
+live checks.
+
+## Quick performance check
+
+`make bench-quick` times direct CLI commands with a baseline and a candidate payload on one simulator
+or device, for quick iteration. The benchmark suite in `benchmarks/` stays the release gate; it measures
+whole agent tasks and takes much longer.
+
+```sh
+AXE_BENCH_UDID=<udid> AXE_BENCH_BASELINE=/path/to/baseline/payload/axe make bench-quick
+```
+
+The target builds the current tree as a payload (`axe` with `Frameworks` beside it) and runs
+`scripts/bench-quick.py`; set `AXE_BENCH_CANDIDATE` to time an existing payload instead, and
+`AXE_BENCH_ARGS` for extra flags. Both builds must be payloads: a debug build in `.build/` loads the
+current tree's frameworks. Use the latest release payload as the simulator baseline. Devices have no
+release, so pin a payload under `e2e-results/bench-quick/baselines/` and replace it only with
+`--accept NAME` after a run without regression.
+
+It launches the Playground's Tap Test screen and alternates blocks of the two builds. Before each block
+it stops every AXe broker for the target, whatever build started it, and waits for it to exit: a broker
+from another build could otherwise serve the block, and device brokers refuse a different build. A
+block times the first `describe-ui` (cold broker), then repeats each command three times (warm), then
+checks that the last tap landed.
+
+| Target | Commands |
+| --- | --- |
+| Simulator | `describe-ui`, `tap`, `key`; selected `describe-ui` and `tap`; `describe-ui --agent` and its output size |
+| Device | `describe-ui`, `tap`, `key`; `--full` adds `tap --id`, a 3-tap batch and a screenshot |
+
+A command is reported slower only when the candidate is slower in every pair (at least five) and the
+median difference exceeds the resolution: twice the median absolute deviation of its warm samples, and
+at least 3% of the baseline. When any command is flagged, as many pairs again run, and the result stands
+only if all but one combined pair agree. Otherwise it prints "no difference" with the resolution. Run
+`--self-check` (the baseline against itself) to see the noise floor on a machine. Exit status: 0 no
+regression, 1 regression, 2 failed commands. Reports go to `e2e-results/bench-quick/`.
+
+It does not cover task success, tokens across real tasks, competitor comparison, boot, Duo fold
+transitions or video; those stay with the release benchmark and the e2e suites. AXe's agent-mode phase
+timing (`AXE_TIMING`) is available with `--phases` to explain a difference, not to decide one.
+
 ## What the checks prove
 
 Core input checks use current raw accessibility frames and real control state. They require exact text, switch/slider values, new visible rows, gesture callbacks and physical contact paths. Duo repeats coordinate and gesture paths in all seven supported display/orientation positions. The outer display does not support upside-down portrait. Selected requests also check the physical display and boot identity and reject inactive or stale targets before input.

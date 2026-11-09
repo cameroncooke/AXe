@@ -8,7 +8,7 @@ struct Tap: AsyncParsableCommand {
         abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
     )
 
-    @Flag(name: .customLong("semantic-press"), help: "Selected AX only: send one AXPress to an exact native CheckBox ID and require a fresh Boolean value change. No HID or mouse fallback; readback is not app callback proof.")
+    @Flag(name: .customLong("semantic-press"), help: "Send one AXPress to an exact native CheckBox ID and confirm a Boolean value change. Simulator targets require selected AX.")
     var semanticPress = false
 
     @Option(name: .customShort("x"), help: "The X coordinate of the point to tap.")
@@ -53,7 +53,7 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25). Selected active polling accepts finite values in 0.05...30 seconds; a non-default interval requires a positive wait.")
     var pollInterval: Double = 0.25
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
 
@@ -63,6 +63,13 @@ struct Tap: AsyncParsableCommand {
     @OptionGroup var agentMode: AgentModeOptions
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            if hasSimulatorOnlyOptions || (!semanticPress && tapStyle == .simulator) { return }
+            if semanticPress {
+                _ = try physicalSemanticIdentifier()
+                return
+            }
+        }
         try agentMode.validate()
         if agentMode.enabled {
             try validateAgent()
@@ -270,7 +277,86 @@ struct Tap: AsyncParsableCommand {
         return policy
     }
 
+    private var hasSimulatorOnlyOptions: Bool {
+        PhysicalAccessibilityCommands.usesSimulatorOptions(input: selectedInput, ax: selectedAX, agent: agentMode)
+            || labelContains != nil || labelRegex != nil || selectorFrame != nil
+    }
+
+    private func physicalSemanticIdentifier() throws -> String {
+        guard !hasSimulatorOnlyOptions else {
+            throw AutomationTarget.unsupportedOnDevice("Physical semantic press does not accept agent mode or simulator display and process options.")
+        }
+        guard let elementID, !elementID.isEmpty,
+              elementID == elementID.trimmingCharacters(in: .whitespacesAndNewlines),
+              elementID.utf8.count <= 4096 else {
+            throw ValidationError("Physical --semantic-press requires one exact --id of at most 4096 UTF-8 bytes.")
+        }
+        guard pointX == nil, pointY == nil, elementLabel == nil, elementValue == nil, elementType == nil,
+              tapStyle == nil, preDelay == nil, postDelay == nil, waitTimeout == 0, pollInterval == 0.25 else {
+            throw ValidationError("Physical --semantic-press accepts only --id and --udid. Remove coordinates, other selectors, style, delays and polling.")
+        }
+        return elementID
+    }
+
+    private func validateDeviceTapOptions() throws {
+        guard !semanticPress else {
+            throw AutomationTarget.unsupportedOnDevice("Run physical semantic press as a standalone tap command.")
+        }
+        guard !hasSimulatorOnlyOptions else {
+            throw AutomationTarget.unsupportedOnDevice("Physical tap does not accept agent mode or simulator display and process options.")
+        }
+        guard tapStyle != .simulator else {
+            throw AutomationTarget.unsupportedOnDevice("Use the physical tap style on a physical device.")
+        }
+        if pointX != nil || pointY != nil {
+            guard elementID == nil, elementLabel == nil, elementValue == nil, elementType == nil,
+                  waitTimeout == 0, pollInterval == 0.25 else {
+                throw ValidationError("Physical coordinate taps do not accept selectors or polling options.")
+            }
+        }
+    }
+
+    func physicalTap(on input: PhysicalDeviceInput) async throws {
+        try validateDeviceTapOptions()
+        if let preDelay { try await Task.sleep(for: .seconds(preDelay)) }
+        if let pointX, let pointY {
+            try await input.tap(at: CGPoint(x: pointX, y: pointY))
+        } else {
+            let query: AccessibilityQuery
+            if let elementID { query = .id(elementID) }
+            else if let elementLabel { query = .label(elementLabel) }
+            else if let elementValue { query = .value(elementValue) }
+            else { throw ValidationError("Physical tap requires coordinates or one accessibility selector.") }
+
+            try await PhysicalAccessibilityCommands.tap(query: query, elementType: elementType,
+                waitTimeout: waitTimeout, pollInterval: pollInterval, on: input)
+        }
+        if let postDelay { try await Task.sleep(for: .seconds(postDelay)) }
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            let identifier = semanticPress ? try physicalSemanticIdentifier() : nil
+            if identifier == nil { try validateDeviceTapOptions() }
+            guard let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) else {
+                throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
+            }
+            if let identifier {
+                let receipt = try await PhysicalAccessibility.semanticPress(identifier: identifier, for: device)
+                try CLIOutput.writeJSON(receipt)
+                guard receipt.identifier == identifier, receipt.stateBefore != receipt.stateAfter,
+                      (1...4).contains(receipt.readbackCount), receipt.outcome == "switchValueChangedObserved",
+                      receipt.delivery == "nativeReplyAccepted" else {
+                    throw CLIOutputFailure(code: "semanticPressUnconfirmed",
+                        message: "The device did not confirm a Boolean switch value change after the press. Check the current switch state before another action.")
+                }
+            } else {
+                try await PhysicalDeviceInput.withSession(for: device) { input in
+                    try await physicalTap(on: input)
+                }
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

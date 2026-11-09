@@ -10,12 +10,14 @@ struct Shutdown: AsyncParsableCommand {
     var simulatorUDID: String
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         guard UUID(uuidString: simulatorUDID) != nil else {
             throw ValidationError("shutdown requires --udid with one valid simulator UUID.")
         }
     }
 
     func run() async throws {
+        try AutomationTarget.refuseOnDevice(simulatorUDID, "AXe cannot shut down a physical device.")
         guard let udid = UUID(uuidString: simulatorUDID) else {
             throw ValidationError("shutdown requires --udid with one valid simulator UUID.")
         }

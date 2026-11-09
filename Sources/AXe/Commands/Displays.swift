@@ -20,12 +20,14 @@ struct Displays: AsyncParsableCommand {
     var verbose = false
 
     func validate() throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         guard UUID(uuidString: simulatorUDID) != nil else {
             throw ValidationError("--udid must be a simulator UDID.")
         }
     }
 
     func run() async throws {
+        try AutomationTarget.refuseOnDevice(simulatorUDID, "Displays are available on simulators only.")
         let logger = AxeLogger()
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         let discovery = try await DeviceState.settledDiscovery(for: simulator)

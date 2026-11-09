@@ -9,17 +9,18 @@ struct StreamVideo: AsyncParsableCommand {
         case raw
         case ffmpeg
         case bgra
+        case h264
     }
 
     static let configuration = CommandConfiguration(
         commandName: "stream-video",
-        abstract: "Stream simulator frames to stdout using screenshot capture"
+        abstract: "Stream frames from a simulator or physical device to stdout."
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
-    @Option(help: "Output format: mjpeg, raw, ffmpeg, bgra (default: mjpeg)")
+    @Option(help: "Output format: mjpeg, raw, ffmpeg, bgra, or native H.264 Annex B on physical devices (h264). Default: mjpeg.")
     var format: OutputFormat = .mjpeg
 
     @Option(help: "Frames per second (1-30, default: 10)")
@@ -42,16 +43,21 @@ struct StreamVideo: AsyncParsableCommand {
     var expectedBoot: String?
 
     func validate() throws {
-        guard (screenID == nil) == (screenUUID == nil) else {
-            throw ValidationError("Selected streaming requires both --screen-id and --screen-uuid.")
+        let physical = AutomationTarget.isPhysicalInputUDID(simulatorUDID)
+        if !physical {
+            guard format != .h264 else {
+                throw ValidationError("Native --format h264 requires a physical device UDID.")
+            }
+            guard (screenID == nil) == (screenUUID == nil) else {
+                throw ValidationError("Selected streaming requires both --screen-id and --screen-uuid.")
+            }
+            if let screenUUID, UUID(uuidString: screenUUID) == nil {
+                throw ValidationError("Selected streaming requires a valid display UUID.")
+            }
+            if let expectedBoot, screenID == nil || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                throw ValidationError("--expected-boot requires selected streaming and a nonempty boot identity.")
+            }
         }
-        if let screenUUID, UUID(uuidString: screenUUID) == nil {
-            throw ValidationError("Selected streaming requires a valid display UUID.")
-        }
-        if let expectedBoot, screenID == nil || expectedBoot.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            throw ValidationError("--expected-boot requires selected streaming and a nonempty boot identity.")
-        }
-
 
         guard fps >= 1 && fps <= 30 else {
             throw ValidationError("FPS must be between 1 and 30")
@@ -64,9 +70,28 @@ struct StreamVideo: AsyncParsableCommand {
         guard scale >= 0.1 && scale <= 1.0 else {
             throw ValidationError("Scale must be between 0.1 and 1.0")
         }
+
+        if format == .h264, fps != 10 || quality != 80 || scale != 1 {
+            throw ValidationError("Native --format h264 uses device encoding settings. Omit --fps, --quality and --scale.")
+        }
     }
 
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            guard screenID == nil, screenUUID == nil, expectedBoot == nil else {
+                throw AutomationTarget.unsupportedOnDevice("Physical streaming does not accept simulator display or boot options.")
+            }
+            guard let device = try await AutomationTarget.physicalDeviceRecord(udid: simulatorUDID) else {
+                throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
+            }
+            if format == .h264 {
+                try await PhysicalDeviceH264Stream.run(for: device)
+            } else {
+                try await PhysicalDeviceMedia.stream(device: device, format: format, fps: fps, quality: quality, scale: scale)
+            }
+            return
+        }
+
         if let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) {
             try await SelectedVideoStream.run(simulatorUDID: simulatorUDID, screenID: screenID,
                 screenUUID: uuid, expectedBoot: expectedBoot, format: format, fps: fps, quality: quality, scale: scale)
@@ -103,7 +128,9 @@ struct StreamVideo: AsyncParsableCommand {
         switch format {
         case .bgra:
             try await streamBGRA(to: targetSimulator, cancellationFlag: cancellationFlag)
-        default:
+        case .h264:
+            throw ValidationError("Native --format h264 requires a physical device UDID.")
+        case .mjpeg, .raw, .ffmpeg:
             try await streamCompressedFrames(from: targetSimulator, format: format, cancellationFlag: cancellationFlag)
         }
     }
@@ -157,7 +184,7 @@ struct StreamVideo: AsyncParsableCommand {
                     destination.write(processedData)
                 case .ffmpeg:
                     destination.write(processedData)
-                case .bgra:
+                case .bgra, .h264:
                     break
                 }
 

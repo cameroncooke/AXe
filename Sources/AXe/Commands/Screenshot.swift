@@ -6,13 +6,13 @@ import FBSimulatorControl
 struct Screenshot: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "screenshot",
-        abstract: "Capture a screenshot from the simulator display and save it as a PNG file"
+        abstract: "Capture a PNG screenshot from a simulator or physical device."
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
-    var simulatorUDID: String
+    @Option(help: "The UDID of the simulator or physical device.")
+    var udid: String
 
-    @Option(help: "Output PNG file path. Defaults to 'Simulator Screenshot - <device name> - <timestamp>.png' in the current directory.")
+    @Option(help: "Output PNG file path. Defaults to a name based on the target and timestamp in the current directory.")
     var output: String?
 
     @Option(name: .customLong("screen-id"), help: "Capture this measured active display; requires --screen-uuid.")
@@ -48,19 +48,22 @@ struct Screenshot: AsyncParsableCommand {
 
     @MainActor
     private func capture() async throws {
-        let logger = AxeLogger()
-        try await performGlobalSetup(logger: logger)
-
-        let trimmedUDID = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedUDID.isEmpty else {
-            throw CLIError(errorDescription: "Simulator UDID cannot be empty. Use --udid to specify a simulator.")
+        let target = try await AutomationTarget.resolve(udid: udid)
+        switch target {
+        case let .simulator(simulator):
+            try await captureSimulator(simulator)
+        case let .device(device):
+            guard screenID == nil else {
+                throw CLIOutputFailure(code: "unsupportedOnDevice",
+                    message: "Selected display options are only supported on simulators. Remove them to capture the device screen.")
+            }
+            try await captureDevice(device)
         }
+    }
 
-        let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let targetSimulator = simulatorSet.allSimulators.first(where: { $0.udid == trimmedUDID }) else {
-            throw CLIError(errorDescription: "Simulator with UDID \(trimmedUDID) not found.")
-        }
-
+    @MainActor
+    private func captureSimulator(_ targetSimulator: FBSimulator) async throws {
+        let trimmedUDID = targetSimulator.udid
         guard targetSimulator.state == .booted else {
             let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)")
@@ -72,7 +75,7 @@ struct Screenshot: AsyncParsableCommand {
             let capture = try await FBSimulatorSelectedScreenshotCapture.png(for: targetSimulator,
                 screenID: screenID, screenUniqueID: uuid, expectedBootIdentity: expectedBoot)
             try Task.checkCancellation()
-            let outputURL = try prepareOutputURL(simulator: targetSimulator, replaceExisting: false)
+            let outputURL = try prepareOutputURL(targetName: targetSimulator.name, existingFile: .refuse)
             let receipt = SelectedScreenshotOutput.Receipt(output: outputURL.path,
                 width: capture.pixelWidth, height: capture.pixelHeight,
                 before: capture.before, after: capture.after, child: capture.child)
@@ -83,28 +86,62 @@ struct Screenshot: AsyncParsableCommand {
             return
         }
 
-        let outputURL = try prepareOutputURL(simulator: targetSimulator)
+        let outputURL = try prepareOutputURL(targetName: targetSimulator.name)
 
         let screenshotData = try await VideoFrameUtilities.captureScreenshotData(from: targetSimulator)
 
         try screenshotData.write(to: outputURL)
 
+        reportSaved(to: outputURL)
+    }
+
+    @MainActor
+    private func captureDevice(_ device: CoreDevice) async throws {
+        let inspection = try await DeviceInspection.inspect(device)
+        guard let directory = inspection.directory else {
+            throw inspection.report.failure
+        }
+        defer { directory.close() }
+
+        guard let coreDeviceVersion = inspection.device.coreDeviceVersion else {
+            throw CLIOutputFailure(code: "coreDeviceVersionUnavailable",
+                message: "Xcode did not report the CoreDevice version. Check the selected Xcode installation.")
+        }
+        let screenshotData = try await directory.captureScreenshot(
+            deviceIdentifier: inspection.device.identifier, coreDeviceVersion: coreDeviceVersion
+        )
+        try Task.checkCancellation()
+        let targetName = (inspection.device.name ?? "iOS Device")
+            .components(separatedBy: CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/")))
+            .joined(separator: "-")
+        let outputURL = try prepareOutputURL(targetName: targetName, filenamePrefix: "Device Screenshot",
+                                             existingFile: .atomicReplacement)
+        try screenshotData.write(to: outputURL, options: .atomic)
+        reportSaved(to: outputURL)
+    }
+
+    private func reportSaved(to outputURL: URL) {
         if !CLIOutput.isFormatted {
             FileHandle.standardError.write(Data("Screenshot saved to \(outputURL.path)\n".utf8))
         }
         CLIOutput.message(outputURL.path)
     }
 
-    private func prepareOutputURL(simulator: FBSimulator, replaceExisting: Bool = true) throws -> URL {
+    private enum ExistingFile { case remove, refuse, atomicReplacement }
+
+    private func prepareOutputURL(targetName: String, filenamePrefix: String = "Simulator Screenshot",
+                                  existingFile: ExistingFile = .remove) throws -> URL {
         let fileManager = FileManager.default
 
+        func defaultFilename() -> String {
+            "\(filenamePrefix) - \(targetName) - \(Self.formatTimestamp(Date())).png"
+        }
         let providedPath = output?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedPath: String
         if let providedPath, !providedPath.isEmpty {
             resolvedPath = (providedPath as NSString).expandingTildeInPath
         } else {
-            let timestamp = Self.formatTimestamp(Date())
-            resolvedPath = "Simulator Screenshot - \(simulator.name) - \(timestamp).png"
+            resolvedPath = defaultFilename()
         }
 
         let baseURL: URL
@@ -116,13 +153,11 @@ struct Screenshot: AsyncParsableCommand {
 
         var isDirectory: ObjCBool = false
         if fileManager.fileExists(atPath: baseURL.path, isDirectory: &isDirectory), isDirectory.boolValue {
-            let timestamp = Self.formatTimestamp(Date())
-            let filename = "Simulator Screenshot - \(simulator.name) - \(timestamp).png"
             let directoryURL = baseURL
             if !fileManager.fileExists(atPath: directoryURL.path) {
                 try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true, attributes: nil)
             }
-            return directoryURL.appendingPathComponent(filename)
+            return directoryURL.appendingPathComponent(defaultFilename())
         }
 
         let directoryURL = baseURL.deletingLastPathComponent()
@@ -136,10 +171,10 @@ struct Screenshot: AsyncParsableCommand {
             if existingIsDirectory.boolValue {
                 throw CLIError(errorDescription: "Output path \(baseURL.path) is a directory. Provide a file name or point to a different location.")
             }
-            guard replaceExisting else {
+            guard existingFile != .refuse else {
                 throw CLIError(errorDescription: "Selected screenshot will not replace an existing output file: \(baseURL.path)")
             }
-            try fileManager.removeItem(at: baseURL)
+            if existingFile == .remove { try fileManager.removeItem(at: baseURL) }
         }
 
         return baseURL

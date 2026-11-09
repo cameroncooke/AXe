@@ -11,10 +11,11 @@ struct ContentView: View {
     @StateObject private var navigationManager = NavigationManager.shared
     @State private var navigationPath = NavigationPath()
     @State private var showSwipeTestModal = false
+    @State private var showMediaPattern = false
     
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            MainMenuView(showSwipeTestModal: $showSwipeTestModal)
+            MainMenuView(showSwipeTestModal: $showSwipeTestModal, showMediaPattern: $showMediaPattern)
                 .navigationDestination(for: String.self) { screen in
                     destinationView(for: screen)
                 }
@@ -22,27 +23,29 @@ struct ContentView: View {
         .fullScreenCover(isPresented: $showSwipeTestModal) {
             SwipeTestView()
         }
-        .onAppear {
-            // Handle direct launch to specific screen
-            if let directScreen = navigationManager.directLaunchScreen {
-                if directScreen == "swipe-test" {
-                    showSwipeTestModal = true
-                } else {
-                    navigationPath.append(directScreen)
-                }
-            }
+        .fullScreenCover(isPresented: $showMediaPattern) {
+            MediaPatternView { showMediaPattern = false }
         }
-        .onChange(of: navigationManager.directLaunchScreen) { _, newValue in
-            if let screen = newValue {
-                if screen == "swipe-test" {
-                    showSwipeTestModal = true
-                } else {
-                    navigationPath.append(screen)
-                }
-            }
+        .onAppear {
+            openDirectScreen(navigationManager.directLaunchScreen)
+        }
+        .onChange(of: navigationManager.directLaunchScreen) { _, screen in
+            openDirectScreen(screen)
         }
     }
-    
+
+    private func openDirectScreen(_ screen: String?) {
+        guard let screen else { return }
+        switch screen {
+        case "swipe-test":
+            showSwipeTestModal = true
+        case "media-pattern":
+            showMediaPattern = true
+        default:
+            navigationPath.append(screen)
+        }
+    }
+
     @ViewBuilder
     private func destinationView(for screen: String) -> some View {
         switch screen {
@@ -62,10 +65,6 @@ struct ContentView: View {
         case "duo-controls":
             DuoControlsView()
                 .navigationTitle("Duo Controls")
-                .navigationBarTitleDisplayMode(.inline)
-        case "media-pattern":
-            MediaPatternView()
-                .navigationTitle("Capture Markers")
                 .navigationBarTitleDisplayMode(.inline)
         case "hinge-layout":
             HingeLayoutView()
@@ -124,6 +123,7 @@ struct ContentView: View {
 
 struct MainMenuView: View {
     @Binding var showSwipeTestModal: Bool
+    @Binding var showMediaPattern: Bool
     
     private let menuSections: [(String, [(String, String, String)])] = [
         ("Touch & Gestures", [
@@ -172,10 +172,14 @@ struct MainMenuView: View {
             ForEach(menuSections, id: \.0) { section in
                 Section(section.0) {
                     ForEach(section.1, id: \.0) { item in
-                        if item.0 == "swipe-test" {
-                            Button(action: {
-                                showSwipeTestModal = true
-                            }) {
+                        if item.0 == "swipe-test" || item.0 == "media-pattern" {
+                            Button {
+                                if item.0 == "media-pattern" {
+                                    showMediaPattern = true
+                                } else {
+                                    showSwipeTestModal = true
+                                }
+                            } label: {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text(item.1)
                                         .font(.headline)

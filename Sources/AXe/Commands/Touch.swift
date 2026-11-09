@@ -33,7 +33,7 @@ struct Touch: AsyncParsableCommand {
     @Option(name: .customLong("delay"), help: "Delay between touch down and up events in seconds (if both are specified).")
     var delay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
 
@@ -121,7 +121,42 @@ struct Touch: AsyncParsableCommand {
         return try selectedInput.request(operation: operation, token: token, primitives: primitives)
     }
 
+    private func validateDeviceOptions(allowPartial: Bool = false) throws {
+        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+        guard contactToken == nil else {
+            throw AutomationTarget.unsupportedOnDevice("Physical touch does not accept a simulator contact token.")
+        }
+        guard allowPartial || (touchDown && touchUp) else {
+            throw AutomationTarget.unsupportedOnDevice("Use --down and --up together for a standalone physical device touch.")
+        }
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput, allowPartial: Bool = false) async throws {
+        try validateDeviceOptions(allowPartial: allowPartial)
+        guard let pointX, let pointY, touchDown || touchUp else {
+            throw ValidationError("Physical touch requires coordinates and --down, --up or both.")
+        }
+        let point = CGPoint(x: pointX, y: pointY)
+        var plan: [PhysicalTouchStep] = []
+        if touchDown {
+            let hold = touchUp ? delay ?? TapTiming.defaultHoldDuration : 0
+            plan.append(PhysicalTouchStep(points: [point], phase: .down, delayAfter: hold))
+        }
+        if touchUp {
+            plan.append(PhysicalTouchStep(points: [point], phase: .up))
+        }
+        try await input.perform(plan, allowPartial: allowPartial)
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try validateDeviceOptions()
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await runOnDevice(input)
+            }
+            return
+        }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

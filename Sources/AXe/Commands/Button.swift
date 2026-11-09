@@ -43,7 +43,7 @@ enum ButtonType: String, CaseIterable, ExpressibleByArgument {
 
 struct Button: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a hardware button on the simulator.",
+        abstract: "Press a hardware button on a simulator or physical device.",
         discussion: """
         Available buttons: apple-pay, home, lock, side-button, siri
         Selected mode supports all five buttons. An optional --screen-id/--screen-uuid pair guards
@@ -62,8 +62,11 @@ struct Button: AsyncParsableCommand {
     @Option(name: .customLong("duration"), help: "Duration to hold the button in seconds (optional).")
     var duration: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
+
+    @Flag(name: .customLong("allow-lock"), help: "Allow the lock button on a physical device.")
+    var allowLock = false
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
@@ -74,6 +77,9 @@ struct Button: AsyncParsableCommand {
 
     func validate() throws {
         try selectedInput.validate()
+        if allowLock, buttonType != .lock || !AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
+            throw ValidationError("--allow-lock requires the lock button and a physical device UDID.")
+        }
         if selectedInput.mode == .selected {
             if let payload = selectedButtonPayload {
                 try payload.validate()
@@ -118,7 +124,38 @@ struct Button: AsyncParsableCommand {
         return SelectedButtonRequest(kind: kind, duration: duration, expectedBoot: expectedBoot)
     }
 
+    private func physicalButtonTarget() throws -> PhysicalDeviceButton {
+        guard selectedInput.mode != .selected else {
+            throw AutomationTarget.unsupportedOnDevice("Physical buttons do not support selected display options.")
+        }
+        let button: PhysicalDeviceButton
+        switch buttonType {
+        case .home: button = .home
+        case .siri: button = .siri
+        case .lock:
+            guard allowLock else {
+                throw AutomationTarget.unsupportedOnDevice("Physical lock requires --allow-lock. You must unlock the device yourself.")
+            }
+            button = .lock
+        case .sideButton, .applePay:
+            throw AutomationTarget.unsupportedOnDevice("This button is not available on physical devices.")
+        }
+        return button
+    }
+
+    func physicalButton(on input: PhysicalDeviceInput) async throws {
+        try await input.pressButton(physicalButtonTarget(), hold: duration ?? 0.08, allowLock: allowLock)
+    }
+
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            let button = try physicalButtonTarget()
+            try await PhysicalDeviceInput.withSession(for: device) { input in
+                try await input.pressButton(button, hold: duration ?? 0.08, allowLock: allowLock)
+            }
+            return
+        }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
                 verbose: selectedOutput.verbose)

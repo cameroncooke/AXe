@@ -32,7 +32,7 @@ extension FBSimulator {
   // disambiguates concurrent requests by token, guarded internally by a lock).
   // The lazy `static let` initialiser is thread-safe; `nonisolated(unsafe)` opts
   // this shared instance out of Swift 6 Sendable checking accordingly.
-  private nonisolated(unsafe) static let sharedAccessibilityTranslationDispatcher: FBAXTranslationDispatcher = {
+  nonisolated(unsafe) static let sharedAccessibilityTranslationDispatcher: FBAXTranslationDispatcher = {
     let translator = unsafeBitCast(AXPTranslator.sharedInstance() as AnyObject, to: AXPTranslator.self)
     return FBSimulator.createAccessibilityTranslationDispatcher(withTranslator: translator)
   }()

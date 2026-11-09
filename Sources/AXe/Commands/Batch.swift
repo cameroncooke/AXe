@@ -3,7 +3,7 @@ import Foundation
 
 struct Batch: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Execute ordered legacy, selected or optional agent steps.",
+        abstract: "Execute ordered interaction steps on a simulator or physical device.",
         discussion: """
         Batch executes multiple interaction steps in one command to reduce overhead.
         Steps are executed in order.
@@ -14,6 +14,10 @@ struct Batch: AsyncParsableCommand {
         It resolves each target again, stops on failed action/refresh or changed device context,
         and reports completed steps without rollback or replay. See the agent guide for JSON.
         Legacy mode uses one simulator/HID session and supports --continue-on-error.
+        A physical device uses one input session for ordered steps and stops on failure.
+        Physical batches accept coordinate taps, preset gestures and supported physical input.
+        The batch releases any held touch when it ends.
+        Simulator selection, agent mode and custom simulator batch settings are unavailable.
         On Duo, one measured display/session is fixed for the whole ordinary batch.
         Folding, rotation, cancellation or an input failure stops later input without replay.
         --continue-on-error still permits pre-input step errors while that session is valid.
@@ -42,7 +46,7 @@ struct Batch: AsyncParsableCommand {
         Legacy step commands:
           tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo
 
-        Legacy and selected batch-only pseudo-step:
+        Batch-only pseudo-step:
           sleep <seconds>
 
         Examples:
@@ -52,7 +56,7 @@ struct Batch: AsyncParsableCommand {
         """
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -154,6 +158,11 @@ struct Batch: AsyncParsableCommand {
     }
 
     func run() async throws {
+        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
+           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
+            try await runPhysicalBatch(on: device)
+            return
+        }
         if agentMode {
             try validate()
             if let stepsJSON {
@@ -183,6 +192,20 @@ struct Batch: AsyncParsableCommand {
 
         try await runOrdinaryBatch(stepLines, logger: logger)
         CLIOutput.message("✓ Batch completed successfully (\(stepLines.count) steps)")
+    }
+
+    @MainActor
+    private func runPhysicalBatch(on device: CoreDevice) async throws {
+        guard !agentMode, selectedInput.mode == .legacy, !continueOnError, !verbose,
+              axCachePolicy == .perBatch, typeSubmissionMode == .chunked, typeChunkSize == 200,
+              tapStyle != .simulator, waitTimeout == 0, pollInterval == 0.25 else {
+            throw AutomationTarget.unsupportedOnDevice(
+                "Use ordinary input and default batch settings on a physical device. Physical batches stop after a failure.")
+        }
+        let lines = try loadStepLines()
+        guard !lines.isEmpty else { throw ValidationError("No executable steps found.") }
+        try await PhysicalDeviceBatch.run(lines, on: device, udid: simulatorUDID)
+        CLIOutput.message("Batch completed successfully (\(lines.count) steps)")
     }
 
     @MainActor

@@ -1,7 +1,7 @@
 import Foundation
 
 public enum OrientationCoordinateMath {
-    public enum Orientation: String, CaseIterable, Sendable {
+    public enum Orientation: String, CaseIterable, Codable, Sendable {
         case portrait
         case portraitUpsideDown
         case landscape
