@@ -146,6 +146,25 @@ struct EdgeInsetTests {
         }
     }
 
+    @Test func gesturePresetInDuoBatchUsesMeasuredSize() async throws {
+        let measured = BatchContext(simulatorUDID: udid, axCachePolicy: .none, typeSubmissionMode: .composite,
+            typeChunkSize: 200, duoLogicalSize: (951, 669))
+        let rigid = BatchContext(simulatorUDID: udid, axCachePolicy: .none, typeSubmissionMode: .composite, typeChunkSize: 200)
+        func ends(_ arguments: [String], _ context: BatchContext) async throws -> [FBSimulatorHIDEvent] {
+            let plan = try await BatchStepParser.parseStepTokens(["gesture"] + arguments, globalUDID: udid,
+                context: context, logger: AxeLogger())
+            guard case let .hidMergeable(event) = try #require(plan.first) else { return [] }
+            let events = leaves(event)
+            return [try #require(events.first), try #require(events.last)]
+        }
+        #expect(try await ends(["swipe-from-bottom-edge"], measured)
+            == [.touch(direction: .down, x: 475.5, y: 649), .touch(direction: .up, x: 475.5, y: 20)])
+        #expect(try await ends(["swipe-from-bottom-edge"], rigid)
+            == [.touch(direction: .down, x: 195, y: 824), .touch(direction: .up, x: 195, y: 20)])
+        #expect(try await ends(["swipe-from-bottom-edge", "--screen-width", "400", "--screen-height", "800"], measured)
+            == [.touch(direction: .down, x: 200, y: 780), .touch(direction: .up, x: 200, y: 20)])
+    }
+
     @Test func omittedInsetRetainsLegacyAdmission() throws {
         // Do not invoke the old factory's short-path behavior in this option-only check.
         let parsed = try Gesture.parse(["swipe-from-left-edge", "--udid", udid, "--screen-width", "41"])

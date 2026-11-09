@@ -153,7 +153,7 @@ Stop normally with SIGINT or SIGTERM and await the actual exit. Capture cleanup 
 
 ## Ordinary Duo batch
 
-Ordinary Duo batch owns one fixed measured display/session and common lease through all steps and host waits. Keep logical points, existing type chunks/styles and normal output. Context/native failure or cancellation stops later input without replay, even with `--continue-on-error`; pre-input errors can continue only in the same valid session. Remaining input closes at batch end and never transfers to standalone commands. Step stdin is cancellable without an EOF deadline; initial batch stdin loads before ownership. A typed orphan touch-up sends no input; other unmatched releases reject. Preserve modifier order; native parts allow one touch, with no two-finger or pose events. Use matched artifacts and verify the real app effect.
+Ordinary Duo batch owns one fixed measured display/session and common lease through all steps and host waits. Keep logical points, existing type chunks/styles and normal output. A gesture preset step without `--screen-width`/`--screen-height` uses the measured display. Context/native failure or cancellation stops later input without replay, even with `--continue-on-error`; pre-input errors can continue only in the same valid session. Remaining input closes at batch end and never transfers to standalone commands. Step stdin is cancellable without an EOF deadline; initial batch stdin loads before ownership. A typed orphan touch-up sends no input; other unmatched releases reject. Preserve modifier order; native parts allow one touch, with no two-finger or pose events. Use matched artifacts and verify the real app effect.
 
 ## Selected-screen tap waiting
 

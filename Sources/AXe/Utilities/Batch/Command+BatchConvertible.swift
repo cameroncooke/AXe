@@ -175,8 +175,9 @@ extension Gesture: BatchConvertible {
         guard case let .preset(preset) = gesture else {
             throw ValidationError("Pinch is not supported in batch steps.")
         }
-        let width = screenWidth ?? 390.0
-        let height = screenHeight ?? 844.0
+        // As the standalone command: explicit overrides, then the measured Duo display, then 390x844.
+        let width = screenWidth ?? context.duoLogicalSize?.width ?? 390.0
+        let height = screenHeight ?? context.duoLogicalSize?.height ?? 844.0
         let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
         let gestureDuration = duration ?? preset.defaultDuration
         let gestureDelta = delta ?? preset.defaultDelta

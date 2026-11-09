@@ -220,7 +220,8 @@ struct Batch: AsyncParsableCommand {
         }
         let context = BatchContext(simulatorUDID: simulatorUDID, axCachePolicy: axCachePolicy,
             typeSubmissionMode: typeSubmissionMode, typeChunkSize: typeChunkSize, tapStyle: tapStyle,
-            waitTimeout: waitTimeout, pollInterval: pollInterval, duoOwner: owner)
+            waitTimeout: waitTimeout, pollInterval: pollInterval, duoOwner: owner,
+            duoLogicalSize: measured.map { ($0.logicalWidth, $0.logicalHeight) })
 
         if let owner, let measured {
             let runner = BatchPlanRunner(duoOwner: owner, logger: logger)

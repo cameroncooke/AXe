@@ -459,7 +459,7 @@ Selected batches accept the same four names, for example `--step 'button apple-p
 
 ## Ordinary Duo batches
 
-AXe routes ordinary no-flag `batch` through one measured Duo display, native session and common input lease for the whole ordered run, including host waits. It preserves the existing command list, selectors, tap styles, cache/poll settings, type chunks and normal text output. Points stay logical and are transformed once. Other devices keep their existing batch route.
+AXe routes ordinary no-flag `batch` through one measured Duo display, native session and common input lease for the whole ordered run, including host waits. It preserves the existing command list, selectors, tap styles, cache/poll settings, type chunks and normal text output. Points stay logical and are transformed once. A gesture preset step without `--screen-width` and `--screen-height` uses the measured display, as the standalone command does. Other devices keep their existing batch route.
 
 A changed pose/context, native failure or cancellation stops later input without replay or a replacement session. `--continue-on-error` permits pre-input step errors only while the same session remains valid; input from an earlier step stays owned. Batch completion or failure closes remaining input, including a final down. No contact transfers to a standalone command. Step `type --stdin` observes cancellation/context while waiting without an EOF deadline and keeps the existing line-join behavior. Initial batch `--stdin` still reads the step list before input ownership. SIGINT/SIGTERM cancel and await the owned operation; SIGKILL cleanup is not guaranteed.
 

@@ -284,7 +284,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Fixed selected and agent accessibility errors omitting the existing native acquisition failure reason. The error message now keeps that detail without a read retry or input replay.
 
-- Fixed no-flag Duo gesture presets with omitted screen dimensions using fixed portrait geometry. Default paths now use the measured active-display dimensions after rotation or folding; explicit dimensions are unchanged.
+- Fixed no-flag Duo gesture presets with omitted screen dimensions using fixed portrait geometry. Default paths, including gesture steps in an ordinary Duo batch, now use the measured active-display dimensions after rotation or folding; explicit dimensions are unchanged.
 - Fixed slider endpoint checks marking completed input as uncertain when a later read fails. Input without confirmed readback remains uncertain; the 15-second limit and final checks are unchanged.
 
 - Fixed Duo hinge confirmation timing out after a fold. Confirmation still requires two fresh matching readings within the existing time limit.

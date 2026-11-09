@@ -22,6 +22,8 @@ final class BatchContext {
     let waitTimeout: TimeInterval
     let pollInterval: TimeInterval
     let duoOwner: SelectedHIDOwner?
+    /// The measured logical size of the display a Duo batch owns, for omitted preset dimensions.
+    let duoLogicalSize: (width: Double, height: Double)?
 
     private var cachedRoots: [AccessibilityElement]?
 
@@ -33,7 +35,8 @@ final class BatchContext {
         tapStyle: TapStyle = .automatic,
         waitTimeout: TimeInterval = 0,
         pollInterval: TimeInterval = 0.25,
-        duoOwner: SelectedHIDOwner? = nil
+        duoOwner: SelectedHIDOwner? = nil,
+        duoLogicalSize: (width: Double, height: Double)? = nil
     ) {
         self.simulatorUDID = simulatorUDID
         self.axCachePolicy = axCachePolicy
@@ -43,6 +46,7 @@ final class BatchContext {
         self.waitTimeout = waitTimeout
         self.pollInterval = pollInterval
         self.duoOwner = duoOwner
+        self.duoLogicalSize = duoLogicalSize
     }
 
     func accessibilityRoots(logger: AxeLogger, forceRefresh: Bool = false) async throws -> [AccessibilityElement] {
