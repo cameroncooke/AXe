@@ -346,6 +346,41 @@ axe rotate left --udid "$UDID"
 
 AXe classifies a device by the built-in touch displays its device type declares, not by profile version or model. One integrated digitizer is a rigid device with no hinge request. Two require native hinge samples on every full read, so a two-panel device without a working hinge fails before input. Other sets are refused. AXe reads the active panel, rotation and geometry from the simulator's own CoreDevice display report, and still checks display identity, geometry, rotation and boot against the host catalogue.
 
+## Settings
+
+`axe settings` reads and changes device-wide settings on a booted simulator or a connected iPhone or iPad, through `xcrun devicectl` (Xcode 27 or later).
+
+```
+$ axe settings set --udid "$UDID" --appearance dark
+Appearance            dark
+Text size             large
+Increase Contrast     off
+Reduce Motion         off
+Reduce Transparency   off
+Show Borders          off
+Liquid Glass          opacity 0.5
+Colour filter         off
+VoiceOver             off
+```
+
+```bash
+axe settings show --udid "$UDID"
+axe settings set --udid "$UDID" --text-size accessibility-large --color-filter grayscale --voiceover off
+axe settings location set --latitude 37.7749 --longitude -122.4194 --udid "$UDID"
+axe settings location scenarios --udid "$UDID"
+axe settings location scenario "City Run" --udid "$UDID"
+axe settings location clear --udid "$UDID"
+axe settings status-bar preset screenshot --udid "$UDID"
+axe settings status-bar set --udid "$UDID" --time 9:41 --wifi-bars 3 --battery-level 100 --battery-state charged
+axe settings status-bar clear --udid "$UDID"
+```
+
+`set` takes any of `--appearance light|dark`, `--text-size`, `--increase-contrast`, `--reduce-motion`, `--reduce-transparency`, `--show-borders` (`on|off`), `--liquid-glass clear|tinted`, `--liquid-glass-opacity 0...1`, `--color-filter off|grayscale|protanopia|deuteranopia|tritanopia`, `--color-filter-intensity 0.25...1` and `--voiceover on|off`. It checks every value first, makes one devicectl call for the appearance options and one for VoiceOver, then prints the settings as `show` does. An accessibility text size also turns on Larger Accessibility Sizes; a standard size leaves that setting as it is. Text sizes print in the spelling `--text-size` accepts. `axe --output json settings show` returns `data.result` as `{udid, appearance, textSize, increaseContrast, reduceMotion, reduceTransparency, showBorders, liquidGlass: {style?, opacity}, colorFilter: {enabled, type?, intensity?}, voiceOver}`; a setting the device does not report is omitted. iOS 27.2 offers no Liquid Glass style, so `--liquid-glass` fails there without changing anything.
+
+`status-bar show`, `set`, `preset` and `clear` print the overrides afterwards: `{udid, overridden, time?, dataNetwork?, wifiBars?, cellularBars?, batteryLevel?, batteryState?}`. Presets are `screenshot`, `low-battery`, `no-service` and `charging`; 0 bars shows no connection. Physical devices do not support status bar overrides. Location commands return `{udid, latitude, longitude}`, `{udid, scenario}`, `{udid, scenarios}` or `{udid, cleared}`; a simulated location lasts until `location clear`.
+
+Settings commands fail with one error code: `targetNotFound`, `notBooted`, `settingUnsupported` (the device, OS or selected Xcode lacks it), `invalidArguments` or `settingFailed` (with devicectl's own message). A physical device that is not ready fails with its `doctor` check code, such as `deviceNotConnected`. AXe never pairs, unlocks or resets a device.
+
 ## Selected Duo input
 
 Ordinary `tap`, `touch`, `swipe` and `drag` without mode flags use the measured active display on the iPhone Duo. Coordinates remain logical UI points. Tap keeps legacy selector matching, styles and wait/poll options. Swipe and drag keep their existing event factories, movement duration, swipe delta and drag steps/holds. Their pre/post delays run on the host; normal text output remains. AXe checks boot, panel, hinge, orientation and geometry before input. These pose checks do not add an app/PID or UI-layout guard. Duo paths above 100,000 movement steps reject before event allocation; `drag --steps` retains its existing 1...1,000 limit. Ordinary `tap`, `swipe`, `drag`, gesture presets and complete `touch --down --up` on other devices that use the DTUHID transport take the same broker route, so repeated input reuses one connection instead of opening and draining a new one per command. Their presets keep the 390×844 default dimensions, and a partial `touch --down` or `--up` keeps its existing route. Ordinary Duo typing and [batches](#ordinary-duo-batches) use owned input as described below.

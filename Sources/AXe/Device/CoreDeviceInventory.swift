@@ -21,6 +21,13 @@ struct CoreDevice: Sendable {
     }
 }
 
+/// A failure devicectl reported: its error codes from outermost to innermost and the innermost
+/// localized description.
+struct CoreDeviceFailure: Error, Sendable, Equatable {
+    let codes: [Int]
+    let message: String
+}
+
 enum CoreDeviceInventory {
     static func list() async throws -> [CoreDevice] {
         physicalDevices(try await query(["list", "devices"]))
@@ -61,6 +68,16 @@ enum CoreDeviceInventory {
     }
 
     private static func query<Result: Decodable>(_ arguments: [String]) async throws -> Response<Result> {
+        let operation = arguments.prefix(3).joined(separator: " ")
+        guard let data = try await run(arguments).json else {
+            throw CLIError(errorDescription: "devicectl \(operation) returned no JSON. Check the selected Xcode installation.")
+        }
+        return try decode(data.contents, operation: operation, succeeded: data.succeeded)
+    }
+
+    /// Runs one devicectl command and reads its JSON file output. `json` is nil when devicectl wrote
+    /// no file, which is how it reports a usage error (exit status 64) such as an unknown subcommand.
+    static func run(_ arguments: [String]) async throws -> (json: (contents: Data, succeeded: Bool)?, exitStatus: Int32) {
         try Task.checkCancellation()
         let operation = arguments.prefix(3).joined(separator: " ")
         let directory = FileManager.default.temporaryDirectory
@@ -119,11 +136,9 @@ enum CoreDeviceInventory {
             throw CLIError(errorDescription: "CoreDevice timed out during \(operation).")
         }
 
-        guard let data = try? Data(contentsOf: jsonURL) else {
-            throw CLIError(errorDescription: "devicectl \(operation) returned no JSON. Check the selected Xcode installation.")
-        }
-        return try decode(data, operation: operation,
-            succeeded: process.terminationReason == .exit && process.terminationStatus == 0)
+        let succeeded = process.terminationReason == .exit && process.terminationStatus == 0
+        guard let data = try? Data(contentsOf: jsonURL) else { return (nil, process.terminationStatus) }
+        return ((data, succeeded), process.terminationStatus)
     }
 
     private static func decode<Result: Decodable>(_ data: Data, operation: String,
@@ -139,6 +154,20 @@ enum CoreDeviceInventory {
             throw CLIError(errorDescription: "devicectl \(operation): \(detail)")
         }
         return Response(result: result, coreDeviceVersion: envelope.info?.version)
+    }
+
+    /// Decodes a devicectl JSON file: the result when the command succeeded, otherwise the failure it
+    /// reported as a `CoreDeviceFailure`.
+    static func result<Result: Decodable>(fromJSON data: Data, succeeded: Bool, operation: String) throws -> Result {
+        let envelope: Envelope<Result>
+        do {
+            envelope = try JSONDecoder().decode(Envelope<Result>.self, from: data)
+        } catch {
+            throw CLIError(errorDescription: "devicectl \(operation) returned an unrecognized JSON response.")
+        }
+        if succeeded, let result = envelope.result { return result }
+        throw CoreDeviceFailure(codes: envelope.error?.codes ?? [],
+            message: envelope.error?.innermostDescription ?? "devicectl \(operation) failed.")
     }
 
     /// Decodes saved `devicectl list devices` JSON the same way as `list()`.
@@ -167,15 +196,38 @@ private struct Envelope<Result: Decodable>: Decodable {
         let version: String?
     }
 
-    struct Failure: Decodable {
+    /// A class, because each error can carry its underlying error.
+    final class Failure: Decodable {
+        let code: Int?
         let userInfo: UserInfo?
+
+        /// Error codes from this error to the innermost underlying one.
+        var codes: [Int] { (code.map { [$0] } ?? []) + (userInfo?.underlying?.error.codes ?? []) }
+
+        /// The innermost localized description.
+        var innermostDescription: String? {
+            userInfo?.underlying?.error.innermostDescription ?? userInfo?.localizedDescription?.string
+        }
 
         struct UserInfo: Decodable {
             let localizedDescription: DescriptionValue?
+            let underlying: Underlying?
 
             enum CodingKeys: String, CodingKey {
                 case localizedDescription = "NSLocalizedDescription"
+                case underlying = "NSUnderlyingError"
             }
+
+            init(from decoder: Decoder) throws {
+                let values = try decoder.container(keyedBy: CodingKeys.self)
+                localizedDescription = try? values.decodeIfPresent(DescriptionValue.self, forKey: .localizedDescription)
+                // An underlying error AXe cannot read must not hide the outer description.
+                underlying = try? values.decodeIfPresent(Underlying.self, forKey: .underlying)
+            }
+        }
+
+        struct Underlying: Decodable {
+            let error: Failure
         }
 
         struct DescriptionValue: Decodable {

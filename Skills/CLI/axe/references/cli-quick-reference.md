@@ -27,6 +27,15 @@ axe displays --udid <UDID>
 
 Waits for a fold or rotation to finish, then shows each screen: which one is active, its role (`outer`, `inner` or `main`), its size in logical points, scale and orientation, and on iPhone Duo the hinge angle. Use these points for coordinates. Pass the active screen's `id` and `uuid` to `--screen-id` and `--screen-uuid` when a command must refuse to act on any other screen. [device-reference.md](device-reference.md#screens-hinge-and-rotation) has the output fields.
 
+## Device settings
+
+```bash
+axe settings show --udid <UDID>
+axe settings set --udid <UDID> --appearance dark
+```
+
+Simulators and physical devices. Also text size, accessibility display settings, VoiceOver, location and status bar. Read [settings-reference.md](settings-reference.md).
+
 ## Screenshot
 
 ```bash
