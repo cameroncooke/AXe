@@ -63,8 +63,7 @@ enum PhysicalAccessibilityCommands {
             guard let deadline else { return readBudget }
             let remaining = clock.now.duration(to: deadline)
             guard remaining > .zero else { throw waitExpired }
-            let components = remaining.components
-            return min(readBudget, Double(components.seconds) + Double(components.attoseconds) / 1e18)
+            return min(readBudget, remaining.timeInterval)
         }
 
         let initial: Target
@@ -80,10 +79,11 @@ enum PhysicalAccessibilityCommands {
             try await Task.sleep(for: .seconds(min(pollInterval, try budget())))
         }
 
-        // An absent target is the only condition that can retry. Verify the first match again.
+        // An absent target is the only condition that can retry. Verify the first match again. The tree read
+        // compared the display before and after it, and the broker compares it again just before the touch.
         let snapshot = try await input.readAccessibility(timeout: budget())
         guard let fresh = try VisibleTree(snapshot).target(matching: query, elementType: elementType),
-              fresh == initial, try await input.display() == fresh.display else {
+              fresh == initial else {
             throw CLIOutputFailure(code: "targetChanged",
                 message: "The accessibility target or display changed before the tap. Read the screen again.")
         }

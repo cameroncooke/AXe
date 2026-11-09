@@ -67,14 +67,6 @@ enum PhysicalDeviceBrokerValue: Codable, Sendable {
     case semanticPress(PhysicalSemanticPressReceipt)
 }
 
-/// The worker retains device connections across leases. End releases all input owned by the lease.
-protocol PhysicalDeviceBrokerBackend: Sendable {
-    func begin() async throws
-    func execute(_ operation: PhysicalDeviceBrokerOperation) async throws -> PhysicalDeviceBrokerValue
-    func end() async throws
-    func shutdown() async
-}
-
 enum PhysicalDeviceBrokerProtocol {
     static let version = 1
     static let commandName = "physical-device-broker"

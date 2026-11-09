@@ -26,25 +26,38 @@ struct PhysicalLockRecheck: Sendable {
     }
 }
 
-actor PhysicalDeviceBrokerOwner: PhysicalDeviceBrokerBackend {
-    private let device: CoreDevice
+/// The worker retains device connections across leases. End releases all input owned by the lease.
+actor PhysicalDeviceBrokerOwner {
+    private let udid: String
+    /// The inventory record, read on the first lease that finds the device.
+    private var device: CoreDevice?
     private var input: PhysicalDeviceInputOwner?
     private var accessibility: DeviceAccessibilitySession?
     private var lockRecheck = PhysicalLockRecheck()
 
-    init(device: CoreDevice) {
-        self.device = device
+    init(udid: String) {
+        self.udid = udid
     }
 
     func begin() async throws {
-        let current = try await PhysicalDeviceInputOwner.readyDevice(device)
+        let listed: CoreDevice
+        if let device {
+            listed = device
+        } else {
+            guard let found = try await AutomationTarget.physicalDeviceRecord(udid: udid) else {
+                throw PhysicalDeviceBrokerProtocol.unavailable
+            }
+            device = found
+            listed = found
+        }
+        let current = try await PhysicalDeviceInputOwner.readyDevice(listed)
         lockRecheck.leaseStarted(at: .now)
         if let input, await input.matchesReadyDevice(current) { return }
         await shutdown()
         input = try await PhysicalDeviceInputOwner.connectReadyDevice(current)
     }
 
-    private func admitInput(_ operation: PhysicalDeviceBrokerOperation) async throws {
+    private func admitInput(_ operation: PhysicalDeviceBrokerOperation, on device: CoreDevice) async throws {
         guard operation.sendsInput else { return }
         if lockRecheck.lockedByButton {
             throw CLIOutputFailure(code: "deviceLocked",
@@ -63,10 +76,10 @@ actor PhysicalDeviceBrokerOwner: PhysicalDeviceBrokerBackend {
     }
 
     func execute(_ operation: PhysicalDeviceBrokerOperation) async throws -> PhysicalDeviceBrokerValue {
-        guard let input else {
+        guard let input, let device else {
             throw CLIOutputFailure(code: "deviceBrokerUnavailable", message: "The broker has no ready device session.")
         }
-        try await admitInput(operation)
+        try await admitInput(operation, on: device)
         let value = try await perform(operation, on: input)
         recordInput(operation)
         return value
@@ -273,7 +286,7 @@ actor PhysicalDeviceBrokerOwner: PhysicalDeviceBrokerBackend {
             guard interval > .zero else {
                 throw CLIOutputFailure(code: "treeUnavailable", message: "The physical accessibility read timed out.")
             }
-            return Double(interval.components.seconds) + Double(interval.components.attoseconds) / 1e18
+            return interval.timeInterval
         }
     }
 }

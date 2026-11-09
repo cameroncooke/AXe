@@ -40,6 +40,7 @@ enum DeviceServiceError: LocalizedError {
 final class DeviceServiceDirectory: @unchecked Sendable {
     private static let screenshotService = "com.apple.coredevice.screencaptureservice"
     private static let hidService = "com.apple.coredevice.hid.indigo"
+    private static let displayService = "com.apple.coredevice.deviceinfo"
 
     private let queue = DispatchQueue(label: "axe.device-services")
     private let tunnel: DeviceTunnelAddress
@@ -91,6 +92,17 @@ final class DeviceServiceDirectory: @unchecked Sendable {
             hidConnection = nil
             session = nil
         }
+    }
+
+    /// Reads the primary display on a new `deviceinfo` connection. A whole read, connection included, took
+    /// about 20 ms on an iPad Pro over USB. Reusing the connection was measured and rejected: a second request
+    /// on it after a pause of 0.5 s or more usually got no reply, and fresh connections then also stalled for
+    /// a few seconds.
+    func readDisplay(deviceIdentifier: String, coreDeviceVersion: String,
+                     timeout: TimeInterval) async throws -> PhysicalDeviceDisplay {
+        try PhysicalDeviceDisplay(response: await requestCoreDevice(service: Self.displayService,
+            feature: "getdisplayinfo", action: "displayinfo", input: [:], deviceIdentifier: deviceIdentifier,
+            coreDeviceVersion: coreDeviceVersion, timeout: timeout))
     }
 
     func captureScreenshot(deviceIdentifier: String, coreDeviceVersion: String,

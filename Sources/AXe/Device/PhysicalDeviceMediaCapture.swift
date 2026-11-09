@@ -53,7 +53,7 @@ final class PhysicalDeviceMediaCapture {
             guard duration > .zero else {
                 throw CLIOutputFailure(code: "deviceFrameTimedOut", message: "The physical device frame timed out.")
             }
-            return Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+            return duration.timeInterval
         }
 
         let before = try await display(timeout: remaining())
@@ -91,9 +91,7 @@ final class PhysicalDeviceMediaCapture {
     }
 
     private func display(timeout: TimeInterval) async throws -> PhysicalDeviceDisplay {
-        let response = try await directory.requestCoreDevice(service: "com.apple.coredevice.deviceinfo",
-            feature: "getdisplayinfo", action: "displayinfo", input: [:], deviceIdentifier: deviceIdentifier,
-            coreDeviceVersion: coreDeviceVersion, timeout: timeout)
-        return try PhysicalDeviceDisplay(response: response)
+        try await directory.readDisplay(deviceIdentifier: deviceIdentifier, coreDeviceVersion: coreDeviceVersion,
+                                        timeout: timeout)
     }
 }

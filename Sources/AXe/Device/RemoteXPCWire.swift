@@ -32,6 +32,28 @@ enum RemoteXPCValue: Sendable, Equatable {
         guard case .uuid(let value) = self else { return nil }
         return value
     }
+
+    var arrayValue: [RemoteXPCValue]? {
+        guard case .array(let values) = self else { return nil }
+        return values
+    }
+
+    var number: Double? {
+        switch self {
+        case let .double(value): return value
+        case let .int64(value): return Double(value)
+        case let .uint64(value): return Double(value)
+        default: return nil
+        }
+    }
+
+    var integer: UInt64? {
+        switch self {
+        case let .uint64(number): return number
+        case let .int64(number): return UInt64(exactly: number)
+        default: return nil
+        }
+    }
 }
 
 enum RemoteXPCWireError: LocalizedError {

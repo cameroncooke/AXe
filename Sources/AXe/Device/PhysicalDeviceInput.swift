@@ -29,13 +29,10 @@ enum PhysicalDeviceButton: UInt64, Codable, Sendable {
     case home = 0x40
     case lock = 0x30
     case siri = 0xCF
-    case volumeUp = 0xE9
-    case volumeDown = 0xEA
 }
 
 /// Holds one RSD and HID session and owns every contact and key it starts.
 actor PhysicalDeviceInputOwner {
-    private static let displayService = "com.apple.coredevice.deviceinfo"
     private static let controlService = "com.apple.coredevice.devicecontrol"
 
     let directory: DeviceServiceDirectory
@@ -143,7 +140,7 @@ actor PhysicalDeviceInputOwner {
 
         try await directory.prepareHID()
         if let admissionDeadline, ContinuousClock().now >= admissionDeadline {
-            throw CLIOutputFailure(code: "targetMissing",
+            throw CLIOutputFailure(code: "waitTimedOut",
                 message: "The element selection expired before AXe could send input.")
         }
         do {
@@ -229,7 +226,7 @@ actor PhysicalDeviceInputOwner {
                 throw CLIOutputFailure(code: "rotationUnconfirmed",
                     message: "The device did not report a changed display orientation within the rotation timeout.")
             }
-            return Double(interval.components.seconds) + Double(interval.components.attoseconds) / 1e18
+            return interval.timeInterval
         }
         // Fail before rotating if the display cannot be read.
         var previous = try await readDisplay(timeout: remaining())
@@ -242,7 +239,10 @@ actor PhysicalDeviceInputOwner {
         guard let reported = payload["currentDeviceOrientation"]?.stringValue,
               let locked = payload["currentDeviceOrientationLocked"],
               locked == .bool(false) || locked == .bool(true) else {
-            throw DeviceServiceError.invalidProtocol("the device returned an invalid rotation reply")
+            // The request was delivered, so the device may have turned.
+            throw CLIOutputFailure(code: "rotationUnconfirmed",
+                message: "The device returned an unreadable rotation reply, so AXe could not confirm whether it "
+                    + "rotated. Read the screen before rotating again.")
         }
         guard locked == .bool(false) else {
             throw CLIOutputFailure(code: "rotationLocked",
@@ -315,10 +315,8 @@ actor PhysicalDeviceInputOwner {
     }
 
     private func readDisplay(timeout: TimeInterval) async throws -> PhysicalDeviceDisplay {
-        let response = try await directory.requestCoreDevice(service: Self.displayService,
-            feature: "getdisplayinfo", action: "displayinfo", input: [:],
-            deviceIdentifier: deviceIdentifier, coreDeviceVersion: coreDeviceVersion, timeout: timeout)
-        return try PhysicalDeviceDisplay(response: response)
+        try await directory.readDisplay(deviceIdentifier: deviceIdentifier, coreDeviceVersion: coreDeviceVersion,
+                                        timeout: timeout)
     }
 
     private func handleInterruptedInput(_ error: Error) async throws -> Never {

@@ -24,18 +24,14 @@ enum AutomationTarget {
         }
     }
 
-    /// The device for a broker-backed command. When this UDID's broker is already running it resolved the
-    /// device and re-checks readiness on every lease, so the CoreDevice inventory spawn (0.65-1.1 s) is
-    /// skipped and only the UDID is passed on. Commands that need the full record use `physicalDeviceRecord`.
+    /// The device for a broker-backed command: only its UDID. The broker resolves the CoreDevice record
+    /// itself, reports `targetNotFound` through the lease, and re-checks readiness on every lease, so the CLI
+    /// spawns no inventory read (0.65-1.1 s). Commands that need the full record use `physicalDeviceRecord`.
     static func physicalInputDevice(udid: String) async throws -> CoreDevice? {
         guard isPhysicalInputUDID(udid) else { return nil }
-        if let endpoint = try? PhysicalDeviceBrokerProtocol.endpoint(udid: udid),
-           (try? HIDBroker.isBrokerProcessAlive(endpoint: endpoint)) == true {
-            return CoreDevice(identifier: udid, udid: udid, name: nil, model: nil, osVersion: nil,
-                tunnelAddress: nil, tunnelConnected: nil, transport: nil, paired: nil,
-                developerModeEnabled: nil, developerDiskImageMounted: nil, coreDeviceVersion: nil)
-        }
-        return try await physicalDeviceRecord(udid: udid)
+        return CoreDevice(identifier: udid, udid: udid, name: nil, model: nil, osVersion: nil,
+            tunnelAddress: nil, tunnelConnected: nil, transport: nil, paired: nil,
+            developerModeEnabled: nil, developerDiskImageMounted: nil, coreDeviceVersion: nil)
     }
 
     /// The full CoreDevice record for a hardware UDID, read from the inventory.
@@ -79,5 +75,12 @@ enum AutomationTarget {
         }
         throw CLIOutputFailure(code: "targetNotFound",
             message: "No simulator or physical device matches UDID \(identifier). Run axe list-simulators or axe list-devices.")
+    }
+}
+
+extension Duration {
+    /// Seconds as a `TimeInterval`, for socket and service timeouts.
+    var timeInterval: TimeInterval {
+        Double(components.seconds) + Double(components.attoseconds) / 1e18
     }
 }

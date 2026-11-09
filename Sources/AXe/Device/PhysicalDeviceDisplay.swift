@@ -22,6 +22,8 @@ struct PhysicalDeviceDisplay: Codable, Sendable, Equatable {
     /// The reported non-flat device orientation, recorded only on panels whose native orientation is not `rot0`.
     private let sensorOrientation: String?
     private let orientation: OrientationCoordinateMath.Orientation
+    /// The primary display's ID, which the native display stream requests; nil when the reply omits it.
+    let displayID: Int64?
 
     var width: Double {
         get throws { try resolvedOrientation().isLandscape ? portraitHeight : portraitWidth }
@@ -59,6 +61,7 @@ struct PhysicalDeviceDisplay: Codable, Sendable, Equatable {
         guard (pixelWidth / scale).isFinite, (pixelHeight / scale).isFinite else {
             throw DeviceServiceError.invalidProtocol("the primary device display reported an invalid scale")
         }
+        displayID = display["displayId"]?.integer.flatMap { Int64(exactly: $0) }.flatMap { $0 > 0 ? $0 : nil }
         modeWidth = pixelWidth
         modeHeight = pixelHeight
         self.scale = scale
@@ -138,20 +141,4 @@ struct PhysicalDeviceDisplay: Codable, Sendable, Equatable {
         "portrait": .portrait, "landscapeRight": .landscape,
         "portraitUpsideDown": .portraitUpsideDown, "landscapeLeft": .landscapeFlipped,
     ]
-}
-
-private extension RemoteXPCValue {
-    var arrayValue: [RemoteXPCValue]? {
-        guard case let .array(values) = self else { return nil }
-        return values
-    }
-
-    var number: Double? {
-        switch self {
-        case let .double(value): return value
-        case let .int64(value): return Double(value)
-        case let .uint64(value): return Double(value)
-        default: return nil
-        }
-    }
 }

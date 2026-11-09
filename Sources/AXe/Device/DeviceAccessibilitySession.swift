@@ -306,7 +306,7 @@ final class DeviceAccessibilitySession: @unchecked Sendable {
     private static func remaining(until deadline: ContinuousClock.Instant, failure: Error) throws -> TimeInterval {
         let duration = ContinuousClock.now.duration(to: deadline)
         guard duration > .zero else { throw failure }
-        return Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+        return duration.timeInterval
     }
 
     private static func validateTimeout(_ timeout: TimeInterval) throws {

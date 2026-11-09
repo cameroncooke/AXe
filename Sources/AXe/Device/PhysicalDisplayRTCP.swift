@@ -52,7 +52,7 @@ struct PhysicalDisplayRTCP: Sendable {
         }
         guard sequences.observe(packet.sequence) else { return }
         if let previousArrival = lastArrival, let previousTimestamp = lastRTPTimestamp, let clockRate {
-            let arrivalTicks = Self.seconds(previousArrival.duration(to: now)) * clockRate
+            let arrivalTicks = previousArrival.duration(to: now).timeInterval * clockRate
             let mediaTicks = Double(Int32(bitPattern: packet.timestamp &- previousTimestamp))
             jitter += (abs(arrivalTicks - mediaTicks) - jitter) / 16
         }
@@ -79,7 +79,7 @@ struct PhysicalDisplayRTCP: Sendable {
             bytes.appendNetwork(UInt32(min(max(jitter, 0), Double(UInt32.max))))
             if let report = lastSenderReport {
                 bytes.appendNetwork(UInt32(truncatingIfNeeded: report.ntpTimestamp >> 16))
-                let delay = Self.seconds(report.receivedAt.duration(to: now)) * 65_536
+                let delay = report.receivedAt.duration(to: now).timeInterval * 65_536
                 bytes.appendNetwork(UInt32(min(max(delay, 0), Double(UInt32.max))))
             } else {
                 bytes.appendNetwork(UInt32(0))
@@ -103,10 +103,6 @@ struct PhysicalDisplayRTCP: Sendable {
 
     private mutating func armReports(at now: ContinuousClock.Instant) {
         if nextReportAt == nil { nextReportAt = now + .seconds(reportInterval) }
-    }
-
-    private static func seconds(_ duration: Duration) -> Double {
-        Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
     }
 
     private struct RTPHeader {

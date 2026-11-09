@@ -13,10 +13,9 @@ struct PhysicalDeviceBrokerCommand: AsyncParsableCommand {
 
     @MainActor
     func run() async throws {
-        guard let device = try await AutomationTarget.physicalDeviceRecord(udid: udid) else {
-            throw PhysicalDeviceBrokerProtocol.unavailable
-        }
-        try await PhysicalDeviceBrokerServer.serve(udid: udid, backend: PhysicalDeviceBrokerOwner(device: device))
+        // Listen before resolving the device, so a missing device reaches the client as `targetNotFound`.
+        guard AutomationTarget.isPhysicalInputUDID(udid) else { throw PhysicalDeviceBrokerProtocol.unavailable }
+        try await PhysicalDeviceBrokerServer.serve(udid: udid, backend: PhysicalDeviceBrokerOwner(udid: udid))
     }
 }
 
@@ -24,7 +23,7 @@ struct PhysicalDeviceBrokerCommand: AsyncParsableCommand {
 private enum PhysicalDeviceBrokerServer {
     private typealias Wire = PhysicalDeviceBrokerProtocol
 
-    static func serve(udid: String, backend: any PhysicalDeviceBrokerBackend) async throws {
+    static func serve(udid: String, backend: PhysicalDeviceBrokerOwner) async throws {
         let task = Task { @MainActor in try await listen(udid: udid, backend: backend) }
         let signals = SignalObserver(signals: [SIGINT, SIGTERM]) { task.cancel() }
         let result = await withTaskCancellationHandler {
@@ -36,7 +35,7 @@ private enum PhysicalDeviceBrokerServer {
         try result.get()
     }
 
-    private static func listen(udid: String, backend: any PhysicalDeviceBrokerBackend) async throws {
+    private static func listen(udid: String, backend: PhysicalDeviceBrokerOwner) async throws {
         let endpoint = try Wire.endpoint(udid: udid)
         let build = try Wire.BuildIdentity.current()
         let lifetime = try HIDBroker.acquireLifetimeLock(endpoint: endpoint)
@@ -88,7 +87,7 @@ private enum PhysicalDeviceBrokerServer {
     }
 
     private static func serveClient(_ socket: PhysicalDeviceBrokerSocket, hello: Wire.Hello,
-                                    backend: any PhysicalDeviceBrokerBackend) async -> Bool {
+                                    backend: PhysicalDeviceBrokerOwner) async -> Bool {
         var began = false
         do {
             try await write(hello, to: socket)
@@ -150,7 +149,7 @@ private enum PhysicalDeviceBrokerServer {
         }
     }
 
-    private static func end(_ backend: any PhysicalDeviceBrokerBackend) async -> Wire.Failure? {
+    private static func end(_ backend: PhysicalDeviceBrokerOwner) async -> Wire.Failure? {
         await Task.detached {
             do {
                 try await backend.end()

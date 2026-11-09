@@ -57,8 +57,10 @@ actor PhysicalDeviceDisplayStream {
         }
 
         let directory = try await DeviceServiceDirectory.connect(tunnelAddress: address, expectedUDID: udid)
+        var openedReceiver: PhysicalDisplayUDPReceiver?
         do {
             let receiver = try PhysicalDisplayUDPReceiver(tunnelAddress: address)
+            openedReceiver = receiver
             let (display, rotation) = try await primaryDisplay(using: directory, deviceIdentifier: device.identifier, version: version)
             let clientSessionID = UUID()
             let offer = try PhysicalDisplayOffer.make()
@@ -117,6 +119,8 @@ actor PhysicalDeviceDisplayStream {
                 throw startError
             }
         } catch {
+            // Closing is idempotent; the start-failure path may already have closed the receiver.
+            openedReceiver?.close()
             directory.close()
             throw error
         }
@@ -211,21 +215,11 @@ actor PhysicalDeviceDisplayStream {
 
     private static func primaryDisplay(using directory: DeviceServiceDirectory,
                                        deviceIdentifier: String, version: String) async throws -> (id: Int64, rotation: Int?) {
-        let response = try await directory.requestCoreDevice(service: "com.apple.coredevice.deviceinfo",
-            feature: "getdisplayinfo", action: "displayinfo", input: [:], deviceIdentifier: deviceIdentifier,
-            coreDeviceVersion: version, timeout: 8)
-        guard let output = response["CoreDevice.output"]?.dictionaryValue, output["current"] == .bool(true),
-              case let .array(rows)? = output["displays"] else {
-            throw DeviceServiceError.invalidProtocol("the device did not report its current displays")
-        }
-        let primary = rows.compactMap(\.dictionaryValue).filter {
-            $0["primary"] == .bool(true) && $0["external"] == .bool(false)
-        }
-        guard primary.count == 1, let id = primary[0]["displayId"]?.integer,
-              id > 0, let display = Int64(exactly: id) else {
+        let geometry = try await directory.readDisplay(deviceIdentifier: deviceIdentifier, coreDeviceVersion: version,
+                                                       timeout: 8)
+        guard let display = geometry.displayID else {
             throw DeviceServiceError.invalidProtocol("the device did not report one built-in primary display")
         }
-        let geometry = try PhysicalDeviceDisplay(response: response)
         // The same reply carries the orientation check; no extra read.
         return (display, (try? geometry.requireResolvedOrientation()) == nil ? nil : geometry.nativeFrameRotation)
     }
@@ -246,7 +240,7 @@ actor PhysicalDeviceDisplayStream {
                 guard remaining > .zero else {
                     throw cleanupFailure("The owned stream still appeared in the display service status.")
                 }
-                let timeout = Double(remaining.components.seconds) + Double(remaining.components.attoseconds) / 1e18
+                let timeout = remaining.timeInterval
                 let sessions: [RemoteXPCValue]
                 do {
                     sessions = try await statusSessions(directory: directory, deviceIdentifier: deviceIdentifier,
@@ -385,15 +379,5 @@ final class PhysicalDisplayControl: @unchecked Sendable {
 
     func close() {
         queue.sync { connection = nil }
-    }
-}
-
-private extension RemoteXPCValue {
-    var integer: UInt64? {
-        switch self {
-        case let .uint64(number): return number
-        case let .int64(number): return UInt64(exactly: number)
-        default: return nil
-        }
     }
 }
