@@ -39,8 +39,10 @@ struct Touch: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
-    @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    var expectedPID: Int32?
 
     @Option(name: .customLong("contact-token"), help: "Selected input only: token returned by a retained down; down moves it and up releases it.")
     var contactToken: String?
@@ -48,7 +50,7 @@ struct Touch: AsyncParsableCommand {
     func validate() throws {
         try agentMode.validate()
         if agentMode.enabled {
-            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
             guard touchDown, touchUp, agentMode.elementRef != nil, pointX == nil, pointY == nil,
                   contactToken == nil else {
                 throw ValidationError("Agent touch requires --ref, --down and --up, without coordinates or a contact token.")
@@ -56,7 +58,7 @@ struct Touch: AsyncParsableCommand {
             _ = try agentRequest()
             return
         }
-        try selectedAX.validate(required: false)
+        guard expectedPID == nil else { throw ValidationError("--expected-pid requires --agent.") }
         guard let pointX, let pointY else {
             throw ValidationError("Touch requires -x and -y without --agent.")
         }
@@ -98,7 +100,7 @@ struct Touch: AsyncParsableCommand {
 
     func agentRequest() throws -> SelectedHIDRequest {
         try AgentModeCommandAdapter.request(AgentModeRequest(kind: .hold,
-            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
             duration: delay ?? TapTiming.defaultHoldDuration), input: selectedInput)
     }
 

@@ -39,8 +39,10 @@ struct Swipe: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
-    @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    var expectedPID: Int32?
 
     @Option(name: .customLong("direction"), help: "Agent ref swipe only: up, down, left or right within the current ref bounds.")
     var agentDirection: RuntimeSwipeDirection?
@@ -57,7 +59,7 @@ struct Swipe: AsyncParsableCommand {
         guard agentDirection == nil, agentDistance == nil else {
             throw ValidationError("--direction and --distance require --agent.")
         }
-        try selectedAX.validate(required: false)
+        guard expectedPID == nil else { throw ValidationError("--expected-pid requires --agent.") }
         try selectedInput.validate()
         guard let startX, let startY, let endX, let endY else {
             throw ValidationError("Swipe requires --start-x, --start-y, --end-x and --end-y.")
@@ -102,7 +104,7 @@ struct Swipe: AsyncParsableCommand {
     }
 
     private func validateAgent() throws {
-        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+        try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
         let coordinates = [startX, startY, endX, endY]
         if agentMode.elementRef != nil {
             guard coordinates.allSatisfy({ $0 == nil }), agentDirection != nil, delta == nil else {
@@ -129,7 +131,7 @@ struct Swipe: AsyncParsableCommand {
     func agentRequest() throws -> SelectedHIDRequest {
         if agentMode.elementRef != nil {
             return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .swipe,
-                expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+                expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
                 direction: agentDirection, distance: agentDistance ?? 1, duration: duration ?? 1,
                 preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
         }
@@ -137,7 +139,7 @@ struct Swipe: AsyncParsableCommand {
         var path = selectedPath
         path.endsAtRest = true
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .complete,
-            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID),
+            expectedPID: expectedPID, snapshotID: agentMode.snapshotID),
             input: selectedInput, path: path)
     }
 

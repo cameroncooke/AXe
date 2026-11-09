@@ -65,7 +65,7 @@ struct Slider: AsyncParsableCommand {
             return
         }
         try selectedInput.validate()
-        try selectedAX.validate(required: selectedInput.mode == .selected)
+        try selectedAX.validate(allowed: selectedInput.mode == .selected)
         if selectedInput.mode == .selected {
             guard (endpoint != nil) != (value != nil),
                   waitTimeout == 0, pollInterval == 0.25 else {

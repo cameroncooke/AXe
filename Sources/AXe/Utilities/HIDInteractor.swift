@@ -218,7 +218,8 @@ struct HIDInteractor {
         }
     }
 
-    /// Use one 250 ms contact: the 100 ms composite regressed real control actions.
+    /// The direct route keeps its released 250 ms contact, where a 100 ms composite regressed real
+    /// control actions. Broker routes hold TapTiming.defaultHoldDuration (0.1 s).
     /// Drain after UP; draining between DOWN and UP extends the contact.
     static func sendPhysicalTap(
         at point: (x: Double, y: Double),

@@ -28,9 +28,9 @@ struct Batch: AsyncParsableCommand {
         Without --screen-id/--screen-uuid each step uses the screen that is active when it starts.
         Earlier steps are not undone. AX targets and focus are read afresh per step.
         Selected mode has no whole-batch exclusive lock or cross-step context token.
-        Selected button home and side-button use device-wide routes with active-screen admission.
-        Their receipts prove transport and release, not UI or security state. Other buttons, retained
-        touch and semantic press are not yet supported in selected batches.
+        Selected button steps (home, side-button, siri, lock, apple-pay) use device-wide routes with
+        active-screen admission. They prove transport and release, not UI or security state. Retained
+        touch and semantic press are not supported in selected batches.
         Selected type --stdin reads 1–256 UTF-8 bytes at its ordered step, before input ownership.
         It preserves newlines and uses the existing US keyboard conversion. Close the input to
         finish the read; there is no EOF deadline or task cancellation during a blocked read.
@@ -41,7 +41,6 @@ struct Batch: AsyncParsableCommand {
         Cancellation or SIGINT/SIGTERM observed during that wait stops later steps.
         Signal handling is wait-only, not a whole-batch cancellation guarantee.
         Keyboard steps require --focus-id; per-step --expected-pid is an optional guard.
-        Home and side-button support --expected-boot.
 
         Legacy step commands:
           tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo

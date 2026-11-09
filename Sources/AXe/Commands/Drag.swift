@@ -41,20 +41,22 @@ struct Drag: AsyncParsableCommand {
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
-    @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
+
+    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    var expectedPID: Int32?
 
     func validate() throws {
         try agentMode.validate()
         if agentMode.enabled {
-            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
+            try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: expectedPID)
             guard startX == nil, startY == nil, agentMode.elementRef != nil else {
                 throw ValidationError("Agent drag requires --ref and does not accept --start-x or --start-y.")
             }
             _ = try agentRequest()
             return
         }
-        try selectedAX.validate(required: false)
+        guard expectedPID == nil else { throw ValidationError("--expected-pid requires --agent.") }
         guard let startX, let startY else {
             throw ValidationError("Drag requires --start-x and --start-y without --agent.")
         }
@@ -95,7 +97,7 @@ struct Drag: AsyncParsableCommand {
 
     func agentRequest() throws -> SelectedHIDRequest {
         try AgentModeCommandAdapter.request(AgentModeRequest(kind: .drag,
-            expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+            expectedPID: expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
             destination: SelectedAXPoint(x: endX, y: endY), steps: steps, duration: duration,
             preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
     }

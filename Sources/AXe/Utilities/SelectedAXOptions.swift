@@ -12,7 +12,7 @@ struct SelectedAXOptions: ParsableArguments {
     var expectedPID: Int32?
 
     /// `allowed` is true for a selected AX operation, where the PID is an optional guard.
-    func validate(required allowed: Bool) throws {
+    func validate(allowed: Bool) throws {
         if let expectedPID {
             guard allowed else { throw ValidationError("--expected-pid requires a selected AX operation.") }
             guard expectedPID > 0 else { throw ValidationError("--expected-pid must be a positive process ID.") }
@@ -24,7 +24,7 @@ struct SelectedAXOptions: ParsableArguments {
                  endpoint: FBSimulatorSliderEndpoint? = nil, point: SelectedAXPoint? = nil, preDelay: Double = 0, postDelay: Double = 0,
                  elementType: String? = nil, tapStyle: SelectedTapStyle? = nil,
                  waitPolicy: SelectedAXWaitPolicy? = nil, percentage: Double? = nil) throws -> SelectedHIDRequest {
-        try validate(required: true)
+        try validate(allowed: true)
         try input.validate()
         guard input.mode == .selected else {
             throw ValidationError("Selected AX requires --input-mode selected.")

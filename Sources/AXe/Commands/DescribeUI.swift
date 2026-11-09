@@ -78,7 +78,7 @@ struct DescribeUI: AsyncParsableCommand {
             throw ValidationError("Agent hash, row and reference-read options require --agent.")
         }
         try selectedInput.validate()
-        try selectedAX.validate(required: selectedInput.mode == .selected)
+        try selectedAX.validate(allowed: selectedInput.mode == .selected)
         _ = try parsedPoint()
     }
 
