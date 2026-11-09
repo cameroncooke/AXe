@@ -119,60 +119,27 @@ final class AgentModeController {
             // A refusal before the owned paths below read anything still reads the table's display.
             refusalContext = referenceRecord?.context
             refusalPID = expectedPID
-            // A published reference tap is admitted on the operation's own owned tree. The table
-            // supplies the target, display and context; the owned full context read and tree
-            // replace the separate pre-description and its two-tree equality.
-            if mode.kind == .tap, mode.ref != nil, focusPlan == nil, let referenceRecord, let pid = expectedPID {
+            // These native operations read the complete owned tree and require the table's fingerprint,
+            // target and context on it before the first event, so the table supplies the plan and no
+            // separate pre-description is read: a published reference tap (admitted on the tap's own
+            // owned tree), path and AX-size guarded actions, and snapshot-bound coordinate input.
+            // Typing reads only its focused field and keeps its pre-description.
+            let referenceTap = mode.kind == .tap && mode.ref != nil
+            if let referenceRecord, focusPlan == nil, let pid = expectedPID,
+               referenceTap || Self.admitsOnOwnedTree(mode.kind) || Self.admitsCoordinatesOnOwnedTree(mode) {
                 try requireRequestedDisplay(request, matches: referenceRecord.context)
-                let admission = try AgentReferenceTapAdmission(published: referenceRecord.snapshot,
-                    context: referenceRecord.context, pid: pid, mode: mode)
-                let native = try admission.request(requestID: request.requestID)
+                let tapAdmission = referenceTap ? try AgentReferenceTapAdmission(published: referenceRecord.snapshot,
+                    context: referenceRecord.context, pid: pid, mode: mode) : nil
+                let native: SelectedHIDRequest
+                if let tapAdmission {
+                    native = try tapAdmission.request(requestID: request.requestID)
+                } else {
+                    native = try nativeRequest(request, mode: mode, pid: pid, context: referenceRecord.context,
+                        snapshot: referenceRecord.snapshot, cached: referenceRecord)
+                }
                 // Invalidate before input, including partial or uncertain native delivery.
                 record = nil
-                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native, batchTap: admission) }
-                let actionReceipt = receipt(mode.kind, result, retried: retryDepth > 0)
-                action = actionReceipt
-                guard result.error == nil, result.cleanup != "uncertain" else {
-                    return await refusal(request, result.agent?.error
-                        ?? AgentModePublicErrorProjection.nativeFailure(result),
-                        native: result, action: actionReceipt,
-                        context: referenceRecord.context, pid: pid,
-                        original: referenceRecord.snapshot, retryDepth: retryDepth)
-                }
-                return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid)
-            }
-            // These native operations read the complete owned tree and require the admission's
-            // fingerprint, target and context on it before the first event, so the table can
-            // supply the plan. Typing reads only its focused field and keeps its pre-description.
-            if let referenceRecord, focusPlan == nil, let pid = expectedPID, Self.admitsOnOwnedTree(mode.kind) {
-                try requireRequestedDisplay(request, matches: referenceRecord.context)
-                let native = try nativeRequest(request, mode: mode, pid: pid, context: referenceRecord.context,
-                    snapshot: referenceRecord.snapshot, cached: referenceRecord)
-                // Invalidate before input, including partial or uncertain native delivery.
-                record = nil
-                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
-                let actionReceipt = receipt(mode.kind, result, retried: retryDepth > 0)
-                action = actionReceipt
-                guard result.error == nil, result.cleanup != "uncertain" else {
-                    return await refusal(request, result.agent?.error
-                        ?? AgentModePublicErrorProjection.nativeFailure(result),
-                        native: result, action: actionReceipt,
-                        context: referenceRecord.context, pid: pid,
-                        original: referenceRecord.snapshot, retryDepth: retryDepth)
-                }
-                return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
-                    context: referenceRecord.context, pid: pid)
-            }
-            // Coordinate input names no target. The native operation's own complete read before
-            // the first event must have the table's fingerprint and context, as the separate
-            // pre-description had to, so that description is not repeated here.
-            if let referenceRecord, focusPlan == nil, let pid = expectedPID, Self.admitsCoordinatesOnOwnedTree(mode) {
-                try requireRequestedDisplay(request, matches: referenceRecord.context)
-                let native = try nativeRequest(request, mode: mode, pid: pid, context: referenceRecord.context,
-                    snapshot: referenceRecord.snapshot, cached: referenceRecord)
-                record = nil
-                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native) }
+                let result = await PhaseTimer.measure("agent.input") { await owner.perform(native, batchTap: tapAdmission) }
                 let actionReceipt = receipt(mode.kind, result, retried: retryDepth > 0)
                 action = actionReceipt
                 guard result.error == nil, result.cleanup != "uncertain" else {
@@ -501,15 +468,12 @@ final class AgentModeController {
         }
     }
 
-    /// Snapshot-bound coordinate taps and complete coordinate paths. Their admission guard reads
-    /// the complete owned tree and requires the table's fingerprint before the first event.
+    /// Snapshot-bound coordinate taps. Their admission guard reads the complete owned tree and
+    /// requires the table's fingerprint before the first event. Complete coordinate paths are
+    /// covered by `admitsOnOwnedTree`.
     static func admitsCoordinatesOnOwnedTree(_ mode: AgentModeRequest) -> Bool {
-        guard mode.snapshotID != nil, mode.ref == nil, mode.selectorKind == nil, mode.tapSelector == nil else { return false }
-        switch mode.kind {
-        case .tap: return mode.point != nil
-        case .complete: return true
-        default: return false
-        }
+        mode.kind == .tap && mode.point != nil && mode.snapshotID != nil && mode.ref == nil
+            && mode.selectorKind == nil && mode.tapSelector == nil
     }
 
     private func receipt(_ kind: AgentModeRequest.Kind, _ result: SelectedHIDResponse,
