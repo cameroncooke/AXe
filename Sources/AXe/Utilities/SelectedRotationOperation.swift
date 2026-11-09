@@ -17,10 +17,7 @@ enum SelectedRotationOperation {
             try rotation.validate()
             try Task.checkCancellation()
             let display = try request.selectedDisplay()
-            try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-            let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-            guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                  simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+            let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
             result.receipt = try await FBSimulatorRotationNative.rotate(for: simulator,
                 screenID: display.id, screenUUID: display.uuid, expectedBootIdentity: rotation.expectedBootIdentity,
                 direction: rotation.direction, timeoutSeconds: rotation.timeoutSeconds)

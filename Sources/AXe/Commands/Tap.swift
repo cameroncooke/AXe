@@ -376,9 +376,9 @@ struct Tap: AsyncParsableCommand {
 
         // Verified DTUHID devices use the broker's retained connection, as the Duo does, so
         // a plain tap neither opens a new guest connection nor waits to drain before exit.
-        let duoContext = try await LegacyDuoInput.captureContext(
+        let duoContext = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
-        )
+        )?.context
         let resolution: TapResolution
         let resolvedDescription: String
 

@@ -19,12 +19,8 @@ enum SelectedKeyboardOperation {
             try request.validate()
             guard var keyboard = request.keyboard else { throw SelectedHIDFailure.invalid("Missing keyboard payload") }
             try Task.checkCancellation()
-            let simulator = try await PhaseTimer.measure("keyboard.simulatorSet") { () async throws -> FBSimulator in
-                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-                return simulator
+            let simulator = try await PhaseTimer.measure("keyboard.simulatorSet") {
+                try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
             }
             let display = try request.selectedDisplay()
             let live = try await PhaseTimer.measure("keyboard.liveContextStart") {

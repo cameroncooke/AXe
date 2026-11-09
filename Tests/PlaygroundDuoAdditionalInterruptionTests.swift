@@ -118,7 +118,7 @@ struct PlaygroundDuoAdditionalInterruptionTests {
 }
 
 private func requireRawDuoRelease(_ diagnostics: String, changedLayout: Bool) throws {
-    let expression = try NSRegularExpression(pattern: #"Duo input failed: (.+); events=([0-9]+); cleanup=releaseEnqueuedAndDrained\. Input was not replayed\."#)
+    let expression = try NSRegularExpression(pattern: #"Input failed: (.+); events=([0-9]+); cleanup=releaseEnqueuedAndDrained\. Input was not replayed\."#)
     let range = NSRange(diagnostics.startIndex..<diagnostics.endIndex, in: diagnostics)
     let match = try #require(expression.firstMatch(in: diagnostics, range: range), "No native owned release receipt: \(diagnostics)")
     let reasonRange = try #require(Range(match.range(at: 1), in: diagnostics))

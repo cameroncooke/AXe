@@ -53,7 +53,7 @@ struct PlaygroundRawInputAdmissionTests {
             let refusal = rejected.output.trimmingCharacters(in: .whitespacesAndNewlines)
             let expectedRefusal: Bool
             if action == .key {
-                expectedRefusal = refusal == "Error: Duo input stopped: busy; cleanup=notNeeded. Input was not replayed."
+                expectedRefusal = refusal == "Error: Input stopped: busy; cleanup=notNeeded. Input was not replayed."
             } else {
                 expectedRefusal = refusal == knownBusy || refusal == legacyBusy
             }

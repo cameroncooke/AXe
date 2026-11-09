@@ -44,7 +44,7 @@ struct PlaygroundDuoTypingInterruptionTests {
                 try await input.wait(timeout: 15)
                 let diagnostic = try input.diagnostics()
                 try #require(input.exitCode == 1, "Long typing did not stop: \(diagnostic)")
-                let base = "Error: Duo input stopped: interrupted(reason: FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: FBSimulatorControl.FBSimulatorHIDCleanupOutcome."
+                let base = "Error: Input stopped: interrupted(reason: FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: FBSimulatorControl.FBSimulatorHIDCleanupOutcome."
                 let suffix = ". Input was not replayed."
                 let accepted = [
                     base + "releaseEnqueuedAndDrained); cleanup=releaseEnqueuedAndDrained" + suffix,

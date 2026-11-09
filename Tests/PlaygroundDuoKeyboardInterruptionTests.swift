@@ -108,7 +108,7 @@ private struct KeyboardInterruptionSession {
             let diagnostics = try input.diagnostics()
             try #require(input.exitCode == 1, "The held key did not stop: \(diagnostics)")
             // The native interruption must confirm release. Outer close can need no further release.
-            let nativeFailure = "Error: Duo input stopped: interrupted(reason: "
+            let nativeFailure = "Error: Input stopped: interrupted(reason: "
                 + "FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: "
                 + "FBSimulatorControl.FBSimulatorHIDCleanupOutcome.releaseEnqueuedAndDrained); "
             var allowedErrors = [
@@ -116,7 +116,7 @@ private struct KeyboardInterruptionSession {
                 nativeFailure + "cleanup=notNeeded. Input was not replayed.",
             ]
             if sequence {
-                let idleFailure = "Error: Duo input stopped: interrupted(reason: "
+                let idleFailure = "Error: Input stopped: interrupted(reason: "
                     + "FBSimulatorControl.FBSimulatorHIDInterruption.staleContext, cleanup: "
                     + "FBSimulatorControl.FBSimulatorHIDCleanupOutcome.notNeeded); "
                 allowedErrors += [idleFailure + "cleanup=notNeeded. Input was not replayed."]

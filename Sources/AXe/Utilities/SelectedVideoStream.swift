@@ -19,15 +19,11 @@ enum SelectedVideoStream {
     private static func stream(owner: SelectedMediaCapture, simulatorUDID: String,
                                screenID: UInt32, screenUUID: UUID, expectedBoot: String?,
                                format: StreamVideo.OutputFormat, fps: Int, quality: Int, scale: Double) async throws {
-        let logger = AxeLogger(debugLogging: false, writeToStdErr: true)
-        try await performGlobalSetup(logger: logger)
-        try Task.checkCancellation()
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty") }
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { $0.udid == udid }), simulator.state == .booted else {
-            throw CLIError(errorDescription: "Selected streaming requires the requested booted simulator")
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: udid,
+            logger: AxeLogger(debugLogging: false, writeToStdErr: true))
+        try Task.checkCancellation()
         guard let first = try await owner.capture(simulator: simulator, screenID: screenID,
             screenUUID: screenUUID, expectedBoot: expectedBoot, initial: nil) else {
             throw CLIError(errorDescription: "Stream stopped before a complete selected frame")

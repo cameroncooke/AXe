@@ -21,21 +21,21 @@ struct LegacyDuoPath: Codable, Sendable {
               startX != endX || startY != endY,
               duration.isFinite, duration > 0,
               duration < Double(UInt64.max) / 1_000_000_000 else {
-            throw SelectedHIDFailure.invalid("Duo path requires finite distinct points and a representable positive duration")
+            throw SelectedHIDFailure.invalid("Path requires finite distinct points and a representable positive duration")
         }
         switch kind {
         case .swipe:
             guard steps == nil, let delta, delta.isFinite, delta > 0 else {
-                throw SelectedHIDFailure.invalid("Duo swipe requires a finite positive delta and no steps")
+                throw SelectedHIDFailure.invalid("Swipe requires a finite positive delta and no steps")
             }
             let distance = sqrt(pow(endY - startY, 2) + pow(endX - startX, 2))
             let moves = distance / delta
             guard moves.isFinite, moves < Double(Self.maximumMoves + 1) else {
-                throw SelectedHIDFailure.invalid("Duo swipe exceeds 100000 movement steps")
+                throw SelectedHIDFailure.invalid("Swipe exceeds 100000 movement steps")
             }
         case .drag:
             guard delta == nil, let steps, (1...1000).contains(steps) else {
-                throw SelectedHIDFailure.invalid("Duo drag requires 1...1000 steps and no delta")
+                throw SelectedHIDFailure.invalid("Drag requires 1...1000 steps and no delta")
             }
         }
     }
@@ -52,7 +52,7 @@ struct LegacyDuoPath: Codable, Sendable {
               logicalSize.width > 0, logicalSize.height > 0,
               startX <= logicalSize.width, endX <= logicalSize.width,
               startY <= logicalSize.height, endY <= logicalSize.height else {
-            throw SelectedHIDFailure.invalid("Duo path endpoints exceed the measured logical display")
+            throw SelectedHIDFailure.invalid("Path endpoints exceed the measured logical display")
         }
         switch kind {
         case .swipe:

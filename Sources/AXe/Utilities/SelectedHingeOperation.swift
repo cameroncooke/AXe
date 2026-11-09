@@ -16,10 +16,7 @@ enum SelectedHingeOperation {
         do {
             try hinge.validate()
             try Task.checkCancellation()
-            try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-            let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-            guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                  simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
+            let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
             result.readback = try await FBSimulatorHingeNative.read(for: simulator,
                 expectedBootIdentity: hinge.expectedBootIdentity)
             if hinge.kind == .read {

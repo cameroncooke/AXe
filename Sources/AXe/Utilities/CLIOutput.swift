@@ -5,10 +5,12 @@ enum CLIOutputFormat: String, Sendable {
     case json
 }
 
-struct CLIOutputFailure: Error, Sendable, LocalizedError {
+struct CLIOutputFailure: Error, Sendable, LocalizedError, CustomStringConvertible {
     let code: String
     let message: String
     var errorDescription: String? { message }
+    /// Broker replies carry `String(describing:)` of an error; keep that the message.
+    var description: String { message }
 }
 
 struct CLIOutputContent: Sendable {

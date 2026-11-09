@@ -140,9 +140,9 @@ struct Drag: AsyncParsableCommand {
         logger.info().log("Duration: \(duration)s, steps: \(steps)")
 
         // Duo and verified DTUHID devices use the broker's retained input connection.
-        if let context = try await LegacyDuoInput.captureContext(
+        if let context = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
-        ) {
+        )?.context {
             let path = LegacyDuoPath(kind: .drag, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: duration, steps: steps)
             try await LegacyDuoInput.perform(path: path, context: context,

@@ -17,18 +17,12 @@ enum FollowActiveVideoRecording {
     private static func record(owner: SelectedMediaCapture, simulatorUDID: String,
                                expectedBoot: String?, output: String?, fps: Int,
                                quality: Int, scale: Double) async throws {
-        let logger = AxeLogger()
-        try await performGlobalSetup(logger: logger)
-        try Task.checkCancellation()
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard UUID(uuidString: udid) != nil else {
             throw CLIError(errorDescription: "Follow-active recording requires a simulator UUID")
         }
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: udid) }),
-              simulator.state == .booted else {
-            throw CLIError(errorDescription: "Follow-active recording requires the requested booted simulator")
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: udid, logger: AxeLogger())
+        try Task.checkCancellation()
         let destination = try SelectedVideoRecording.outputURL(output)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent(".axe-follow-video-" + UUID().uuidString + ".mp4")

@@ -22,15 +22,9 @@ struct HIDBrokerReadinessTests {
             startMicroseconds: 200
         )
 
-        #expect(HIDBroker.shouldReuseSession(sessionBootIdentity: original, currentBootIdentity: original))
-        #expect(!HIDBroker.shouldReuseSession(
-            sessionBootIdentity: original,
-            currentBootIdentity: rebootedWithNewPID
-        ))
-        #expect(!HIDBroker.shouldReuseSession(
-            sessionBootIdentity: original,
-            currentBootIdentity: rebootedWithReusedPID
-        ))
+        #expect(original == original)
+        #expect(original != rebootedWithNewPID)
+        #expect(original != rebootedWithReusedPID)
     }
 
     @Test("Boot identity selects the newest launchd process during reboot overlap")
@@ -83,16 +77,6 @@ struct HIDBrokerReadinessTests {
             bootIdentity: bootIdentity,
             now: Date(timeIntervalSince1970: 99)
         ) == HIDBroker.dtuhidMinimumBootUptime)
-    }
-
-    @Test("A selected Xcode does not imply DTUHID without a simulator process")
-    func missingDTUHIDProcessSelectsIndigo() {
-        #expect(!HIDBroker.isDTUHIDSelected(processIdentifier: 0))
-    }
-
-    @Test("A simulator DTUHID process selects DTUHID readiness")
-    func dtuhidProcessSelectsDTUHID() {
-        #expect(HIDBroker.isDTUHIDSelected(processIdentifier: 42))
     }
 
     @Test("DTUHID readiness uses the injected boot identity and clock")

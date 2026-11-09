@@ -67,21 +67,15 @@ struct HIDInteractor {
             of: bootIdentity.processIdentifier,
             withName: "dtuhidd"
         )
-        let isDTUHIDSelected = HIDBroker.isDTUHIDSelected(
-            processIdentifier: dtuhidProcessIdentifier
-        )
         try await HIDBroker.waitForHIDReadiness(
             bootIdentity: bootIdentity,
-            isDTUHIDSelected: isDTUHIDSelected,
+            isDTUHIDSelected: dtuhidProcessIdentifier > 0,
             now: Date.init,
             sleep: { delay in try await Task.sleep(for: .seconds(delay)) }
         )
         let hid = try await getOrCreateHIDConnection(for: simulator, logger: logger)
         let connectedBootIdentity = try HIDBroker.currentBootIdentity(simulatorUDID: simulatorUDID)
-        guard HIDBroker.shouldReuseSession(
-            sessionBootIdentity: bootIdentity,
-            currentBootIdentity: connectedBootIdentity
-        ) else {
+        guard bootIdentity == connectedBootIdentity else {
             hidConnections.removeValue(forKey: simulatorUDID)
             throw CLIError(
                 errorDescription: "Simulator \(simulatorUDID) restarted while AXe was connecting. Try the command again."
@@ -255,9 +249,5 @@ struct HIDInteractor {
         logger.info().log("HID connection created and cached for simulator \(simulator.udid)")
 
         return hid
-    }
-
-    static func clearHIDConnections() {
-        hidConnections.removeAll()
     }
 }

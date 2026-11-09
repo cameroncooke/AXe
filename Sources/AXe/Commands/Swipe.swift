@@ -188,9 +188,9 @@ struct Swipe: AsyncParsableCommand {
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
         // Duo and verified DTUHID devices use the broker's retained input connection.
-        if let context = try await LegacyDuoInput.captureContext(
+        if let context = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
-        ) {
+        )?.context {
             notifySwipe(startX: startX, startY: startY, endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
             let path = LegacyDuoPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)

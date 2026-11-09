@@ -169,7 +169,7 @@ enum HIDBroker {
                 catch {
                     Darwin.close(client); admission.release(reservation); throw error
                 }
-                guard shouldReuseSession(sessionBootIdentity: bootIdentity, currentBootIdentity: currentBoot) else {
+                guard bootIdentity == currentBoot else {
                     try? await offMain { try writeHandshake(ready: false, version: protocolVersion, to: client) }
                     Darwin.close(client)
                     admission.release(reservation)

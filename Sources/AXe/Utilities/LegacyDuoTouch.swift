@@ -11,11 +11,11 @@ struct LegacyDuoTouch: Codable, Sendable {
 
     func validate() throws {
         guard x.isFinite, y.isFinite, x >= 0, y >= 0, down || up else {
-            throw SelectedHIDFailure.invalid("Duo touch requires finite non-negative coordinates and a down or up")
+            throw SelectedHIDFailure.invalid("Touch requires finite non-negative coordinates and a down or up")
         }
         if let delay {
             guard down, up, delay.isFinite, (0...10).contains(delay) else {
-                throw SelectedHIDFailure.invalid("Duo touch delay requires down/up and must be in 0...10 seconds")
+                throw SelectedHIDFailure.invalid("Touch delay requires down/up and must be in 0...10 seconds")
             }
         }
     }

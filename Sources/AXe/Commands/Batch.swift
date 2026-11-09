@@ -210,8 +210,8 @@ struct Batch: AsyncParsableCommand {
 
     @MainActor
     private func runOrdinaryBatch(_ lines: [String], logger: AxeLogger) async throws {
-        let measured = try await LegacyDuoInput.captureContext(
-            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger)
+        let measured = try await LegacyDuoInput.captureRoute(
+            simulatorUDID: simulatorUDID, preDelay: nil, logger: logger)?.context
         let owner: SelectedHIDOwner?
         if measured != nil {
             owner = SelectedHIDOwner(simulatorUDID: simulatorUDID, logger: logger)

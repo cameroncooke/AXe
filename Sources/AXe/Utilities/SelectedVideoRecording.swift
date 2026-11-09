@@ -18,15 +18,10 @@ enum SelectedVideoRecording {
 
     private static func record(owner: SelectedMediaCapture, simulatorUDID: String, screenID: UInt32, screenUUID: UUID,
                         expectedBoot: String?, output: String?, fps: Int, quality: Int, scale: Double) async throws {
-        let logger = AxeLogger()
-        try await performGlobalSetup(logger: logger)
-        try Task.checkCancellation()
         let udid = simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !udid.isEmpty else { throw CLIError(errorDescription: "Simulator UDID cannot be empty") }
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { $0.udid == udid }), simulator.state == .booted else {
-            throw CLIError(errorDescription: "Selected recording requires the requested booted simulator")
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: udid, logger: AxeLogger())
+        try Task.checkCancellation()
         let destination = try Self.outputURL(output)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent(".axe-selected-video-" + UUID().uuidString + ".mp4")

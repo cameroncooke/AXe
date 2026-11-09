@@ -4,6 +4,8 @@ import FBSimulatorControl
 
 /// Keep the legacy CLI surface while using the measured input owner on the verified Duo.
 enum LegacyDuoInput {
+    static let duoDeviceTypeIdentifier = "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
+
     /// The measured context for the shared input owner, and whether it belongs to the Duo.
     struct Route {
         let context: SelectedHIDContext
@@ -11,15 +13,25 @@ enum LegacyDuoInput {
     }
 
     @MainActor
-    static func captureContext(
-        simulatorUDID: String,
-        preDelay: Double?,
-        logger: AxeLogger,
-        forKeyboard: Bool = false,
-        includeVerifiedRigid: Bool = false
-    ) async throws -> SelectedHIDContext? {
-        try await captureRoute(simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger,
-            forKeyboard: forKeyboard, includeVerifiedRigid: includeVerifiedRigid)?.context
+    static func isDuo(_ simulator: FBSimulator) -> Bool {
+        simulator.device.deviceType?.identifier == duoDeviceTypeIdentifier
+    }
+
+    /// Refuses a Duo profile whose hinge capability is not the verified one.
+    @MainActor
+    static func requireVerifiedDuo(_ simulator: FBSimulator) throws {
+        let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
+        guard capability.hinge == .supported else { throw SelectedHIDFailure.invalid(capability.reason) }
+    }
+
+    /// Missing rigid-profile metadata cannot establish support for the measured route.
+    @MainActor
+    private static func hasProfileMetadata(_ simulator: FBSimulator) -> Bool {
+        guard let type = simulator.device.deviceType, let bundle = type.bundle,
+              type.identifier != nil, type.modelIdentifier != nil,
+              bundle.object(forInfoDictionaryKey: "CFBundleVersion") is String,
+              bundle.url(forResource: "capabilities", withExtension: "plist") != nil else { return false }
+        return true
     }
 
     /// Nil keeps the caller's existing route. Verified DTUHID rigid devices join the Duo only
@@ -33,27 +45,14 @@ enum LegacyDuoInput {
         forKeyboard: Bool = false,
         includeVerifiedRigid: Bool = false
     ) async throws -> Route? {
-        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-        let set = try await getSimulatorSet(
-            deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared
-        )
-        guard let simulator = set.allSimulators.first(where: {
-            UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID)
-        }), simulator.state == .booted else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         if forKeyboard || includeVerifiedRigid {
             // Duo and verified DTUHID profiles share the broker's retained connection.
             guard try usesSharedKeyboardOwner(for: simulator) else { return nil }
         } else {
             // Older rigid-device input keeps its existing route.
-            guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
-                return nil
-            }
-            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
-            guard capability.hinge == .supported else {
-                throw SelectedHIDFailure.invalid(capability.reason)
-            }
+            guard isDuo(simulator) else { return nil }
+            try requireVerifiedDuo(simulator)
         }
         try await wait(preDelay)
         let discovery = try await ActivePanelReader.discoverWithMetadata(for: simulator)
@@ -64,28 +63,22 @@ enum LegacyDuoInput {
         )
         let observation = try await reader.observation()
         guard observation.bootIdentity == discovery.bootIdentity else {
-            throw SelectedHIDFailure.invalid("Simulator boot changed during Duo input preparation")
+            throw SelectedHIDFailure.invalid("Simulator boot changed during input preparation")
         }
-        return Route(context: SelectedHIDContext(observation),
-            isDuo: simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo")
+        return Route(context: SelectedHIDContext(observation), isDuo: isDuo(simulator))
     }
 
     /// One policy shared by caller capture and broker admission. Rigid Indigo and unknown
     /// profiles keep their existing route; a measured read failure never changes routes.
     @MainActor
     static func usesSharedKeyboardOwner(for simulator: FBSimulator) throws -> Bool {
-        if simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" {
-            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
-            guard capability.hinge == .supported else { throw SelectedHIDFailure.invalid(capability.reason) }
+        if isDuo(simulator) {
+            try requireVerifiedDuo(simulator)
             return true
         }
         let boot = try HIDBroker.currentBootIdentity(simulatorUDID: simulator.udid)
         let dtuhidPID = FBProcessFetcher().subprocess(of: boot.processIdentifier, withName: "dtuhidd")
-        guard HIDBroker.isDTUHIDSelected(processIdentifier: dtuhidPID) else { return false }
-        guard let type = simulator.device.deviceType, let bundle = type.bundle,
-              type.identifier != nil, type.modelIdentifier != nil,
-              bundle.object(forInfoDictionaryKey: "CFBundleVersion") is String,
-              bundle.url(forResource: "capabilities", withExtension: "plist") != nil else { return false }
+        guard dtuhidPID > 0, hasProfileMetadata(simulator) else { return false }
         return try FBSimulatorNativeContextReader.capability(for: simulator).hinge == .unsupported
     }
 
@@ -97,26 +90,14 @@ enum LegacyDuoInput {
         hasStableIdentifier: Bool,
         logger: AxeLogger
     ) async throws -> ActivePanelIdentity? {
-        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-        let set = try await getSimulatorSet(
-            deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared
-        )
-        guard let simulator = set.allSimulators.first(where: {
-            UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID)
-        }), simulator.state == .booted else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
-        }
-        let isDuo = simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
-        // Missing rigid-profile metadata cannot establish support for the measured route.
-        guard let type = simulator.device.deviceType, let bundle = type.bundle,
-              type.identifier != nil, type.modelIdentifier != nil,
-              bundle.object(forInfoDictionaryKey: "CFBundleVersion") is String,
-              bundle.url(forResource: "capabilities", withExtension: "plist") != nil else {
-            guard !isDuo else { throw SelectedHIDFailure.invalid("Duo device type metadata is unavailable") }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
+        let duo = isDuo(simulator)
+        guard hasProfileMetadata(simulator) else {
+            guard !duo else { throw SelectedHIDFailure.invalid("Duo device type metadata is unavailable") }
             return nil
         }
         let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
-        if isDuo {
+        if duo {
             // Preserve the existing refusal for an unverified Duo profile.
             guard capability.hinge == .supported else { throw SelectedHIDFailure.invalid(capability.reason) }
         } else {
@@ -135,9 +116,9 @@ enum LegacyDuoInput {
         logger: AxeLogger,
         persistentOrdinaryKeyboard: Bool = false
     ) async throws {
-        guard let context = try await captureContext(
+        guard let context = try await captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger, forKeyboard: true
-        ) else {
+        )?.context else {
             if persistentOrdinaryKeyboard {
                 try HIDBroker.sendKeyboardEvent(event, simulatorUDID: simulatorUDID)
             } else {
@@ -146,7 +127,7 @@ enum LegacyDuoInput {
             return
         }
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+            throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
         let endpoint = try SelectedHIDBroker.endpoint(simulatorUDID: simulatorUDID)
         let requestID = UUID()
@@ -172,10 +153,10 @@ enum LegacyDuoInput {
         switch style {
         case .physical: selectedStyle = .physical
         case .simulator: selectedStyle = .simulator
-        case .automatic: throw SelectedHIDFailure.invalid("Duo tap requires a resolved legacy style")
+        case .automatic: throw SelectedHIDFailure.invalid("Ordinary tap requires a resolved style")
         }
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+            throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
@@ -183,7 +164,7 @@ enum LegacyDuoInput {
             primitives: try selectedStyle.primitives(x: point.x, y: point.y),
             expectedContext: context
         )
-        logger.info().log("Duo tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
+        logger.info().log("Tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
     }
 
@@ -195,14 +176,14 @@ enum LegacyDuoInput {
         logger: AxeLogger
     ) async throws {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+            throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
             primitives: [], expectedContext: context, legacyPath: path
         )
-        logger.info().log("Duo \(path.kind.rawValue) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
+        logger.info().log("\(path.kind.rawValue.capitalized) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay)
     }
 
@@ -214,7 +195,7 @@ enum LegacyDuoInput {
     ) async throws {
         try touch.validate()
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw SelectedHIDFailure.invalid("Invalid measured Duo display identity")
+            throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
@@ -246,14 +227,14 @@ enum LegacyDuoInput {
                 let persistence = response.quarantine?.persisted == true
                     ? "Input quarantine saved. " + HIDInputQuarantine.recoveryStep(recordPath: response.quarantine?.recordPath)
                     : "Input quarantine could not be saved; manual recovery is required. \(response.quarantine?.error ?? "")"
-                throw CLIError(errorDescription: "Duo batch cleanup is uncertain. \(response.error ?? "Batch completion"). \(persistence)")
+                throw CLIError(errorDescription: "Input cleanup is uncertain. \(response.error ?? "Input completion"). \(persistence)")
             }
             if let error = response.error {
-                throw CLIError(errorDescription: "Duo input stopped: \(error); cleanup=\(response.cleanup). Input was not replayed.")
+                throw CLIError(errorDescription: "Input stopped: \(error); cleanup=\(response.cleanup). Input was not replayed.")
             }
         }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
-            throw CLIError(errorDescription: "Duo input failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
+            throw CLIError(errorDescription: "Input failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.")
         }
         try await wait(postDelay)
     }

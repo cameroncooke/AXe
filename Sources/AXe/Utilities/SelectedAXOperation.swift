@@ -26,12 +26,8 @@ enum SelectedAXOperation {
         var cleanup = "notNeeded"
         do {
             try Task.checkCancellation()
-            let simulator = try await PhaseTimer.measure("ax.simulatorSet") { () async throws -> FBSimulator in
-                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-                return simulator
+            let simulator = try await PhaseTimer.measure("ax.simulatorSet") {
+                try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
             }
             if ax.preDelay > 0 { try await PhaseTimer.measure("ax.preDelay") { try await Task.sleep(for: .seconds(ax.preDelay)) } }
             let display = try request.selectedDisplay()

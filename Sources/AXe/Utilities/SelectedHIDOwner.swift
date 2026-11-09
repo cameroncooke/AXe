@@ -324,12 +324,7 @@ final class SelectedHIDOwner {
     /// Selected input without a screen pair binds the screen that is active now. A retained contact
     /// keeps its original pair, so a fold or rotation since it began fails admission instead.
     private func bindActiveDisplay(_ request: SelectedHIDRequest) async throws -> SelectedHIDRequest {
-        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-              simulator.state == .booted else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         let active = try await PhaseTimer.measure("owner.activeDisplay") {
             try await DisplayTransition.settledDiscovery(for: simulator).readback.snapshot.activePanel.identity
         }
@@ -342,11 +337,8 @@ final class SelectedHIDOwner {
     }
 
     private func acquireLease() throws {
+        // Every current input route, including the raw broker, takes this common lease.
         try PhaseTimer.measureSync("owner.lease") {
-            // Older raw brokers can retain input without the common lease. Keep their process guard.
-            // Protocol 3 brokers release the common lease after a complete contact pair.
-            let legacyEndpoint = try HIDBroker.endpointPath(simulatorUDID: simulatorUDID, version: 2)
-            guard try !HIDBroker.isBrokerProcessAlive(endpoint: legacyEndpoint) else { throw SelectedHIDFailure.busy }
             lease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
         }
     }
@@ -368,19 +360,12 @@ final class SelectedHIDOwner {
                       requiresDuo: Bool, requiresSharedOwner: Bool = false,
                       validate: (FBSimulatorHIDSessionObservation) throws -> Void = { _ in }) async throws {
         try acquireLease()
-        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }), simulator.state == .booted else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         if requiresDuo {
-            guard simulator.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
+            guard LegacyDuoInput.isDuo(simulator) else {
                 throw SelectedHIDFailure.invalid("Legacy Duo input requires the verified Duo device profile")
             }
-            let capability = try FBSimulatorNativeContextReader.capability(for: simulator)
-            guard capability.hinge == .supported else {
-                throw SelectedHIDFailure.invalid(capability.reason)
-            }
+            try LegacyDuoInput.requireVerifiedDuo(simulator)
         }
         if requiresSharedOwner, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
             throw SelectedHIDFailure.invalid("Raw input transport or verified profile changed before input")
