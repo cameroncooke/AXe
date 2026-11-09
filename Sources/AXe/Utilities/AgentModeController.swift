@@ -251,16 +251,24 @@ final class AgentModeController {
                 let stored: Record
                 let unchanged: Bool
                 let cacheStatus: String
-                var refreshedPage = false
                 if mode.snapshotID != nil {
                     do {
                         stored = try requireRecord(mode, context: context, fresh: snapshot)
                         cacheStatus = "validated"
                     } catch let changed as AgentModeFailure where ["screenChanged", "targetChanged"].contains(changed.code) {
-                        // The agent would read the screen again; this read is that read.
-                        stored = store(snapshot, context: context, pid: pid)
-                        cacheStatus = "refreshed"
-                        refreshedPage = true
+                        // The agent would read the screen again; this read is that read. It is a new
+                        // table, so it is a refusal of the requested page: its refs must not be
+                        // merged with pages of the old snapshot. It restarts at its first row.
+                        let replacement = store(snapshot, context: context, pid: pid)
+                        var first = mode
+                        first.rowOffset = 0
+                        let capture = replacement.snapshot.capture(id: replacement.id, sequence: replacement.sequence,
+                            udid: simulatorUDID, request: first, applicationPID: replacement.expectedPID,
+                            context: replacement.context, unchanged: false, expiresIn: Self.timeToLive)
+                        return failure(request, changed,
+                            cache: AgentModeCacheState(status: "refreshed", reason: changed.code, requiresRefresh: false),
+                            nextSteps: ["The capture is a new snapshot of the current screen. Discard rows from the old snapshot and page this one from its first row."],
+                            capture: capture)
                     }
                     unchanged = false
                 } else if let previous = record,
@@ -281,10 +289,8 @@ final class AgentModeController {
                     unchanged = false
                     cacheStatus = "refreshed"
                 }
-                var page = mode
-                if refreshedPage { page.rowOffset = 0 }  // a new table restarts at its first row
                 let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence,
-                    udid: simulatorUDID, request: page, applicationPID: stored.expectedPID, context: stored.context,
+                    udid: simulatorUDID, request: mode, applicationPID: stored.expectedPID, context: stored.context,
                     unchanged: unchanged,
                     expiresIn: max(0, Self.timeToLive - (now - stored.capturedAt)))
                 guard let fresh else { throw AgentModeFailure("missingObservation", "The description has no native observation.") }

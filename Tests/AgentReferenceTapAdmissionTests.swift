@@ -287,6 +287,28 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.ownedTaps == 1)
     }
 
+    @Test("Paging a snapshot whose screen changed is refused with the new snapshot's first page")
+    func stalePageIsRefused() async throws {
+        let harness = try Harness()
+        let (snapshot, _) = try await harness.describe()
+        var changed = harness.fixture.controls
+        changed.append(.init(type: "Button", label: "Edit", frame: .init(y: 300)))
+        harness.state.describeRoots = try harness.fixture.roots(changed)
+        var page = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+        page.agent = AgentModeRequest(kind: .describe, snapshotID: snapshot, rowOffset: 2)
+        let result = try #require(await harness.controller.perform(page).agent)
+        #expect(result.didError && result.error?.code == "screenChanged")
+        let capture = try #require(result.data.capture)
+        #expect(capture.snapshotID != snapshot && capture.rowOffset == 0)
+        #expect(capture.targets.contains { $0.contains("|tap|button|Edit|") })
+        #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
+        // The replacement is the current table: it pages and admits input.
+        page.agent = AgentModeRequest(kind: .describe, snapshotID: capture.snapshotID, rowOffset: 1)
+        let next = try #require(await harness.controller.perform(page).agent)
+        #expect(!next.didError && next.data.capture?.snapshotID == capture.snapshotID)
+    }
+
     @Test("A batch stopped by a step that sent nothing returns the current screen, without resending input")
     func stoppedBatchReturnsCurrentScreen() async throws {
         let harness = try Harness()

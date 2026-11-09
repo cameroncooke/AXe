@@ -138,7 +138,7 @@ When the current screen is unchanged and you need visible text, request reading 
 axe describe-ui --agent --view reading --snapshot-id <CURRENT_UUID> --row-offset 0 --udid <UDID>
 ```
 
-This performs a fresh native check. After validation, the snapshot ID, references and original expiry stay the same. If validation fails, refresh and use the new references. A plain describe that returns a new snapshot ID replaces the previous table.
+This performs a fresh native check. After validation, the snapshot ID, references and original expiry stay the same. If the screen changed, the reply is a `screenChanged` refusal whose capture is a new snapshot starting at its first row: discard rows from the old snapshot, never combine its refs with the new one, and page the new snapshot from there. A plain describe that returns a new snapshot ID replaces the previous table.
 
 ## Read complete fields and page controls
 
