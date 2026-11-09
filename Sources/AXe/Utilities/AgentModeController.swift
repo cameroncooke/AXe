@@ -899,13 +899,13 @@ final class AgentModeController {
                         throw AgentModeFailure("invalidBatchID", "A native ID batch step has no ID.")
                     }
                     if step.action == .type && step.focuses {
-                        let ref = try current.snapshot.reference(id: id, action: .tap)
+                        let ref = try Self.batchReference(current.snapshot, id: id, action: .tap)
                         action.agent = AgentModeRequest(kind: .focusAndType, expectedPID: batchPID,
                             snapshotID: current.id, ref: ref, text: step.text)
                         return Self.focusStep(await performFocusAndTypeRetrying(action, retryDepth: retryDepth),
                             retried: retryDepth > 0)
                     }
-                    let ref = try current.snapshot.reference(id: id,
+                    let ref = try Self.batchReference(current.snapshot, id: id,
                         action: step.action == .tap ? .tap : .typeText)
                     action.agent = AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
                         expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text)
@@ -987,6 +987,15 @@ final class AgentModeController {
                     context: last?.context))
             }
             return finish(failure)
+        }
+    }
+
+    /// An ID step's ref on the current table. A missing or duplicated ID is a batch refusal.
+    private static func batchReference(_ snapshot: AgentModeSnapshot, id: String,
+                                       action: RuntimeElementAction) throws -> String {
+        do { return try snapshot.reference(id: id, action: action) }
+        catch let failure as AgentModeFailure where ["targetMissing", "targetAmbiguous"].contains(failure.code) {
+            throw AgentModeFailure("batchTargetMissing", "The batch ID does not identify one exact current native target, so this step and later steps were not sent. \(AgentModeFailure.batchRest)")
         }
     }
 

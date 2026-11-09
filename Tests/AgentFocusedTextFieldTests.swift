@@ -46,7 +46,7 @@ struct AgentFocusedTextFieldTests {
             _ = try snapshot.reference(id: "shared", action: .typeText)
             Issue.record("A duplicate TextField ID authorized typing.")
         } catch let error as AgentModeFailure {
-            #expect(error.code == "batchTargetMissing")
+            #expect(error.code == "targetAmbiguous")
         }
     }
 

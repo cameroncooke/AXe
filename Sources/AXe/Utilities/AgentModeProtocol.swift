@@ -278,7 +278,7 @@ struct AgentModeRequest: Codable, Sendable {
 enum AgentModePIDPolicy {
     static func expectedPID(assertion: Int32?, snapshot: Int32?) throws -> Int32? {
         if let assertion, assertion <= 0 {
-            throw AgentModeFailure("expectedPIDRequired", "--expected-pid must be positive when provided.")
+            throw AgentModeFailure("invalidExpectedPID", "--expected-pid must be positive when provided.")
         }
         guard let snapshot else { return assertion }
         guard snapshot > 0 else {

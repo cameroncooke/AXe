@@ -327,6 +327,23 @@ struct AgentReferenceTapAdmissionTests {
         #expect(!result.didError && result.data.action?.enqueuedEventCount == 2)
     }
 
+    @Test("A missing focus ID is a single-action refusal; in an ID batch it is a batch refusal")
+    func missingIDCodes() async throws {
+        let harness = try Harness()
+        var type = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+        type.agent = AgentModeRequest(kind: .typeText, selectorKind: .id, selectorValue: "missing", text: "x")
+        let typed = try #require(await harness.controller.perform(type).agent)
+        #expect(typed.didError && typed.error?.code == "targetMissing")
+        var batch = type
+        batch.agent = nil
+        batch.agentBatch = try JSONDecoder().decode(AgentBatchRequest.self,
+            from: Data(#"{"steps":[{"action":"tap","id":"missing"}]}"#.utf8))
+        let stopped = try #require(await harness.controller.performBatch(batch).agent)
+        #expect(stopped.didError && stopped.error?.code == "batchTargetMissing")
+        #expect(harness.state.ownedTaps == 0)
+    }
+
     @Test("Paging a snapshot whose screen changed is refused with the new snapshot's first page")
     func stalePageIsRefused() async throws {
         let harness = try Harness()

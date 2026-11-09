@@ -219,9 +219,12 @@ struct AgentModeSnapshot: Sendable {
 
     func reference(id: String, action: RuntimeElementAction) throws -> String {
         let type: String? = action == .typeText ? "TextField" : nil
-        guard let entry = identityIndex.entry(kind: .id, value: id, type: type), entry.count == 1,
-              nodes[entry.index].identifier == id else {
-            throw AgentModeFailure("batchTargetMissing", "The batch ID does not identify one exact current native target.")
+        let entry = identityIndex.entry(kind: .id, value: id, type: type)
+        guard let entry, entry.count == 1, nodes[entry.index].identifier == id else {
+            let ambiguous = (entry?.count ?? 0) > 1
+            throw AgentModeFailure(ambiguous ? "targetAmbiguous" : "targetMissing", ambiguous
+                ? "More than one current control has this exact ID, so nothing was sent. Use a ref from a current capture."
+                : "No current control has this exact ID, so nothing was sent. Check the ID in a current capture.")
         }
         let ref = elements[entry.index].ref
         _ = try node(ref: ref, requiredAction: action)
