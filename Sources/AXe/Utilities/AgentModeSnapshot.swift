@@ -1,5 +1,4 @@
 import AXeCore
-import CryptoKit
 import Foundation
 import FBSimulatorControl
 
@@ -19,15 +18,15 @@ struct AgentModeSnapshot: Sendable {
     /// inspected. Focus is excluded: typing checks its own field before every key.
     let visibleFingerprint: String
     private let identityIndex: NativeIdentityIndex
-    private let referenceIndices: [String: Int]
+    let referenceIndices: [String: Int]
     let nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata?
-    private let selectedTargets: [SelectedNativeTarget?]
-    private let nativeOccurrences: [FBSimulatorAXNativeIdentity: [Int]]
+    let selectedTargets: [SelectedNativeTarget?]
+    let nativeOccurrences: [FBSimulatorAXNativeIdentity: [Int]]
     private let aliasTapIndex: FBSimulatorAXNativeObjectIndex?
     private let aliasTapKeys: Set<FBSimulatorAXNativeIdentity>
-    private let nativePID: Int32?
-    private let keyboardButtons: [AgentModeKeyboardDetector.Button]
-    private let redundantTextParents: [String: String]
+    let nativePID: Int32?
+    let keyboardButtons: [AgentModeKeyboardDetector.Button]
+    let redundantTextParents: [String: String]
 
     init(roots: [FBSimulatorAXNode], nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata? = nil,
          context: SelectedHIDContext) throws {
@@ -286,7 +285,7 @@ struct AgentModeSnapshot: Sendable {
         return frame.isUsableAgentFrame
     }
 
-    private func targetRows() -> [RuntimeSnapshotRow] {
+    func targetRows() -> [RuntimeSnapshotRow] {
         let targets = RuntimeSnapshotCompactor.targets(in: elements, limit: Self.maximumElements)
         let targetRefs = Set(targets.map { $0.element.ref })
         let sliders = elements.indices.compactMap { index -> RuntimeSnapshotRow? in
@@ -479,115 +478,8 @@ struct AgentModeSnapshot: Sendable {
         return (selector.kind, selector.value)
     }
 
-    func capture(id: UUID, sequence: Int, udid: String, request: AgentModeRequest,
-                 applicationPID: Int32, context: SelectedHIDContext,
-                 unchanged: Bool, expiresIn: Double) -> AgentModeCapture {
-        let targets = targetRows()
-        let scroll = RuntimeSnapshotCompactor.scrollAreas(in: elements, limit: Self.maximumElements)
-        let text = RuntimeSnapshotCompactor.text(in: elements, limit: Self.maximumElements)
-        let emittedParents = Set((targets + scroll).map { $0.element.ref })
-        let redundantTextRefs = redundantTextParents.filter { emittedParents.contains($0.value) }.keys.sorted()
-        let total = targets.count + scroll.count + text.count
-        let start = request.rowOffset
-        let end = min(total, start + request.rowLimit)
-        func presented(_ row: RuntimeSnapshotRow, requiresSelector: Bool) -> String {
-            guard requiresSelector, let index = referenceIndices[row.element.ref], selectedTargets[index] == nil else {
-                return row.text
-            }
-            return RuntimeSnapshotCompactor.row(row.element, action: "unavailable").text
-        }
-        func page(_ rows: [RuntimeSnapshotRow], base: Int, requiresSelector: Bool) -> [String] {
-            guard !unchanged else { return [] }
-            return rows.enumerated().filter { start <= base + $0.offset && base + $0.offset < end }
-                .map { presented($0.element, requiresSelector: requiresSelector) }
-        }
-        let remaining = end < total
-        let targetPage = page(targets, base: 0, requiresSelector: true)
-        let scrollPage = page(scroll, base: targets.count, requiresSelector: true)
-        let textPage = page(text, base: targets.count + scroll.count, requiresSelector: false)
-        let scrollPreview: AgentModeScrollPreview?
-        if start == 0, !unchanged, scrollPage.isEmpty, !scroll.isEmpty {
-            var seen: Set<String> = []
-            let unique = scroll.filter { seen.insert($0.element.ref).inserted }
-            scrollPreview = AgentOutputProjection.scrollPreview(
-                rows: unique.prefix(AgentOutputProjection.maximumAreaPreviewRows).map { presented($0, requiresSelector: true) },
-                hasMore: unique.count > AgentOutputProjection.maximumAreaPreviewRows)
-        } else { scrollPreview = nil }
-        var unavailable: [String: String] = [:]
-        if nativeIdentityMetadata?.complete != true {
-            for row in targetPage + scrollPage {
-                let ref = String(row.prefix { $0 != "|" })
-                guard let index = referenceIndices[ref], selectedTargets[index] == nil,
-                      elements[index].state.visible, elements[index].state.enabled,
-                      Self.isOpaqueInputCandidate(nodes[index], element: semanticElements[index]),
-                      nodes[index].enabled == true, nodes[index].hidden == false,
-                      nodes[index].pid == nativePID,
-                      let frame = nodes[index].frame,
-                      frame.isUsableAgentFrame,
-                      let type = nodes[index].type, !type.isEmpty, type.utf8.count <= 256,
-                      type == type.trimmingCharacters(in: .whitespacesAndNewlines), type != "Slider" else { continue }
-                if let identity = nodes[index].nativeIdentity {
-                    guard identity.pid == nativePID, nativeOccurrences[identity]?.count == 1 else { continue }
-                }
-                unavailable[ref] = "nativeIdentityIncomplete"
-            }
-        }
-        let publishedRefs = Set((targetPage + scrollPage + textPage).map { String($0.prefix { $0 != "|" }) })
-        var customActions: [String: [String]] = [:]
-        var truncatedCustomActionRefs: [String] = []
-        for element in elements where publishedRefs.contains(element.ref) && !element.customActionNames.isEmpty {
-            let preview = AgentModeCustomActions.preview(element.customActionNames)
-            customActions[element.ref] = preview.names
-            if preview.truncated { truncatedCustomActionRefs.append(element.ref) }
-        }
-        return AgentModeCapture(type: unchanged ? "runtime-snapshot-unchanged" : "runtime-snapshot", rs: "1",
-            snapshotID: id, screenHash: hash, seq: sequence, count: elements.count,
-            targets: targetPage, scroll: scrollPage, text: textPage, udid: udid,
-            applicationPID: applicationPID, context: context,
-            rowOffset: request.rowOffset, rowLimit: request.rowLimit, targetCount: targets.count,
-            scrollCount: scroll.count, textCount: text.count, truncated: remaining, expiresInSeconds: expiresIn,
-            keyboard: AgentModeKeyboardDetector.observe(keyboardButtons,
-                logicalWidth: context.logicalWidth, logicalHeight: context.logicalHeight,
-                numericKeyCount: AgentModeKeyboardDetector.numericKeyCount(in: self, expectedPID: applicationPID,
-                    logicalSize: CGSize(width: context.logicalWidth, height: context.logicalHeight))),
-            totalRows: total, nextRowOffset: remaining ? end : nil,
-            redundantTextRefs: redundantTextRefs.isEmpty ? nil : redundantTextRefs,
-            unavailableReferences: unavailable.isEmpty ? nil : unavailable,
-            customActions: customActions.isEmpty ? nil : customActions,
-            truncatedCustomActionRefs: truncatedCustomActionRefs.isEmpty ? nil : truncatedCustomActionRefs,
-            scrollPreview: scrollPreview)
-    }
-
-    func detail(ref: String, query: AgentModeTextQuery) throws -> AgentModeTextDetail {
-        try query.validate()
-        guard let index = referenceIndices[ref] else {
-            throw AgentModeFailure("referenceMissing", "That ref is not in this snapshot, so nothing was sent. Use a ref from the same capture as the snapshot ID.")
-        }
-        let node = nodes[index]
-        let value: String
-        switch query.field {
-        case .label: value = node.label ?? ""
-        case .value: value = Self.text(node.value) ?? ""
-        case .id: value = node.identifier ?? ""
-        case .customActions: value = try AgentModeCustomActions.jsonText(node.customActionNames)
-        }
-        let scalars = value.unicodeScalars
-        let total = scalars.count
-        guard query.offset <= total else {
-            throw AgentModeFailure("invalidTextRange", "The text offset exceeds the field length.")
-        }
-        let start = scalars.index(scalars.startIndex, offsetBy: query.offset)
-        let count = min(query.limit, total - query.offset)
-        let end = scalars.index(start, offsetBy: count)
-        let next = query.offset + count
-        return AgentModeTextDetail(ref: ref, field: query.field, offset: query.offset,
-            nextOffset: next < total ? next : nil, totalLength: total,
-            text: String(scalars[start..<end]), frame: elements[index].frame,
-            actions: elements[index].actions)
-    }
-
     /// Identity adds authority to an existing input capability, never scroll inference to a Group.
-    private static func isOpaqueInputCandidate(_ node: FBSimulatorAXNode, element: RuntimeSnapshotElement) -> Bool {
+    static func isOpaqueInputCandidate(_ node: FBSimulatorAXNode, element: RuntimeSnapshotElement) -> Bool {
         if element.actions.contains(.tap) || element.actions.contains(.typeText) { return true }
         guard element.actions.contains(.swipeWithin) else { return false }
         let role = [node.type, node.role, node.subrole, node.roleDescription]
@@ -613,7 +505,7 @@ struct AgentModeSnapshot: Sendable {
             children: includingChildren ? node.children.map { runtimeNode($0) } : [])
     }
 
-    private static func text(_ value: FBSimulatorAXValue?) -> String? {
+    static func text(_ value: FBSimulatorAXValue?) -> String? {
         guard let value else { return nil }
         switch value {
         case .string(let text): return text
@@ -623,154 +515,4 @@ struct AgentModeSnapshot: Sendable {
         }
     }
 
-    private static func digest(_ bytes: Data) -> String {
-        SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
-    }
-
-    /// Each node encodes only its own exact fields and fixed-size child digests.
-    /// Sorting child digests preserves sibling reorder while retaining ancestry.
-    private struct NativeFingerprintNode: Encodable {
-        let type: String?
-        let role: String?
-        let subrole: String?
-        let roleDescription: String?
-        let identifier: String?
-        let label: String?
-        let value: FBSimulatorAXValue?
-        let customActionNames: [String]
-        let frame: AgentFrame?
-        let pid: Int32?
-        let focused: Bool?
-        let enabled: Bool?
-        let hidden: Bool?
-        let children: [String]
-
-        init(_ node: FBSimulatorAXNode, children: [String]) {
-            type = node.type; role = node.role; subrole = node.subrole; roleDescription = node.roleDescription
-            identifier = node.identifier; label = node.label; value = node.value; pid = node.pid
-            focused = node.focused; enabled = node.enabled; hidden = node.hidden
-            customActionNames = node.customActionNames
-            frame = node.frame.map { AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height) }
-            self.children = children
-        }
-    }
-
-    /// Missing or invalid geometry is kept: it does not prove that a node is off-screen.
-    static func affectsAdmission(_ node: FBSimulatorAXNode, hidden: Bool, display: CGRect) -> Bool {
-        if hidden { return false }
-        if let frame = node.frame, frame.isUsableAgentFrame, !frame.intersects(display) { return false }
-        let empty: (String?) -> Bool = { $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
-        let inertGroup = node.type == "Group" && node.children.isEmpty && node.customActionNames.isEmpty
-            && node.focused != true && empty(node.identifier) && empty(node.label) && empty(text(node.value))
-        return !inertGroup
-    }
-
-    private struct VisibleFingerprintNode: Encodable {
-        let type: String?
-        let role: String?
-        let subrole: String?
-        let roleDescription: String?
-        let identifier: String?
-        let label: String?
-        let value: FBSimulatorAXValue?
-        let customActionNames: [String]
-        let frame: AgentFrame?
-        let pid: Int32?
-        let enabled: Bool?
-        let children: [String]
-
-        /// Ordinary text keeps its place, type and identity but not its text or glyph bounds, so a
-        /// ticking clock or progress label does not refuse every action on its screen. Controls, text
-        /// inside controls, and every frame that can place a touch stay bound.
-        init(_ node: FBSimulatorAXNode, ordinaryText: Bool, children: [String]) {
-            type = node.type; role = node.role; subrole = node.subrole; roleDescription = node.roleDescription
-            identifier = node.identifier; pid = node.pid
-            label = ordinaryText ? nil : node.label
-            value = ordinaryText ? nil : node.value
-            enabled = node.enabled; customActionNames = node.customActionNames
-            frame = ordinaryText ? nil : node.frame.map {
-                AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height)
-            }
-            self.children = children
-        }
-    }
-
-    private struct NativeSelector: Sendable {
-        let kind: SelectedAXRequest.SelectorKind
-        let value: String
-    }
-
-    /// Native selector matching trims only its ends. It does not use the RS/1 text projection.
-    private struct NativeIdentityIndex: Sendable {
-        struct Entry: Sendable {
-            var count: Int
-            let index: Int
-            var buttonLeaf = false
-        }
-        private struct Key: Hashable, Sendable {
-            let kind: String
-            let value: String
-            let type: String?
-        }
-        private var entries: [Key: Entry] = [:]
-        private var buttonChainAncestors: Set<Int> = []
-
-        init(nodes: [FBSimulatorAXNode], roots: [FBSimulatorAXNode]) {
-            for (index, node) in nodes.enumerated() {
-                for (kind, raw) in [(SelectedAXRequest.SelectorKind.id, node.identifier), (.label, node.label), (.value, AgentModeSnapshot.text(node.value))] {
-                    guard let raw else { continue }
-                    let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !value.isEmpty else { continue }
-                    let types: [String?] = node.type.map { [nil, $0] } ?? [nil]
-                    for type in types {
-                        let key = Key(kind: kind.rawValue, value: value, type: type)
-                        if var entry = entries[key] { entry.count += 1; entries[key] = entry }
-                        else { entries[key] = Entry(count: 1, index: index) }
-                    }
-                }
-            }
-            let duplicateEntries = entries.filter { $0.value.count > 1 }
-            for (key, entry) in duplicateEntries {
-                guard key.type == nil || key.type == "Button" else { continue }
-                let selector: FBSimulatorAXSelector
-                if key.kind == SelectedAXRequest.SelectorKind.id.rawValue {
-                    selector = key.type == nil ? .identifier(key.value) : .identifierWithType(key.value, elementType: "Button")
-                } else if key.kind == SelectedAXRequest.SelectorKind.label.rawValue {
-                    selector = key.type == nil ? .label(key.value) : .labelWithType(key.value, elementType: "Button")
-                } else { continue }
-                guard let leaf = FBSimulatorAXButtonLeafSelection.resolve(in: roots, selector: selector),
-                      leaf.matchingIndices.count == entry.count else { continue }
-                entries[key] = Entry(count: 1, index: leaf.index, buttonLeaf: true)
-                buttonChainAncestors.formUnion(leaf.matchingIndices.dropLast())
-            }
-        }
-
-        func isButtonChainAncestor(at index: Int) -> Bool { buttonChainAncestors.contains(index) }
-
-        func entry(kind: SelectedAXRequest.SelectorKind, value: String, type: String?) -> Entry? {
-            entries[Key(kind: kind.rawValue, value: value.trimmingCharacters(in: .whitespacesAndNewlines), type: type)]
-        }
-
-        func selector(for node: FBSimulatorAXNode, nodes: [FBSimulatorAXNode]) -> NativeSelector? {
-            guard let frame = node.frame else { return nil }
-            for (kind, raw) in [(SelectedAXRequest.SelectorKind.id, node.identifier), (.label, node.label)] {
-                guard let raw else { continue }
-                let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !value.isEmpty, value.utf8.count <= 4096,
-                      let entry = entry(kind: kind, value: value, type: node.type), entry.count == 1,
-                      nodes[entry.index].frame == frame,
-                      !entry.buttonLeaf || node.children.isEmpty else { continue }
-                return NativeSelector(kind: kind, value: value)
-            }
-            return nil
-        }
-
-        func hasUniqueTextFieldID(for node: FBSimulatorAXNode) -> Bool {
-            guard node.type == "TextField", let identifier = node.identifier,
-                  !identifier.isEmpty, identifier.utf8.count <= 4096,
-                  identifier == identifier.trimmingCharacters(in: .whitespacesAndNewlines),
-                  let entry = entry(kind: .id, value: identifier, type: "TextField") else { return false }
-            return entry.count == 1
-        }
-    }
 }
