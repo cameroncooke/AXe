@@ -201,15 +201,20 @@ struct AgentCommand: AsyncParsableCommand {
         )
     }
 
-    private static func validatedHTTPURL(
+    /// Both clients send their API key with every request, so plain HTTP is accepted only for a
+    /// server on this Mac.
+    static func validatedHTTPURL(
         _ rawValue: String,
         optionName: String
     ) throws -> URL {
         guard let url = URL(string: rawValue),
               let scheme = url.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
-              url.host != nil else {
+              let host = url.host?.lowercased(), !host.isEmpty else {
             throw ValidationError("\(optionName) must be an absolute HTTP or HTTPS URL.")
+        }
+        guard scheme == "https" || ["localhost", "127.0.0.1", "::1", "[::1]"].contains(host) else {
+            throw ValidationError("\(optionName) must use HTTPS, because the API key is sent with every request. Plain HTTP is accepted only for localhost, 127.0.0.1 or ::1.")
         }
         return url
     }
