@@ -49,6 +49,7 @@ struct Type: AsyncParsableCommand {
     var focusBeforeTyping = false
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -114,7 +115,8 @@ struct Type: AsyncParsableCommand {
             return
         }
         if selectedInput.mode == .selected {
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         let logger = AxeLogger()

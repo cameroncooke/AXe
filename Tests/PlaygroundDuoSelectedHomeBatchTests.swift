@@ -54,7 +54,7 @@ struct PlaygroundDuoSelectedHomeBatchTests {
         // Home completes when its events are delivered; SpringBoard takes the foreground a moment
         // later. Until then selected AX refuses the read with processChanged, so read again.
         let describe = ["describe-ui", "--expected-pid", String(systemPID),
-            "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString]
+            "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString, "--verbose"]
         let deadline = ProcessInfo.processInfo.systemUptime + 10
         var tree: DuoCLIResponse
         while true {

@@ -19,6 +19,14 @@ axe list-simulators
 
 No `--udid` needed. Lists all available simulators with their UDIDs and boot state. Supply a real UDID to other commands; an empty value never selects a device.
 
+## Screens
+
+```bash
+axe displays --udid <UDID>
+```
+
+Waits for a fold or rotation to finish, then shows each screen: which one is active, its role (`outer`, `inner` or `main`), its size in logical points, scale and orientation, and on iPhone Duo the hinge angle. Use these points for coordinates. Pass the active screen's `id` and `uuid` to `--screen-id` and `--screen-uuid` when a command must refuse to act on any other screen. [device-reference.md](device-reference.md#screens-hinge-and-rotation) has the output fields.
+
 ## Screenshot
 
 ```bash

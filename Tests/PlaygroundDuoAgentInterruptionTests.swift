@@ -222,7 +222,7 @@ private struct AgentLayoutInterruption {
             if action.typing {
                 let panel = afterLayout.activePanel.identity
                 let selection = ["--input-mode", "selected", "--screen-id", String(panel.displayID),
-                    "--screen-uuid", panel.uniqueID.uuidString]
+                    "--screen-uuid", panel.uniqueID.uuidString, "--verbose"]
                 let beforePopup = try await typingPopupTree(session, selection: selection, catalogue: afterLayout)
                 if let popup = UIStateParser.findElement(in: beforePopup.roots, withIdentifier: "PopoverDismissRegion") {
                     try #require(popup.type == "Group" && popup.label == "dismiss popup")

@@ -2,12 +2,15 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 83
+    static let version = 84
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
-    let screenID: UInt32?
-    let screenUUID: UUID?
+    var screenID: UInt32?
+    var screenUUID: UUID?
+    /// Selected input without an explicit pair: the broker binds the screen that is active when it
+    /// admits the request, then clears this flag. Every later check uses the bound pair.
+    var activeDisplay: Bool? = nil
     let operation: Operation
     let token: UUID?
     let primitives: [SelectedHIDPrimitive]
@@ -33,6 +36,13 @@ struct SelectedHIDRequest: Codable, Sendable {
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if activeDisplay != nil {
+            guard activeDisplay == true, screenID == nil, screenUUID == nil, expectedContext == nil,
+                  agentAdmission == nil, agent == nil, agentBatch == nil, hinge == nil,
+                  legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else {
+                throw SelectedHIDFailure.invalid("Active-display binding applies only to selected input without a screen pair")
+            }
+        }
         if includeReadingContinuation == true, agentBatch == nil, agent?.rowLimit != 64 {
             throw AgentModeFailure("invalidReadingContinuation", "A reading continuation requires a default-size agent capture.")
         }
@@ -114,8 +124,8 @@ struct SelectedHIDRequest: Codable, Sendable {
             try hinge.validate()
             return
         }
-        guard screenID != nil, screenUUID != nil else {
-            throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID")
+        guard (screenID != nil && screenUUID != nil) || activeDisplay == true else {
+            throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID, or the active screen")
         }
         if let legacyPath {
             try legacyPath.validate()

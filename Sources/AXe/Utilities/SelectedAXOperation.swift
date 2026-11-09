@@ -52,8 +52,17 @@ enum SelectedAXOperation {
                 }
                 let acquisition = try await PhaseTimer.measure("ax.acquire") { () async throws -> FBSimulatorAXAcquisition in
                     if ax.kind == .describePoint {
-                        guard let point = ax.point, let expectedPID = ax.expectedPID else {
-                            throw SelectedHIDFailure.invalid("Selected point description requires a point and expected PID")
+                        guard let point = ax.point else {
+                            throw SelectedHIDFailure.invalid("Selected point description requires a point")
+                        }
+                        let expectedPID: Int32
+                        if let bound = ax.expectedPID {
+                            expectedPID = bound
+                        } else {
+                            // Bind the frontmost app once; the point read still requires it before and after.
+                            expectedPID = try await FBSimulatorAXSnapshot.frontmostApplicationPID(for: simulator,
+                                observation: initial, freshnessProvider: reader)
+                            result.expectedPID = expectedPID
                         }
                         result.point = point
                         return try await FBSimulatorAXSnapshot.acquire(at: CGPoint(x: point.x, y: point.y),
@@ -70,7 +79,8 @@ enum SelectedAXOperation {
                 result.acquisition = try SelectedAXAcquisition(acquisition)
                 result.roots = acquisition.snapshot?.roots
                 result.nativeIdentityMetadata = acquisition.snapshot?.nativeIdentityMetadata
-                if ax.expectedPID == nil, acquisition.outcome == .ready {
+                // A point read bound its PID before reading; only a whole-tree read discovers it here.
+                if ax.kind == .describe, ax.expectedPID == nil, acquisition.outcome == .ready {
                     guard let observedPID = acquisition.attempts.last?.rootPID, observedPID > 0,
                           result.roots?.contains(where: { $0.type == "Application" && $0.pid == observedPID }) == true else {
                         throw SelectedHIDFailure.invalid("Frontmost acquisition did not confirm one positive application PID")
@@ -85,7 +95,7 @@ enum SelectedAXOperation {
                 return response(request, brokerID: brokerID, result: result, observation: observation,
                     outcome: "ready", count: 0, cleanup: "notNeeded", error: nil)
             }
-            guard let expectedPID = ax.expectedPID, expectedPID > 0 else {
+            if let bound = ax.expectedPID, bound <= 0 {
                 throw SelectedHIDFailure.invalid("Selected AX input requires a positive expected PID")
             }
             let live = try await PhaseTimer.measure("ax.liveContextStart") {
@@ -93,6 +103,18 @@ enum SelectedAXOperation {
                     screenID: display.id, screenUniqueID: display.uuid)
             }
             feed = live; observation = live.initialObservation
+            let expectedPID: Int32
+            if let bound = ax.expectedPID {
+                expectedPID = bound
+            } else {
+                // Without --expected-pid, bind the app that is frontmost now. Every later target,
+                // hit and frontmost check requires this PID, so an app change fails before input.
+                expectedPID = try await PhaseTimer.measure("ax.frontmostPID") {
+                    try await FBSimulatorAXSnapshot.frontmostApplicationPID(for: simulator,
+                        observation: live.initialObservation, freshnessProvider: live)
+                }
+                result.expectedPID = expectedPID
+            }
             try SelectedAXBounds.validateContext(SelectedHIDContext(live.initialObservation))
             try request.agentAdmission?.validateContext(live.initialObservation)
             try batchTap?.validateContext(SelectedHIDContext(live.initialObservation), pid: expectedPID)

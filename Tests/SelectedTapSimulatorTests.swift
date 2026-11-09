@@ -154,7 +154,6 @@ struct SelectedTapSimulatorTests {
         ["--id", "target", "--expected-pid", "42", "--tap-style", "physical", "--semantic-press"],
         ["--id", "target", "--expected-pid", "42", "--tap-style", "simulator", "--wait-timeout", "31"],
         ["--id", "target", "--expected-pid", "42", "--tap-style", "simulator", "--poll-interval", "0.1"],
-        ["--id", "target", "--tap-style", "simulator"],
         ["-x", "1", "-y", "2", "--tap-style", "simulator", "--element-type", "Button"]
     ])
     func unsupportedOptionsStillReject(arguments: [String]) throws {

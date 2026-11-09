@@ -59,8 +59,7 @@ struct SelectedTapElementTypeTests {
         ["--id", "target", "--element-type", "  ", "--expected-pid", "42"],
         ["--element-type", "Button", "--expected-pid", "42"],
         ["--value", "1", "--semantic-press", "--element-type", "Button", "--expected-pid", "42"],
-        ["--id", "target", "--label", "target", "--element-type", "Button", "--expected-pid", "42"],
-        ["--id", "target", "--element-type", "Button"]
+        ["--id", "target", "--label", "target", "--element-type", "Button", "--expected-pid", "42"]
     ])
     func unsupportedCombinationsRejectBeforeSend(arguments: [String]) throws {
         #expect(throws: (any Error).self) { _ = try parse(arguments) }

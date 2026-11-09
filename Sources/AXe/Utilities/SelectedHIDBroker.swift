@@ -83,7 +83,9 @@ enum SelectedHIDBroker {
             throw CLIError(errorDescription: "Selected HID request outcome is unknown and was not replayed: \(error)")
         }
     }
-    static func printResponse(_ response: SelectedHIDResponse) throws {
+    /// `verbose` prints the full receipt; otherwise the plain-command result or a clear error.
+    static func printResponse(_ response: SelectedHIDResponse, verbose: Bool) throws {
+        guard verbose else { try SelectedInputOutput.print(response); return }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         try CLIOutput.writeJSONData(encoder.encode(response))
         if response.error != nil { throw CLIError(errorDescription: "Selected input failed; inspect the JSON receipt. No input was replayed.") }

@@ -36,7 +36,14 @@ final class SelectedHIDOwner {
         lastActivity = self.dependencies.now()
     }
 
-    func perform(_ request: SelectedHIDRequest, batchTap: (any AgentOwnedTapAdmission)? = nil) async -> SelectedHIDResponse {
+    func perform(_ incoming: SelectedHIDRequest, batchTap: (any AgentOwnedTapAdmission)? = nil) async -> SelectedHIDResponse {
+        var request = incoming
+        if incoming.activeDisplay == true {
+            do {
+                guard !shouldStop, !quarantined, !maintainingRetainedInput, !batchRunning else { throw SelectedHIDFailure.busy }
+                request = try await bindActiveDisplay(incoming)
+            } catch { return response(incoming, outcome: "rejectedBeforeInput", error: error) }
+        }
         do {
             guard !shouldStop, !quarantined, !maintainingRetainedInput, !batchRunning else { throw SelectedHIDFailure.busy }
             if batchTap != nil {
@@ -312,6 +319,26 @@ final class SelectedHIDOwner {
         result.quarantine = quarantineReceipt
         result.ax?.failure = .ownershipRejected
         return result
+    }
+
+    /// Selected input without a screen pair binds the screen that is active now. A retained contact
+    /// keeps its original pair, so a fold or rotation since it began fails admission instead.
+    private func bindActiveDisplay(_ request: SelectedHIDRequest) async throws -> SelectedHIDRequest {
+        try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
+        let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+        guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
+              simulator.state == .booted else {
+            throw CLIError.simulatorNotFound(udid: simulatorUDID)
+        }
+        let active = try await PhaseTimer.measure("owner.activeDisplay") {
+            try await DisplayTransition.settledDiscovery(for: simulator).readback.snapshot.activePanel.identity
+        }
+        var bound = request
+        bound.screenID = active.displayID
+        bound.screenUUID = active.uniqueID
+        bound.activeDisplay = nil
+        try bound.validate()
+        return bound
     }
 
     private func acquireLease() throws {

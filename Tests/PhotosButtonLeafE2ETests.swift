@@ -49,7 +49,7 @@ struct PhotosButtonLeafE2ETests: Sendable {
             })
             try #require(initialBodies.count == 1)
 
-            let flags = ["--input-mode", "selected", "--screen-id", String(context.screenID), "--screen-uuid", context.screenUUID.uuidString]
+            let flags = ["--input-mode", "selected", "--screen-id", String(context.screenID), "--screen-uuid", context.screenUUID.uuidString, "--verbose"]
             let rawReply = try await command(["describe-ui", "--expected-pid", String(owner)] + flags,
                 session: session, name: "raw-chain")
             let raw = try decode(Envelope.self, rawReply.output)

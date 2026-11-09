@@ -192,6 +192,7 @@ struct DuoPlaygroundSession {
         if abs(beforeReadback.sample.mechanicalDegrees - pose.degrees) > 0.1 {
             let response: DuoCLIResponse = try await decode([
                 "hinge", "set", pose.rawValue, "--expected-boot", boot, "--tolerance", "0.1",
+                "--no-wait", "--verbose",
             ])
             try response.requireSuccess("observedMechanicalTarget")
             guard let receipt = response.hinge?.receipt, receipt.expectedBootIdentity == boot,
@@ -362,7 +363,7 @@ struct DuoPlaygroundSession {
     func rotateRight(catalogue before: DuoCatalogue) async throws -> DuoCatalogue {
         let pair = before.activePanel.identity
         let arguments = ["rotate", "right", "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString,
-            "--expected-boot", before.bootIdentity]
+            "--expected-boot", before.bootIdentity, "--verbose"]
         let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
         let started = ProcessInfo.processInfo.systemUptime
         let result = try await CommandRunner.run(command, allowFailure: true, timeout: 35)
@@ -629,7 +630,7 @@ struct DuoPlaygroundSession {
         let arguments = [
             "tap", "--id", buttonID, "--element-type", "Button", "--tap-style", "physical",
             "--expected-pid", String(pid), "--input-mode", "selected",
-            "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString,
+            "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString, "--verbose",
         ]
         let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
         let result = try await CommandRunner.run(command, allowFailure: true, timeout: 35)
@@ -693,7 +694,7 @@ struct DuoPlaygroundSession {
     }
 
     private func catalogueDescription(boot: String?, timeout: TimeInterval) async throws -> DuoCatalogue {
-        let arguments = ["list-simulators", "--displays"]
+        let arguments = ["displays", "--verbose"]
         let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
         let started = ProcessInfo.processInfo.systemUptime
         let result: (output: String, exitCode: Int32)
@@ -715,7 +716,8 @@ struct DuoPlaygroundSession {
             recordCatalogueFailure(command: command, boot: boot, timeout: timeout, started: started,
                 result: CommandOutput(output: result.output, exitCode: result.exitCode))
             if result.exitCode == 1,
-               result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "Error: changedDuringRead" {
+               result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                .hasPrefix("Error: The screens were still changing after") {
                 throw CatalogueReadFailure.changedDuringRead
             }
             if DuoStateReadWait.current != nil, result.exitCode == 1,
@@ -770,9 +772,9 @@ struct DuoPlaygroundSession {
             }
         }
         guard let wait = DuoStateReadWait.current else {
-            return try await decode(["hinge", "read", "--expected-boot", boot], timeout: timeout, artifactURL: artifactURL)
+            return try await decode(["hinge", "read", "--expected-boot", boot, "--verbose"], timeout: timeout, artifactURL: artifactURL)
         }
-        let command = ([axePath, "hinge", "read", "--expected-boot", boot, "--udid", udid]).map(Self.quote).joined(separator: " ")
+        let command = ([axePath, "hinge", "read", "--expected-boot", boot, "--verbose", "--udid", udid]).map(Self.quote).joined(separator: " ")
         while true {
             let remaining = min(timeout, try wait.remaining(minimum: 3.5))
             let started = ProcessInfo.processInfo.systemUptime
@@ -812,7 +814,8 @@ struct DuoPlaygroundSession {
 
     private func selection(_ catalogue: DuoCatalogue) -> [String] {
         let pair = catalogue.activePanel.identity
-        return ["--input-mode", "selected", "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString]
+        return ["--input-mode", "selected", "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString,
+            "--verbose"]
     }
 
     private func decode<Value: Decodable>(_ arguments: [String], timeout: TimeInterval = 35,

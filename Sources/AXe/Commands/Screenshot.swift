@@ -18,10 +18,11 @@ struct Screenshot: AsyncParsableCommand {
     @Option(name: .customLong("screen-id"), help: "Capture this measured active display; requires --screen-uuid.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from list-simulators --displays; no retargeting.")
+    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from axe displays; no retargeting.")
     var screenUUID: String?
 
-    @Option(name: .customLong("expected-boot"), help: "Selected capture only: reject a different simulator boot identity.")
+    @Option(name: .customLong("expected-boot"),
+        help: ArgumentHelp("Selected capture only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
     func validate() throws {

@@ -329,7 +329,7 @@ private struct PlaygroundInterruptionSession {
 
     private func selection(_ catalogue: DuoCatalogue) -> [String] {
         ["--input-mode", "selected", "--screen-id", String(catalogue.activePanel.identity.displayID),
-         "--screen-uuid", catalogue.activePanel.identity.uniqueID.uuidString]
+         "--screen-uuid", catalogue.activePanel.identity.uniqueID.uuidString, "--verbose"]
     }
 
     private func traces(_ value: PlaygroundContactSnapshot) -> [[PlaygroundContactEvent]] {

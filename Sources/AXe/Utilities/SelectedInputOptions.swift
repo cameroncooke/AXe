@@ -4,13 +4,13 @@ import Foundation
 enum SimulatorInputMode: String, ExpressibleByArgument { case legacy, selected }
 
 struct SelectedInputOptions: ParsableArguments {
-    @Option(name: .customLong("input-mode"), help: "legacy preserves the existing route; selected uses an explicit display and owned HID session.")
+    @Option(name: .customLong("input-mode"), help: "legacy preserves the existing route; selected uses the owned input session with target checks.")
     var mode: SimulatorInputMode = .legacy
 
-    @Option(name: .customLong("screen-id"), help: "Selected input only: discovered simulator screen ID.")
+    @Option(name: .customLong("screen-id"), help: "Selected input only, optional: refuse unless this screen is active. Requires --screen-uuid. Without the pair, AXe uses the screen that is active when the command starts.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Selected input only: discovered display UUID; no automatic retargeting.")
+    @Option(name: .customLong("screen-uuid"), help: "Selected input only, optional: the active screen's UUID from axe displays. Requires --screen-id.")
     var screenUUID: String?
 
     func validate() throws {
@@ -20,49 +20,50 @@ struct SelectedInputOptions: ParsableArguments {
             }
             return
         }
-        guard screenID != nil, let screenUUID, UUID(uuidString: screenUUID) != nil else {
-            throw ValidationError("Selected input requires --screen-id and a valid --screen-uuid.")
+        guard (screenID == nil) == (screenUUID == nil) else {
+            throw ValidationError("Pass both --screen-id and --screen-uuid, or neither to use the active screen.")
+        }
+        if let screenUUID, UUID(uuidString: screenUUID) == nil {
+            throw ValidationError("--screen-uuid must be a display UUID.")
         }
     }
 
-    func request(operation: SelectedHIDRequest.Operation, token: UUID?, primitives: [SelectedHIDPrimitive]) throws -> SelectedHIDRequest {
+    /// The unvalidated request: the caller attaches its payload and validates the result.
+    /// Without an explicit pair the broker binds the screen that is active when it admits the request.
+    func baseRequest(operation: SelectedHIDRequest.Operation, token: UUID?,
+                     primitives: [SelectedHIDPrimitive]) throws -> SelectedHIDRequest {
         try validate()
-        guard let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) else {
-            throw ValidationError("Missing selected display")
-        }
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: uuid, operation: operation, token: token, primitives: primitives)
+        guard mode == .selected else { throw ValidationError("Selected input requires --input-mode selected.") }
+        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: screenID, screenUUID: screenUUID.flatMap(UUID.init(uuidString:)),
+            operation: operation, token: token, primitives: primitives)
+        if screenID == nil { request.activeDisplay = true }
+        return request
+    }
+
+    func request(operation: SelectedHIDRequest.Operation, token: UUID?, primitives: [SelectedHIDPrimitive]) throws -> SelectedHIDRequest {
+        let request = try baseRequest(operation: operation, token: token, primitives: primitives)
         try request.validate()
         return request
     }
+
     func pathRequest(_ path: SelectedHIDPath) throws -> SelectedHIDRequest {
-        try validate()
-        guard let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) else {
-            throw ValidationError("Missing selected display")
-        }
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: uuid, operation: .complete, token: nil, primitives: [], path: path)
+        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
+        request.path = path
         try request.validate()
         return request
     }
 
     func pinchRequest(_ pinch: SelectedHIDPinch) throws -> SelectedHIDRequest {
-        try validate()
-        guard mode == .selected, let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) else {
-            throw ValidationError("Pinch requires explicit selected input")
-        }
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: uuid, operation: .complete, token: nil, primitives: [], pinch: pinch)
+        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
+        request.pinch = pinch
         try request.validate()
         return request
     }
+
     func gestureRequest(_ gesture: SelectedHIDCompleteGesture) throws -> SelectedHIDRequest {
-        try validate()
-        guard mode == .selected, let screenID, let screenUUID, let uuid = UUID(uuidString: screenUUID) else {
-            throw ValidationError("Complete gestures require explicit selected input")
-        }
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: uuid, operation: .complete, token: nil, primitives: [], gesture: gesture)
+        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
+        request.gesture = gesture
         try request.validate()
         return request
     }

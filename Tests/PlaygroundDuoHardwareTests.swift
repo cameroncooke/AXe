@@ -158,9 +158,10 @@ struct HardwareAcceptanceSession {
         let name = UUID().uuidString
         try JSONEncoder().encode(invocation).write(to: controls.artifacts.appendingPathComponent(name + "-argv.json"))
         try Data(result.output.utf8).write(to: controls.artifacts.appendingPathComponent(name + "-output.txt"))
-        let changedDisplay = allowChangedDisplayRead && arguments == ["list-simulators", "--displays"]
+        let changedDisplay = allowChangedDisplayRead && arguments == ["displays", "--verbose"]
             && result.exitCode == 1
-            && result.output.trimmingCharacters(in: .whitespacesAndNewlines) == "Error: changedDuringRead"
+            && result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+                .hasPrefix("Error: The screens were still changing after")
         if changedDisplay || allowAnyExit { return result }
         if !allowFailure { try #require(result.exitCode == 0, "Hardware command failed: \(result.output)") }
         else { try #require(result.exitCode == 1) }
@@ -239,7 +240,7 @@ struct HardwareAcceptanceSession {
     func waitForBacklight(_ expected: String) async throws -> HardwarePowerCatalogue {
         let deadline = ProcessInfo.processInfo.systemUptime + 10
         while ProcessInfo.processInfo.systemUptime < deadline {
-            let result = try await command(["list-simulators", "--displays"],
+            let result = try await command(["displays", "--verbose"],
                 timeout: deadline - ProcessInfo.processInfo.systemUptime, allowChangedDisplayRead: true)
             if result.exitCode == 0 {
                 let value = try JSONDecoder().decode(HardwarePowerCatalogue.self, from: Data(result.output.utf8))
@@ -286,14 +287,14 @@ struct HardwareAcceptanceSession {
 
     func returnToSameApp() async throws {
         // These are new explicit UI actions after the hardware receipt, never replay of that request.
-        let result = try await command(["list-simulators", "--displays"])
+        let result = try await command(["displays", "--verbose"])
         let power = try JSONDecoder().decode(HardwarePowerCatalogue.self, from: Data(result.output.utf8))
         let freshCatalogue = try await DuoPlaygroundSession().catalogue(boot: controls.catalogue.bootIdentity)
         if power.activePanel.backlightState == "inactiveOn" {
             let pair = freshCatalogue.activePanel.identity
             let output = try await command(["button", "side-button", "--duration", "0.2",
                 "--expected-boot", freshCatalogue.bootIdentity, "--input-mode", "selected",
-                "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString])
+                "--screen-id", String(pair.displayID), "--screen-uuid", pair.uniqueID.uuidString, "--verbose"])
             let line = output.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
             let wake = try JSONDecoder().decode(HardwareAcceptanceReceipt.self, from: Data(line.utf8))
             try wake.requireComplete(kind: "side-button", events: 2, controls: controls, catalogue: freshCatalogue)

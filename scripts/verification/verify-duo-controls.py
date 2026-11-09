@@ -77,15 +77,16 @@ class Check:
         return self.run(name, [self.cli, *arguments, '--udid', self.args.device], **kwargs)
 
     def catalogue(self, name):
-        result = self.axe(name, 'list-simulators', '--displays')
+        result = self.axe(name, 'displays', '--verbose')
         assert result['requestedSimulatorUDID'].upper() == self.args.device.upper()
         assert result['activePanel']['active']
         return result
 
     def selection(self, catalogue):
         identity = catalogue['activePanel']['identity']
+        # --verbose prints the full JSON receipt these checks parse.
         return ['--input-mode', 'selected', '--screen-id', str(identity['displayID']),
-                '--screen-uuid', identity['uniqueID']]
+                '--screen-uuid', identity['uniqueID'], '--verbose']
 
     def container(self):
         value = self.run('data-container', [self.simctl, 'get_app_container', self.args.device,

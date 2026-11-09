@@ -19,7 +19,9 @@ struct Batch: AsyncParsableCommand {
         --continue-on-error still permits pre-input step errors while that session is valid.
         The batch releases its remaining input before exit; no contact transfers to another command.
         Batch-level selected mode sends each complete step through the selected owner.
-        It returns one JSON receipt per attempted step and stops on any failure.
+        It stops on any failure and reports the failing step's error; on success it prints the
+        plain batch summary. --verbose also prints one JSON receipt per attempted step.
+        Without --screen-id/--screen-uuid each step uses the screen that is active when it starts.
         Earlier steps are not undone. AX targets and focus are read afresh per step.
         Selected mode has no whole-batch exclusive lock or cross-step context token.
         Selected button home and side-button use device-wide routes with active-screen admission.
@@ -34,7 +36,8 @@ struct Batch: AsyncParsableCommand {
         host without an input lease; a typed host-wait receipt has no request or broker ID.
         Cancellation or SIGINT/SIGTERM observed during that wait stops later steps.
         Signal handling is wait-only, not a whole-batch cancellation guarantee.
-        Use per-step --expected-pid and --focus-id where required; Home and side-button support --expected-boot.
+        Keyboard steps require --focus-id; per-step --expected-pid is an optional guard.
+        Home and side-button support --expected-boot.
 
         Legacy step commands:
           tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo
@@ -96,7 +99,7 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active.")
     var pollInterval: Double = 0.25
 
-    @Flag(name: .customLong("verbose"), help: "Enable verbose logging to stderr.")
+    @Flag(name: .customLong("verbose"), help: "Enable verbose logging to stderr. Selected batch: print each step's full JSON receipt instead of the summary.")
     var verbose: Bool = false
 
     func validate() throws {
@@ -165,7 +168,8 @@ struct Batch: AsyncParsableCommand {
         if selectedInput.mode == .selected {
             let lines = try loadStepLines()
             guard !lines.isEmpty else { throw ValidationError("No executable steps found.") }
-            try await SelectedBatchRunner.run(lines: lines, input: selectedInput, simulatorUDID: simulatorUDID)
+            try await SelectedBatchRunner.run(lines: lines, input: selectedInput, simulatorUDID: simulatorUDID,
+                verbose: verbose)
             return
         }
         let logger = AxeLogger(writeToStdErr: verbose)

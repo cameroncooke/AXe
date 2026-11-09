@@ -146,7 +146,7 @@ struct AccessibilityFetcher {
                 throw CancellationError()
             } catch {
                 guard clock.now < deadline else {
-                    throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe list-simulators --displays --udid \(simulatorUDID)` succeeds, then read again.")
+                    throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe displays --udid \(simulatorUDID)` succeeds, then read again.")
                 }
                 if !logged {
                     logger.info().log("Waiting for the simulator displays before preparing accessibility")

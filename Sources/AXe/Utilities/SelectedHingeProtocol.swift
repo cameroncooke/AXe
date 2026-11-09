@@ -24,7 +24,13 @@ struct SelectedHingeRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Hinge read cannot carry write options")
             }
         case .set:
-            _ = try nativeRequest()
+            // The CLI binds the boot it reads at start when none is given; the write still requires one.
+            guard let degrees, degrees.isFinite, (0...180).contains(degrees),
+                  let toleranceDegrees, toleranceDegrees.isFinite, (0...1).contains(toleranceDegrees),
+                  let timeoutSeconds, timeoutSeconds.isFinite, (0.5...15).contains(timeoutSeconds) else {
+                throw SelectedHIDFailure.invalid("Hinge set requires an angle in 0...180, tolerance in 0...1 and timeout in 0.5...15 seconds")
+            }
+            if expectedBootIdentity != nil { _ = try nativeRequest() }
             if let readiness {
                 _ = try FBSimulatorHingeReadinessRequest(screenID: readiness.screenID, screenUUID: readiness.screenUUID,
                     timeoutSeconds: readiness.timeoutSeconds)

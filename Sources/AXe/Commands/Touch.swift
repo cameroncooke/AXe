@@ -38,6 +38,7 @@ struct Touch: AsyncParsableCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -126,7 +127,8 @@ struct Touch: AsyncParsableCommand {
             return
         }
         if selectedInput.mode == .selected {
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         guard let pointX, let pointY else { throw ValidationError("Touch requires -x and -y without --agent.") }

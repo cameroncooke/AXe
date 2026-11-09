@@ -133,7 +133,7 @@ struct Gesture: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a preset or a complete selected gesture.",
         discussion: """
-        Execute a preset, or one complete gesture on an explicit selected display.
+        Execute a preset, or one complete gesture with selected input (the active screen unless --screen-id/--screen-uuid guard it).
         Selected gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
         Double-tap requires -x/-y; rotate also requires --radius/--degrees.
         With --agent, double-tap instead requires a current --snapshot-id/--ref; --expected-pid is optional.
@@ -232,6 +232,7 @@ struct Gesture: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
     @Option(name: .customLong("expected-pid"), help: "Agent gesture only: optional assertion of the snapshot owner PID.")
@@ -456,7 +457,8 @@ struct Gesture: AsyncParsableCommand {
             case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
                 request = try selectedInput.gestureRequest(selectedCompleteGesture())
             }
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         guard case let .preset(preset) = gesture else {

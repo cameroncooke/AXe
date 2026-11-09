@@ -30,7 +30,7 @@ struct PlaygroundAgentTransportTests {
         let contextResult = try await session.run(["describe-ui", "--agent", "--expected-pid", String(session.pid)])
         let context = try decode(TransportContext.self, contextResult.output).data.context
         let selection = ["--input-mode", "selected", "--screen-id", String(context.screenID),
-            "--screen-uuid", context.screenUUID.uuidString]
+            "--screen-uuid", context.screenUUID.uuidString, "--verbose"]
         let before = try session.document.read()
         try #require(before == seeded)
         let fieldPoint = (fieldFrame.x + fieldFrame.width / 2, fieldFrame.y + fieldFrame.height / 2)

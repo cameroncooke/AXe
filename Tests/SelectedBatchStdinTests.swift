@@ -84,7 +84,7 @@ struct SelectedBatchStdinTests {
     }
 
     @Test(arguments: [
-        "type --stdin --focus-id field", "type --stdin --expected-pid 123",
+        "type --stdin --expected-pid 123",
         "type --stdin --expected-pid 0 --focus-id field",
         "type literal --stdin --expected-pid 123 --focus-id field",
         "type --file /unused --stdin --expected-pid 123 --focus-id field",

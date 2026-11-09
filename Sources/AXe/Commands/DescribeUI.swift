@@ -21,6 +21,7 @@ struct DescribeUI: AsyncParsableCommand {
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
 
     @Option(name: .customLong("since-screen-hash"), help: "Agent only: return an unchanged capture when a fresh screen hash matches.")
     var sinceScreenHash: String?
@@ -87,7 +88,8 @@ struct DescribeUI: AsyncParsableCommand {
         }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         let logger = AxeLogger()

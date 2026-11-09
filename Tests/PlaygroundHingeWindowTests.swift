@@ -65,12 +65,13 @@ struct PlaygroundDuoHingeWindowTests {
         let targets = [1, 5, 10, 20, 45, 90, 105, 113, 114, 115, 120, 135, 112, 110, 90, 0, 115, 114]
         for (index, degrees) in targets.enumerated() {
             let before = try controls.documents.read()
-            let output = try await app.run(["hinge", "set", String(degrees), "--expected-boot", original.bootIdentity, "--tolerance", "0.1"])
+            let output = try await app.run(["hinge", "set", String(degrees), "--expected-boot", original.bootIdentity, "--tolerance", "0.1",
+                "--no-wait", "--verbose"])
             let receipt = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(output.utf8))
             try receipt.requireSuccess("observedMechanicalTarget")
             let samples = try #require(receipt.hinge?.receipt?.matchingSamples)
             try #require(samples.count == 2 && samples.allSatisfy { abs($0.mechanicalDegrees - Double(degrees)) <= 0.1 })
-            let fresh = try await app.run(["hinge", "read", "--expected-boot", original.bootIdentity])
+            let fresh = try await app.run(["hinge", "read", "--expected-boot", original.bootIdentity, "--verbose"])
             let measured = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(fresh.utf8))
             try measured.requireSuccess("observedHinge")
             let angle = try #require(measured.hinge?.readback?.sample.mechanicalDegrees)
@@ -158,8 +159,9 @@ private func verifyInsetWindow() async throws {
 }
 
 func screenArguments(_ catalogue: DuoCatalogue) -> [String] {
+    // --verbose prints the full JSON receipt that refusal checks decode.
     ["--input-mode", "selected", "--screen-id", String(catalogue.activePanel.identity.displayID),
-        "--screen-uuid", catalogue.activePanel.identity.uniqueID.uuidString]
+        "--screen-uuid", catalogue.activePanel.identity.uniqueID.uuidString, "--verbose"]
 }
 
 private struct HingeDocument: PlaygroundObservedDocument {
@@ -201,7 +203,7 @@ private struct ObservedLayoutRect: Decodable, Equatable {
 private func verifyDuoDiscoveryReadInterval() async throws {
     let app = try CorePlaygroundSession()
     let started = ProcessInfo.processInfo.systemUptime
-    let output = try await app.run(["list-simulators", "--displays"])
+    let output = try await app.run(["displays", "--verbose"])
     let finished = ProcessInfo.processInfo.systemUptime
     let data = Data(output.utf8)
     let catalogue = try JSONDecoder().decode(DuoCatalogue.self, from: data)

@@ -64,15 +64,13 @@ struct SelectedTapValueTests {
         ["--value", "Ready", "--tap-style", "automatic", "--semantic-press", "--expected-pid", "42"],
         ["--value", "Ready", "--wait-timeout", "31", "--expected-pid", "42"],
         ["--value", "Ready", "--poll-interval", "0.1", "--expected-pid", "42"],
-        ["--value", "Ready", "--expected-pid", "0"],
-        ["--value", "Ready"]
+        ["--value", "Ready", "--expected-pid", "0"]
     ])
     func invalidValueCombinationsRejectBeforeRequest(arguments: [String]) throws {
         #expect(throws: (any Error).self) { _ = try parse(arguments) }
     }
 
     @Test(arguments: [
-        ["--input-mode", "selected"],
         ["--input-mode", "selected", "--screen-id", "3"],
         ["--input-mode", "selected", "--screen-uuid", "00000000-0000-0000-0000-000000000003"],
         ["--input-mode", "selected", "--screen-id", "3", "--screen-uuid", "invalid"]

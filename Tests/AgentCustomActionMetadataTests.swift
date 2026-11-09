@@ -156,7 +156,7 @@ struct AgentCustomActionMetadataTests {
         try command.validate()
         let request = try command.agentRequest()
         #expect(request.agent?.kind == .read && request.agent?.textQuery?.field == .customActions)
-        #expect(SelectedHIDRequest.version == 83)
+        #expect(SelectedHIDRequest.version == 84)
     }
 
     private var frame: AgentFrame { AgentFrame(x: 10, y: 100, width: 300, height: 44) }

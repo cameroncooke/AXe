@@ -1,0 +1,72 @@
+import ArgumentParser
+import Foundation
+
+struct SelectedOutputOptions: ParsableArguments {
+    @Flag(name: .customLong("verbose"), help: "Selected input: print the full broker receipt as JSON, including context, target checks and cleanup evidence.")
+    var verbose = false
+}
+
+/// The default result of a selected command, matching what the plain command reports. The full
+/// receipt stays behind `--verbose`.
+struct SelectedInputSummary: Encodable {
+    struct Screen: Encodable {
+        let id: UInt32
+        let uuid: String
+        let width: Double
+        let height: Double
+        let rotation: Int
+    }
+    let outcome: String
+    let screen: Screen?
+    let pid: Int32?
+    let events: Int
+    let token: UUID?
+
+    init(_ response: SelectedHIDResponse) {
+        outcome = response.outcome
+        screen = response.context.map {
+            Screen(id: $0.screenID, uuid: $0.screenUUID, width: $0.logicalWidth, height: $0.logicalHeight,
+                rotation: $0.rotationDegrees)
+        }
+        pid = response.ax?.expectedPID ?? response.keyboard?.expectedPID
+        events = response.enqueuedEventCount
+        token = response.token
+    }
+}
+
+enum SelectedInputOutput {
+    static func print(_ response: SelectedHIDResponse) throws {
+        if response.error != nil || response.quarantine != nil || response.cleanup == "uncertain" {
+            throw failure(response)
+        }
+        if let ax = response.ax, ax.kind == .describe || ax.kind == .describePoint {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try CLIOutput.writeJSONText(String(decoding: try encoder.encode(ax.roots ?? []), as: UTF8.self))
+            return
+        }
+        if CLIOutput.isFormatted {
+            try CLIOutput.writeJSON(SelectedInputSummary(response))
+        } else if let token = response.token {
+            CLIOutput.message("Contact token: \(token.uuidString)")
+        }
+    }
+
+    static func failure(_ response: SelectedHIDResponse) -> CLIOutputFailure {
+        let detail = response.error ?? "The broker reported \(response.outcome)."
+        if let quarantine = response.quarantine {
+            return CLIOutputFailure(code: "quarantined",
+                message: "Device input is quarantined. \(detail) " + HIDInputQuarantine.recoveryStep(recordPath: quarantine.recordPath))
+        }
+        if detail == SelectedHIDFailure.busy.errorDescription { return DeviceStateFailure.busy }
+        let code: String
+        if let ax = response.ax?.failure { code = ax.rawValue }
+        else if response.cleanup == "uncertain" { code = "cleanupUncertain" }
+        else if response.enqueuedEventCount > 0 { code = "inputFailed" }
+        else { code = "rejectedBeforeInput" }
+        let sent = response.enqueuedEventCount == 0 && response.cleanup != "uncertain"
+            ? "No input was sent."
+            : "Some input was sent and it was not repeated; read the screen before trying again."
+        return CLIOutputFailure(code: code, message: "\(detail) \(sent)")
+    }
+}

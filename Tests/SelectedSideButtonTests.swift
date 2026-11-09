@@ -71,7 +71,9 @@ struct SelectedSideButtonTests {
             #expect(throws: (any Error).self) { try payload.validate(observation: observation(boot: boot)) }
             #expect(throws: (any Error).self) { _ = try request.completeEvent(observation: observation(boot: boot)) }
         }
-        for arguments in [["--input-mode", "selected"], ["--input-mode", "selected", "--screen-id", "3"],
+        let active = try Button.parse(["side-button", "--udid", udid, "--input-mode", "selected"]).selectedRequest()
+        #expect(active.activeDisplay == true && active.screenID == nil && active.button?.kind == .sideButton)
+        for arguments in [["--input-mode", "selected", "--screen-id", "3"],
                           ["--input-mode", "selected", "--screen-uuid", screen.uuidString],
                           ["--input-mode", "selected", "--screen-id", "3", "--screen-uuid", "invalid"],
                           ["--expected-boot", "boot-one"]] {

@@ -4,9 +4,9 @@ Use exactly one of `--endpoint minimum|maximum` or `--value <0...100>`. Values m
 
 ## Selected command
 
-`axe slider --input-mode selected --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --expected-pid <PID> --id <ID> --value 63.25`
+`axe slider --input-mode selected --udid <UDID> --id <ID> --value 63.25`
 
-Use exactly one ID or label. Labels match case-sensitively after trimming whitespace and newlines from the query and native label. A label can select a Slider without an ID. Duplicate matches reject before optional `--element-type` filtering; the filter cannot hide duplicates. Type matching is exact and case-sensitive, without trimming or aliases. Empty or whitespace-only filters reject. The native Slider role, expected PID, current display, positive finite frame and numeric domain must match. Each owned-handle read must match the root target itself, not a matching child. Non-default wait/poll settings reject.
+The screen pair and `--expected-pid` are optional guards; without them AXe binds the active screen and the frontmost app when the command starts ([device-reference.md](device-reference.md#selected-input)). Use exactly one ID or label. Labels match case-sensitively after trimming whitespace and newlines from the query and native label. A label can select a Slider without an ID. Duplicate matches reject before optional `--element-type` filtering; the filter cannot hide duplicates. Type matching is exact and case-sensitive, without trimming or aliases. Empty or whitespace-only filters reject. The native Slider role, bound PID, current display, positive finite frame and numeric domain must match. Each owned-handle read must match the root target itself, not a matching child. Non-default wait/poll settings reject.
 
 ## Agent command
 

@@ -59,7 +59,7 @@ struct PlaygroundDuoSelectedSwitchTests {
             let nativeType = try await controlsElement(app, id: "feature.switch").type
             let output = try await app.app.run(["tap", "--id", "feature.switch", "--element-type", nativeType, "--tap-style", "physical",
                 "--expected-pid", String(stalePID ? app.pid + 1 : app.pid), "--input-mode", "selected",
-                "--screen-id", String(panel.identity.displayID), "--screen-uuid", panel.identity.uniqueID.uuidString], allowFailure: true)
+                "--screen-id", String(panel.identity.displayID), "--screen-uuid", panel.identity.uniqueID.uuidString, "--verbose"], allowFailure: true)
             try #require(output.exitCode != 0)
             let result = try controlsReceipt(output.output)
             try #require(result.error != nil && result.outcome == "failedBeforeInput" && result.enqueuedEventCount == 0 && result.cleanup == "notNeeded" && result.quarantine == nil)

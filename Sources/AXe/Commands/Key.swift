@@ -36,6 +36,7 @@ struct Key: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -78,7 +79,8 @@ struct Key: AsyncParsableCommand {
             return
         }
         if selectedInput.mode == .selected {
-            try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID)
+            try selectedKeyboard.send(input: selectedInput, event: selectedKeyboardEvent(), simulatorUDID: simulatorUDID,
+                verbose: selectedOutput.verbose)
             return
         }
         let logger = AxeLogger()

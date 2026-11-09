@@ -8,14 +8,14 @@ enum SelectedSliderEndpoint: String, ExpressibleByArgument {
 }
 
 struct SelectedAXOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Required for selected AX; optional with --agent to assert the snapshot or frontmost app PID.")
+    @Option(name: .customLong("expected-pid"), help: "Optional: refuse unless this app PID is frontmost. Without it, selected AX uses the app that is frontmost when the command starts. With --agent it asserts the snapshot or frontmost app PID.")
     var expectedPID: Int32?
 
-    func validate(required: Bool) throws {
-        if required {
-            guard let expectedPID, expectedPID > 0 else { throw ValidationError("Selected AX requires a positive --expected-pid.") }
-        } else if expectedPID != nil {
-            throw ValidationError("--expected-pid requires a selected AX operation.")
+    /// `allowed` is true for a selected AX operation, where the PID is an optional guard.
+    func validate(required allowed: Bool) throws {
+        if let expectedPID {
+            guard allowed else { throw ValidationError("--expected-pid requires a selected AX operation.") }
+            guard expectedPID > 0 else { throw ValidationError("--expected-pid must be a positive process ID.") }
         }
     }
 
@@ -26,16 +26,15 @@ struct SelectedAXOptions: ParsableArguments {
                  waitPolicy: SelectedAXWaitPolicy? = nil, percentage: Double? = nil) throws -> SelectedHIDRequest {
         try validate(required: true)
         try input.validate()
-        guard input.mode == .selected, let expectedPID, let screenID = input.screenID,
-              let rawUUID = input.screenUUID, let screenUUID = UUID(uuidString: rawUUID) else {
-            throw ValidationError("Missing selected AX display or process identity.")
+        guard input.mode == .selected else {
+            throw ValidationError("Selected AX requires --input-mode selected.")
         }
         let ax = SelectedAXRequest(kind: kind, expectedPID: expectedPID,
             endpoint: endpoint,
             selectorKind: selectorKind, selectorValue: selectorValue, preDelay: preDelay, postDelay: postDelay, point: point,
             elementType: elementType, tapStyle: tapStyle, waitPolicy: waitPolicy, percentage: percentage)
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [], ax: ax)
+        var request = try input.baseRequest(operation: .complete, token: nil, primitives: [])
+        request.ax = ax
         try request.validate()
         return request
     }

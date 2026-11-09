@@ -77,7 +77,7 @@ struct SelectedBatchRoutingTests {
 
     @Test(arguments: ["button HOME", "sleep inf", "touch -x 10 -y 20 --down",
         "touch -x 10 -y 20 --up --contact-token 00000000-0000-0000-0000-000000000004",
-        "tap --semantic-press --id switch --expected-pid 123", "tap --id target",
+        "tap --semantic-press --id switch --expected-pid 123",
         "type --stdin --expected-pid 123", "key 4 --expected-pid 123",
         "tap -x 10 -y 20 --wait-timeout 1", "gesture pinch -x 10 -y 20 --radius 5 --scale 1"])
     func unsupportedOrIncompleteStepsDoNotSend(line: String) async throws {

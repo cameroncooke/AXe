@@ -91,8 +91,9 @@ struct SelectedAXRequest: Codable, Sendable {
     func validate() throws {
         if let expectedPID {
             guard expectedPID > 0 else { throw SelectedHIDFailure.invalid("Selected AX requires a positive expected PID") }
-        } else if kind != .describe {
-            throw SelectedHIDFailure.invalid("Selected AX input and point reads require a positive expected PID")
+        } else if nativeTarget != nil || kind == .hold || kind == .doubleTap {
+            // Without a PID the broker binds the frontmost app. Reference actions always carry their snapshot PID.
+            throw SelectedHIDFailure.invalid("Reference actions require the snapshot's expected PID")
         }
         guard preDelay.isFinite, postDelay.isFinite, (0...10).contains(preDelay), (0...10).contains(postDelay) else {
             throw SelectedHIDFailure.invalid("Selected AX delays must be finite and in 0...10 seconds")

@@ -58,6 +58,7 @@ struct Tap: AsyncParsableCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -277,8 +278,8 @@ struct Tap: AsyncParsableCommand {
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
             let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
-            // Preserve the broker receipt even when an older broker lacks value readback.
-            try SelectedHIDBroker.printResponse(response)
+            // Report the result (or the full receipt with --verbose) before the readback check.
+            try SelectedHIDBroker.printResponse(response, verbose: selectedOutput.verbose)
             if semanticPress { try requireSemanticReadback(response, request: request) }
             return
         }
@@ -343,9 +344,12 @@ struct Tap: AsyncParsableCommand {
     }
 
     private func requireSemanticReadback(_ response: SelectedHIDResponse, request: SelectedHIDRequest) throws {
+        // Without --expected-pid or a screen pair the broker binds the frontmost app and the active
+        // screen; the receipt then proves the target against what it bound.
         guard response.outcome == "switchValueChangedObserved", response.enqueuedEventCount == 0,
               response.cleanup == "notNeeded", let ax = response.ax, ax.kind == .semanticPress,
-              ax.expectedPID == request.ax?.expectedPID, ax.failure == nil,
+              let boundPID = ax.expectedPID, boundPID > 0,
+              request.ax?.expectedPID == nil || request.ax?.expectedPID == boundPID, ax.failure == nil,
               let press = ax.press, press.outcome == "switchValueChangedObserved",
               press.delivery == "nativeReplyAccepted", press.failure == nil,
               press.translatorCallAttempted, press.callbackCount == 1, press.sendCount == 1,
@@ -353,14 +357,15 @@ struct Tap: AsyncParsableCommand {
               let before = press.stateBefore, let after = press.stateAfter, before != after,
               let reads = press.readbackCount, (1...4).contains(reads),
               let target = press.target, target.identifier == request.ax?.selectorValue,
-              target.pid == request.ax?.expectedPID, target.contextID > 0, target.displayID > 0,
+              target.pid == boundPID, target.contextID > 0, target.displayID > 0,
               let objectID = UInt64(target.objectID), objectID > 0, String(objectID) == target.objectID,
-              let context = response.context, context.screenID == request.screenID,
-              UUID(uuidString: context.screenUUID) == request.screenUUID,
+              let context = response.context,
+              request.screenID == nil || context.screenID == request.screenID,
+              request.screenUUID == nil || UUID(uuidString: context.screenUUID) == request.screenUUID,
               [target.frame.minX, target.frame.minY, target.frame.width, target.frame.height].allSatisfy(\.isFinite),
               target.frame.width > 0, target.frame.height > 0,
               CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(target.frame) else {
-            throw CLIError(errorDescription: "Semantic switch value change is unproved; inspect the preserved receipt. No input was replayed.")
+            throw CLIError(errorDescription: "Semantic switch value change is unproved; --verbose prints the full receipt. No input was replayed.")
         }
         try context.validate()
     }

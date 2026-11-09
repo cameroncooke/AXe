@@ -90,8 +90,12 @@ struct SelectedHomeTests {
         #expect(throws: (any Error).self) { _ = try legacy.selectedRequest() }
     }
 
+    @Test func homeWithoutScreenPairBindsActiveScreen() throws {
+        let request = try Button.parse(["home", "--udid", udid, "--input-mode", "selected"]).selectedRequest()
+        #expect(request.activeDisplay == true && request.screenID == nil && request.home != nil)
+    }
+
     @Test(arguments: [
-        ["--input-mode", "selected"],
         ["--input-mode", "selected", "--screen-id", "3"],
         ["--input-mode", "selected", "--screen-uuid", "00000000-0000-0000-0000-000000000003"],
         ["--input-mode", "selected", "--screen-id", "3", "--screen-uuid", "invalid"],

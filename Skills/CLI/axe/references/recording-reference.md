@@ -11,21 +11,21 @@ axe --output json screenshot --udid <UDID> --output screenshot.png
 
 The root `--output text|json` selects the command result format. `record-video --output` and `screenshot --output` retain their existing destination-path meaning. Normal output is unchanged when no format is selected. Explicit format selection for `stream-video` is rejected before capture; stream bytes remain on stdout only in its existing no-format mode. Read [output fields](agent-reference.md#output-format) for JSON success and error results.
 
-For one fixed measured panel:
+For one fixed measured panel, use the active screen's `id` and `uuid` from `axe displays`:
 
 ```bash
-axe record-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --expected-boot <BOOT_ID> --output selected.mp4
+axe record-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --output selected.mp4
 ```
 
-Both screen options are required; the boot check is optional. Every frame must match the first frame's boot, screen identity, orientation, hinge pose and geometry. A context change or capture error fails without retargeting or stale-frame continuation.
+Both screen options are required. Every frame must match the first frame's boot, screen identity, orientation, hinge pose and geometry. A context change or capture error fails without retargeting or stale-frame continuation.
 
 To follow the active panel through folding and rotation:
 
 ```bash
-axe record-video --udid <UDID> --follow-active-display --expected-boot <BOOT_ID> --output active.mp4
+axe record-video --udid <UDID> --follow-active-display --output active.mp4
 ```
 
-This explicit mode rejects either screen option. The boot check is optional before the first accepted frame; every later frame must keep that first frame's boot. Each frame discovers the measured active ID/UUID under the common lease and uses unchanged before/after context checks. Only complete validated frames enter the movie. A new panel or orientation can be accepted between frames.
+This explicit mode rejects either screen option. Every later frame must keep the first accepted frame's boot. Test suites can also pin the boot with the hidden `--expected-boot`; see [device-reference.md](device-reference.md#automation-and-testing). Each frame discovers the measured active ID/UUID under the common lease and uses unchanged before/after context checks. Only complete validated frames enter the movie. A new panel or orientation can be accepted between frames.
 
 The first accepted frame determines the even video dimensions after --scale (0.1...1.0, default 1.0). Upright frames fit without stretching or cropping; black bars fill unused space. Native PNG pixels are already upright. The encoder keeps one fixed canvas and one timeline. It does not encode every transition animation or rotate pixels again. A player can hold the previous frame across a capture gap.
 

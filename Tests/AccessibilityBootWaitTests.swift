@@ -46,7 +46,7 @@ struct AccessibilityBootWaitTests {
         } catch {
             let message = String(describing: error)
             #expect(message.contains("is still starting"))
-            #expect(message.contains("axe list-simulators --displays --udid FIXTURE"))
+            #expect(message.contains("axe displays --udid FIXTURE"))
             #expect(!message.contains("translation object"))
         }
         #expect(reads == 1)

@@ -17,7 +17,7 @@ enum SelectedKeyboardOperation {
         var cleanup = "notNeeded"
         do {
             try request.validate()
-            guard let keyboard = request.keyboard else { throw SelectedHIDFailure.invalid("Missing keyboard payload") }
+            guard var keyboard = request.keyboard else { throw SelectedHIDFailure.invalid("Missing keyboard payload") }
             try Task.checkCancellation()
             let simulator = try await PhaseTimer.measure("keyboard.simulatorSet") { () async throws -> FBSimulator in
                 try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
@@ -34,8 +34,17 @@ enum SelectedKeyboardOperation {
             feed = live
             observation = live.initialObservation
             try request.agentAdmission?.validateContext(live.initialObservation)
+            if keyboard.expectedPID == nil {
+                // Without --expected-pid, bind the app that is frontmost now; every focus read requires it.
+                let pid = try await PhaseTimer.measure("keyboard.frontmostPID") {
+                    try await FBSimulatorAXSnapshot.frontmostApplicationPID(for: simulator,
+                        observation: live.initialObservation, freshnessProvider: live)
+                }
+                keyboard = keyboard.bound(to: pid)
+                result = SelectedKeyboardResult(expectedPID: pid, focusID: keyboard.focusID)
+            }
             _ = try FBSimulatorHIDSession.preflight(keyboard.event, observation: live.initialObservation)
-            let focus = SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard, agentAdmission: request.agentAdmission)
+            let focus = try SelectedKeyboardFocusGuard(simulator: simulator, feed: live, request: keyboard, agentAdmission: request.agentAdmission)
             guardOwner = focus
             try await focus.prepare()
             let hid = try await PhaseTimer.measure("keyboard.hidOpen") { () async throws -> FBSimulatorHIDSession in
@@ -83,14 +92,19 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     private let simulator: FBSimulator
     private let feed: FBSimulatorHIDNativeFreshnessProvider
     private let request: SelectedKeyboardRequest
+    private let expectedPID: Int32
     private let agentAdmission: AgentModeAdmission?
     private let deadline: DispatchTime
     private(set) var result: SelectedKeyboardResult
 
-    init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, request: SelectedKeyboardRequest, agentAdmission: AgentModeAdmission? = nil) {
+    init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, request: SelectedKeyboardRequest, agentAdmission: AgentModeAdmission? = nil) throws {
+        guard let expectedPID = request.expectedPID, expectedPID > 0 else {
+            throw SelectedHIDFailure.invalid("Selected keyboard focus checks require a bound PID")
+        }
         self.simulator = simulator
         self.feed = feed
         self.request = request
+        self.expectedPID = expectedPID
         self.agentAdmission = agentAdmission
         let requestedDelay = request.events.reduce(0.0) { total, event in
             if case .delay(let seconds) = event { return total + seconds }
@@ -148,14 +162,14 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         let field = try await SelectedKeyboardFocusRead.perform(remainingSeconds: remainingSeconds) { remaining in
             if let identifier = request.fieldTarget.semanticID {
                 return try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
-                    expectedPID: request.expectedPID, identifier: identifier,
+                    expectedPID: expectedPID, identifier: identifier,
                     observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
             }
             guard let identity = request.fieldTarget.nativeIdentity else {
                 throw SelectedHIDFailure.invalid("Selected keyboard field identity is unavailable")
             }
             return try await FBSimulatorAXSnapshot.readFocusedTextField(for: simulator,
-                expectedPID: request.expectedPID, identity: identity,
+                expectedPID: expectedPID, identity: identity,
                 observation: feed.initialObservation, liveFreshnessProvider: feed, timeoutSeconds: remaining)
         }
         _ = try remainingSeconds()
@@ -166,11 +180,11 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         else { target = nil }
         if let target {
             try SelectedKeyboardEditingTargetPolicy.validate(field, against: target,
-                expectedPID: request.expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize,
+                expectedPID: expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize,
                 editingStarted: result.validatedKeyDownCount > 0)
         } else {
             try SelectedKeyboardEditingTargetPolicy.validateCurrentField(field,
-                expectedPID: request.expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize)
+                expectedPID: expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize)
         }
         _ = try remainingSeconds()
         return field

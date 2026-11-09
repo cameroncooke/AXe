@@ -86,8 +86,9 @@ struct PlaygroundAgentFeatureSession {
         _ = try await document.waitFor("released normal controls") { $0.activeWindowTouches == 0 }
         let contextReply = try await core.command(canonicalAgentArguments(["describe-ui", "--agent", "--expected-pid", String(pid)]))
         let context = try Self.context(from: contextReply.output)
+        // --verbose prints the full JSON receipt the selected checks decode; for batch it is batch-level.
         let selectedFlags = ["--input-mode", "selected", "--screen-id", String(context.screenID),
-            "--screen-uuid", context.screenUUID.uuidString]
+            "--screen-uuid", context.screenUUID.uuidString, "--verbose"]
         return PlaygroundAgentFeatureSession(core: core, agent: agent, pid: pid, document: document, selectedFlags: selectedFlags, initialContext: context, artifacts: artifacts)
     }
 

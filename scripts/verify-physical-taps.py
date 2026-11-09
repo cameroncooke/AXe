@@ -151,7 +151,7 @@ class Probe:
             time.sleep(0.05)
 
     def catalogue(self, name):
-        value = json.loads(self.axe(name, ["list-simulators", "--displays"]))
+        value = json.loads(self.axe(name, ["displays", "--verbose"]))
         require(uuid.UUID(value["requestedSimulatorUDID"]) == uuid.UUID(self.args.udid), "Wrong display catalogue")
         require(value["activePanel"]["backlightState"] == "activeOn", "Selected display backlight is not activeOn")
         return value
@@ -160,7 +160,7 @@ class Probe:
         cat = self.catalogue(name+"-catalogue")
         identity = cat["activePanel"]["identity"]
         args = ["describe-ui", "--input-mode", "selected", "--screen-id", str(identity["displayID"]),
-                "--screen-uuid", identity["uniqueID"], "--expected-pid", str(self.pid)]
+                "--screen-uuid", identity["uniqueID"], "--expected-pid", str(self.pid), "--verbose"]
         reply = json.loads(self.axe(name+"-native", args))
         require(type(reply.get("version")) is int and reply["version"] > 0 and reply.get("error") is None
                 and reply.get("quarantine") is None and reply.get("enqueuedEventCount") == 0,

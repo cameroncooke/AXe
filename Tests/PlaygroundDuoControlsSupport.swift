@@ -114,7 +114,9 @@ struct PlaygroundControlsSession {
 
     func selection() -> [String] {
         let identity = catalogue.activePanel.identity
-        return ["--input-mode", "selected", "--screen-id", String(identity.displayID), "--screen-uuid", identity.uniqueID.uuidString]
+        // --verbose prints the full JSON receipt these checks decode. For batch it is a batch-level flag.
+        return ["--input-mode", "selected", "--screen-id", String(identity.displayID), "--screen-uuid", identity.uniqueID.uuidString,
+            "--verbose"]
     }
 
     func selected(_ arguments: [String], allowFailure: Bool = false) async throws -> PlaygroundControlsReceipt {
@@ -209,7 +211,8 @@ struct PlaygroundControlsSession {
         let point = (frame.x + frame.width / 2, frame.y + frame.height / 2)
         let panel = current.activePanel.identity
         let arguments = ["tap", "--id", "feature.tap", "--element-type", "Button", "--tap-style", "physical",
-            "--expected-pid", String(pid), "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString]
+            "--expected-pid", String(pid), "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString,
+            "--verbose"]
         let output = try await app.run(arguments)
         try Data(output.output.utf8).write(to: artifacts.appendingPathComponent("fresh-tap-" + UUID().uuidString + ".txt"))
         let receipt = try controlsReceipt(output.output)

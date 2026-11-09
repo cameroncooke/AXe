@@ -158,7 +158,7 @@ struct SelectedAgentLifetimeTests {
         }
     }
 
-    @Test("Only a native full description can omit its internal PID")
+    @Test("Selected reads and input without a PID bind the frontmost app; reference actions cannot")
     func unboundPIDCannotAdmitNativeInput() throws {
         let describe = SelectedAXRequest(kind: .describe, expectedPID: nil,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
@@ -170,11 +170,15 @@ struct SelectedAgentLifetimeTests {
         }
         let tap = SelectedAXRequest(kind: .tap, expectedPID: nil,
             endpoint: nil, selectorKind: .id, selectorValue: "button", preDelay: 0, postDelay: 0)
-        #expect(throws: (any Error).self) { try tap.validate() }
+        try tap.validate()
         var point = SelectedAXRequest(kind: .describePoint, expectedPID: nil,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
         point.point = .init(x: 10, y: 10)
-        #expect(throws: (any Error).self) { try point.validate() }
+        try point.validate()
+        var hold = SelectedAXRequest(kind: .hold, expectedPID: nil,
+            endpoint: nil, selectorKind: .id, selectorValue: "button", preDelay: 0, postDelay: 0)
+        hold.holdDuration = 1
+        #expect(throws: (any Error).self) { try hold.validate() }
     }
 
     private func makeOwner(_ clock: LifetimeClock) -> SelectedHIDOwner {

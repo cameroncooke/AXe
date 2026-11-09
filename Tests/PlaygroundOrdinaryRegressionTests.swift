@@ -89,7 +89,7 @@ struct PlaygroundOrdinaryRegressionTests {
         let roots = try #require(receipt.ax?.roots)
         try #require(UIStateParser.findElement(in: roots, withIdentifier: "feature.tap") != nil)
         let context = try #require(receipt.context)
-        let discovery = try await session.command(["list-simulators", "--displays"])
+        let discovery = try await session.command(["displays", "--verbose"])
         let catalogue = try JSONDecoder().decode(DuoCatalogue.self, from: Data(discovery.output.utf8))
         try context.requireMatch(catalogue)
         let metadata = try JSONDecoder().decode(OrdinaryDiscoveryMetadata.self, from: Data(discovery.output.utf8))
@@ -124,7 +124,10 @@ struct PlaygroundOrdinaryRegressionTests {
         _ = try await session.core.waitFor("ordinary capture markers") { session.core.value("media-pattern-phase", in: $0) == "0" }
         let base = try #require(ProcessInfo.processInfo.environment["AXE_E2E_ARTIFACT_DIR"])
         let output = URL(fileURLWithPath: base).appendingPathComponent("ordinary-selected-" + UUID().uuidString + ".png")
-        let flags = Array(session.selectedFlags.dropFirst(2)) + ["--expected-boot", catalogue.bootIdentity]
+        // Screenshot takes the screen pair but not the selected-input --verbose flag.
+        let flags = ["--screen-id", String(session.initialContext.screenID),
+            "--screen-uuid", session.initialContext.screenUUID.uuidString,
+            "--expected-boot", catalogue.bootIdentity]
         _ = try await session.command(["screenshot", "--output", output.path] + flags)
         let geometry = try PlaygroundMediaAssertions.image(Data(contentsOf: output), type: "public.png")
         try #require(geometry.width > 100 && geometry.height > 100 && pid > 0)

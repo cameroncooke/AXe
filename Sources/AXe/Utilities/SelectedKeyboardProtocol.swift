@@ -5,28 +5,34 @@ import FBSimulatorControl
 struct SelectedKeyboardRequest: Codable, Sendable {
     static let maximumTextBytes = 256
     static let maximumEvents = 1024
-    let expectedPID: Int32
+    /// Nil asks the broker to bind the app that is frontmost when the operation starts.
+    let expectedPID: Int32?
     let fieldTarget: SelectedNativeTarget
     let events: [SelectedKeyboardPrimitive]
 
     var focusID: String? { fieldTarget.semanticID }
 
-    init(expectedPID: Int32, focusID: String, events: [SelectedKeyboardPrimitive]) {
+    init(expectedPID: Int32?, focusID: String, events: [SelectedKeyboardPrimitive]) {
         self.init(expectedPID: expectedPID,
             fieldTarget: .semantic(kind: .id, value: focusID, elementType: "TextField"), events: events)
     }
 
-    init(expectedPID: Int32, fieldTarget: SelectedNativeTarget, events: [SelectedKeyboardPrimitive]) {
+    init(expectedPID: Int32?, fieldTarget: SelectedNativeTarget, events: [SelectedKeyboardPrimitive]) {
         self.expectedPID = expectedPID
         self.fieldTarget = fieldTarget
         self.events = events
+    }
+
+    /// The same request bound to one process; every focus read then requires it.
+    func bound(to pid: Int32) -> SelectedKeyboardRequest {
+        SelectedKeyboardRequest(expectedPID: pid, fieldTarget: fieldTarget, events: events)
     }
 
     private enum CodingKeys: String, CodingKey { case expectedPID, focusID, fieldTarget, events }
 
     init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        expectedPID = try values.decode(Int32.self, forKey: .expectedPID)
+        expectedPID = try values.decodeIfPresent(Int32.self, forKey: .expectedPID)
         events = try values.decode([SelectedKeyboardPrimitive].self, forKey: .events)
         let identifier = try values.decodeIfPresent(String.self, forKey: .focusID)
         let target = try values.decodeIfPresent(SelectedNativeTarget.self, forKey: .fieldTarget)
@@ -41,7 +47,7 @@ struct SelectedKeyboardRequest: Codable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(expectedPID, forKey: .expectedPID)
+        try values.encodeIfPresent(expectedPID, forKey: .expectedPID)
         try values.encode(events, forKey: .events)
         if case let .semantic(kind, value, type) = fieldTarget,
            kind == .id, type == nil || type == "TextField" {
@@ -51,7 +57,7 @@ struct SelectedKeyboardRequest: Codable, Sendable {
 
     func validate() throws {
         try fieldTarget.validate()
-        guard expectedPID > 0 else {
+        if let expectedPID, expectedPID <= 0 {
             throw SelectedHIDFailure.invalid("Selected keyboard requires a positive PID")
         }
         switch fieldTarget {
@@ -62,7 +68,7 @@ struct SelectedKeyboardRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Selected keyboard requires an exact nonempty focus ID")
             }
         case let .nativeObject(identity, type):
-            guard identity.pid == expectedPID, type == "TextField" else {
+            guard expectedPID != nil, identity.pid == expectedPID, type == "TextField" else {
                 throw SelectedHIDFailure.invalid("Selected keyboard requires an exact native TextField in the expected process")
             }
         }
@@ -176,7 +182,7 @@ enum SelectedKeyboardFocusPolicy {
 }
 
 struct SelectedKeyboardResult: Codable, Sendable {
-    let expectedPID: Int32
+    let expectedPID: Int32?
     let focusID: String?
     var initialTarget: FBSimulatorAXNode?
     var lastValidatedTarget: FBSimulatorAXNode?

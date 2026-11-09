@@ -39,7 +39,6 @@ struct SelectedBatchSliderTests {
 
     @Test(arguments: [
         "slider --endpoint minimum --expected-pid 123",
-        "slider --id feature.slider --endpoint minimum",
         "slider --id feature.slider --endpoint minimum --expected-pid 0",
         "slider --id feature.slider --expected-pid 123",
         "slider --id feature.slider --endpoint midpoint --expected-pid 123",

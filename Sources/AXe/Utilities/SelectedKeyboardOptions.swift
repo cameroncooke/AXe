@@ -3,7 +3,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedKeyboardOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Required for selected keyboard; optional with --agent to assert the snapshot owner PID.")
+    @Option(name: .customLong("expected-pid"), help: "Selected keyboard, optional: refuse unless this app PID is frontmost. Without it, AXe uses the app that is frontmost when the command starts. With --agent it asserts the snapshot owner PID.")
     var expectedPID: Int32?
     @Option(name: .customLong("focus-id"), help: "Selected keyboard: exact ID of an already focused TextField. No focus action or fallback.")
     var focusID: String?
@@ -16,32 +16,31 @@ struct SelectedKeyboardOptions: ParsableArguments {
             }
             return
         }
-        guard let expectedPID, expectedPID > 0, let focusID, !focusID.isEmpty,
-              focusID.utf8.count <= 4096,
+        if let expectedPID, expectedPID <= 0 {
+            throw ValidationError("--expected-pid must be a positive process ID.")
+        }
+        guard let focusID, !focusID.isEmpty, focusID.utf8.count <= 4096,
               focusID == focusID.trimmingCharacters(in: .whitespacesAndNewlines) else {
-            throw ValidationError("Selected keyboard requires a positive --expected-pid and exact --focus-id.")
+            throw ValidationError("Selected keyboard requires the exact --focus-id of the focused TextField.")
         }
     }
 
     func request(input: SelectedInputOptions, event: FBSimulatorHIDEvent) throws -> SelectedHIDRequest {
         try validate(input: input)
-        guard input.mode == .selected, let expectedPID, let focusID,
-              let screenID = input.screenID, let rawUUID = input.screenUUID,
-              let screenUUID = UUID(uuidString: rawUUID) else {
-            throw ValidationError("Missing selected keyboard identity.")
+        guard input.mode == .selected, let focusID else {
+            throw ValidationError("Missing selected keyboard field identity.")
         }
-        let keyboard = SelectedKeyboardRequest(expectedPID: expectedPID, focusID: focusID,
+        var request = try input.baseRequest(operation: .complete, token: nil, primitives: [])
+        request.keyboard = SelectedKeyboardRequest(expectedPID: expectedPID, focusID: focusID,
             events: try SelectedKeyboardRequest.primitives(from: event))
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: screenUUID, operation: .complete,
-            token: nil, primitives: [], keyboard: keyboard)
         try request.validate()
         return request
     }
 
-    func send(input: SelectedInputOptions, event: FBSimulatorHIDEvent, simulatorUDID: String) throws {
+    func send(input: SelectedInputOptions, event: FBSimulatorHIDEvent, simulatorUDID: String,
+              verbose: Bool = false) throws {
         try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(
-            request(input: input, event: event), simulatorUDID: simulatorUDID))
+            request(input: input, event: event), simulatorUDID: simulatorUDID), verbose: verbose)
     }
 
     /// Preserve all input bytes. Cap memory before conversion; never trim or truncate input.

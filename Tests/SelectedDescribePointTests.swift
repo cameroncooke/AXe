@@ -33,11 +33,16 @@ struct SelectedDescribePointTests {
         #expect(throws: (any Error).self) { _ = try DescribeUI.parse(selected + ["--point", point]) }
     }
 
-    @Test func selectedPointRequiresExplicitSelectionAndPID() {
+    @Test func selectedPointBindsActiveScreenAndFrontmostAppWhenOmitted() throws {
+        let unbound = try DescribeUI.parse(["--udid", "TEST", "--input-mode", "selected", "--point", "10,20"])
+            .selectedRequest()
+        #expect(unbound.activeDisplay == true && unbound.screenID == nil && unbound.screenUUID == nil)
+        #expect(unbound.ax?.expectedPID == nil && unbound.ax?.kind == .describePoint)
+        let withoutPID = try DescribeUI.parse(Array(selected.dropLast(2)) + ["--point", "10,20"]).selectedRequest()
+        #expect(withoutPID.screenID == 3 && withoutPID.activeDisplay == nil && withoutPID.ax?.expectedPID == nil)
         for args in [
-            ["--udid", "TEST", "--input-mode", "selected", "--point", "10,20"],
-            Array(selected.dropLast(2)) + ["--point", "10,20"],
-            selected + ["--point", "10,20", "--expected-pid", "0"]
+            selected + ["--point", "10,20", "--expected-pid", "0"],
+            ["--udid", "TEST", "--input-mode", "selected", "--screen-id", "3", "--point", "10,20"]
         ] {
             #expect(throws: (any Error).self) { _ = try DescribeUI.parse(args) }
         }

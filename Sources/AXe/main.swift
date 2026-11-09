@@ -22,6 +22,7 @@ struct Axe: AsyncParsableCommand {
         subcommands: [
             DescribeUI.self,
             ListSimulators.self,
+            Displays.self,
             Shutdown.self,
             Clipboard.self,
             Init.self,

@@ -36,6 +36,7 @@ struct Slider: AsyncParsableCommand {
     var endpoint: SelectedSliderEndpoint?
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -114,7 +115,8 @@ struct Slider: AsyncParsableCommand {
         }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         guard let value else { throw ValidationError("Legacy slider requires --value.") }
@@ -275,7 +277,8 @@ struct Slider: AsyncParsableCommand {
             primitives: [], ax: ax)
         logger.info().log("Slider uses the native \(endpoint.rawValue) endpoint route on its measured active display")
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
-        if CLIOutput.isFormatted { try CLIOutput.writeJSON(response) }
+        // The plain result line follows; the owned-route receipt stays behind --verbose.
+        if selectedOutput.verbose { try CLIOutput.writeJSON(response) }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let receipt = response.ax?.slider,
               receipt.outcome == "endpointObserved" || receipt.outcome == "alreadyAtEndpoint" else {
@@ -301,7 +304,8 @@ struct Slider: AsyncParsableCommand {
             primitives: [], ax: ax)
         logger.info().log("Slider uses current native value feedback on its measured active display")
         let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
-        if CLIOutput.isFormatted { try CLIOutput.writeJSON(response) }
+        // The plain result line follows; the owned-route receipt stays behind --verbose.
+        if selectedOutput.verbose { try CLIOutput.writeJSON(response) }
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let receipt = response.ax?.sliderValue,
               receipt.outcome == "reached" || receipt.outcome == "alreadyAtValue" else {

@@ -22,7 +22,7 @@ struct CLIOutputInvocation: Sendable {
         let flags: Set<String> = [
             "--agent", "--stdin", "--continue-on-error", "--verbose", "--force", "--uninstall",
             "--print", "--displays", "--follow-active-display", "--semantic-press", "--down",
-            "--up", "--json", "--selected", "--help", "-h", "--help-hidden", "--version"
+            "--up", "--json", "--selected", "--no-wait", "--help", "-h", "--help-hidden", "--version"
         ]
         while index < original.count {
             let token = original[index]

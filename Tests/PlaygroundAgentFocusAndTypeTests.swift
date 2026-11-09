@@ -80,7 +80,7 @@ struct PlaygroundFocusTypeCheck {
     private func native(_ name: String, context: DuoContext) async throws -> PlaygroundFocusNativeRead {
         let output = try await command(name, ["describe-ui", "--input-mode", "selected",
             "--screen-id", String(context.screenID), "--screen-uuid", context.screenUUID.uuidString,
-            "--expected-pid", String(pid)])
+            "--expected-pid", String(pid), "--verbose"])
         let read = try JSONDecoder().decode(PlaygroundFocusNativeRead.self, from: Data(output.output.utf8))
         try #require(read.outcome == "ready" && read.enqueuedEventCount == 0 && read.cleanup == "notNeeded")
         try #require(read.error == nil && read.quarantine == nil && read.context == context

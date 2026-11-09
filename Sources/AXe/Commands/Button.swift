@@ -46,8 +46,8 @@ struct Button: AsyncParsableCommand {
         abstract: "Press a hardware button on the simulator.",
         discussion: """
         Available buttons: apple-pay, home, lock, side-button, siri
-        Selected mode supports all five buttons. The screen pair guards the active context;
-        buttons act on the whole device. Transport evidence does not prove a UI, lock or power state.
+        Selected mode supports all five buttons. An optional --screen-id/--screen-uuid pair guards
+        the active context; without it AXe uses the active screen. Buttons act on the whole device. Transport evidence does not prove a UI, lock or power state.
         
         Examples:
           axe button home --udid SIMULATOR_UDID
@@ -66,8 +66,10 @@ struct Button: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
 
-    @Option(name: .customLong("expected-boot"), help: "Selected hardware button: require this exact measured boot identity before input.")
+    @Option(name: .customLong("expected-boot"),
+        help: ArgumentHelp("Selected hardware button: require this exact measured boot identity before input.", visibility: .hidden))
     var expectedBoot: String?
 
     func validate() throws {
@@ -94,12 +96,7 @@ struct Button: AsyncParsableCommand {
 
     func selectedRequest() throws -> SelectedHIDRequest {
         try validate()
-        guard selectedInput.mode == .selected, let screenID = selectedInput.screenID,
-              let screenUUID = selectedInput.screenUUID.flatMap(UUID.init(uuidString:)) else {
-            throw ValidationError("Selected button requires an explicit screen ID and UUID.")
-        }
-        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [])
+        var request = try selectedInput.baseRequest(operation: .complete, token: nil, primitives: [])
         if let payload = selectedButtonPayload {
             request.button = payload
         } else {
@@ -123,7 +120,8 @@ struct Button: AsyncParsableCommand {
 
     func run() async throws {
         if selectedInput.mode == .selected {
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         let logger = AxeLogger()

@@ -97,7 +97,7 @@ struct PlaygroundDuoManualBoundaryTests {
             let before = try app.documents.read()
             let inner = try #require(app.catalogue.panels.first { $0.identity != app.catalogue.activePanel.identity })
             let output = try await app.app.run(["slider", "--id", "feature.slider", "--endpoint", "maximum", "--element-type", "Slider", "--expected-pid", String(app.pid),
-                "--input-mode", "selected", "--screen-id", String(inner.identity.displayID), "--screen-uuid", inner.identity.uniqueID.uuidString], allowFailure: true)
+                "--input-mode", "selected", "--screen-id", String(inner.identity.displayID), "--screen-uuid", inner.identity.uniqueID.uuidString, "--verbose"], allowFailure: true)
             try Data(output.output.utf8).write(to: app.artifacts.appendingPathComponent("inactive-slider-receipt.txt"))
             let receiptLine = output.output.split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
             let receipt = try JSONDecoder().decode(DuoCLIResponse.self, from: Data(receiptLine.utf8))

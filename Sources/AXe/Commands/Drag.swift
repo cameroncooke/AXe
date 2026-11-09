@@ -40,6 +40,7 @@ struct Drag: AsyncParsableCommand {
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -106,7 +107,8 @@ struct Drag: AsyncParsableCommand {
         }
         if selectedInput.mode == .selected {
             let request = try selectedRequest()
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         guard let startX, let startY else {

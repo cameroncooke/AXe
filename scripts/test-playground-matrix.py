@@ -70,7 +70,7 @@ def wait_for_displays(run, name, axe, identifier):
     while True:
         attempts += 1
         try:
-            run(name + '-displays-ready-' + str(attempts), [str(axe), 'list-simulators', '--displays', '--udid', identifier], timeout=60)
+            run(name + '-displays-ready-' + str(attempts), [str(axe), 'displays', '--verbose', '--udid', identifier], timeout=60)
             return attempts
         except RuntimeError:
             if time.monotonic() >= deadline:

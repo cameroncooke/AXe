@@ -38,6 +38,7 @@ struct Swipe: AsyncParsableCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -149,7 +150,8 @@ struct Swipe: AsyncParsableCommand {
         }
         if selectedInput.mode == .selected {
             let request = try selectedInput.pathRequest(selectedPath)
-            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID))
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         guard let startX, let startY, let endX, let endY else {

@@ -108,7 +108,7 @@ struct PlaygroundDuoTapWaitTests {
                 let fresh = try await DuoPlaygroundSession().catalogue(boot: app.catalogue.bootIdentity)
                 let panel = fresh.activePanel.identity
                 let response = try await app.app.run(["tap", "--id", "wait.target", "--element-type", "Button", "--tap-style", "physical",
-                    "--expected-pid", String(app.pid), "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString])
+                    "--expected-pid", String(app.pid), "--input-mode", "selected", "--screen-id", String(panel.displayID), "--screen-uuid", panel.uniqueID.uuidString, "--verbose"])
                 let tap = try controlsReceipt(response.output)
                 try tap.requireCompleted()
                 _ = try await app.documents.waitFor("fresh same-element tap after interrupted wait") { $0.count("target") == before.count("target") + 1 && $0.activeWindowTouches == 0 }

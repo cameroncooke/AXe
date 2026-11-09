@@ -672,3 +672,47 @@ extension FBSimulatorAXWorker {
       provider: provider, policy: policy, budget: budget, includeNativeIdentity: includeNativeIdentity)
   }
 }
+
+extension FBSimulatorAXSnapshot {
+  /// One bounded read of the frontmost application's PID on the observed display, without
+  /// serializing its tree. A caller that has no expected PID binds this one; every later target
+  /// and frontmost check still requires it, so a process change fails rather than retargets.
+  public static func frontmostApplicationPID(for simulator: FBSimulator,
+    observation: FBSimulatorHIDSessionObservation, freshnessProvider: any FBSimulatorHIDFreshnessProvider,
+    timeoutSeconds: Double = 4) async throws -> Int32 {
+    guard timeoutSeconds.isFinite, timeoutSeconds > 0, timeoutSeconds <= 8 else {
+      throw FBSimulatorAXSnapshotError.invalidSelection
+    }
+    let budget = FBAXAcquisitionBudget(seconds: timeoutSeconds)
+    return try await withTaskCancellationHandler(operation: {
+      try await FBSimulatorAXWorker.shared.frontmostApplicationPID(for: simulator, observation: observation,
+        provider: freshnessProvider, budget: budget)
+    }, onCancel: { budget.stop(.cancelled) })
+  }
+}
+
+extension FBSimulatorAXWorker {
+  func frontmostApplicationPID(for simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
+    provider: any FBSimulatorHIDFreshnessProvider, budget: FBAXAcquisitionBudget) async throws -> Int32 {
+    try Task.checkCancellation()
+    try budget.check()
+    try await validateSelection(simulator, observation: observation, provider: provider)
+    let commands = FBSimulatorAccessibilityCommands(simulator: simulator)
+    try commands.validateAccessibility(bootstrap: false)
+    try budget.check()
+    let pid: Int32
+    do {
+      pid = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
+    } catch let error where Self.pointReadMayNeedPreparation(error) {
+      // Same rule as the point read: preparation runs only after a direct read fails.
+      try FBSimulatorAXSnapshot.requireSame(observation, try await provider.observation())
+      try prepareAccessibility(for: simulator, budget: budget)
+      pid = try await pointReadFrontmostPID(commands, observation: observation, budget: budget)
+    }
+    guard pid > 0 else { throw FBSimulatorAXSnapshotError.invalidSelection }
+    try FBSimulatorAXSnapshot.requireSame(observation, try await provider.observation())
+    try budget.check()
+    try Task.checkCancellation()
+    return pid
+  }
+}
