@@ -166,24 +166,10 @@ extension Gesture: BatchConvertible {
             throw ValidationError("Pinch is not supported in batch steps.")
         }
         // As the standalone command: explicit overrides, then the measured Duo display, then 390x844.
-        let width = screenWidth ?? context.duoLogicalSize?.width ?? 390.0
-        let height = screenHeight ?? context.duoLogicalSize?.height ?? 844.0
-        let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
-        let gestureDuration = duration ?? preset.defaultDuration
-        let gestureDelta = delta ?? preset.defaultDelta
-        try context.validateSwipeAllocation(from: (x: coords.startX, y: coords.startY),
-            to: (x: coords.endX, y: coords.endY), duration: gestureDuration, delta: gestureDelta)
-
-        let gestureEvent = FBSimulatorHIDEvent.swipe(
-            coords.startX,
-            yStart: coords.startY,
-            xEnd: coords.endX,
-            yEnd: coords.endY,
-            delta: gestureDelta,
-            duration: gestureDuration
-        )
-
-        return [.hidMergeable(buildDelayedEvent(preDelay: preDelay, mainEvent: gestureEvent, postDelay: postDelay))]
+        let swipe = try legacySwipe(preset, measured: context.duoLogicalSize)
+        try context.validateSwipeAllocation(from: (x: swipe.startX, y: swipe.startY),
+            to: (x: swipe.endX, y: swipe.endY), duration: swipe.duration, delta: swipe.delta)
+        return [.hidMergeable(swipe.event(preDelay: preDelay, postDelay: postDelay))]
     }
 }
 

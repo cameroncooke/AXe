@@ -289,7 +289,11 @@ struct Slider: AsyncParsableCommand {
         let accepted: Set<String> = endpoint == nil ? ["reached", "alreadyAtValue"] : ["endpointObserved", "alreadyAtEndpoint"]
         guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil,
               let outcome, accepted.contains(outcome) else {
-            throw CLIError(errorDescription: "Slider failed: \(response.error ?? response.outcome); events=\(response.enqueuedEventCount); cleanup=\(response.cleanup). Input was not replayed.", code: .inputFailed)
+            if SelectedInputOutput.failed(response) { throw SelectedInputOutput.failure(response) }
+            // A clean reply whose slider outcome is not a success; --verbose prints it.
+            let sent = response.enqueuedEventCount == 0 ? "No input was sent." : CLIErrorMapping.someInputSent
+            throw CLIOutputFailure(code: response.ax?.failure?.rawValue ?? "sliderFailed",
+                message: "The slider did not reach \(formatPercent(targetNormalized * 100)). \(sent)")
         }
     }
 

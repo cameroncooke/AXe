@@ -234,3 +234,15 @@ struct EdgeInsetTests {
         #expect(!admission.inFlight && admission.token == nil)
     }
 }
+
+@Suite("Legacy edge inset on the measured size")
+struct LegacyEdgeInsetMeasuredSizeTests {
+    @Test func spanUsesTheMeasuredDuoSizeNot390x844() throws {
+        // A 60-point inset with delta 200 fits 951 points across but not 200.
+        let gesture = try Gesture.parse(["swipe-from-left-edge", "--edge-inset", "60", "--delta", "200",
+            "--udid", "2154413A-7E31-4566-A03E-598AC9B5D4D7"])
+        #expect(throws: (any Error).self) { _ = try gesture.legacySwipe(.swipeFromLeftEdge, measured: (200, 400)) }
+        let swipe = try gesture.legacySwipe(.swipeFromLeftEdge, measured: (951, 669))
+        #expect(swipe.width == 951 && swipe.startX == 60 && swipe.endX == 931 && swipe.delta == 200)
+    }
+}

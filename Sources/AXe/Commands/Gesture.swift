@@ -251,15 +251,11 @@ struct Gesture: AsyncParsableCommand {
             guard case let .preset(preset) = gesture else {
                 throw ValidationError("--edge-inset is available only for edge presets.")
             }
-            if selectedInput.mode == .selected || physical {
-                try preset.validateEdgeInset(edgeInset)
-            } else {
-                try preset.validateEdgeInset(edgeInset, screenWidth: screenWidth ?? 390, screenHeight: screenHeight ?? 844)
-                let points = preset.coordinates(screenWidth: screenWidth ?? 390, screenHeight: screenHeight ?? 844, edgeInset: edgeInset)
-                let span = hypot(points.endX - points.startX, points.endY - points.startY)
-                guard span >= (delta ?? preset.defaultDelta) else {
-                    throw ValidationError("Explicit legacy edge inset requires a path span at least as large as delta.")
-                }
+            try preset.validateEdgeInset(edgeInset)
+            // The ordinary route checks the span on the size it uses: here when both dimensions are
+            // explicit, otherwise once it has measured the Duo display or chosen 390×844.
+            if selectedInput.mode != .selected, !physical, screenWidth != nil, screenHeight != nil {
+                _ = try legacySwipe(preset, measured: nil)
             }
         }
         if endX != nil || endY != nil || secondEndX != nil || secondEndY != nil {
@@ -327,6 +323,36 @@ struct Gesture: AsyncParsableCommand {
                 throw ValidationError("Post-delay must be between 0 and 10 seconds.")
             }
         }
+    }
+
+    /// The ordinary preset swipe on explicit dimensions, else the measured Duo display, else 390×844.
+    struct LegacySwipe {
+        let width, height, startX, startY, endX, endY, duration, delta: Double
+
+        /// The HID swipe with the requested delays around it.
+        func event(preDelay: Double?, postDelay: Double?) -> FBSimulatorHIDEvent {
+            var events: [FBSimulatorHIDEvent] = []
+            if let preDelay, preDelay > 0 { events.append(.delay(preDelay)) }
+            events.append(.swipe(startX, yStart: startY, xEnd: endX, yEnd: endY, delta: delta, duration: duration))
+            if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
+            return events.count == 1 ? events[0] : .composite(events)
+        }
+    }
+
+    /// An explicit edge inset also needs a path span of at least the delta on the dimensions used.
+    func legacySwipe(_ preset: GesturePreset, measured: (width: Double, height: Double)?) throws -> LegacySwipe {
+        let width = screenWidth ?? measured?.width ?? 390
+        let height = screenHeight ?? measured?.height ?? 844
+        let points = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
+        let swipeDelta = delta ?? preset.defaultDelta
+        if let edgeInset {
+            try preset.validateEdgeInset(edgeInset, screenWidth: width, screenHeight: height)
+            guard hypot(points.endX - points.startX, points.endY - points.startY) >= swipeDelta else {
+                throw ValidationError("Explicit legacy edge inset requires a path span at least as large as delta.")
+            }
+        }
+        return LegacySwipe(width: width, height: height, startX: points.startX, startY: points.startY,
+            endX: points.endX, endY: points.endY, duration: duration ?? preset.defaultDuration, delta: swipeDelta)
     }
 
     func selectedPath() throws -> SelectedHIDPath {
@@ -509,66 +535,23 @@ struct Gesture: AsyncParsableCommand {
         let measured = route?.isDuo == true ? context : nil
 
         // Keep explicit overrides and rigid-device defaults; measure omitted Duo dimensions.
-        let width = screenWidth ?? measured?.logicalWidth ?? 390.0
-        let height = screenHeight ?? measured?.logicalHeight ?? 844.0
-        
-        // Get gesture coordinates
-        let coords = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
-        
-        // Use provided values or preset defaults
-        let gestureDuration = duration ?? preset.defaultDuration
-        let gestureDelta = delta ?? preset.defaultDelta
-        
+        let swipe = try legacySwipe(preset, measured: measured.map { ($0.logicalWidth, $0.logicalHeight) })
         logger.info().log("Performing \(preset.description)")
-        logger.info().log("Screen size: \(width)x\(height)")
-        logger.info().log("Coordinates: (\(coords.startX), \(coords.startY)) to (\(coords.endX), \(coords.endY))")
-        logger.info().log("Duration: \(gestureDuration)s, Delta: \(gestureDelta)px")
-        
+        logger.info().log("Screen size: \(swipe.width)x\(swipe.height)")
+        logger.info().log("Coordinates: (\(swipe.startX), \(swipe.startY)) to (\(swipe.endX), \(swipe.endY))")
+        logger.info().log("Duration: \(swipe.duration)s, Delta: \(swipe.delta)px")
+
         if let context {
-            let path = LegacyDuoPath(kind: .swipe, startX: coords.startX, startY: coords.startY,
-                endX: coords.endX, endY: coords.endY, duration: gestureDuration, delta: gestureDelta)
+            let path = LegacyDuoPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
+                endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta)
             try await LegacyDuoInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Gesture completed successfully")
             return
         }
 
-        // Create gesture events with timing controls
-        var events: [FBSimulatorHIDEvent] = []
-        
-        // Add pre-delay if specified
-        if let preDelay = preDelay, preDelay > 0 {
-            logger.info().log("Pre-delay: \(preDelay)s")
-            events.append(FBSimulatorHIDEvent.delay(preDelay))
-        }
-        
-        // Add the main gesture
-        let gestureEvent = FBSimulatorHIDEvent.swipe(
-            coords.startX,
-            yStart: coords.startY,
-            xEnd: coords.endX,
-            yEnd: coords.endY,
-            delta: gestureDelta,
-            duration: gestureDuration
-        )
-        events.append(gestureEvent)
-        
-        // Add post-delay if specified
-        if let postDelay = postDelay, postDelay > 0 {
-            logger.info().log("Post-delay: \(postDelay)s")
-            events.append(FBSimulatorHIDEvent.delay(postDelay))
-        }
-        
-        // Execute the gesture sequence
-        let finalEvent = events.count == 1 ? events[0] : FBSimulatorHIDEvent.composite(events)
-        
-        try await HIDInteractor
-            .performHIDEvent(
-                finalEvent,
-                for: simulatorUDID,
-                logger: logger
-            )
-        
+        try await HIDInteractor.performHIDEvent(swipe.event(preDelay: preDelay, postDelay: postDelay),
+            for: simulatorUDID, logger: logger)
         logger.info().log("Gesture completed successfully")
     }
 } 
