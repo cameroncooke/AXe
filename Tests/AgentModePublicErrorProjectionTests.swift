@@ -65,6 +65,34 @@ struct AgentModePublicErrorProjectionTests {
         #expect(!projected.message.contains(objectID) && !projected.message.contains("private-tree-label"))
     }
 
+    @Test("Each typed native failure has its own public code and fixed message", arguments: [
+        (SelectedAXFailure.ownershipRejected, "busy"), (.acquisitionFailed, "observationFailed"),
+        (.targetRejected, "targetCovered"), (.pressFailed, "inputIncomplete"), (.sliderFailed, "inputIncomplete"),
+        (.inputFailed, "inputIncomplete"), (.cleanupUncertain, "cleanupUncertain"),
+        (.responseTooLarge, "responseTooLarge"), (.setupFailed, "displayChanged"),
+        (.waitTimedOut, "waitTimedOut"), (.waitCancelled, "waitCancelled"),
+    ])
+    func everyTypedAXFailureHasItsOwnCode(_ kind: SelectedAXFailure, code: String) {
+        let native = response(failure: kind)
+        let failure = AgentModePublicErrorProjection.nativeFailure(native)
+        #expect(failure.code == code)
+        #expect(failure.message == AgentModePublicErrorProjection.project(.init("nativeActionFailed", diagnostic),
+            native: native).message)
+        #expect(!failure.message.contains(objectID) && !failure.message.contains("private-tree-label"))
+        // Projecting the typed failure again keeps its code and text.
+        let projected = AgentModePublicErrorProjection.project(failure, native: native)
+        #expect(projected.code == code && projected.message == failure.message)
+    }
+
+    @Test("An untyped native failure stays nativeActionFailed; uncertain cleanup is cleanupUncertain")
+    func untypedAndUncertainNativeFailures() {
+        #expect(AgentModePublicErrorProjection.nativeFailure(response()).code == "nativeActionFailed")
+        #expect(AgentModePublicErrorProjection.nativeFailure(
+            response(failure: .targetRejected, cleanup: "uncertain")).code == "cleanupUncertain")
+        #expect(AgentModePublicErrorProjection.nativeFailure(
+            response(failure: .inputFailed, count: 2, quarantined: true)).code == "cleanupUncertain")
+    }
+
     @Test("Public batch failure retains partial delivery, cleanup, quarantine and no-replay evidence")
     func failedBatchEvidenceIsNotCompactedAway() throws {
         let native = response(failure: .inputFailed, count: 2, cleanup: "uncertain", quarantined: true)

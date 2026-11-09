@@ -353,10 +353,10 @@ struct PlaygroundAgentNativeStateTests {
         let result = try await session.run(["tap", "--agent", "--expected-pid", String(session.pid),
             "--id", "agent-examples.covered"], allowFailure: true)
         let envelope = try session.decode(result.output)
-        try #require(result.exitCode != 0 && envelope.didError && envelope.error?.code == "nativeActionFailed")
+        try #require(result.exitCode != 0 && envelope.didError && envelope.error?.code == "targetCovered")
         let publicFailure = try JSONDecoder().decode(BoundedPublicFailure.self, from: Data(result.output.utf8))
         try #require(publicFailure.schema == "axe.output.agent-result" && publicFailure.schemaVersion == "1"
-            && publicFailure.didError && publicFailure.error.code == "nativeActionFailed"
+            && publicFailure.didError && publicFailure.error.code == "targetCovered"
             && publicFailure.error.message == "Another control is at the tap point (yours is covered or has moved), so nothing was sent. Check the capture in this reply, then scroll it into view, close what covers it, or choose it again.")
         // The refusal returns the current screen, which in full view is the complete tree with the
         // long text. Everything else in the reply stays small and free of native diagnostics.
@@ -377,7 +377,7 @@ struct PlaygroundAgentNativeStateTests {
             && action.enqueuedEventCount == 0 && action.cleanup == "notNeeded" && !action.replayed)
         // The returned screen is the new current table, so it needs no further read.
         try #require(publicFailure.data.cache.status == "refreshed"
-            && publicFailure.data.cache.reason == "nativeActionFailed" && !envelope.data.cache.requiresRefresh)
+            && publicFailure.data.cache.reason == "targetCovered" && !envelope.data.cache.requiresRefresh)
         let after = try session.document.read()
         try #require(after == before)
         let state = try await session.core.state()

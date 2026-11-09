@@ -13,6 +13,29 @@ enum AgentModePublicErrorProjection {
         }
     }
 
+    /// A native operation that failed without a typed AXe policy code. The code names the
+    /// failure's cause so an agent can branch on it; the message is fixed text.
+    static func nativeFailure(_ native: SelectedHIDResponse) -> AgentModeFailure {
+        let code = nativeCode(native)
+        return AgentModeFailure(code, message(code: code, native: native))
+    }
+
+    private static func nativeCode(_ native: SelectedHIDResponse) -> String {
+        if native.quarantine != nil || native.cleanup == "uncertain" { return "cleanupUncertain" }
+        switch native.ax?.failure {
+        case .ownershipRejected: return "busy"
+        case .acquisitionFailed: return "observationFailed"
+        case .targetRejected: return "targetCovered"
+        case .pressFailed, .sliderFailed, .inputFailed: return "inputIncomplete"
+        case .cleanupUncertain: return "cleanupUncertain"
+        case .responseTooLarge: return "responseTooLarge"
+        case .setupFailed: return "displayChanged"
+        case .waitTimedOut: return "waitTimedOut"
+        case .waitCancelled: return "waitCancelled"
+        case nil: return "nativeActionFailed"
+        }
+    }
+
     static func quarantine(_ source: SelectedHIDQuarantine?) -> SelectedHIDQuarantine? {
         source.map { value in
             SelectedHIDQuarantine(recordPath: value.recordPath, persisted: value.persisted,

@@ -7,10 +7,10 @@ import FBSimulatorControl
 @MainActor
 final class AgentModeController {
     static let timeToLive = 60.0
-    /// A refusal before input re-reads and retries while the target is unchanged. Each retry
-    /// needs two consecutive reads to agree, so a screen still changing (a keyboard appearing,
-    /// a sheet settling) is retried about every half second. Five retries cover a transition of
-    /// about three seconds; beyond that the current screen is returned to the agent.
+    /// A refusal before input caused by a changing screen re-reads and retries while the target is
+    /// the same control. An unchanged target binds on that one read; a moved one binds once two
+    /// reads about 150 ms apart agree. Five retries cover a transition of a few seconds; beyond
+    /// that, or for a refusal that would repeat on the same screen, the current screen is returned.
     static let maximumRetries = 5
     private struct Record {
         let id: UUID
@@ -133,7 +133,7 @@ final class AgentModeController {
                 action = actionReceipt
                 guard result.error == nil, result.cleanup != "uncertain" else {
                     return await refusal(request, result.agent?.error
-                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        ?? AgentModePublicErrorProjection.nativeFailure(result),
                         native: result, action: actionReceipt,
                         context: referenceRecord.context, pid: pid,
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
@@ -155,7 +155,7 @@ final class AgentModeController {
                 action = actionReceipt
                 guard result.error == nil, result.cleanup != "uncertain" else {
                     return await refusal(request, result.agent?.error
-                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        ?? AgentModePublicErrorProjection.nativeFailure(result),
                         native: result, action: actionReceipt,
                         context: referenceRecord.context, pid: pid,
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
@@ -176,7 +176,7 @@ final class AgentModeController {
                 action = actionReceipt
                 guard result.error == nil, result.cleanup != "uncertain" else {
                     return await refusal(request, result.agent?.error
-                        ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                        ?? AgentModePublicErrorProjection.nativeFailure(result),
                         native: result, action: actionReceipt,
                         context: referenceRecord.context, pid: pid,
                         original: referenceRecord.snapshot, retryDepth: retryDepth)
@@ -315,9 +315,11 @@ final class AgentModeController {
             action = actionReceipt
             guard result.error == nil, result.cleanup != "uncertain" else {
                 return await refusal(request, result.agent?.error
-                    ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                    ?? AgentModePublicErrorProjection.nativeFailure(result),
                     native: result, action: actionReceipt, context: context, pid: pid,
-                    original: referenceRecord?.snapshot, retryDepth: retryDepth)
+                    original: referenceRecord?.snapshot, retryDepth: retryDepth,
+                    // Focus-and-type owns the single retry loop for both of its phases.
+                    allowsRetry: focusPlan == nil)
             }
             return await publishReplacement(request, mode: mode, result: result, action: actionReceipt,
                 context: context, pid: pid)
@@ -344,7 +346,8 @@ final class AgentModeController {
     private func refusal(_ request: SelectedHIDRequest, _ error: AgentModeFailure,
                          native: SelectedHIDResponse?, action: AgentModeActionReceipt?,
                          context: SelectedHIDContext?, pid: Int32?,
-                         original: AgentModeSnapshot? = nil, retryDepth: Int = 0) async -> SelectedHIDResponse {
+                         original: AgentModeSnapshot? = nil, retryDepth: Int = 0,
+                         allowsRetry: Bool = true) async -> SelectedHIDResponse {
         guard Self.refusalRefreshes(error, native: native), let mode = request.agent,
               var stored = await refreshTable(context: context, pid: pid) else {
             return failure(request, error, native: native, action: action)
@@ -353,7 +356,7 @@ final class AgentModeController {
         // every attempt: the keyboard does not move by itself. Say so at once, with the fix and the
         // fresh screen, instead of retrying. The hit check stays the authority; the keyboard frame
         // only explains its refusal.
-        if error.code == "nativeActionFailed", native?.outcome == "failedBeforeInput", mode.kind == .tap,
+        if error.code == "targetCovered", native?.outcome == "failedBeforeInput", mode.kind == .tap,
            let original, let ref = mode.ref,
            let fresh = Self.unchangedReference(ref, from: original, to: stored.snapshot),
            let cover = AgentKeyboardCover.find(ref: fresh, in: stored.snapshot, pid: stored.expectedPID,
@@ -366,11 +369,14 @@ final class AgentModeController {
                 nextSteps: ["Input was not sent. The capture is the current screen; choose the next action from its snapshot ID."],
                 capture: capture)
         }
-        // The agent's own recovery, inside the call. When the refused action's target is still
-        // the same control, perform the action on the new table. Anything else returns the new
-        // table to the agent.
-        if Self.retriesOnNewTable(mode.kind), retryDepth < Self.maximumRetries,
-           !Self.targetRefusals.contains(error.code) {
+        // The agent's own recovery, inside the call. A refusal caused by a changing screen, or any
+        // refusal after which the screen has moved on, is retried when the refused action's target
+        // is still the same control. A refusal on an unchanged screen (a covered target, another
+        // input running) would only repeat, so it returns the new table to the agent at once.
+        let screenMovedOn = original.map { stored.snapshot.visibleFingerprint != $0.visibleFingerprint } ?? false
+        if allowsRetry, Self.retriesOnNewTable(mode.kind), retryDepth < Self.maximumRetries,
+           !Self.targetRefusals.contains(error.code),
+           Self.screenChangeRefusals.contains(error.code) || screenMovedOn {
             if let original, let ref = mode.ref,
                let newRef = await reboundReference(ref, original: original, stored: &stored) {
                 var retry = request
@@ -393,14 +399,20 @@ final class AgentModeController {
             capture: capture)
     }
 
-    /// A refusal that proves no input was sent.
+    /// A refusal that proves no input was sent: a host refusal of a changed screen or an
+    /// unusable target, or any native operation, whatever its code, that failed before input
+    /// with clean release and no quarantine.
     private static func refusalRefreshes(_ error: AgentModeFailure, native: SelectedHIDResponse?) -> Bool {
-        let failedBeforeInput = error.code == "nativeActionFailed" && native?.outcome == "failedBeforeInput"
-            && native?.cleanup != "uncertain"
-        return (["screenChanged", "targetChanged", "batchLayoutChanged", "nativeIdentityIncomplete"].contains(error.code)
-                || targetRefusals.contains(error.code) || failedBeforeInput)
-            && (native?.enqueuedEventCount ?? 0) == 0 && native?.quarantine == nil
+        guard (native?.enqueuedEventCount ?? 0) == 0, native?.quarantine == nil,
+              native?.cleanup != "uncertain" else { return false }
+        return screenChangeRefusals.contains(error.code) || targetRefusals.contains(error.code)
+            || native?.outcome == "failedBeforeInput"
     }
+
+    /// Refusals that a changing screen causes. Retried while the target is the same control.
+    private static let screenChangeRefusals: Set<String> = [
+        "screenChanged", "targetChanged", "batchLayoutChanged", "nativeIdentityIncomplete",
+    ]
 
     /// A ref or selector that names no current control offering the action. The agent chose it,
     /// often from a capture taken while the screen was still changing, so the same request is not
@@ -414,19 +426,18 @@ final class AgentModeController {
         }
     }
 
-    /// The same target on a new table: identity, type, label, value and frame unchanged, and
-    /// still enabled and shown.
+    /// The same target on a new table: the same control as `sameControl` defines (including the
+    /// native object whenever both reads report one) at the same frame.
     private static func unchangedReference(_ ref: String, from original: AgentModeSnapshot,
                                            to fresh: AgentModeSnapshot) -> String? {
         guard let chosen = try? original.target(ref: ref), let old = try? original.match(target: chosen),
-              let new = try? fresh.match(target: chosen), (try? AgentModeTarget(old).validate(new)) != nil,
-              new.enabled != false, new.hidden != true else { return nil }
+              let new = try? fresh.match(target: chosen), sameControl(old, new),
+              (try? AgentModeTarget(old).validate(new)) != nil else { return nil }
         return try? fresh.reference(target: chosen)
     }
 
     /// The refused target on the new table. An unchanged target binds at once. The same control
-    /// at a new position (same type, identifier, label, value, process and, when both reads have
-    /// one, native identity) binds once its frame holds still across two reads about 150 ms apart,
+    /// at a new position binds once its frame holds still across two reads about 150 ms apart,
     /// within four reads. A changed value is a changed state, not a moved control. Anything else
     /// does not bind.
     private func reboundReference(_ ref: String, original: AgentModeSnapshot, stored: inout Record) async -> String? {
@@ -445,6 +456,8 @@ final class AgentModeController {
         return nil
     }
 
+    /// Same type, identifier, label, value and process, the same native object whenever both reads
+    /// report one, and still enabled and shown.
     private static func sameControl(_ old: FBSimulatorAXNode, _ new: FBSimulatorAXNode) -> Bool {
         old.type == new.type && old.identifier == new.identifier && old.label == new.label && old.pid == new.pid
             && old.value == new.value
@@ -579,16 +592,17 @@ final class AgentModeController {
         }
     }
 
-    /// A focus-and-type refused before any input is repeated on a new table when
-    /// its field is unchanged, as the agent would do after reading the screen again.
+    /// A focus-and-type refused before any input returns the current screen. A refusal caused by
+    /// a changing screen is repeated on that new table when its field is unchanged, as the agent
+    /// would do after reading the screen again. This is the only retry loop for both phases.
     private func performFocusAndTypeRetrying(_ request: SelectedHIDRequest, retryDepth: Int = 0) async -> SelectedHIDResponse {
         let original = record.flatMap { $0.id == request.agent?.snapshotID ? $0 : nil }
         let response = await performFocusAndTypeReserved(request, retryDepth: retryDepth)
         guard let original, let error = response.agent?.error, let ref = request.agent?.ref, let mode = request.agent,
-              response.enqueuedEventCount == 0, response.quarantine == nil,
-              ["screenChanged", "targetChanged"].contains(error.code),
+              response.enqueuedEventCount == 0, response.quarantine == nil, response.cleanup != "uncertain",
               var stored = await refreshTable(context: original.context, pid: original.expectedPID) else { return response }
-        guard retryDepth < Self.maximumRetries, let newRef = await reboundReference(ref, original: original.snapshot, stored: &stored) else {
+        guard ["screenChanged", "targetChanged"].contains(error.code), retryDepth < Self.maximumRetries,
+              let newRef = await reboundReference(ref, original: original.snapshot, stored: &stored) else {
             let capture = stored.snapshot.capture(id: stored.id, sequence: stored.sequence, udid: simulatorUDID,
                 request: mode, applicationPID: stored.expectedPID, context: stored.context,
                 unchanged: false, expiresIn: Self.timeToLive)
@@ -1003,7 +1017,7 @@ final class AgentModeController {
                 retried: retryDepth > 0 ? true : nil)
             guard result.error == nil, result.cleanup != "uncertain" else {
                 return failure(request, result.agent?.error
-                    ?? AgentModeFailure("nativeActionFailed", "The native action failed."),
+                    ?? AgentModePublicErrorProjection.nativeFailure(result),
                     native: result, action: action)
             }
             return success(request, native: result, action: action,

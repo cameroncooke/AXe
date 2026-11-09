@@ -194,6 +194,99 @@ struct AgentReferenceTapAdmissionTests {
         #expect(harness.state.ownedTaps == 1)
     }
 
+    @Test("A changed screen whose same-label target is a different native object is not retried")
+    func replacedObjectIsNotRetried() async throws {
+        var controls = Fixture.defaultControls
+        controls[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 1)
+        let harness = try Harness(controls: controls)
+        let (snapshot, ref) = try await harness.describe()
+        // Another alert replaced the first: an equal button at the same frame, but another object.
+        var replaced = controls
+        replaced[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 2)
+        replaced.append(.init(type: "Button", label: "Overlay", frame: .init(y: 300)))
+        harness.state.ownedRoots = try harness.fixture.roots(replaced)
+        harness.state.describeRoots = harness.state.ownedRoots
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
+        #expect(result.didError && result.error?.code == "screenChanged")
+        #expect(result.data.capture != nil && !result.data.cache.requiresRefresh)
+        #expect(harness.state.ownedTaps == 1)
+
+        let batch = try Harness(controls: controls)
+        let (batchSnapshot, batchRef) = try await batch.describe()
+        batch.state.ownedRoots = try batch.fixture.roots(replaced)
+        batch.state.describeRoots = batch.state.ownedRoots
+        let stopped = try #require(await batch.controller.performBatch(
+            try batch.batch(snapshot: batchSnapshot, refs: [batchRef])).agent)
+        #expect(stopped.didError && stopped.error?.code == "batchLayoutChanged")
+        #expect(stopped.data.batch?.completedSteps == 0 && stopped.data.capture != nil)
+        #expect(batch.state.ownedTaps == 1)
+    }
+
+    @Test("A covered target is refused once with the current screen, for a ref and a selector")
+    func coveredTargetIsNotRetried() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        harness.state.tapFailure = .targetRejected
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
+        #expect(result.didError && result.error?.code == "targetCovered")
+        #expect(result.data.action?.outcome == "failedBeforeInput" && result.data.action?.enqueuedEventCount == 0)
+        #expect(result.data.capture != nil && !result.data.cache.requiresRefresh)
+        #expect(harness.state.kinds == [.describe, .tap, .describe] && harness.state.ownedTaps == 1)
+
+        let selector = try Harness()
+        selector.state.tapFailure = .targetRejected
+        let refused = try #require(await selector.controller.perform(selector.tap(label: "5")).agent)
+        #expect(refused.didError && refused.error?.code == "targetCovered" && refused.data.capture != nil)
+        #expect(selector.state.kinds == [.describe, .tap, .describe] && selector.state.ownedTaps == 1)
+    }
+
+    @Test("Native refusals before input have distinct codes, return the screen and are not retried", arguments: [
+        (SelectedAXFailure.ownershipRejected, "busy"), (.acquisitionFailed, "observationFailed"),
+        (.setupFailed, "displayChanged"), (.waitTimedOut, "waitTimedOut"),
+    ])
+    func nativeRefusalsHaveDistinctCodes(_ failure: SelectedAXFailure, code: String) async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        harness.state.tapFailure = failure
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
+        #expect(result.didError && result.error?.code == code)
+        #expect(result.data.capture != nil && harness.state.ownedTaps == 1)
+    }
+
+    @Test("A typed path or frame guard refusal before input returns the current screen")
+    func typedGuardRefusalReturnsCurrentScreen() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        harness.state.tapPolicyFailure = AgentModeFailure("opaqueFrameTapRejected", "Another control is at the point.")
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
+        #expect(result.didError && result.error?.code == "opaqueFrameTapRejected")
+        let capture = try #require(result.data.capture, "The refusal must carry the current screen")
+        #expect(capture.snapshotID != snapshot && !result.data.cache.requiresRefresh)
+        #expect(harness.state.kinds == [.describe, .tap, .describe] && harness.state.ownedTaps == 1)
+    }
+
+    @Test("A focus tap refused before input is retried only by the focus-and-type loop")
+    func refusedFocusTapIsNotRetriedTwice() async throws {
+        var controls = Fixture.defaultControls
+        controls.append(.init(type: "TextField", label: "Field", value: "", frame: .init(y: 200, width: 200),
+            identifier: "field", role: "AXTextField", focused: false))
+        let harness = try Harness(controls: controls)
+        var describe = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+        describe.agent = AgentModeRequest(kind: .describe)
+        let capture = try #require(await harness.controller.perform(describe).agent?.data.capture)
+        let row = try #require(capture.targets.first { $0.contains("|text-field|Field|") })
+        harness.state.tapFailure = .targetRejected
+        var request = describe
+        request.agent = AgentModeRequest(kind: .focusAndType, snapshotID: capture.snapshotID,
+            ref: String(row.prefix { $0 != "|" }), text: "Hi")
+        let result = try #require(await harness.controller.perform(request).agent)
+        #expect(result.didError && result.error?.code == "targetCovered")
+        #expect(result.data.capture != nil)
+        // One focus tap. Its refusal is not retried as a plain tap that would skip the focus plan.
+        #expect(harness.state.ownedTaps == 1)
+    }
+
     @Test("A batch stopped by a step that sent nothing returns the current screen, without resending input")
     func stoppedBatchReturnsCurrentScreen() async throws {
         let harness = try Harness()
@@ -271,6 +364,10 @@ struct AgentReferenceTapAdmissionTests {
             var activePanel: ActivePanelIdentity
             /// Runs after each owned tap that delivered input, to change the screen between steps.
             var afterTap: (() throws -> Void)?
+            /// A native refusal before input that every owned tap returns, without a policy code.
+            var tapFailure: SelectedAXFailure?
+            /// A typed admission refusal before input that every owned tap returns.
+            var tapPolicyFailure: AgentModeFailure?
             init(context: SelectedHIDContext) {
                 describeContext = context
                 activePanel = ActivePanelIdentity(displayID: context.screenID, uniqueID: UUID(uuidString: context.screenUUID)!)
@@ -281,8 +378,8 @@ struct AgentReferenceTapAdmissionTests {
         let owner: SelectedHIDOwner
         let controller: AgentModeController
 
-        init() throws {
-            let fixture = try Fixture()
+        init(controls: [Fixture.Node] = Fixture.defaultControls) throws {
+            let fixture = try Fixture(controls: controls)
             self.fixture = fixture
             let state = State(context: fixture.context)
             state.ownedRoots = try fixture.roots(fixture.controls)
@@ -312,6 +409,15 @@ struct AgentReferenceTapAdmissionTests {
                         cleanup: "notNeeded", error: nil, context: state.describeContext, ax: result)
                 case .tap:
                     state.ownedTaps += 1
+                    if let failure = state.tapFailure {
+                        return Self.failed(request, broker: broker, error: "covered", agent: nil, failure: failure)
+                    }
+                    if let policy = state.tapPolicyFailure {
+                        return Self.failed(request, broker: broker, error: policy.message,
+                            agent: AgentModeResult(error: policy,
+                                cache: AgentModeCacheState(status: "invalidated", reason: policy.code, requiresRefresh: true),
+                                context: fixture.context))
+                    }
                     #expect(request.agentAdmission == nil)
                     do {
                         let supplied = try #require(batchTap)
@@ -369,6 +475,13 @@ struct AgentReferenceTapAdmissionTests {
             return request
         }
 
+        func tap(label: String) -> SelectedHIDRequest {
+            var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+            request.agent = AgentModeRequest(kind: .tap, selectorKind: .label, selectorValue: label)
+            return request
+        }
+
         func tap(snapshot: UUID, ref: String) -> SelectedHIDRequest {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                 screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
@@ -377,9 +490,9 @@ struct AgentReferenceTapAdmissionTests {
         }
 
         private static func failed(_ request: SelectedHIDRequest, broker: UUID, error: String,
-                                   agent: AgentModeResult?) -> SelectedHIDResponse {
+                                   agent: AgentModeResult?, failure: SelectedAXFailure = .setupFailed) -> SelectedHIDResponse {
             var ax = request.ax.map { SelectedAXResult(kind: $0.kind, expectedPID: $0.expectedPID) }
-            ax?.failure = .setupFailed
+            ax?.failure = failure
             var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID,
                 brokerID: broker, outcome: "failedBeforeInput", token: nil, enqueuedEventCount: 0,
                 cleanup: "notNeeded", error: error, context: nil, ax: ax)
@@ -391,13 +504,15 @@ struct AgentReferenceTapAdmissionTests {
     private struct Fixture {
         let context: SelectedHIDContext
         let snapshot: AgentModeSnapshot
-        let controls = [Node(type: "Button", label: "5"),
+        static let defaultControls = [Node(type: "Button", label: "5"),
             Node(type: "StaticText", label: "0", frame: .init(x: 200)),
             Node(type: "Switch", label: "Animations", value: "1", frame: .init(y: 100))]
+        let controls: [Node]
 
-        init() throws {
+        init(controls: [Node] = Self.defaultControls) throws {
             let context = try Self.context()
             self.context = context
+            self.controls = controls
             snapshot = try AgentModeSnapshot(roots: Self.roots(controls), context: context)
         }
 
@@ -441,8 +556,13 @@ struct AgentReferenceTapAdmissionTests {
             var pid: Int32 = 1234
             var enabled = true
             var hidden = false
+            var nativeIdentity: FBSimulatorAXNativeIdentity? = nil
+            var identifier: String? = nil
+            var role: String? = nil
+            var focused: Bool? = nil
             private enum CodingKeys: String, CodingKey {
-                case type, label = "AXLabel", value = "AXValue", frame, children, pid, enabled, hidden
+                case type, label = "AXLabel", value = "AXValue", frame, children, pid, enabled, hidden, nativeIdentity,
+                     identifier = "AXUniqueId", role, focused
             }
         }
     }

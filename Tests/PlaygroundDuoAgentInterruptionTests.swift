@@ -143,7 +143,9 @@ private struct AgentLayoutInterruption {
             } else if action == .batchFold { try requireInterruptedBatch(output, session: session) }
             else {
                 let result = try session.decodeAgent(output)
-                try #require(result.didError && result.error?.code == "nativeActionFailed" && result.data.cache.requiresRefresh)
+                // Interrupted AX input reports inputIncomplete; other interrupted input keeps the generic code.
+                try #require(result.didError && ["inputIncomplete", "nativeActionFailed"].contains(result.error?.code)
+                    && result.data.cache.requiresRefresh)
                 let receipt = try #require(result.data.action)
                 try #require(receipt.kind == action.kind && receipt.outcome == "failedNoReplay" && receipt.enqueuedEventCount > 0 && !receipt.replayed)
                 try #require(receipt.cleanup == "releaseEnqueuedAndDrained" || (action.typing && receipt.cleanup == "notNeeded"))
