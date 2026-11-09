@@ -132,3 +132,13 @@ struct CLIOutputInvocationTests {
         #expect(CLIOutputInvocation(arguments: ["tap", "--agent", "--udid", "U"]).format == .json)
     }
 }
+
+@Suite("Command path of an unparsed command line")
+struct CommandPathSpellingTests {
+    @Test func leadingSubcommandWordsNameThePath() {
+        #expect(Axe.commandPath(spelledBy: ["hinge", "set", "200", "--udid", "U"]) == "hinge set")
+        #expect(Axe.commandPath(spelledBy: ["settings", "status-bar", "bogus"]) == "settings status-bar")
+        #expect(Axe.commandPath(spelledBy: ["tap", "set"]) == "tap")
+        #expect(Axe.commandPath(spelledBy: ["--udid", "U", "tap"]) == nil)
+    }
+}

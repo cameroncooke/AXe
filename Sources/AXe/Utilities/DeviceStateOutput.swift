@@ -272,7 +272,9 @@ enum DeviceStateFailure {
 
     static func rotation(_ response: SelectedHIDResponse) -> CLIOutputFailure {
         guard let rotation = response.rotation?.failure else { return generic(response) }
-        let detail = CLIErrorMapping.readable(rotation.detail).map { " " + $0 } ?? ""
+        let detail = CLIErrorMapping.readable(rotation.detail).map { " " + $0 }
+            // A rigid profile reports its hinge capability as unsupported.
+            ?? (rotation.detail.contains(".unsupported") ? " rotate works on the iPhone Duo and physical devices." : "")
         let failure = CLIOutputFailure(code: "rotationFailed", message: "The rotation did not complete.\(detail)")
         return rotation.delivery == .uncertain ? uncertain(failure, response: response) : failure
     }

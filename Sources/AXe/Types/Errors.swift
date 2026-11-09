@@ -161,11 +161,12 @@ enum CLIErrorMapping {
     static let interrupted = CLIOutputFailure(code: "interrupted", message: "The command was interrupted.")
     static let someInputSent = "Some input may have been sent; it was not repeated. Read the screen before trying again."
 
-    /// Readable text from a broker or framework detail, or nil when it is a Swift value dump such
-    /// as `busy` or `interrupted(reason: …)`. Dumps stay in the `--verbose` receipt.
+    /// Readable text from a broker or framework detail, or nil when it is a Swift or Objective-C
+    /// value dump such as `busy`, `interrupted(reason: …)`, `FBSimulatorHingeFailure(…)` or
+    /// `Error Domain=…`. Dumps stay in the `--verbose` receipt.
     static func readable(_ detail: String?) -> String? {
         guard let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines), !detail.isEmpty else { return nil }
-        let dump = #"^[a-z][A-Za-z0-9]*(\(.*\))?$"#
+        let dump = #"^[a-z][A-Za-z0-9]*(\(.*\))?$|^[A-Z][A-Za-z0-9.]*\(.*\)$|^Error Domain=|FBSimulatorControl\.|FBControlCore\."#
         guard detail.range(of: dump, options: .regularExpression) == nil else { return nil }
         return sentence(detail)
     }

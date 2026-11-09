@@ -74,7 +74,9 @@ struct Axe: AsyncParsableCommand {
             return
         }
 
-        let output = CLIOutputContext(format: format, command: invocation.command, agent: invocation.agent)
+        // A command line that fails to parse still names the subcommands it spells out.
+        let output = CLIOutputContext(format: format, command: commandPath(spelledBy: invocation.arguments)
+            ?? invocation.command, agent: invocation.agent)
         let completion = await CLIOutput.$context.withValue(output) {
             var parsed = false
             do {
@@ -145,6 +147,19 @@ struct Axe: AsyncParsableCommand {
         } else {
             try command.run()
         }
+    }
+
+    /// The leading command words that name known subcommands, for example `hinge set` in
+    /// `hinge set 200 --udid …`; nil when the first word is not a command.
+    static func commandPath(spelledBy arguments: [String]) -> String? {
+        var parent: ParsableCommand.Type = Axe.self
+        var path: [String] = []
+        for word in arguments {
+            guard let child = parent.configuration.subcommands.first(where: { $0._commandName == word }) else { break }
+            path.append(word)
+            parent = child
+        }
+        return path.isEmpty ? nil : path.joined(separator: " ")
     }
 
     /// The full command path without the root, for example `hinge set` or `settings status-bar show`.

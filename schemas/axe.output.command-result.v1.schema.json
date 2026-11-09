@@ -9,7 +9,7 @@
     "schema": { "const": "axe.output.command-result" },
     "schemaVersion": { "const": "1" },
     "command": {
-      "description": "The full command path without axe, for example tap, hinge set or settings status-bar show. A command line that does not parse reports its first word.",
+      "description": "The full command path without axe, for example tap, hinge set or settings status-bar show. A command line that does not parse reports the command words it spells out, or its first word.",
       "type": "string"
     },
     "didError": { "type": "boolean" },
