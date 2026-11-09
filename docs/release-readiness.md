@@ -51,15 +51,29 @@ The third and fourth are one owner with two admission styles and can be merged.
 
 ## Phase 2: bug fixes
 
-- [ ] Device support bugs
-- [~] Simulator input and broker bugs
-- [ ] Agent mode bugs
+- [~] Device support bugs (separate worktree, branch `audit/device-fixes`)
+- [x] Simulator input and broker bugs
+- [~] Agent mode bugs (separate worktree, branch `audit/agent-fixes`)
+
+Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
+
+- `swift test --skip Playground` passed 889 tests. Two timing tests failed in full runs while the machine load average was about 145 and passed when rerun alone.
+- New unit tests: a held contact gets its touch-up before the raw broker exits on idle, and a request is validated before its first touch-down (`HIDBrokerTests`); selected input, hinge and rotate return the same codes with and without `--verbose` (`VerboseOutputContractTests`).
+- Shut-down iPhone 18 Pro simulator: `tap`, `swipe` and `type` print "iPhone 18 Pro is not booted" and exit 1; JSON code `notBooted`. Before, they said no simulator was found.
+- Booted iPhone 18 Pro: three coordinate taps took 0.60, 0.21 and 0.20 s; swipe, `gesture scroll-down`, `key 40` and `button home` exited 0.
+- Duo batch with a `swipe-from-bottom-edge` preset completed on the closed outer screen (466×678) and the inner screen (951×669). The old fixed 390×844 start point (y=824) is off both screens.
+- `hinge read` on the iPhone gives `noHinge` and exit 1 with and without `--verbose`. A selected tap on a missing ID gives `targetRejected` both ways.
+- Playground groups on the iPhone simulator: `PlaygroundOrdinaryRegressionTests` 5 of 5 and `PlaygroundInputHandoverTests` 3 of 3.
+- Net change: 617 lines added, 1,010 removed.
+
+Not done, with reasons: the audit's claim that the second DTUHID readiness wait is a no-op was wrong
+(the first wait is skipped when `dtuhidd` is not yet a child process), so it is kept.
 
 ## Phase 3: remove dead and stale code
 
-- [~] Unused Swift symbols
+- [x] Unused Swift symbols in the input stack (`CoordinateHelpers.swift`, dead wrappers; commit `8d1c5a0f8`)
 - [ ] Stale or duplicate tests
-- [~] Orphan scripts, stale goldens and unused fixtures
+- [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
 - [ ] Unused IDBKit command families
 - [ ] Stale documentation
 
@@ -71,7 +85,7 @@ The third and fourth are one owner with two admission styles and can be merged.
 
 ## Phase 5: output contracts
 
-- [ ] Default output holds only what a person or agent needs; internals only with `--verbose`
+- [~] Default output holds only what a person or agent needs; internals only with `--verbose`
 - [ ] JSON results match the published schemas
 - [ ] Schemas for per-command results
 
@@ -87,7 +101,7 @@ Transparency, VoiceOver, location and status bar overrides.
 - [x] Verified on a simulator
 - [x] Verified on the iPhone and iPad, with the original settings restored
 - [x] README, skill and CHANGELOG
-- [~] Follow-up: a standard text size turns Larger Accessibility Sizes off again
+- [x] Follow-up: a standard text size turns Larger Accessibility Sizes off again (commit `01ac672d3`; `devicectl info appearance` showed the flag true after an accessibility size and false after `large`)
 
 Verification (commit `198a1e702`):
 
@@ -167,3 +181,12 @@ None yet.
 | `6ab92d88d` | Add this log |
 | `2c7044ad1` | Playground: Drawing and Zoom screens |
 | `198a1e702` | `axe settings` command |
+| `eecb92b82` | Remove orphan scripts, stale goldens and unused fixtures |
+| `3d938025a` | Release a held contact before the raw broker exits; validate before input |
+| `6a7361854` | Same exit status and codes with `--verbose` |
+| `19ffbeddf` | Duo batch gesture presets use the measured screen |
+| `3979992b8` | A shut-down simulator reports `notBooted`; shared booted-simulator lookup |
+| `2f991f496` | Correct tap, batch and `--expected-pid` help |
+| `7ad37746a` | Build each command's events once; share signal scoping (wire version 85) |
+| `8d1c5a0f8` | Remove unused coordinate helpers and dead wrappers |
+| `01ac672d3` | Text size alone decides Larger Accessibility Sizes |
