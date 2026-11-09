@@ -25,6 +25,12 @@ struct HIDBrokerPrimitive: Codable, Equatable {
     }
 }
 
+/// The DOWN point of a contact the raw broker holds across CLI calls.
+struct HIDBrokerRetainedContact: Equatable {
+    let x: Double
+    let y: Double
+}
+
 private struct HIDBrokerRequest: Codable {
     let primitives: [HIDBrokerPrimitive]
     let keyboard: HIDBrokerKeyboardRequest?
@@ -111,7 +117,7 @@ enum HIDBroker {
 
         let bootIdentity = try currentBootIdentity(simulatorUDID: simulatorUDID)
         var session: HIDInteractor.Session? = nil
-        var hasRetainedContact = false
+        var retainedContact: HIDBrokerRetainedContact? = nil
         // One admitted task runs at a time. Retained touch state is separate so MOVE/UP remains valid.
         var active: Task<Void, Never>?
         let admission = HIDBrokerRequestAdmission()
@@ -180,16 +186,43 @@ enum HIDBroker {
                     do {
                         try await offMain { try writeHandshake(ready: true, version: protocolVersion, to: client) }
                         let keepServing = await handle(client: client, simulatorUDID: simulatorUDID,
-                            session: &session, hasRetainedContact: &hasRetainedContact, logger: logger)
+                            session: &session, retainedContact: &retainedContact, logger: logger)
                         if !keepServing { shouldStop = true }
                     } catch { logger.error().log("Raw broker handshake failed before input: \(error.localizedDescription)") }
                 }
             }
         } catch {
             if let active { await active.value }
+            await releaseRetainedContact(&retainedContact, session: session, logger: logger)
             throw error
         }
         if let active { await active.value }
+        // An idle or retiring broker must not leave a DOWN held after it exits.
+        await releaseRetainedContact(&retainedContact, session: session, logger: logger)
+    }
+
+    @MainActor
+    private static func releaseRetainedContact(
+        _ contact: inout HIDBrokerRetainedContact?,
+        session: HIDInteractor.Session?,
+        logger: AxeLogger
+    ) async {
+        guard let session else { return }
+        await releaseRetainedContact(&contact, logger: logger) { event in
+            try await HIDInteractor.performHIDEvent(event, in: session, logger: logger)
+        }
+    }
+
+    /// Sends one UP at the held DOWN point. A failed release is logged and never repeated.
+    static func releaseRetainedContact(
+        _ contact: inout HIDBrokerRetainedContact?,
+        logger: AxeLogger,
+        send: (FBSimulatorHIDEvent) async throws -> Void
+    ) async {
+        guard let point = contact else { return }
+        contact = nil
+        do { try await send(.touch(direction: .up, x: point.x, y: point.y)) }
+        catch { logger.error().log("Raw broker could not release its held contact: \(error.localizedDescription)") }
     }
 
     @MainActor
@@ -197,7 +230,7 @@ enum HIDBroker {
         client: Int32,
         simulatorUDID: String,
         session: inout HIDInteractor.Session?,
-        hasRetainedContact: inout Bool,
+        retainedContact: inout HIDBrokerRetainedContact?,
         logger: AxeLogger
     ) async -> Bool {
         var peerUID: uid_t = 0
@@ -227,12 +260,12 @@ enum HIDBroker {
                 }
             } else {
                 try await perform(request.primitives, simulatorUDID: simulatorUDID,
-                    session: &session, hasRetainedContact: &hasRetainedContact,
+                    session: &session, retainedContact: &retainedContact,
                     shouldContinue: &shouldContinue, logger: logger)
             }
             // A completed UP releases common input ownership before the client receives success.
             // A failed request keeps the prior ownership policy; it is never declared clear here.
-            if !hasRetainedContact { session = nil }
+            if retainedContact == nil { session = nil }
             try await offMain { try writeResponse(error: nil, to: client) }
         } catch {
             logger.error().log("HID broker request failed: \(error.localizedDescription)")
@@ -248,10 +281,11 @@ enum HIDBroker {
         _ primitives: [HIDBrokerPrimitive],
         simulatorUDID: String,
         session: inout HIDInteractor.Session?,
-        hasRetainedContact: inout Bool,
+        retainedContact: inout HIDBrokerRetainedContact?,
         shouldContinue: inout Bool,
         logger: AxeLogger
     ) async throws {
+        try validate(primitives)
         let activeSession: HIDInteractor.Session
         if let session {
             activeSession = session
@@ -259,6 +293,43 @@ enum HIDBroker {
             activeSession = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
             session = activeSession
         }
+        do {
+            try await send(primitives, retainedContact: &retainedContact) { event in
+                try await HIDInteractor.performHIDEvent(event, in: activeSession, logger: logger)
+            }
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            shouldContinue = false
+            throw error
+        }
+    }
+
+    /// The broker is the trust boundary: refuse the whole request before its first event.
+    static func validate(_ primitives: [HIDBrokerPrimitive]) throws {
+        guard primitives.count <= 1024 else {
+            throw CLIError(errorDescription: "HID broker request has too many touch primitives.")
+        }
+        for primitive in primitives {
+            switch primitive.kind {
+            case .down, .up:
+                guard let x = primitive.x, let y = primitive.y, x.isFinite, y.isFinite else {
+                    throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
+                }
+            case .delay:
+                guard let duration = primitive.duration, duration >= 0, duration <= 10 else {
+                    throw CLIError(errorDescription: "HID broker delay is invalid.")
+                }
+            }
+        }
+    }
+
+    /// Sends validated primitives in order and records the DOWN point while a contact is held.
+    static func send(
+        _ primitives: [HIDBrokerPrimitive],
+        retainedContact: inout HIDBrokerRetainedContact?,
+        event send: (FBSimulatorHIDEvent) async throws -> Void
+    ) async throws {
         for primitive in primitives {
             switch primitive.kind {
             case .down, .up:
@@ -266,22 +337,10 @@ enum HIDBroker {
                     throw CLIError(errorDescription: "Touch primitive is missing coordinates.")
                 }
                 let direction: FBSimulatorHIDDirection = primitive.kind == .down ? .down : .up
-                do {
-                    try await HIDInteractor.performHIDEvent(
-                        .touch(direction: direction, x: x, y: y),
-                        in: activeSession,
-                        logger: logger
-                    )
-                    hasRetainedContact = primitive.kind == .down
-                } catch {
-                    shouldContinue = false
-                    throw error
-                }
+                try await send(.touch(direction: direction, x: x, y: y))
+                retainedContact = primitive.kind == .down ? HIDBrokerRetainedContact(x: x, y: y) : nil
             case .delay:
-                guard let duration = primitive.duration, duration >= 0, duration <= 10 else {
-                    throw CLIError(errorDescription: "HID broker delay is invalid.")
-                }
-                try await Task.sleep(for: .seconds(duration))
+                try await Task.sleep(for: .seconds(primitive.duration ?? 0))
             }
         }
     }

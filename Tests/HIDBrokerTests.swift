@@ -1,6 +1,7 @@
 import Darwin
 import Dispatch
 import Foundation
+import FBSimulatorControl
 import Testing
 @testable import AXe
 
@@ -413,5 +414,48 @@ struct HIDBrokerTests {
             Issue.record("An unread response should time out")
         } catch {}
         #expect(Date().timeIntervalSince(start) < 1)
+    }
+}
+
+@Suite("Raw broker contact lifetime")
+@MainActor
+struct HIDBrokerContactLifetimeTests {
+    @Test("An invalid delay refuses the request before its DOWN is sent")
+    func invalidDelayRejectsBeforeDown() {
+        let request: [HIDBrokerPrimitive] = [.touch(.down, x: 10, y: 20), .delay(11), .touch(.up, x: 10, y: 20)]
+        #expect(throws: CLIError.self) { try HIDBroker.validate(request) }
+        let missing = HIDBrokerPrimitive(kind: .up, x: nil, y: 4, duration: nil)
+        #expect(throws: CLIError.self) { try HIDBroker.validate([.touch(.down, x: 1, y: 2), missing]) }
+        #expect(throws: CLIError.self) { try HIDBroker.validate([.touch(.down, x: .nan, y: 2)]) }
+        #expect(throws: CLIError.self) {
+            try HIDBroker.validate(Array(repeating: .delay(0), count: 1025))
+        }
+        #expect(throws: Never.self) { try HIDBroker.validate(Array(request.prefix(1)) + [.delay(10)]) }
+    }
+
+    @Test("A broker that exits while a contact is held sends its UP first")
+    func idleExitReleasesRetainedContact() async throws {
+        var sent: [FBSimulatorHIDEvent] = []
+        var contact: HIDBrokerRetainedContact?
+        try await HIDBroker.send([.touch(.down, x: 10, y: 20)], retainedContact: &contact) { sent.append($0) }
+        #expect(contact == HIDBrokerRetainedContact(x: 10, y: 20))
+
+        await HIDBroker.releaseRetainedContact(&contact, logger: AxeLogger()) { sent.append($0) }
+        #expect(contact == nil)
+        #expect(sent == [.touch(direction: .down, x: 10, y: 20), .touch(direction: .up, x: 10, y: 20)])
+
+        await HIDBroker.releaseRetainedContact(&contact, logger: AxeLogger()) { sent.append($0) }
+        #expect(sent.count == 2)
+    }
+
+    @Test("A completed contact leaves nothing to release")
+    func completedContactIsNotRetained() async throws {
+        var sent: [FBSimulatorHIDEvent] = []
+        var contact: HIDBrokerRetainedContact?
+        try await HIDBroker.send([.touch(.down, x: 1, y: 2), .delay(0), .touch(.up, x: 3, y: 4)],
+            retainedContact: &contact) { sent.append($0) }
+        #expect(contact == nil)
+        await HIDBroker.releaseRetainedContact(&contact, logger: AxeLogger()) { sent.append($0) }
+        #expect(sent.count == 2)
     }
 }
