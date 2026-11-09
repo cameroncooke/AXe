@@ -78,9 +78,16 @@ struct Doctor: AsyncParsableCommand {
             CLIOutput.message("\(report.name ?? report.target) (\(report.udid)): \(report.ready ? "ready" : "not ready")")
             for check in report.checks {
                 let message = check.message.map { " — " + $0 } ?? ""
-                CLIOutput.message("  \(check.id): \(check.status.rawValue)\(message)")
+                CLIOutput.message("  \(Self.labels[check.id] ?? check.id): \(check.status.rawValue)\(message)")
             }
         }
         guard report.ready else { throw report.failure }
     }
+
+    /// Text labels for the check IDs, which name the failure and double as JSON error codes.
+    private static let labels = [
+        "simulatorNotBooted": "Booted", "notPaired": "Paired", "developerModeDisabled": "Developer Mode",
+        "deviceNotConnected": "Connected", "developerDiskImageUnavailable": "Disk image",
+        "deviceLocked": "Unlocked", "screenshotServiceUnavailable": "Screenshot service",
+    ]
 }
