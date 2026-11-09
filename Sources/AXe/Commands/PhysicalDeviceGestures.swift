@@ -16,25 +16,35 @@ enum PhysicalDeviceGestures {
         try request.validate()
         try await wait(request.preDelay)
         let display = try await input.display()
+        // The client sleeps both outer delays, as `perform(_:preDelay:postDelay:on:)` does: a post-delay
+        // inside the broker operation would make an interrupt after the lift report an unknown outcome.
         var path = request
         path.preDelay = 0
+        path.postDelay = 0
         let primitives = try path.primitives(logicalSize: CGSize(width: display.width, height: display.height))
+        try await input.perform(touchSteps(primitives, edge: edge), on: display)
+        try await wait(request.postDelay)
+    }
+
+    /// Converts path primitives to contact phases. Each phase waits for every delay before the next phase:
+    /// a drag holds after its down and then waits one movement interval before the first move. Delays before
+    /// the first phase belong to the caller.
+    static func touchSteps(_ primitives: [SelectedHIDPrimitive], edge: PhysicalTouchEdge) -> [PhysicalTouchStep] {
         var isDown = false
         var steps: [PhysicalTouchStep] = []
-        for (index, primitive) in primitives.enumerated() {
-            guard primitive.kind != .delay else { continue }
-            let next = index + 1
-            let delay = next < primitives.count ? primitives[next].duration ?? 0 : 0
-            if primitive.kind == .up {
-                steps.append(PhysicalTouchStep(points: [primitive.point], phase: .up, edge: edge, delayAfter: delay))
+        for primitive in primitives {
+            switch primitive.kind {
+            case .delay:
+                if !steps.isEmpty { steps[steps.count - 1].delayAfter += primitive.duration ?? 0 }
+            case .up:
+                steps.append(PhysicalTouchStep(points: [primitive.point], phase: .up, edge: edge))
                 isDown = false
-            } else {
-                steps.append(PhysicalTouchStep(points: [primitive.point], phase: isDown ? .move : .down,
-                                               edge: edge, delayAfter: delay))
+            case .down:
+                steps.append(PhysicalTouchStep(points: [primitive.point], phase: isDown ? .move : .down, edge: edge))
                 isDown = true
             }
         }
-        try await input.perform(steps, on: display)
+        return steps
     }
 
     static func pinch(_ request: SelectedHIDPinch, on input: PhysicalDeviceInput) async throws {

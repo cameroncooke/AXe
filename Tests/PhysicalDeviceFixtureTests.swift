@@ -429,6 +429,49 @@ struct PhysicalDeviceDisplayTests {
     }
 }
 
+// MARK: - Gesture timing
+
+@Suite("Physical path timing")
+struct PhysicalPathTimingTests {
+    private static func steps(_ path: SelectedHIDPath) throws -> [PhysicalTouchStep] {
+        PhysicalDeviceGestures.touchSteps(try path.primitives(logicalSize: CGSize(width: 440, height: 956)), edge: .none)
+    }
+
+    private static func drag(steps: Int, duration: Double) -> SelectedHIDPath {
+        SelectedHIDPath(kind: .drag, startX: 100, startY: 200, endX: 300, endY: 600, duration: duration, steps: steps)
+    }
+
+    @Test("A drag keeps its whole duration, including the interval before the first move",
+          arguments: [1, 4, 60])
+    func dragDuration(steps: Int) throws {
+        let plan = try Self.steps(Self.drag(steps: steps, duration: 2))
+        #expect(plan.map(\.phase) == [.down] + Array(repeating: .move, count: steps) + [.up])
+        // 0.05 s hold after the down, the full duration across the moves, 0.05 s before the lift.
+        #expect(abs(plan.reduce(0) { $0 + $1.delayAfter } - 2.1) < 1e-9)
+        #expect(abs(plan[0].delayAfter - (0.05 + 2 / Double(steps))) < 1e-9)
+        #expect(plan.last?.delayAfter == 0)
+    }
+
+    @Test("A swipe spreads its duration over the moves")
+    func swipeDuration() throws {
+        let swipe = SelectedHIDPath(kind: .swipe, startX: 100, startY: 800, endX: 100, endY: 200,
+                                    duration: 0.5, delta: 100)
+        let plan = try Self.steps(swipe)
+        #expect(plan.count == 8)
+        #expect(abs(plan.reduce(0) { $0 + $1.delayAfter } - 0.5) < 1e-9)
+    }
+
+    @Test("Delays after the lift are left to the caller")
+    func trailingDelay() throws {
+        var path = Self.drag(steps: 2, duration: 1)
+        path.postDelay = 3
+        let plan = try Self.steps(path)
+        #expect(plan.last?.phase == .up)
+        // The primitives' post-delay follows the lift; `path(_:edge:on:)` removes it and sleeps in the client.
+        #expect(plan.last?.delayAfter == 3)
+    }
+}
+
 // MARK: - Lock recheck
 
 @Suite("Physical lock recheck")
