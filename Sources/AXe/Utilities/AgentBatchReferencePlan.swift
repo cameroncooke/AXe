@@ -9,14 +9,6 @@ struct AgentBatchReferencePlan: Sendable {
     struct ResolvedTarget: Sendable {
         let node: FBSimulatorAXNode
         let nativeTarget: SelectedNativeTarget
-        var selectorKind: SelectedAXRequest.SelectorKind? {
-            guard case let .semantic(kind, _, _) = nativeTarget else { return nil }
-            return kind
-        }
-        var selectorValue: String? {
-            guard case let .semantic(_, value, _) = nativeTarget else { return nil }
-            return value
-        }
     }
 
     private struct Target: Sendable {
@@ -116,8 +108,7 @@ struct AgentBatchReferencePlan: Sendable {
             throw AgentModeFailure("targetChanged", "A later batch target was replaced by another control, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
         }
         guard node.enabled != false, node.hidden != true, let frame = node.frame,
-              [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-              frame.width > 0, frame.height > 0, display.contains(frame) else {
+              frame.isUsableAgentFrame, display.contains(frame) else {
             throw AgentModeFailure("batchLayoutChanged", "A batch target is unavailable or outside the display. Later steps were stopped.")
         }
         let ref = try snapshot.reference(target: target.nativeTarget)

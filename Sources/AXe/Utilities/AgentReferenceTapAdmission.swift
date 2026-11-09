@@ -13,14 +13,6 @@ protocol AgentOwnedTapAdmission: Sendable {
                                nativeTarget: FBSimulatorAXNode) throws -> AgentModeAdmission
 }
 
-extension AgentOwnedTapAdmission {
-    func validateOwnedSnapshot(roots: [FBSimulatorAXNode], context: SelectedHIDContext, pid: Int32,
-                               nativeTarget: FBSimulatorAXNode) throws -> AgentModeAdmission {
-        try validateOwnedSnapshot(roots: roots, nativeIdentityMetadata: nil, context: context, pid: pid,
-            nativeTarget: nativeTarget)
-    }
-}
-
 /// One `tap --agent --snapshot-id --ref`. The owned tree must have the published table's
 /// exact native fingerprint, the same as the former pre-description had to; the target
 /// and its execution authority are resolved on that owned tree before input.
@@ -62,7 +54,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
 
     func request(requestID: UUID) throws -> SelectedHIDRequest {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+            throw AgentModeFailure.missingContext
         }
         let ax = SelectedAXRequest(kind: .tap, expectedPID: expectedPID, endpoint: nil,
             selectorKind: nil, selectorValue: nil, preDelay: preDelay, postDelay: postDelay,
@@ -86,7 +78,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         try validateContext(context, pid: pid)
         let fresh = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: nativeIdentityMetadata, context: context)
         guard fresh.visibleFingerprint == published.visibleFingerprint else {
-            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
+            throw AgentModeFailure.screenChanged
         }
         try published.validateProtectedReference(ref, in: fresh)
         let current = try fresh.match(target: reference)
@@ -99,7 +91,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         let target = try AgentModeTarget(current, nativeTarget: execution)
         try target.validate(nativeTarget)
         var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: fresh.hash,
-            nativeFingerprint: fresh.nativeFingerprint, visibleFingerprint: fresh.visibleFingerprint,
+            visibleFingerprint: fresh.visibleFingerprint,
             target: target, nativeTarget: execution)
         if case let .semantic(kind, value, _) = execution {
             admission.selectorKind = kind

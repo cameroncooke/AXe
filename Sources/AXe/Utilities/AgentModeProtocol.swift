@@ -308,6 +308,10 @@ struct AgentModeFailure: Error, Codable, Sendable, LocalizedError {
     var errorDescription: String? { message }
     /// The next step after a refusal before input. Refusal replies usually carry the current screen.
     static let actFromCapture = "Act again from the capture in this reply, or run describe-ui --agent if it has none."
+    /// The simulator display could not be read before input.
+    static let missingContext = AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+    /// The visible screen no longer matches the snapshot's table.
+    static let screenChanged = AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
     /// The next step after a batch stops early: what stands, and how to plan the rest.
     static let batchRest = "Completed steps are in the receipt and were not undone. Plan the rest from the capture in this reply; do not resend the batch."
 }
@@ -449,8 +453,7 @@ struct AgentModeAdmission: Codable, Sendable {
     let context: SelectedHIDContext
     let expectedPID: Int32
     let screenHash: String
-    let nativeFingerprint: String
-    /// The admission comparison; `nativeFingerprint` identifies the exact native read.
+    /// The admission comparison.
     let visibleFingerprint: String
     let target: AgentModeTarget?
     var selectorKind: SelectedAXRequest.SelectorKind? = nil
@@ -471,7 +474,7 @@ struct AgentModeAdmission: Codable, Sendable {
 
     func validateScreen(_ snapshot: AgentModeSnapshot) throws {
         guard snapshot.visibleFingerprint == visibleFingerprint else {
-            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
+            throw AgentModeFailure.screenChanged
         }
         if let nativeTarget, nativeTarget.nativeIdentity != nil {
             let node = try snapshot.match(target: nativeTarget)

@@ -61,8 +61,4 @@ public extension AgentJSONValue {
     static func optionalString(_ value: String?) -> AgentJSONValue {
         value.map(AgentJSONValue.string) ?? .null
     }
-
-    static func optionalNumber(_ value: Double?) -> AgentJSONValue {
-        value.map(AgentJSONValue.number) ?? .null
-    }
 }

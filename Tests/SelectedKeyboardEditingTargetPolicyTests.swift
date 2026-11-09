@@ -117,7 +117,7 @@ struct SelectedKeyboardEditingTargetPolicyTests {
         let initial = try observation()
         let target = try AgentModeTarget(Field().node())
         let admission = AgentModeAdmission(context: SelectedHIDContext(initial), expectedPID: 2934,
-            screenHash: "test", nativeFingerprint: "test", visibleFingerprint: "test", target: target)
+            screenHash: "test", visibleFingerprint: "test", target: target)
         try admission.validateContext(initial)
         for changed in [try observation(boot: "changed"), try observation(screen: 2),
                         try observation(rotation: .rot90), try observation(pose: "folded")] {

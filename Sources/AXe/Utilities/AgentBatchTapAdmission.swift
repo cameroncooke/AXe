@@ -19,7 +19,7 @@ struct AgentBatchTapAdmission: AgentOwnedTapAdmission {
         try plan.validateContext(context, pid: pid)
     }
 
-    func validateOwnedSnapshot(roots: [FBSimulatorAXNode], nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata? = nil,
+    func validateOwnedSnapshot(roots: [FBSimulatorAXNode], nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata?,
                                context: SelectedHIDContext,
                                pid: Int32, nativeTarget: FBSimulatorAXNode) throws -> AgentModeAdmission {
         let snapshot = try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: nativeIdentityMetadata, context: context)
@@ -29,7 +29,7 @@ struct AgentBatchTapAdmission: AgentOwnedTapAdmission {
         // The target value is bound to this owned snapshot for the later native hit check.
         // No comparison of a snapshot fingerprint with itself is used as an input guard.
         return AgentModeAdmission(context: context, expectedPID: pid, screenHash: snapshot.hash,
-            nativeFingerprint: snapshot.nativeFingerprint, visibleFingerprint: snapshot.visibleFingerprint,
+            visibleFingerprint: snapshot.visibleFingerprint,
             target: target, nativeTarget: resolved.nativeTarget)
     }
 }

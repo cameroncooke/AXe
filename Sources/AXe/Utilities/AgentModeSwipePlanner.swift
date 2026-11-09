@@ -21,7 +21,7 @@ enum AgentModeSwipePlanner {
         guard logicalSize.width.isFinite, logicalSize.height.isFinite,
               logicalSize.width > 0, logicalSize.height > 0,
               let targetPID = target.pid, targetPID > 0,
-              let frame = target.frame, validFrame(frame), distance.isFinite,
+              let frame = target.frame, frame.isUsableAgentFrame, distance.isFinite,
               distance > 0, distance <= 1 else {
             throw AgentModeFailure("invalidSwipeGeometry", "The current swipe area, display or distance is invalid.")
         }
@@ -45,7 +45,7 @@ enum AgentModeSwipePlanner {
                 excludedKeyboard = keyboard.frame
             }
         }
-        guard validFrame(visible), visible.width >= 2, visible.height >= 2 else {
+        guard visible.isUsableAgentFrame, visible.width >= 2, visible.height >= 2 else {
             throw AgentModeFailure("invalidSwipeGeometry", "The selected scroll area has no usable visible region.")
         }
         let area = RuntimeSnapshotElement(ref: "", role: role,
@@ -65,12 +65,11 @@ enum AgentModeSwipePlanner {
                        nativeTarget: SelectedNativeTarget? = nil, planningBounds: CGRect? = nil) throws -> Points {
         guard logicalSize.width.isFinite, logicalSize.height.isFinite,
               logicalSize.width > 0, logicalSize.height > 0,
-              let area = target.frame, validFrame(area),
+              let area = target.frame, area.isUsableAgentFrame,
               [standard.from.x, standard.from.y, standard.to.x, standard.to.y].allSatisfy(\.isFinite),
               standard.from != standard.to else {
             throw AgentModeFailure("invalidSwipeGeometry", "The current swipe area, display or stroke is invalid.")
         }
-        guard snapshot.nodes.count == snapshot.elements.count else { return standard }
         let useNativeIdentity = nativeTarget?.nativeIdentity != nil
         let targetIndex: Int
         if useNativeIdentity {
@@ -80,7 +79,9 @@ enum AgentModeSwipePlanner {
             targetIndex = try AgentModePathIdentityPolicy.uniqueIndex(matching: target, in: snapshot,
                 usingNativeIdentity: true)
         } else {
-            let matches = snapshot.nodes.indices.filter { sameSignature(snapshot.nodes[$0], target) }
+            let matches = snapshot.nodes.indices.filter {
+                AgentModePathIdentityPolicy.sameSignature(snapshot.nodes[$0], target, usingNativeIdentity: false)
+            }
             guard matches.count == 1, let index = matches.first else { return standard }
             targetIndex = index
         }
@@ -88,7 +89,7 @@ enum AgentModeSwipePlanner {
         let indexByPath = Dictionary(uniqueKeysWithValues: snapshot.elements.enumerated().map { ($0.element.path, $0.offset) })
         let display = CGRect(origin: .zero, size: logicalSize)
         if let planningBounds {
-            guard validFrame(planningBounds), area.contains(planningBounds), display.contains(planningBounds) else {
+            guard planningBounds.isUsableAgentFrame, area.contains(planningBounds), display.contains(planningBounds) else {
                 throw AgentModeFailure("invalidSwipeGeometry", "The planned swipe bounds are outside the current target or display.")
             }
         }
@@ -102,7 +103,7 @@ enum AgentModeSwipePlanner {
                   node.pid == target.pid, node.enabled == true, node.hidden == false,
                   element.role == .text, element.state.enabled, element.state.visible,
                   element.path.hasPrefix(targetPath + "."),
-                  let frame = node.frame, validFrame(frame),
+                  let frame = node.frame, frame.isUsableAgentFrame,
                   hasSafeAncestors(of: element.path, targetPath: targetPath,
                       indexByPath: indexByPath, snapshot: snapshot),
                   (try? AgentModePathIdentityPolicy.uniqueIndex(matching: node, in: snapshot,
@@ -184,15 +185,5 @@ enum AgentModeSwipePlanner {
             let point = CGPoint(x: $0.x, y: $0.y)
             return area.contains(point) && display.contains(point)
         }
-    }
-
-    private static func validFrame(_ frame: CGRect) -> Bool {
-        [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite)
-            && frame.size.width > 0 && frame.size.height > 0
-    }
-
-    private static func sameSignature(_ left: FBSimulatorAXNode, _ right: FBSimulatorAXNode) -> Bool {
-        left.pid == right.pid && left.type == right.type && left.identifier == right.identifier
-            && left.label == right.label && left.value == right.value && left.frame == right.frame
     }
 }

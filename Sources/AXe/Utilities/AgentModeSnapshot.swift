@@ -33,7 +33,7 @@ struct AgentModeSnapshot: Sendable {
          context: SelectedHIDContext) throws {
         guard context.logicalWidth.isFinite, context.logicalHeight.isFinite,
               context.logicalWidth > 0, context.logicalHeight > 0 else {
-            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+            throw AgentModeFailure.missingContext
         }
         var nodes: [FBSimulatorAXNode] = []
         var inheritedHidden: [Bool] = []
@@ -116,8 +116,7 @@ struct AgentModeSnapshot: Sendable {
                       occurrences.allSatisfy({ baseElements[$0].actions.contains(.tap) }),
                       nodes[index].focused != nil, nodes[index].role?.isEmpty == false,
                       let frame = nodes[index].frame,
-                      [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite),
-                      frame.size.width > 0, frame.size.height > 0,
+                      frame.isUsableAgentFrame,
                       CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(frame),
                       (try? aliasIndex.resolve(identity: identity, elementType: type, expectedPID: nativePID)) != nil
                 else { continue }
@@ -134,8 +133,7 @@ struct AgentModeSnapshot: Sendable {
                Self.isOpaqueInputCandidate(node, element: baseElements[index]), let identity = node.nativeIdentity,
                identity.pid == nativePID, identity.pid == node.pid,
                node.enabled == true, node.hidden == false,
-               let frame = node.frame, [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-               frame.width > 0, frame.height > 0,
+               let frame = node.frame, frame.isUsableAgentFrame,
                (nativeOccurrences[identity]?.count == 1 || aliasTapKeys.contains(identity)),
                let type = node.type, !type.isEmpty, type.utf8.count <= 256,
                type == type.trimmingCharacters(in: .whitespacesAndNewlines), type != "Slider" {
@@ -263,8 +261,7 @@ struct AgentModeSnapshot: Sendable {
               node.enabled == true, node.hidden == false, selectedTargets[index] != nil,
               selectedTargets[index]?.nativeIdentity == nil,
               let frame = node.frame else { return false }
-        return [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite)
-            && frame.width > 0 && frame.height > 0
+        return frame.isUsableAgentFrame
     }
 
     func sliderNode(ref: String) throws -> FBSimulatorAXNode {
@@ -286,8 +283,7 @@ struct AgentModeSnapshot: Sendable {
         guard node.type == "Slider", node.enabled == true, node.hidden == false,
               elements[index].state.visible, selectedTargets[index] != nil,
               selectedTargets[index]?.nativeIdentity == nil, let frame = node.frame else { return false }
-        return [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite)
-            && frame.width > 0 && frame.height > 0
+        return frame.isUsableAgentFrame
     }
 
     private func targetRows() -> [RuntimeSnapshotRow] {
@@ -338,8 +334,7 @@ struct AgentModeSnapshot: Sendable {
         guard nativeIdentityMetadata?.complete == true, node.enabled == true, node.hidden == false,
               node.focused != nil, node.role?.isEmpty == false,
               let frame = node.frame,
-              [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite),
-              frame.size.width > 0, frame.size.height > 0,
+              frame.isUsableAgentFrame,
               CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(frame)
         else { return reference }
         _ = try self.node(ref: elements[index].ref, requiredAction: .tap)
@@ -429,11 +424,6 @@ struct AgentModeSnapshot: Sendable {
         guard projectionHash == fresh.projectionHash, opaqueActionCount == fresh.opaqueActionCount else { return false }
         do { try validateProtectedTargets(in: fresh); return true }
         catch { return false }
-    }
-
-    func resolve(_ original: FBSimulatorAXNode) throws -> FBSimulatorAXNode {
-        let selector = try uniqueSelector(for: original)
-        return try match(kind: selector.kind, value: selector.value, type: original.type)
     }
 
     func match(kind: SelectedAXRequest.SelectorKind, value: String, type: String?) throws -> FBSimulatorAXNode {
@@ -533,8 +523,7 @@ struct AgentModeSnapshot: Sendable {
                       nodes[index].enabled == true, nodes[index].hidden == false,
                       nodes[index].pid == nativePID,
                       let frame = nodes[index].frame,
-                      [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-                      frame.width > 0, frame.height > 0,
+                      frame.isUsableAgentFrame,
                       let type = nodes[index].type, !type.isEmpty, type.utf8.count <= 256,
                       type == type.trimmingCharacters(in: .whitespacesAndNewlines), type != "Slider" else { continue }
                 if let identity = nodes[index].nativeIdentity {
@@ -669,8 +658,7 @@ struct AgentModeSnapshot: Sendable {
     /// Missing or invalid geometry is kept: it does not prove that a node is off-screen.
     static func affectsAdmission(_ node: FBSimulatorAXNode, hidden: Bool, display: CGRect) -> Bool {
         if hidden { return false }
-        if let frame = node.frame, [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-           frame.width > 0, frame.height > 0, !frame.intersects(display) { return false }
+        if let frame = node.frame, frame.isUsableAgentFrame, !frame.intersects(display) { return false }
         let empty: (String?) -> Bool = { $0?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false }
         let inertGroup = node.type == "Group" && node.children.isEmpty && node.customActionNames.isEmpty
             && node.focused != true && empty(node.identifier) && empty(node.label) && empty(text(node.value))

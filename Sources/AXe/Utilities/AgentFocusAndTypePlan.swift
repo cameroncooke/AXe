@@ -76,8 +76,7 @@ struct AgentFocusAndTypePlan: Sendable {
             }
         }
         guard let frame = node.frame,
-              [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite),
-              frame.size.width > 0, frame.size.height > 0,
+              frame.isUsableAgentFrame,
               CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(frame) else {
             throw AgentModeFailure("focusTargetChanged", "The field is off screen or has no size, so nothing was typed. Scroll it into view, then act again from the capture in this reply.")
         }

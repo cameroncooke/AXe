@@ -140,7 +140,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         guard result.outcome == .ready, let snapshot = result.snapshot, snapshot.roots.count == 1,
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
               hit.type?.isEmpty == false, hit.hidden != true, hit.enabled != false,
-              let frame = hit.frame, validFrame(frame), frame.contains(start) else {
+              let frame = hit.frame, frame.isUsableAgentFrame, frame.contains(start) else {
             throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "AXe could not confirm the control at the \(kind.rawValue) start, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         try checkDeadline()
@@ -160,7 +160,7 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         }
         try expected.validate(target)
         guard target.pid == admission.expectedPID, target.hidden != true, target.enabled != false,
-              let frame = target.frame, validFrame(frame), frame.contains(start),
+              let frame = target.frame, frame.isUsableAgentFrame, frame.contains(start),
               kind == .drag || ends.allSatisfy({ frame.contains($0) }) else {
             throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The \(kind.rawValue) path is outside the selected area now, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
@@ -169,9 +169,6 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         }
         if kind == .drag, start != CGPoint(x: frame.midX, y: frame.midY) {
             throw AgentModeFailure("dragStartChanged", "The drag target moved before input, so nothing was sent. \(AgentModeFailure.actFromCapture)")
-        }
-        guard tree.nodes.count == tree.elements.count else {
-            throw AgentModeFailure("\(kind.rawValue)TargetMismatch", "The screen changed under the \(kind.rawValue) target, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
         guard let hit else {
             try validateEmptyStart(start, area: target, tree: tree)
@@ -258,10 +255,6 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         return target
     }
 
-    private func validFrame(_ frame: CGRect) -> Bool {
-        [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite) && frame.width > 0 && frame.height > 0
-    }
-
     /// Point reads keep one attempt. The tree read uses two: a direct first read, with runtime
     /// preparation only after a verified empty tree, as ordinary descriptions do.
     private func policy(attempts: Int = 1) throws -> FBSimulatorAXAcquisitionPolicy {
@@ -288,9 +281,6 @@ enum AgentModePathIdentityPolicy {
     static func ancestorChain(hit: FBSimulatorAXNode, area: FBSimulatorAXNode,
                               roots: [FBSimulatorAXNode], snapshot: AgentModeSnapshot,
                               usingNativeIdentity: Bool) throws -> [Int] {
-        guard snapshot.nodes.count == snapshot.elements.count else {
-            throw AgentModeFailure("pathIdentityChanged", "The screen changed under this gesture, so nothing was sent. \(AgentModeFailure.actFromCapture)")
-        }
         if usingNativeIdentity {
             // Count every occurrence before type, focus or visibility can hide a copy.
             _ = try uniqueIndex(matching: hit, in: snapshot, usingNativeIdentity: true)

@@ -82,7 +82,6 @@ enum AgentModeKeyboardDetector {
     static func occlusion(in snapshot: AgentModeSnapshot, expectedPID: Int32,
                           logicalSize: CGSize) -> Occlusion? {
         guard expectedPID > 0, snapshot.nativeIdentityMetadata?.complete == true,
-              snapshot.nodes.count == snapshot.elements.count,
               logicalSize.width.isFinite, logicalSize.height.isFinite,
               logicalSize.width > 0, logicalSize.height > 0 else { return nil }
         let display = CGRect(origin: .zero, size: logicalSize)
@@ -94,7 +93,7 @@ enum AgentModeKeyboardDetector {
             let node = snapshot.nodes[index], element = snapshot.elements[index]
             guard node.pid == expectedPID, node.enabled == true, node.hidden == false,
                   element.state.visible, element.state.enabled,
-                  let rect = node.frame, validBounds(rect), rect.intersects(display),
+                  let rect = node.frame, rect.isUsableAgentFrame, rect.intersects(display),
                   let button = Button(node, inheritedHidden: false), isKeyboardSignal(button) else { continue }
             signals.append((element.path, button))
         }
@@ -111,7 +110,7 @@ enum AgentModeKeyboardDetector {
                   element.state.visible, element.state.enabled,
                   let identity = node.nativeIdentity, identity.pid == expectedPID, identity.objectID > 0,
                   snapshot.nodes.filter({ $0.nativeIdentity == identity }).count == 1,
-                  let frame = node.frame, validBounds(frame), display.contains(frame),
+                  let frame = node.frame, frame.isUsableAgentFrame, display.contains(frame),
                   signals.allSatisfy({ frame.contains($0.button.frame.intersection(display)) }) else { return nil }
             return Occlusion(frame: frame, path: path)
         }
@@ -134,8 +133,7 @@ enum AgentModeKeyboardDetector {
 
     private static func numericEvidence(in snapshot: AgentModeSnapshot, expectedPID: Int32,
                                         display: CGRect) -> NumericEvidence? {
-        guard expectedPID > 0, snapshot.nativeIdentityMetadata?.complete == true,
-              snapshot.nodes.count == snapshot.elements.count else { return nil }
+        guard expectedPID > 0, snapshot.nativeIdentityMetadata?.complete == true else { return nil }
         let focused = snapshot.nodes.indices.filter { index in
             let node = snapshot.nodes[index], element = snapshot.elements[index]
             return node.type == "TextField" && node.pid == expectedPID && node.focused == true
@@ -155,7 +153,7 @@ enum AgentModeKeyboardDetector {
             for child in snapshot.nodes.indices where snapshot.elements[child].path.hasPrefix(prefix) {
                 let key = snapshot.nodes[child], state = snapshot.elements[child].state
                 guard key.type == "Button", key.pid == expectedPID, key.enabled == true, key.hidden == false,
-                      state.visible, state.enabled, let bounds = key.frame, validBounds(bounds),
+                      state.visible, state.enabled, let bounds = key.frame, bounds.isUsableAgentFrame,
                       display.contains(bounds), frame.contains(bounds) else { continue }
                 let label = key.label?.trimmingCharacters(in: .whitespacesAndNewlines)
                 if label?.unicodeScalars.count == 1, let digit = label?.unicodeScalars.first,
@@ -205,7 +203,7 @@ enum AgentModeKeyboardDetector {
               element.state.visible, element.state.enabled,
               let identity = node.nativeIdentity, identity.pid == expectedPID, identity.objectID > 0,
               snapshot.nodes.filter({ $0.nativeIdentity == identity }).count == 1,
-              let frame = node.frame, validBounds(frame) else { return nil }
+              let frame = node.frame, frame.isUsableAgentFrame else { return nil }
         return frame
     }
 
@@ -215,11 +213,6 @@ enum AgentModeKeyboardDetector {
         if globeLabels.contains(label) || chromeLabels.contains(label) { return true }
         guard label.unicodeScalars.count == 1, let scalar = label.unicodeScalars.first else { return false }
         return (65...90).contains(scalar.value) || (97...122).contains(scalar.value)
-    }
-
-    private static func validBounds(_ frame: CGRect) -> Bool {
-        [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite)
-            && frame.size.width > 0 && frame.size.height > 0
     }
 
     static func observe(_ buttons: [Button], logicalWidth: Double, logicalHeight: Double,

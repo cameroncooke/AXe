@@ -594,7 +594,7 @@ final class AgentModeController {
 
     private static func display(of context: SelectedHIDContext) throws -> ActivePanelIdentity {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+            throw AgentModeFailure.missingContext
         }
         return ActivePanelIdentity(displayID: context.screenID, uniqueID: uuid)
     }
@@ -1017,7 +1017,7 @@ final class AgentModeController {
                 // Typing retains its existing independent description and focused-field path.
                 // The step request carries the plan's display; its full context read admits it.
                 guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
-                    throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+                    throw AgentModeFailure.missingContext
                 }
                 let fresh = try await observe(display: ActivePanelIdentity(displayID: screenID, uniqueID: screenUUID), pid: pid)
                 guard let context = fresh.context, let roots = fresh.ax?.roots else {
@@ -1069,7 +1069,7 @@ final class AgentModeController {
                                           pid: Int32) async -> SelectedHIDResponse {
         do {
             guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
-                throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+                throw AgentModeFailure.missingContext
             }
             let fresh = try await observe(display: ActivePanelIdentity(displayID: screenID, uniqueID: screenUUID), pid: pid)
             guard let context = fresh.context, let roots = fresh.ax?.roots else {
@@ -1165,7 +1165,7 @@ final class AgentModeController {
         guard record.snapshot.visibleFingerprint == fresh.visibleFingerprint,
               mode.readReference.map({ record.snapshot.hasSameFields($0, in: fresh) }) != false else {
             logger.info().log("Agent snapshot fingerprint mismatch: \(AgentModeSnapshotDifference.summary(previous: record.snapshot.nodes, current: fresh.nodes))")
-            throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
+            throw AgentModeFailure.screenChanged
         }
         if let ref = mode.ref ?? mode.readReference {
             try record.snapshot.validateProtectedReference(ref, in: fresh)
@@ -1226,7 +1226,7 @@ final class AgentModeController {
                                snapshot: AgentModeSnapshot, cached: Record?,
                                binding: AgentBatchReferencePlan.ResolvedTarget? = nil) throws -> SelectedHIDRequest {
         guard pid > 0, let uuid = UUID(uuidString: context.screenUUID) else {
-            throw AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
+            throw AgentModeFailure.missingContext
         }
         var plannedPrimitives: [SelectedHIDPrimitive] = []
         var plannedPath: SelectedHIDPath?
@@ -1283,7 +1283,7 @@ final class AgentModeController {
             chosenTarget = .semantic(kind: selector.kind, value: selector.value, elementType: node.type)
         }
         var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: snapshot.hash,
-            nativeFingerprint: snapshot.nativeFingerprint, visibleFingerprint: snapshot.visibleFingerprint,
+            visibleFingerprint: snapshot.visibleFingerprint,
             target: try node.map { try AgentModeTarget($0, nativeTarget: chosenTarget) }, nativeTarget: chosenTarget)
         if case let .semantic(kind, value, _)? = chosenTarget {
             admission.selectorKind = kind
@@ -1375,8 +1375,7 @@ final class AgentModeController {
                 preDelay: mode.preDelay, postDelay: mode.postDelay, endsAtRest: true)
         case .drag:
             guard let node, let frame = node.frame, let destination = mode.destination,
-                  [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
-                  frame.width > 0, frame.height > 0 else {
+                  frame.isUsableAgentFrame else {
                 throw AgentModeFailure("missingDragTarget", "The fresh native drag target has no valid frame.")
             }
             let bounds = CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)

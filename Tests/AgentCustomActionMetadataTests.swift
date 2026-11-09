@@ -42,7 +42,7 @@ struct AgentCustomActionMetadataTests {
         let (after, _) = try makeSnapshot([Fixture(customActionNames: ["Archive"])])
         #expect(before.hash != after.hash && before.nativeFingerprint != after.nativeFingerprint)
         let admission = AgentModeAdmission(context: context, expectedPID: 1234,
-            screenHash: before.hash, nativeFingerprint: before.nativeFingerprint, visibleFingerprint: before.visibleFingerprint, target: nil)
+            screenHash: before.hash, visibleFingerprint: before.visibleFingerprint, target: nil)
         try admission.validateScreen(before)
         do {
             try admission.validateScreen(after)

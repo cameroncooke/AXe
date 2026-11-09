@@ -45,7 +45,7 @@ struct AgentReferenceTapAdmissionTests {
         let same = try fixture.roots(fixture.controls)
         let accepted = try admission.validateOwnedSnapshot(roots: same, context: fixture.context,
             pid: 1234, nativeTarget: same[0].children[0])
-        #expect(accepted.nativeFingerprint == fixture.snapshot.nativeFingerprint)
+        #expect(accepted.visibleFingerprint == fixture.snapshot.visibleFingerprint)
         #expect(accepted.selectorKind == .label && accepted.selectorValue == "5")
         try accepted.target?.validate(same[0].children[0])
         var variants: [[Fixture.Node]] = []

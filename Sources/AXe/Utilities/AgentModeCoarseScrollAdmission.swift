@@ -29,7 +29,7 @@ enum AgentModeCoarseScrollAdmission {
               logicalSize.width > 0, logicalSize.height > 0,
               !ends.isEmpty else { throw rejected() }
         let display = CGRect(origin: .zero, size: logicalSize)
-        guard let areaFrame = area.frame, validFrame(areaFrame),
+        guard let areaFrame = area.frame, areaFrame.isUsableAgentFrame,
               ([start] + ends).allSatisfy({ finitePoint($0) && display.contains($0) && areaFrame.contains($0) })
         else { throw rejected() }
 
@@ -43,7 +43,7 @@ enum AgentModeCoarseScrollAdmission {
                 in: snapshot, usingNativeIdentity: true)
             guard node.pid == pid, node.enabled == true, node.hidden == false,
                   element.state.enabled, element.state.visible,
-                  let frame = node.frame, validFrame(frame) else { throw rejected() }
+                  let frame = node.frame, frame.isUsableAgentFrame else { throw rejected() }
         }
 
         if let keyboard = AgentModeKeyboardDetector.occlusion(in: snapshot,
@@ -84,11 +84,6 @@ enum AgentModeCoarseScrollAdmission {
               frame.size.width >= 0, frame.size.height >= 0 else { throw rejected() }
         if frame.size.width == 0 || frame.size.height == 0 { return false }
         return frame.contains(start)
-    }
-
-    private static func validFrame(_ frame: CGRect) -> Bool {
-        [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite)
-            && frame.size.width > 0 && frame.size.height > 0
     }
 
     private static func finitePoint(_ point: CGPoint) -> Bool {
