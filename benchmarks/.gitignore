@@ -4,6 +4,7 @@ baselines.json.lock
 .cache/
 artifacts/
 config.local.json
+history/
 
 # Installed dependencies and large model/build artifacts
 vendor/**/node_modules/

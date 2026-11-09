@@ -92,11 +92,11 @@ For a smaller run or the benchmark application's checks:
 ./benchmarks/run test
 ```
 
-Reports are retained under [benchmarks/history/](benchmarks/history/).
+Reports are retained locally under `benchmarks/history/`, which Git ignores.
 [benchmarks/baselines.json](benchmarks/baselines.json) keeps accepted AXe baselines;
 acceptance is explicit. Failed or unverified runs cannot replace a baseline.
-Code, task definitions, grading rules and report history belong in Git. Local
-settings, dependencies and large raw artifacts are ignored. The suite does not
+Code, task definitions, grading rules and baselines belong in Git. Run history,
+local settings, dependencies and large raw artifacts are ignored. The suite does not
 replace the installed AXe CLI or require a separate XcodeBuildMCP checkout.
 
 See [benchmark setup and commands](benchmarks/README.md) for configuration,

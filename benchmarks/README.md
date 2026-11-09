@@ -91,16 +91,16 @@ measured job. The suite continues other tools when a case cannot start.
 | `tasks/`, `shared-rules.md` | Original task requirements and allowed actions |
 | `preparation.py`, `environment.py`, `monitor.py`, `processes.py` | Starting-state checks, identity, resource samples and cleanup |
 | `baselines.py`, `baselines.json` | Explicit best-baseline selection and accepted results |
-| `history.py`, `history/` | Immutable result history and an index |
+| `history.py` | Immutable result history and an index |
 | `vendor/xcodebuildmcp/` | Pinned model-runner source, dependency lock and provenance |
 | `apps/Weather/` | Original app source and Xcode project |
 | `test_*.py` | Benchmark application checks |
 
 Ignored local files are `.venv/`, `.cache/`, `config.local.json`,
-`artifacts/`, and the vendor's `node_modules/` and `out.nosync/`.
-These are dependencies, local settings, transcripts, images and build outputs.
-The application code, grading rules, app fixture, reports and baseline registry
-are not stored under `build_products`.
+`artifacts/`, `history/`, and the vendor's `node_modules/` and `out.nosync/`.
+These are dependencies, local settings, run history, transcripts, images and
+build outputs. The application code, grading rules, app fixture and baseline
+registry are not stored under `build_products`.
 
 ## Results and history
 
@@ -115,7 +115,9 @@ and blocked cases are retained. Each record has a manifest with the report
 hash and external evidence location/hash. `history/index.json` supplies a
 machine-readable index. Existing run IDs cannot be overwritten with changed
 report bytes. Listing and comparing saved results do not require old build
-folders or raw transcripts. Review and commit history changes with the code.
+folders or raw transcripts. History is local to this Mac and ignored by Git;
+`baselines.json` keeps the accepted results themselves, so a fresh checkout can
+still compare with its baselines.
 
 Raw evidence is **not** included in Git history. Keep or archive it separately
 when you need screenshots, detailed diagnosis or rescoring. A retained report
