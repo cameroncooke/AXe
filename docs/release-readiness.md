@@ -142,12 +142,23 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 
 ## Phase 8: verification
 
-- [~] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`)
+- [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
+- [~] Second run on `v2` after the input-stack wave
 - [ ] Unit tests
 - [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
 - [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad
 - [ ] Taps and typing on a simulator and on both devices
 - [ ] Performance against the pre-audit build (`make bench-quick`)
+
+Baseline run (`e2e-results/20261109T222215Z` in the verification checkout, 58 minutes): FAIL, for two
+environmental reasons, so it says nothing about the code.
+
+- iPhone: all 27 suites failed. A "VoiceOver Gestures" system alert covered the Playground. It appeared when the settings checks turned VoiceOver on, and it stays up after VoiceOver is turned off. One tap on OK dismissed it.
+- Duo: only 4 suites ran. `axe displays` did not succeed within the 180-second boot budget for one group while three agents were building and testing (load average up to 145 on 18 cores).
+- iPad: all 5 suites passed.
+
+Follow-ups: document that turning VoiceOver on shows this alert; keep agents off the E2E simulators
+(already the rule; the settings agent ran before the rule existed).
 
 ## Phase 9: documentation
 
