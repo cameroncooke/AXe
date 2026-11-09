@@ -27,7 +27,9 @@ axe tap --udid "$DEVICE_UDID" --semantic-press --id "$CHECKBOX_ID"
 ```
 
 Semantic press requires an exact ID for a visible native checkbox. AXe checks the native reply
-and the changed Boolean value. If the outcome is uncertain, read the screen before any more input.
+and the changed Boolean value, then prints `Switch <id>: off -> on`; JSON is `{identifier, before,
+after}` and `--verbose` prints the full receipt. If the outcome is uncertain, read the screen before
+any more input.
 If a modal alert blocks the tree, close the alert on the phone and read again.
 
 Coordinate taps, swipes, drags, gestures, touch, rotation, typing, key commands, buttons and batches

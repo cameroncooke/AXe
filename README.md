@@ -163,7 +163,7 @@ accessibility reads and input work while Device Hub shows the screen.
 
 ## Output format
 
-Without `--output`, existing commands keep their output. `--agent` returns one agent JSON result by default. Select compact RS/1 text or JSON explicitly with the root option:
+Without `--output`, commands print text: a command that reads or changes state prints that state in a few lines, input commands print nothing (`tap`, `slider` and `batch` keep their released `✓ … completed successfully` line), and `screenshot` and `record-video` print the file path. `--agent` returns one agent JSON result by default. Select compact text or JSON with the root option:
 
 ```bash
 axe --output text describe-ui --agent --udid "$SIM_UUID"
@@ -174,17 +174,38 @@ axe --output json screenshot --udid "$SIM_UUID" --output screen.png
 
 Set `SIM_UUID` to one simulator UDID from `axe list-simulators`. Agent calls require `--udid`; an empty or missing value is an error. AXe does not choose a device.
 
-Agent JSON uses the `axe.output.agent-result` envelope. Default reading and optional navigation views use public adaptive schema version `"2"`; `--view full` returns canonical base schema version `"1"`. Ordinary commands with `--output json` use `axe.output.command-result`, schema version `"1"`, with `command`, `didError`, `data` and `nextSteps`. `data.result` holds one typed result, `data.results` holds multiple results, and optional `data.messages` holds text. A failure adds `error.code` and `error.message`, writes one JSON result to stdout and exits nonzero without a second plain error. Inspect action receipts before any repeat; formatting does not replay input. Parse stdout for JSON. Diagnostic messages can remain on stderr; do not merge the streams when parsing.
+Ordinary commands with `--output json` write one `axe.output.command-result` (schema version `"1"`) to stdout:
 
-JSON Schema (2020-12) files for these results are in [schemas/](schemas/), one per `schema` and `schemaVersion`: [agent result version 1](schemas/axe.output.agent-result.v1.schema.json) (`--view full`), [agent result version 2](schemas/axe.output.agent-result.v2.schema.json) (reading and navigation) and [command result version 1](schemas/axe.output.command-result.v1.schema.json). AXe can add fields within a schema version, so ignore fields you do not know rather than rejecting them. `nextSteps` is plain-language guidance for an agent, and its wording can change in any release; branch on `didError`, `error.code` and `data.cache.requiresRefresh` instead. The command-result schema covers the envelope only; each command's payload in `data.result` keeps its own shape. AXe's unit tests and the end-to-end suites' shared command runners check JSON results against these files and fail on any field a schema does not declare.
+```json
+{"schema": "axe.output.command-result", "schemaVersion": "1", "command": "hinge set", "didError": false,
+ "data": {"result": {"udid": "…", "previousDegrees": 113.8, "hinge": {"degrees": 180, "mechanicalDegrees": 180, "posture": "open"}}},
+ "nextSteps": []}
+```
 
-Put the format before the command. Leaf placement also works where unambiguous, such as `axe describe-ui --output json ...`. After `screenshot` or `record-video`, `--output` still means a destination path. `stream-video` rejects an explicit output format before capture; its normal binary stream is unchanged. Existing command-specific `--json` flags keep their meanings.
+`command` is the full command path. `data.result` is the command's typed result; `data.messages` holds any text the command printed. A failure sets `didError`, adds `error: {code, message}`, exits nonzero and prints nothing else to stdout. Branch on `error.code`; messages can change. A failure never repeats input. `--verbose` adds the full receipt (broker reply, context reads, capture child) in place of the result; it never changes the exit status or the code. Diagnostics can go to stderr; do not merge the streams when parsing. SIGINT or SIGTERM cancellation exits with 128 + the signal.
+
+| Code | Meaning |
+|---|---|
+| `invalidArguments` | Options or values are wrong; nothing was sent |
+| `targetNotFound`, `notBooted` | No simulator or device has the UDID, or the simulator is not booted |
+| `busy`, `quarantined` | Another AXe command owns the device, or input is blocked until you check the device |
+| `timeout`, `interrupted` | A deadline expired, or a signal cancelled the command |
+| `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `inputUnavailable` | Input was refused, stopped after some input, may have left a touch or key held, or AXe could not reach its input service |
+| `elementNotFound`, `ambiguousElement`, `elementNotHittable`, `treeUnavailable` | A selector matched nothing or several elements, or the accessibility tree could not be read |
+| `screenChanged`, `screensDidNotSettle`, `displayUnavailable`, `bootChanged` | The screen or boot changed, or the screens could not be read |
+| `noHinge`, `hingeUnavailable`, `rotationFailed`, `sliderFailed` | Device-state and slider failures |
+| `captureFailed`, `outputFailed`, `readFailed`, `actionOutcomeUnknown`, `xcodeUnavailable` | Capture, output file, state read, unconfirmed shutdown or clipboard result, or Xcode setup |
+| `commandFailed` | Anything else |
+
+Selected accessibility failures use their own code, such as `targetRejected`; settings, physical devices and `doctor` add their own (see their sections). JSON Schema (2020-12) files are in [schemas/](schemas/): [command result version 1](schemas/axe.output.command-result.v1.schema.json) (the envelope), [command payloads version 1](schemas/axe.output.command-payloads.v1.schema.json) (each command's `data.result`, in `$defs` under the envelope's `command`, such as `$defs["settings status-bar show"]`), and [agent result version 1](schemas/axe.output.agent-result.v1.schema.json) (`--view full`) and [version 2](schemas/axe.output.agent-result.v2.schema.json) (reading and navigation). `--verbose` receipts are not described. AXe can add fields within a schema version, so ignore fields you do not know. `nextSteps` is plain-language guidance whose wording can change; branch on `didError`, `error.code` and `data.cache.requiresRefresh` instead. AXe's unit tests validate every command's payload and the end-to-end runners validate every envelope, failing on any undeclared field.
+
+Put the format before the command. Leaf placement also works where unambiguous, such as `axe describe-ui --output json ...`. After `screenshot` or `record-video`, `--output` still means a destination path. `stream-video` rejects an explicit output format before capture; its binary stream is unchanged. Existing command-specific `--json` flags keep their meanings.
 
 ## Simulator shutdown
 
 Use `axe shutdown --udid <UUID>` to shut down exactly one simulator through the public `simctl` command. Names and the `booted` and `all` aliases are rejected. This command is simulator lifecycle control, not a guest lock or power-button action. It does not select a display or accept agent/batch options.
 
-Success prints JSON with `source: "simctl"`, `udid`, `initialState`, `finalState: "Shutdown"` and `outcome`. `shutdownCompleted` requires a fresh state read after the one shutdown request. `alreadyShutdown` means the initial read found that state, with no shutdown request. The command has a shared 60-second budget for child commands and state observation. A failure or interruption does not undo a shutdown that has started; inspect the simulator state before another request. Success records the observed state, not a guarantee against a later boot by another client.
+Success prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}`. `shutDown` requires a fresh state read after the one shutdown request. `alreadyShutDown` means the first read found that state, with no shutdown request. A shutdown AXe could not confirm fails with `actionOutcomeUnknown`. The command has a shared 60-second budget for child commands and state observation. A failure or interruption does not undo a shutdown that has started; inspect the simulator state before another request. Success records the observed state, not a guarantee against a later boot by another client.
 
 ```bash
 axe shutdown --udid "$UDID"
@@ -198,7 +219,7 @@ Use `axe clipboard copy --stdin --udid <UUID>` to stage 1...65536 valid UTF-8 by
 printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid "$UDID"
 ```
 
-The command sends one public CoreDevice copy, then one exact readback, with no retry or fallback. Success prints only a JSON receipt: `source: "appleCoreDevicePasteboard"`, `operation: "copy"`, `outcome: "stagedAndVerified"`, `simulatorUDID`, `utf8Length`, `sha256`, `verified: true`, `inserted: false`, `clipboardReplaced: true` and `sharedClipboardMayChange: true`. It does not insert text or change the existing US HID `type` command. No agent, selected-screen or batch options apply.
+The command sends one public CoreDevice copy, then one exact readback, with no retry or fallback. Success prints `Copied N bytes to the clipboard of <udid> (sha256 …)`; JSON is `{udid, bytes, sha256}` for the verified readback. A copy that may have changed the clipboard but did not verify fails with `actionOutcomeUnknown`. It does not insert text or change the existing US HID `type` command. No agent, selected-screen or batch options apply.
 
 This replaces the general clipboard and can affect the Mac or other devices through sharing. AXe does not save prior content or restore it. Raw child streams and unexpected readback stay private. A failed or interrupted copy can already have changed the clipboard; preserve the result and do not replay automatically. Readback is an observation, not an atomic clipboard or recipient guarantee. Each child has a 30-second bound; CoreDevice copy/readback use `--timeout 8`. Stdin waits for EOF without a deadline and observes cancellation. SIGINT/SIGTERM cancel and await owned child cleanup; SIGKILL cleanup is not guaranteed.
 
@@ -330,9 +351,9 @@ axe hinge set open --udid "$UDID"
 #         id 3   0DFCB507-C4AA-4CB8-8575-8E2D0DB7C6B9
 ```
 
-`degrees` is the angle iOS senses, rounded to 0.1, and is the true pose. `mechanicalDegrees` is the angle `hinge set` drives; at rest the two can differ by several degrees, for example mechanical 120 and sensed 113.8. `posture` is `closed` (sensed at most 0.5°), `partiallyOpen` or `open` (at least 179.5°). `hinge read` JSON is `{udid, degrees, mechanicalDegrees, posture}`. On a one-screen simulator both hinge commands fail with `noHinge`.
+`degrees` is the angle iOS senses, rounded to 0.1, and is the true pose. `mechanicalDegrees` is the angle `hinge set` drives; at rest the two can differ by several degrees, for example mechanical 120 and sensed 113.8. `posture` is `closed` (sensed at most 0.5°), `partiallyOpen` or `open` (at least 179.5°). `hinge read` JSON is `{udid, hinge: {degrees, mechanicalDegrees, posture}}`, the `hinge` of `displays`. On a one-screen simulator both hinge commands fail with `noHinge`.
 
-`hinge set` takes an angle from 0 through 180, including fractions, or the case-sensitive names `closed` (0), `tabletop` (90) and `open` (180). It sends one request and never repeats it. It pins the boot it reads at start and fails with `bootChanged` if the simulator restarts. By default it waits up to 8 seconds for the screens to settle and reports the active screen; JSON is `{udid, previousDegrees, degrees, mechanicalDegrees, posture, activeScreen}`. `--no-wait` returns once the hinge reaches the angle, without `activeScreen`. `--tolerance` (0...1 degrees, default 0.5) and `--timeout` (0.5...15 seconds, default 8) bound the mechanical move. On iOS 27.2, closing settled in about 3 s and opening in about 0.6 s. Read the UI again before input.
+`hinge set` takes an angle from 0 through 180, including fractions, or the case-sensitive names `closed` (0), `tabletop` (90) and `open` (180). It sends one request and never repeats it. It pins the boot it reads at start and fails with `bootChanged` if the simulator restarts. By default it waits up to 8 seconds for the screens to settle and reports the active screen; JSON is `{udid, previousDegrees, hinge, activeScreen}`. `--no-wait` returns once the hinge reaches the angle, without `activeScreen`. `--tolerance` (0...1 degrees, default 0.5) and `--timeout` (0.5...15 seconds, default 8) bound the mechanical move. On iOS 27.2, closing settled in about 3 s and opening in about 0.6 s. Read the UI again before input.
 
 ```bash
 axe rotate left --udid "$UDID"
@@ -342,7 +363,7 @@ axe rotate left --udid "$UDID"
 
 `rotate left|right` turns the iPhone Duo and prints the active screen afterwards; JSON is `{udid, direction, previousRotation, activeScreen}`. Without `--screen-id` and `--screen-uuid`, AXe rotates the screen that is active when the command starts; with the pair, it refuses unless that screen is active. Like `hinge set`, it pins the boot it reads at start. This device-wide action uses the common input lock and rejects held touches. It sends one request, observes two matching positions on the screen, and checks that the position remains after the connection closes. `--timeout` sets the observation budget (0.5...15 seconds, default 8); native reads have separate bounds. The Duo supports all four inner positions and skips upside-down portrait on the outer screen. Read the UI again before input; app layout readiness is not guaranteed. Do not replay a failed or uncertain request. An uncertain send holds the input lock and saves a recovery record. This command is separate from the two-finger `gesture rotate` and is not a batch step.
 
-`displays`, `hinge` and `rotate` fail with one error code: `simulatorNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `rotationFailed` or `quarantined`. For full broker replies and boot checks, see [Automation and testing](#automation-and-testing).
+`displays`, `hinge` and `rotate` fail with one error code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `rotationFailed` or `quarantined`. For full broker replies and boot checks, see [Automation and testing](#automation-and-testing).
 
 AXe classifies a device by the built-in touch displays its device type declares, not by profile version or model. One integrated digitizer is a rigid device with no hinge request. Two require native hinge samples on every full read, so a two-panel device without a working hinge fails before input. Other sets are refused. AXe reads the active panel, rotation and geometry from the simulator's own CoreDevice display report, and still checks display identity, geometry, rotation and boot against the host catalogue.
 
@@ -389,7 +410,7 @@ Ordinary Duo `touch -x <X> -y <Y> --down` starts one contact if none is held; an
 
 AXe supports explicit display selection on `describe-ui`, `tap`, `slider`, `touch`, `swipe`, `drag`, `gesture`, `type`, `key`, `key-sequence`, `key-combo`, `button home|side-button|siri|lock|apple-pay` and `batch`. Pass `--input-mode selected`. Without `--screen-id` and `--screen-uuid`, the broker binds the screen that is active when it admits the request. Pass both, from `axe displays`, to refuse input unless that screen is active; do not assume that the primary display is active. A retained touch keeps its original screen, so a fold since `touch --down` fails instead of retargeting. `--expected-pid` is optional too on commands that read accessibility (`describe-ui`, selector `tap`, `slider` and the keyboard commands); selected `touch`, `swipe` and `drag` accept it only with `--agent`. Without it, the broker binds the app that is frontmost when the command starts (a PID read, not a full hierarchy read), and every later target, hit and frontmost check requires that PID, so an app change fails before input. In a selected batch each step binds its own. Selected keyboard commands still require `--focus-id`. No selected failure falls back to legacy input.
 
-By default a selected command prints what the plain command prints. Selected `describe-ui`, including `--point`, prints the accessibility tree JSON (the `roots`); a retained `touch --down` prints `Contact token: <uuid>`; other successful input prints nothing. With `--output json`, the result is `{outcome: "completed", screen: {id, uuid, width, height, rotation}, pid, token?}`. A failure is one error with a code, either the accessibility failure such as `targetRejected` or one of `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `quarantined` and `busy`, and its message says whether any input was sent. `--verbose` prints the full broker receipt; see [Automation and testing](#automation-and-testing).
+By default a selected command prints what the plain command prints. Selected `describe-ui`, including `--point`, prints the accessibility tree JSON (the `roots`); a retained `touch --down` prints `Contact token: <uuid>`; other successful input prints nothing. With `--output json`, the result is `{outcome: "completed", screen: {id, uuid, width, height, rotation}, pid, token?}`; ordinary and physical input return `{outcome: "completed"}`. A failure is one error with a code, either the accessibility failure such as `targetRejected` or one of `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `quarantined`, `timeout` and `busy`, and its message says whether any input was sent. `--verbose` prints the full broker receipt, also for ordinary input that the broker owns on the Duo and DTUHID simulators; see [Automation and testing](#automation-and-testing).
 
 Selected AX reads and physical target checks use the normal IDB accessibility-readiness check. There is no new preparation option or retained preparation layer. Reads go to the device directly; the short-lived bootstrap for simulator runtimes 27 and later runs only after a direct read returns an empty tree or a point read fails, and the same checks then repeat within the original deadline. Plain `describe-ui`, including `--point`, follows the same rule; its output is unchanged. On runtimes 27 and later, plain accessibility reads (`describe-ui`, selector taps, batches and `slider`) first wait, for up to 60 seconds after a boot, until a built-in display reports a known backlight state (it reports `unknown` early in a boot; a locked display reads at once): a read made earlier can stop the simulator's accessibility working until it is rebooted. Native slider and semantic-switch operations keep their separate identity sessions; physical touch input remains HID. Use a matching CLI, broker and rebuilt native frameworks; older requests reject.
 
@@ -504,7 +525,7 @@ axe screenshot --udid "$UDID" --screen-id "$SCREEN_ID" \
 
 This PNG route accepts only the measured active panel. Both selection options are required; it does not use `--input-mode` or `--expected-pid`. It rejects a changed context or invalid selection without choosing another display or using legacy capture.
 
-Selected capture does not replace an existing output file. On success, stdout contains a JSON receipt with `source: "appleSimctlSelectedPNG"`, the output path, pixel dimensions, before/after context reads and the capture child receipt. `surfaceIdentity` and `framePresentationTime` are `"unavailable"`. Context reads and live change checks bound the capture; they do not make the frame and context an atomic observation.
+Selected capture does not replace an existing output file. On success it prints the path, as legacy capture does; `--verbose` prints a JSON receipt with the path, pixel size, before/after context reads and the capture child receipt. Surface identity and frame presentation time are unavailable. Context reads and live change checks bound the capture; they do not make the frame and context an atomic observation.
 
 For selected capture, `SIGINT` and `SIGTERM` request cancellation. AXe waits for the operation to return, including its cleanup path. Cancellation accepted before output publication produces no PNG. A late signal can arrive after publication. Unconfirmed cleanup remains an error; this does not guarantee cleanup after parent termination or `SIGKILL`.
 
@@ -521,7 +542,7 @@ The paired screen options from `axe displays` select one measured active panel. 
 
 `SIGINT` and `SIGTERM` request a normal stop. AXe cancels and awaits any in-flight capture, finishes the validated frames and publishes the completed MP4 without replacing an existing destination. A stop before the first accepted frame, task cancellation or unconfirmed cleanup produces no successful output. A late signal can arrive after publication. Parent termination and `SIGKILL` cleanup are not guaranteed.
 
-The input lease covers each capture, not the entire recording. Input can run between frames; an overlapping input request can receive a busy error. FPS is a requested maximum; context validation and capture can reduce the actual rate. Surface identity and native frame presentation time are unavailable. Success prints a JSON receipt. Without the screen pair or follow-active flag, recording retains its legacy route and path-only stdout.
+The input lease covers each capture, not the entire recording. Input can run between frames; an overlapping input request can receive a busy error. FPS is a requested maximum; context validation and capture can reduce the actual rate. Surface identity and native frame presentation time are unavailable. Success prints the path; `--verbose` prints the recording receipt. Without the screen pair or follow-active flag, recording retains its legacy route and path-only stdout.
 
 ## Follow the active display while recording
 
@@ -531,7 +552,7 @@ axe record-video --udid "$UDID" --follow-active-display --output ./active.mp4
 
 This explicit mode follows freshly measured active display IDs and UUIDs on one simulator boot. It rejects `--screen-id` and `--screen-uuid`. Every individual frame still requires unchanged before/after context. The first accepted frame fixes the video size; later upright images fit inside it with black bars, without stretching or cropping.
 
-Typed lock or transition failures permit bounded fresh read-only attempts after cleanup. Quarantine, reboot, uncertain cleanup and other capture errors stop the recording. Timestamps preserve host elapsed time; a player may hold the previous frame across gaps. JSON reports accepted frames, observed context changes, maximum frame gap and recovery waits. This does not promise smooth transition animation or the requested FPS. Existing selected and legacy routes remain unchanged.
+Typed lock or transition failures permit bounded fresh read-only attempts after cleanup. Quarantine, reboot, uncertain cleanup and other capture errors stop the recording. Timestamps preserve host elapsed time; a player may hold the previous frame across gaps. The `--verbose` receipt reports accepted frames, observed context changes, maximum frame gap and recovery waits. This does not promise smooth transition animation or the requested FPS. Existing selected and legacy routes remain unchanged.
 
 Follow-active recording is low-rate capture, not smooth animation capture. See the [full recording contract](Skills/CLI/axe/references/recording-reference.md).
 
