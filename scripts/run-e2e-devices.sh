@@ -5,7 +5,8 @@
 #
 # Opt-in and separate from make e2e: it needs paired, unlocked devices with Developer Mode on.
 # It exits 1 before building anything when no physical iPhone or iPad is paired. It then builds the
-# AXe runtime payload, builds the AXe Playground for iOS devices with automatic signing, installs it
+# AXe runtime payload, generates the Playground project with XcodeGen and builds it for iOS devices
+# with automatic signing, installs it
 # on each device, compiles scripts/fixtures/MediaPatternCheck.swift and runs
 # scripts/test-physical-devices.py. Each check reads its result back from the device. Keep the
 # devices unlocked and awake; the rotation check turns each device's interface through four
@@ -68,9 +69,20 @@ for item in axe Frameworks AXe_AXe.bundle; do
 done
 
 echo "Building the AXe Playground for iOS devices"
+# The Xcode project is not checked in; XcodeGen generates it from project.yml, as make e2e does.
+if ! command -v xcodegen >/dev/null 2>&1; then
+    echo "XcodeGen is required to generate the Playground project. Install it, then run make e2e-devices again." >&2
+    exit 1
+fi
+mkdir "$RUN/project"
+xcodegen generate --spec AxePlaygroundApp/project.yml --project "$RUN/project" >"$RUN/playground-project.log" 2>&1 || {
+    tail -5 "$RUN/playground-project.log" >&2
+    echo "Could not generate the Playground project. See $RUN/playground-project.log." >&2
+    exit 1
+}
 provisioning=()
 [[ "${AXE_E2E_ALLOW_PROVISIONING_UPDATES:-}" == 1 ]] && provisioning=(-allowProvisioningUpdates)
-if ! xcodebuild -project AxePlaygroundApp/AxePlayground.xcodeproj -scheme AxePlayground -configuration Debug \
+if ! xcodebuild -project "$RUN/project/AxePlayground.xcodeproj" -scheme AxePlayground -configuration Debug \
         -destination 'generic/platform=iOS' -derivedDataPath "$RUN/playground" ${provisioning[@]+"${provisioning[@]}"} \
         build >"$RUN/playground-build.log" 2>&1; then
     grep -E "error:|requires a provisioning profile|not included" "$RUN/playground-build.log" | head -20 >&2

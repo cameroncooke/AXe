@@ -153,25 +153,37 @@ def announced_rotation(stderr_path):
     return int(match.group(1)) if match else 0
 
 
+def stop(process):
+    """Sends SIGINT and waits up to 40 seconds; kills the process and returns None when it does not stop.
+    A capture left running would keep the device's only display stream from the next check."""
+    if process.poll() is None:
+        process.send_signal(signal.SIGINT)
+    try:
+        return process.wait(timeout=40)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait()
+        return None
+
+
 def stream(runner, udid, command, path, taps, total, label):
     """Runs a capture command, taps the next marker at each offset, then stops it with SIGINT."""
-    log = open(runner.output / f'{label}.stderr', 'w')
-    with open(path, 'wb') if command[0] == 'stream-video' else open(runner.output / f'{label}.stdout', 'wb') as out:
+    output = path if command[0] == 'stream-video' else runner.output / f'{label}.stdout'
+    with open(runner.output / f'{label}.stderr', 'w') as log, open(output, 'wb') as out:
         runner.log_start([runner.axe, *command, '--udid', udid])
         process = subprocess.Popen([runner.axe, *command, '--udid', udid], stdout=out, stderr=log,
             stdin=subprocess.DEVNULL)
-        started = time.monotonic()
-        for offset in taps:
-            time.sleep(max(0, started + offset - time.monotonic()))
-            runner.axe_ok(udid, 'tap', '--id', 'media-pattern-next')
-        time.sleep(max(0, started + total - time.monotonic()))
-        stopping = time.monotonic()
-        process.send_signal(signal.SIGINT)
+        stopping = None
         try:
-            rc = process.wait(timeout=40)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            raise CheckFailed(f'{label}: did not stop within 40 seconds of SIGINT')
+            started = time.monotonic()
+            for offset in taps:
+                time.sleep(max(0, started + offset - time.monotonic()))
+                runner.axe_ok(udid, 'tap', '--id', 'media-pattern-next')
+            time.sleep(max(0, started + total - time.monotonic()))
+            stopping = time.monotonic()
+        finally:
+            rc = stop(process)
+    require(rc is not None, f'{label}: did not stop within 40 seconds of SIGINT')
     require(rc == 0, f'{label}: exited {rc}: {(runner.output / f"{label}.stderr").read_text().strip()[-200:]}')
     return round(time.monotonic() - stopping, 2)
 
@@ -354,30 +366,37 @@ def concurrent(runner, devices):
     """Parallel screenshots and native streams on every device, on Capture Markers."""
     results = []
     print('All devices at once', flush=True)
+    streams = {}
     try:
         starts = {d.udid: phase(runner.launch(d.udid, 'media-pattern', 'media-pattern-next')) for d in devices}
         processes = {d.udid: subprocess.Popen([runner.axe, 'screenshot', '--udid', d.udid, '--output',
-            str(d.folder / 'parallel.png')], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE) for d in devices}
-        for udid, process in processes.items():
-            require(process.wait(timeout=60) == 0, f'{udid}: parallel screenshot failed')
+            str(d.folder / 'parallel.png')], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) for d in devices}
+        try:
+            for udid, process in processes.items():
+                require(process.wait(timeout=60) == 0, f'{udid}: parallel screenshot failed')
+        finally:
+            for process in processes.values():
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
+        for udid in processes:
             summary = runner.markers(runner.output / udid / 'parallel.png')
             require(summary['frames'] == 1 and summary['noPhase'] == 0 and summary['rotations'] == [0]
                     and summary['phases'][0][0] == starts[udid], f'{udid}: parallel screenshot failed the marker check')
-        streams = {}
         for d in devices:
             out = open(d.folder / 'parallel.h264', 'wb')
+            log = open(d.folder / 'parallel.stderr', 'w')
             runner.log_start([runner.axe, 'stream-video', '--format', 'h264', '--udid', d.udid])
             streams[d.udid] = (subprocess.Popen([runner.axe, 'stream-video', '--format', 'h264', '--udid', d.udid],
-                stdout=out, stderr=open(d.folder / 'parallel.stderr', 'w'), stdin=subprocess.DEVNULL), out)
+                stdout=out, stderr=log, stdin=subprocess.DEVNULL), out, log)
         time.sleep(5)
         for d in devices:
             runner.axe_ok(d.udid, 'tap', '--id', 'media-pattern-next')
         time.sleep(5)
-        for udid, (process, out) in streams.items():
+        for process, _, _ in streams.values():
             process.send_signal(signal.SIGINT)
-        for udid, (process, out) in streams.items():
-            rc = process.wait(timeout=40)
-            out.close()
+        codes = {udid: stop(process) for udid, (process, _, _) in streams.items()}
+        for udid, rc in codes.items():
             require(rc == 0, f'{udid}: parallel native stream exited {rc}')
             check_video(runner.markers(runner.output / udid / 'parallel.h264'), starts[udid], 30,
                 f'{udid} parallel native H.264', announced_rotation(runner.output / udid / 'parallel.stderr'))
@@ -387,6 +406,11 @@ def concurrent(runner, devices):
     except (CheckFailed, subprocess.TimeoutExpired) as error:
         results.append(dict(device='all', check='concurrent capture and input', ok=False, detail=str(error)))
         print(f'  FAIL concurrent capture and input: {error}', flush=True)
+    finally:
+        for process, out, log in streams.values():
+            stop(process)
+            out.close()
+            log.close()
     return results
 
 
