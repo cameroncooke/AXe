@@ -37,13 +37,37 @@ struct AgentVisibleFingerprintTests {
         #expect(before.visibleFingerprint != after.visibleFingerprint)
     }
 
+    @Test("A ticking leaf StaticText does not change the admission fingerprint")
+    func ordinaryTextChangesAreInvisible() throws {
+        let before = try snapshot(buttons: ["A", "B"], text: Node(type: "StaticText", label: "00:01",
+            frame: .init(x: 20, y: 400, width: 60)))
+        let after = try snapshot(buttons: ["A", "B"], text: Node(type: "StaticText", label: "00:02", value: "2",
+            frame: .init(x: 20, y: 400, width: 64)))
+        #expect(before.visibleFingerprint == after.visibleFingerprint)
+        // The semantic hash still reports the new text, and a new or removed text node still counts.
+        #expect(before.hash != after.hash)
+        #expect(before.visibleFingerprint != (try snapshot(buttons: ["A", "B"])).visibleFingerprint)
+    }
+
+    @Test("Text inside a control, and a control's own label, stay bound")
+    func controlTextIsBound() throws {
+        func cell(_ text: String) throws -> AgentModeSnapshot {
+            try snapshot(buttons: ["A"], text: Node(type: "Button", label: "Row",
+                frame: .init(x: 20, y: 400, width: 300),
+                children: [Node(type: "StaticText", label: text, frame: .init(x: 24, y: 404, width: 100))]))
+        }
+        #expect(try cell("Delete").visibleFingerprint != cell("Keep").visibleFingerprint)
+        #expect(try snapshot(buttons: ["A"]).visibleFingerprint != snapshot(buttons: ["B"]).visibleFingerprint)
+    }
+
     enum Extra: Sendable { case inertGroup, hidden, offDisplay, groupWithVisibleChild }
 
     private func snapshot(buttons: [String], value: String? = nil, offset: Double = 0,
-                          extra: Extra? = nil) throws -> AgentModeSnapshot {
+                          extra: Extra? = nil, text: Node? = nil) throws -> AgentModeSnapshot {
         var children = buttons.enumerated().map { index, label in
             Node(type: "Button", label: label, frame: .init(x: 20 + offset, y: 100 + Double(index) * 50))
         }
+        if let text { children.append(text) }
         if let value { children[0].value = value }
         switch extra {
         case .inertGroup?:
@@ -77,7 +101,7 @@ struct AgentVisibleFingerprintTests {
         }
         let type: String
         let label: String?
-        var value: String?
+        var value: String? = nil
         let frame: Frame
         var children: [Node] = []
         var hidden = false

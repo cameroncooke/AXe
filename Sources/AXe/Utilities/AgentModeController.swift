@@ -1142,7 +1142,9 @@ final class AgentModeController {
         guard record.context == context else {
             throw AgentModeFailure("contextChanged", "The app or display changed after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
-        guard record.snapshot.visibleFingerprint == fresh.visibleFingerprint else {
+        // Admission ignores the text of ordinary labels; a field read also needs that field unchanged.
+        guard record.snapshot.visibleFingerprint == fresh.visibleFingerprint,
+              mode.readReference.map({ record.snapshot.hasSameFields($0, in: fresh) }) != false else {
             logger.info().log("Agent snapshot fingerprint mismatch: \(AgentModeSnapshotDifference.summary(previous: record.snapshot.nodes, current: fresh.nodes))")
             throw AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
         }

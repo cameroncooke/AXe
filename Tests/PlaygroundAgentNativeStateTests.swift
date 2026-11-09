@@ -236,7 +236,7 @@ struct PlaygroundAgentNativeStateTests {
         return after
     }
 
-    @Test("A native change elsewhere refreshes a stale reference and types once on the fresh read")
+    @Test("A native change to ordinary text keeps a reference and types once without a retry")
     func exactNativeWhitespace() async throws {
         let session = try await PlaygroundAgentExamplesSession.open()
         try await session.tap("agent-examples.text")
@@ -252,13 +252,13 @@ struct PlaygroundAgentNativeStateTests {
         try #require(initial.status == "a")
         let changed = try await session.document.waitFor("normal delayed native trailing space", timeout: 12) { $0.status == "a " }
         try #require(changed.text == "q7" && changed.focused)
-        // The status text gained a trailing space after the snapshot, so the reference is stale. The
-        // field itself is unchanged, so AXe re-reads inside the call and types once on the fresh table.
+        // The status text gained a trailing space after the snapshot. It is ordinary text outside any
+        // control, so input admission ignores its text and the unchanged field types at once.
         let result = try await session.run(["type", "z"] + (try session.arguments(old, id: "agent-examples.text")))
         let typed = try session.decode(result.output)
         let action = try #require(typed.data.action)
         try #require(!typed.didError && action.outcome == "enqueuedAndDrained" && !action.replayed
-            && action.retried == true && action.enqueuedEventCount > 0)
+            && action.retried == nil && action.enqueuedEventCount > 0)
         let capture = try #require(typed.data.capture)
         try #require(capture.snapshotID != old.capture.snapshotID)
         let after = try await session.document.waitFor("typed once after the refresh") { $0.text == "q7z" }

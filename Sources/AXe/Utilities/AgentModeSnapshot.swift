@@ -42,7 +42,7 @@ struct AgentModeSnapshot: Sendable {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         let display = CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)
-        func collect(_ node: FBSimulatorAXNode, depth: Int, parentHidden: Bool, parent: Int?) throws -> (native: String, visible: [String]) {
+        func collect(_ node: FBSimulatorAXNode, depth: Int, parentHidden: Bool, parent: Int?) throws -> String {
             guard depth <= Self.maximumDepth, nodes.count < Self.maximumElements else {
                 throw AgentModeFailure("hierarchyTooLarge", "The accessibility hierarchy exceeds the agent query bound.")
             }
@@ -55,14 +55,10 @@ struct AgentModeSnapshot: Sendable {
                 keyboardButtons.append(button)
             }
             let children = try node.children.map { try collect($0, depth: depth + 1, parentHidden: hidden, parent: index) }
-            let native = Self.digest(try encoder.encode(NativeFingerprintNode(node, children: children.map(\.native).sorted())))
-            let visibleChildren = children.flatMap(\.visible).sorted()
-            guard Self.affectsAdmission(node, hidden: hidden, display: display) else { return (native, visibleChildren) }
-            return (native, [Self.digest(try encoder.encode(VisibleFingerprintNode(node, children: visibleChildren)))])
+            return Self.digest(try encoder.encode(NativeFingerprintNode(node, children: children.sorted())))
         }
         let rootFingerprints = try roots.map { try collect($0, depth: 0, parentHidden: false, parent: nil) }
-        nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.map(\.native).sorted()))
-        visibleFingerprint = Self.digest(try encoder.encode(rootFingerprints.flatMap(\.visible).sorted()))
+        nativeFingerprint = Self.digest(try encoder.encode(rootFingerprints.sorted()))
         self.nodes = nodes
         self.keyboardButtons = keyboardButtons
         let identities = NativeIdentityIndex(nodes: nodes, roots: roots)
@@ -87,6 +83,25 @@ struct AgentModeSnapshot: Sendable {
         self.nativePID = nativePID
         let viewport = AgentFrame(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight)
         let baseElements = RuntimeSnapshotBuilder.elements(from: roots.map { Self.runtimeNode($0) }, viewport: viewport)
+        // The second pre-order walk sees each node's actions, so ordinary text (a leaf StaticText
+        // outside any control, as a reference batch's layout defines it) can be told apart.
+        var visibleIndex = 0
+        func visible(_ node: FBSimulatorAXNode, controlAncestor: Bool) throws -> [String] {
+            let index = visibleIndex
+            visibleIndex += 1
+            let actions = baseElements[index].actions
+            let control = actions.contains(.tap) || actions.contains(.typeText)
+            let children = try node.children.flatMap {
+                try visible($0, controlAncestor: controlAncestor || control)
+            }.sorted()
+            guard Self.affectsAdmission(node, hidden: inheritedHidden[index], display: display) else { return children }
+            let ordinaryText = !controlAncestor && node.type == "StaticText" && node.children.isEmpty
+                && !actions.contains { $0 == .tap || $0 == .typeText || $0 == .swipeWithin }
+            return [Self.digest(try encoder.encode(VisibleFingerprintNode(node, ordinaryText: ordinaryText,
+                children: children)))]
+        }
+        visibleFingerprint = Self.digest(try encoder.encode(
+            try roots.flatMap { try visible($0, controlAncestor: false) }.sorted()))
         // Optional alias evidence cannot remove existing semantic or singleton controls.
         // Keep every occurrence/path. This index grants only the existing tap capability.
         let aliasIndex: FBSimulatorAXNativeObjectIndex?
@@ -392,6 +407,14 @@ struct AgentModeSnapshot: Sendable {
         try AgentModeTarget(nodes[index], nativeTarget: chosen).validate(node)
     }
 
+    /// The readable fields of one ref are the same on both tables.
+    func hasSameFields(_ ref: String, in fresh: AgentModeSnapshot) -> Bool {
+        guard let index = referenceIndices[ref], let current = fresh.referenceIndices[ref] else { return false }
+        let old = nodes[index], new = fresh.nodes[current]
+        return old.type == new.type && old.label == new.label && old.value == new.value
+            && old.identifier == new.identifier && old.customActionNames == new.customActionNames
+    }
+
     func validateProtectedTargets(in fresh: AgentModeSnapshot) throws {
         for index in selectedTargets.indices where selectedTargets[index]?.nativeIdentity != nil
             && !elements[index].actions.isEmpty {
@@ -665,11 +688,18 @@ struct AgentModeSnapshot: Sendable {
         let enabled: Bool?
         let children: [String]
 
-        init(_ node: FBSimulatorAXNode, children: [String]) {
+        /// Ordinary text keeps its place, type and identity but not its text or glyph bounds, so a
+        /// ticking clock or progress label does not refuse every action on its screen. Controls, text
+        /// inside controls, and every frame that can place a touch stay bound.
+        init(_ node: FBSimulatorAXNode, ordinaryText: Bool, children: [String]) {
             type = node.type; role = node.role; subrole = node.subrole; roleDescription = node.roleDescription
-            identifier = node.identifier; label = node.label; value = node.value; pid = node.pid
+            identifier = node.identifier; pid = node.pid
+            label = ordinaryText ? nil : node.label
+            value = ordinaryText ? nil : node.value
             enabled = node.enabled; customActionNames = node.customActionNames
-            frame = node.frame.map { AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height) }
+            frame = ordinaryText ? nil : node.frame.map {
+                AgentFrame(x: $0.origin.x, y: $0.origin.y, width: $0.width, height: $0.height)
+            }
             self.children = children
         }
     }

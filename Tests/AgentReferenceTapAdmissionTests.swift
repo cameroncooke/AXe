@@ -39,7 +39,7 @@ struct AgentReferenceTapAdmissionTests {
         #expect(accepted.selectorKind == .label && accepted.selectorValue == "5")
         try accepted.target?.validate(same[0].children[0])
         var variants: [[Fixture.Node]] = []
-        var nodes = fixture.controls; nodes[1].label = "8"; variants.append(nodes)
+        var nodes = fixture.controls; nodes[2].label = "Motion"; variants.append(nodes)
         nodes = fixture.controls; nodes[2].value = "0"; variants.append(nodes)
         nodes = fixture.controls; nodes[0].frame.x += 1; variants.append(nodes)
         nodes = fixture.controls; nodes.append(.init(type: "Button", label: "Overlay")); variants.append(nodes)
@@ -98,7 +98,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var changed = harness.fixture.controls
-        changed[1].label = "8"
+        changed[2].value = "0"
         harness.state.ownedRoots = try harness.fixture.roots(changed)
         harness.state.describeRoots = harness.state.ownedRoots
         let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
@@ -110,6 +110,27 @@ struct AgentReferenceTapAdmissionTests {
         // The first owned tap refuses before input; one read replaces the table; the tap runs on it.
         #expect(harness.state.kinds == [.describe, .tap, .describe, .tap, .describe])
         #expect(harness.state.ownedTaps == 2 && harness.state.discoveries == 1)
+    }
+
+    @Test("A ticking ordinary label neither refuses a ref tap nor lets a read return its old text")
+    func tickingTextAdmitsInput() async throws {
+        let harness = try Harness()
+        let (snapshot, ref) = try await harness.describe()
+        var ticked = harness.fixture.controls
+        ticked[1].label = "8"
+        harness.state.ownedRoots = try harness.fixture.roots(ticked)
+        harness.state.describeRoots = harness.state.ownedRoots
+        let read = try #require(await harness.controller.perform(harness.read(snapshot: snapshot, ref: "e3")).agent)
+        #expect(read.didError && read.error?.code == "screenChanged" && read.data.detail == nil)
+
+        let (current, currentRef) = try await harness.describe()
+        ticked[1].label = "9"
+        harness.state.ownedRoots = try harness.fixture.roots(ticked)
+        harness.state.describeRoots = harness.state.ownedRoots
+        harness.state.kinds = []
+        let result = try #require(await harness.controller.perform(harness.tap(snapshot: current, ref: currentRef)).agent)
+        #expect(!result.didError && result.data.action?.retried == nil)
+        #expect(harness.state.kinds == [.tap, .describe] && harness.state.ownedTaps == 1)
     }
 
     @Test("A changed target stops before input and returns the current screen as a new table")
@@ -161,7 +182,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var elsewhere = harness.fixture.controls
-        elsewhere[1].label = "8"
+        elsewhere[2].value = "0"
         harness.state.describeRoots = try harness.fixture.roots(elsewhere)
         // Another row changed: the read is of the same control on the current screen, and the
         // cache state still reports the snapshot as stale for input.

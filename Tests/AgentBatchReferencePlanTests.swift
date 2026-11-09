@@ -111,7 +111,8 @@ struct AgentBatchReferencePlanTests {
             screenHash: fresh.hash, nativeFingerprint: fresh.nativeFingerprint, visibleFingerprint: fresh.visibleFingerprint,
             target: try AgentModeTarget(target.node))
         try admission.validateScreen([fresh.nodes[0]])
-        #expect(throws: (any Error).self) { try admission.validateScreen([original.nodes[0]]) }
+        // Single-action admission uses the same rule: the result text is ordinary text.
+        try admission.validateScreen([original.nodes[0]])
     }
 
     @Test("Container and control descendant frames remain bound")
