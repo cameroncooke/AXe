@@ -2,8 +2,6 @@ import Foundation
 
 /// A reading view can fill unused space from one more page of the same captured table.
 enum AgentPageEnrichment {
-    private static let localFillMetadata: CLIOutputValue = .object(["extraReads": .integer(0)])
-
     static func continuationOffset(_ original: CLIOutputValue) throws -> Int? {
         guard original["didError"]?.boolValue == false,
               original["data"]?["cache"]?["requiresRefresh"]?.boolValue == false,
@@ -15,11 +13,10 @@ enum AgentPageEnrichment {
               integer(capture["page"]?["nextOffset"]) == next,
               case var .object(reserved) = source else { return nil }
 
-        // Budget for the largest cursor from the optional page and the local-fill marker.
+        // Budget for the largest cursor from the optional page.
         // Adding the page must not displace an already visible row from this reply.
         let lastOffset = min(page.total, next + AgentOutputProjection.maximumRows)
         reserved["nextRowOffset"] = .integer(Int64(lastOffset))
-        reserved["pageEnrichment"] = localFillMetadata
         let preview = try AgentOutputProjection.project(
             replacingCapture(original, with: .object(reserved)), view: .reading)
         guard let projectedPage = preview["data"]?["capture"],
@@ -85,7 +82,6 @@ enum AgentPageEnrichment {
             throw InvalidPage.metadata
         }
         merged["expiresInSeconds"] = .floatingPoint(min(firstExpiry, secondExpiry))
-        merged["pageEnrichment"] = localFillMetadata
         return .object(merged)
     }
 

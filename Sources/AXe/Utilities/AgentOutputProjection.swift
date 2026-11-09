@@ -29,31 +29,67 @@ enum AgentOutputProjection {
         guard case var .object(envelope) = result,
               let sourceData = envelope["data"],
               case var .object(data) = sourceData else { return result }
+        // The compact views carry what an agent acts on: references and rows, input evidence,
+        // refusal codes and recovery. Constants, request echoes, internal correlation, timings and
+        // device identities stay in the full view.
         envelope["schemaVersion"] = .string("2")
         if let error = envelope["error"] { envelope["error"] = compactError(error) }
-        let failed = result["didError"]?.boolValue == true
+        if envelope["nextSteps"]?.arrayValue?.isEmpty == true { envelope.removeValue(forKey: "nextSteps") }
         let refreshedBatchCapture = result["didError"]?.boolValue == false
             && isAbsentOrNull(result["error"]) && isAbsentOrNull(data["quarantine"])
             && hasRefreshedBatchCapture(data)
         if let capture = data["capture"] {
             data["capture"] = try compactCapture(capture, view: view)
-            // The selected display is represented once in the adaptive capture.
-            data.removeValue(forKey: "context")
-        } else if !failed, let context = data["context"] {
+        } else if let context = data["context"] {
             data["screen"] = screen(context)
-            data.removeValue(forKey: "context")
         }
+        // The selected display is represented once, in the capture or as the screen.
+        data.removeValue(forKey: "context")
+        // Without a required refresh the capture is current; the status only repeats it.
+        if data["cache"]?["requiresRefresh"]?.boolValue == false { data.removeValue(forKey: "cache") }
+        if let action = data["action"] { data["action"] = compactReceipt(action, omittingKind: true) }
         if let batch = data["batch"] {
-            data["batch"] = compactBatch(batch, removeSharedContext: !failed,
-                refreshedFinalCapture: refreshedBatchCapture)
+            data["batch"] = compactBatch(batch, refreshedFinalCapture: refreshedBatchCapture)
+        }
+        if let observation = data["observation"] { data["observation"] = keeping(["outcome", "observedPID"], of: observation) }
+        if case var .object(detail)? = data["detail"] {
+            // The ref, field and offset repeat the request.
+            for key in ["ref", "field", "offset"] { detail.removeValue(forKey: key) }
+            data["detail"] = .object(detail)
         }
         envelope["data"] = .object(data)
         return .object(envelope)
     }
 
+    /// One action receipt: input evidence, without the constant replay flag or the default cleanup.
+    private static func compactReceipt(_ source: CLIOutputValue, omittingKind: Bool) -> CLIOutputValue {
+        guard case var .object(receipt) = source else { return source }
+        receipt.removeValue(forKey: "replayed")
+        if omittingKind { receipt.removeValue(forKey: "kind") }
+        if receipt["cleanup"]?.stringValue == "notNeeded" { receipt.removeValue(forKey: "cleanup") }
+        if let slider = receipt["slider"] {
+            var compact = keeping(["outcome", "reason", "delivery", "endpoint", "actionsReturned"], of: slider)
+            if case var .object(fields) = compact, let last = slider["samples"]?.arrayValue?.last?["value"] {
+                fields["finalValue"] = last
+                compact = .object(fields)
+            }
+            receipt["slider"] = compact
+        }
+        if let value = receipt["sliderValue"] {
+            receipt["sliderValue"] = keeping(["outcome", "reason", "delivery", "initialValue", "finalValue",
+                "domainMinimum", "domainMaximum"], of: value)
+        }
+        return .object(receipt)
+    }
+
+    private static func keeping(_ keys: Set<String>, of source: CLIOutputValue) -> CLIOutputValue {
+        guard case let .object(fields) = source else { return source }
+        return .object(fields.filter { keys.contains($0.key) && !isAbsentOrNull($0.value) })
+    }
+
     private static func compactCapture(_ source: CLIOutputValue, view: AgentOutputView) throws -> CLIOutputValue {
         var capture: [String: CLIOutputValue] = [:]
-        for key in ["snapshotID", "seq"] { capture[key] = source[key] }
+        capture["snapshotID"] = source["snapshotID"]
         if let expiry = source["expiresInSeconds"]?.scalarText.flatMap(Double.init), expiry.isFinite,
            let seconds = Int64(exactly: max(0, expiry.rounded(.down))) {
             capture["expiresInSeconds"] = .integer(seconds)
@@ -66,8 +102,8 @@ enum AgentOutputProjection {
         capture["screenHash"] = source["screenHash"]
         capture["pid"] = source["applicationPID"]
         capture["screen"] = source["context"].map(screen)
-        capture["keyboard"] = source["keyboard"]?["state"]
-        capture["view"] = .string(view.rawValue)
+        // An unknown keyboard state proves nothing, so only a likely visible keyboard is reported.
+        if let keyboard = source["keyboard"]?["state"], keyboard.stringValue != "unknown" { capture["keyboard"] = keyboard }
 
         let targets = source["targets"]?.arrayValue ?? []
         let scroll = source["scroll"]?.arrayValue ?? []
@@ -78,7 +114,7 @@ enum AgentOutputProjection {
             let allowed = reasons.filter { inputRefs.contains($0.key) && $0.value.stringValue == "nativeIdentityIncomplete" }
             if !allowed.isEmpty { capture["unavailableReferences"] = .object(allowed) }
         }
-        for key in ["customActions", "truncatedCustomActionRefs", "pageEnrichment"] { capture[key] = source[key] }
+        for key in ["customActions", "truncatedCustomActionRefs"] { capture[key] = source[key] }
         let textStart = targets.count + scroll.count
         let redundant = Set(source["redundantTextRefs"]?.arrayValue?.compactMap(\.stringValue) ?? [])
         let offset = integer(source["rowOffset"])
@@ -194,7 +230,6 @@ enum AgentOutputProjection {
     private static func withRows(_ capture: [String: CLIOutputValue], rows: [Row], offset: Int,
                                  total: CLIOutputValue, next: CLIOutputValue?) throws -> CLIOutputValue {
         var value = capture
-        value.removeValue(forKey: "pageEnrichment")
         if case let .object(reasons)? = value["unavailableReferences"] {
             let emitted = Set(rows.map(\.ref))
             let shown = reasons.filter { emitted.contains($0.key) }
@@ -220,9 +255,6 @@ enum AgentOutputProjection {
         } else if offset > 0 {
             // Correlate an explicit terminal-page request without implying more rows.
             page["offset"] = .integer(Int64(offset))
-        }
-        if case let .object(enrichment)? = capture["pageEnrichment"] {
-            for key in ["extraReads", "incomplete", "reason", "requiresRefresh"] { page[key] = enrichment[key] }
         }
         if !page.isEmpty { value["page"] = .object(page) }
         let clipped = rows.flatMap(\.clippedFields)
@@ -264,36 +296,22 @@ enum AgentOutputProjection {
         .array(["screenID", "logicalWidth", "logicalHeight", "rotationDegrees"].map { context[$0] ?? .null })
     }
 
-    private static func compactBatch(_ source: CLIOutputValue, removeSharedContext: Bool,
-                                     refreshedFinalCapture: Bool) -> CLIOutputValue {
+    private static func compactBatch(_ source: CLIOutputValue, refreshedFinalCapture: Bool) -> CLIOutputValue {
         guard case var .object(batch) = source, let steps = batch["steps"]?.arrayValue else { return source }
-        let compactCompletedBatch = refreshedFinalCapture && completedBatch(batch, steps: steps)
-        if compactCompletedBatch {
+        if refreshedFinalCapture && completedBatch(batch, steps: steps) {
             // Completed count and ordered receipts already state the successful batch size.
             batch.removeValue(forKey: "totalSteps")
-            batch.removeValue(forKey: "rolledBack")
         }
-        // A successful batch has already proved that all steps share its baseline.
+        batch.removeValue(forKey: "replayed")
+        batch.removeValue(forKey: "rolledBack")
+        // Each step keeps its status, input evidence and refusal. The top-level cache, screen and
+        // capture state what the agent acts on next; request IDs stay in the full view.
         batch["steps"] = .array(steps.map { step in
             guard case var .object(fields) = step else { return step }
-            if removeSharedContext { fields.removeValue(forKey: "context") }
-            if compactCompletedBatch, let cacheValue = fields["cache"],
-               case let .object(cache) = cacheValue, cache.count == 3,
-               cache["status"]?.stringValue == "invalidated",
-               cache["reason"]?.stringValue == "batchInProgress",
-               cache["requiresRefresh"]?.boolValue == true {
-                // The final refreshed capture supersedes this exact intermediate state.
-                fields.removeValue(forKey: "cache")
-            }
-            if compactCompletedBatch, let receiptValue = fields["receipt"],
-               case var .object(receipt) = receiptValue {
-                // The full view retains diagnostic IDs; the adaptive view keeps input evidence.
-                fields.removeValue(forKey: "requestID")
-                if receipt["kind"]?.stringValue == fields["action"]?.stringValue {
-                    receipt.removeValue(forKey: "kind")
-                }
-                receipt.removeValue(forKey: "replayed")
-                fields["receipt"] = .object(receipt)
+            for key in ["context", "cache", "requestID"] { fields.removeValue(forKey: key) }
+            if let receipt = fields["receipt"] {
+                fields["receipt"] = compactReceipt(receipt,
+                    omittingKind: receipt["kind"]?.stringValue == fields["action"]?.stringValue)
             }
             if let error = fields["error"] { fields["error"] = compactError(error) }
             return .object(fields)
@@ -320,7 +338,8 @@ enum AgentOutputProjection {
                   isAbsentOrNull(step["error"]), let requestID = step["requestID"]?.stringValue,
                   UUID(uuidString: requestID) != nil, let action = step["action"]?.stringValue,
                   action == "tap" || action == "type", let receipt = step["receipt"],
-                  receipt["kind"]?.stringValue == (action == "tap" ? "tap" : "typeText"),
+                  let kind = receipt["kind"]?.stringValue,
+                  action == "tap" ? kind == "tap" : (kind == "typeText" || kind == "focusAndType"),
                   receipt["outcome"]?.stringValue == "enqueuedAndDrained",
                   receipt["cleanup"]?.stringValue == "notNeeded", receipt["replayed"]?.boolValue == false,
                   let count = batchInteger(receipt["enqueuedEventCount"]), count >= 0,

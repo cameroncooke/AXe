@@ -188,8 +188,8 @@ struct OutputSchemaTests {
         #expect(try validator.validate(json(undeclared), strict: false).isEmpty)
         #expect(try validator.validate(json(undeclared), strict: true) == ["$.data.capture: field newField is not declared in the schema."])
 
-        let missing = try replacing(valid, path: ["data", "cache"], with: nil)
-        #expect(try validator.validate(json(missing), strict: false) == ["$.data: missing required field cache."])
+        let missing = try replacing(valid, path: ["data", "capture", "pid"], with: nil)
+        #expect(try validator.validate(json(missing), strict: false).contains { $0.contains("missing required field pid") })
 
         let wrongVersion = try replacing(valid, path: ["schemaVersion"], with: .string("1"))
         #expect(try !validator.validate(json(wrongVersion), strict: false).isEmpty)

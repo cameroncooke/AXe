@@ -374,27 +374,33 @@ struct AgentOutputProjectionTests {
         #expect(full["data"]?["capture"]?["totalRows"]?.scalarText == "69")
     }
 
-    @Test("Terminal compact pages retain enrichment diagnostics and refresh warnings")
-    func terminalPageKeepsEnrichmentEvidence() throws {
-        let metadataValues: [CLIOutputValue] = [
-            .object(["extraReads": .integer(1)]),
-            .object(["extraReads": .integer(1), "incomplete": .bool(true),
-                "reason": .string("nextPageUnavailable"), "requiresRefresh": .bool(true)])
-        ]
-        for metadata in metadataValues {
-            let original = try replacing(result(targets: ["e1|tap|button|Control||"]),
-                path: ["data", "capture", "pageEnrichment"], with: metadata)
-            for view in [AgentOutputView.reading, .navigation] {
-                let projected = try AgentOutputProjection.project(original, view: view)
-                let page = try #require(projected["data"]?["capture"]?["page"])
-                for key in ["extraReads", "incomplete", "reason", "requiresRefresh"] {
-                    #expect(page[key]?.scalarText == metadata[key]?.scalarText)
-                }
-                #expect(page["offset"] == nil && page["total"] == nil && page["nextOffset"] == nil)
-                let actualCache = try #require(projected["data"]?["cache"])
-                let originalCache = try #require(original["data"]?["cache"])
-                #expect(try encoded(actualCache) == encoded(originalCache))
+    @Test("A successful action reply carries only what an agent acts on")
+    func successfulActionIsMinimal() throws {
+        var original = result(targets: ["e2|tap|button|Target||target"])
+        original = try replacing(original, path: ["data", "action"], with: .object([
+            "kind": .string("tap"), "outcome": .string("enqueuedAndDrained"), "enqueuedEventCount": .integer(2),
+            "cleanup": .string("notNeeded"), "replayed": .bool(false)]))
+        for view in [AgentOutputView.reading, .navigation] {
+            let projected = try AgentOutputProjection.project(original, view: view)
+            guard case let .object(top) = projected, case let .object(data)? = projected["data"],
+                  case let .object(capture)? = data["capture"], case let .object(action)? = data["action"] else {
+                throw FixtureError.invalidPath
             }
+            #expect(Set(top.keys) == ["schema", "schemaVersion", "didError", "data"])
+            #expect(Set(data.keys) == ["capture", "action"])
+            #expect(Set(action.keys) == ["outcome", "enqueuedEventCount"])
+            #expect(Set(capture.keys) == ["snapshotID", "expiresInSeconds", "screenHash", "pid", "screen", "rows"])
+        }
+    }
+
+    @Test("Compact pages carry only the cursor fields an agent passes back")
+    func compactPageHasOnlyCursorFields() throws {
+        let original = try replacing(result(targets: (1...64).map { "e\($0)|tap|button|Control \($0)||" }, total: 70),
+            path: ["data", "capture", "nextRowOffset"], with: .integer(64))
+        for view in [AgentOutputView.reading, .navigation] {
+            let page = try #require(AgentOutputProjection.project(original, view: view)["data"]?["capture"]?["page"])
+            guard case let .object(fields) = page else { throw FixtureError.invalidPath }
+            #expect(Set(fields.keys) == ["offset", "total", "nextOffset"])
         }
     }
 
@@ -404,7 +410,7 @@ struct AgentOutputProjectionTests {
         let projected = try AgentOutputProjection.project(original, view: .reading)
         let capture = try #require(projected["data"]?["capture"])
         #expect(capture["snapshotID"]?.stringValue == snapshotID)
-        #expect(capture["seq"]?.scalarText == "3")
+        #expect(capture["seq"] == nil)
         #expect(capture["expiresInSeconds"]?.scalarText == "59")
         #expect(capture["unchanged"]?.boolValue == true)
         #expect(capture["rows"] == nil && capture["context"] == nil && capture["screen"] == nil)
@@ -428,7 +434,15 @@ struct AgentOutputProjectionTests {
         #expect(projected["didError"]?.boolValue == true)
         let returnedData = try #require(projected["data"])
         let returnedError = try #require(projected["error"])
-        #expect(try encoded(returnedData) == encoded(evidence))
+        // Uncertain cleanup, sent events, quarantine and the required refresh stay. The display is
+        // the compact screen; the constant replay flag is the full view's.
+        let compact = CLIOutputValue.object([
+            "screen": .array([.integer(3), .integer(951), .integer(669), .integer(90)]),
+            "action": .object(["cleanup": .string("uncertain"), "enqueuedEventCount": .integer(1)]),
+            "quarantine": .object(["reason": .string("releaseUncertain")]),
+            "cache": .object(["status": .string("quarantined"), "requiresRefresh": .bool(true)])
+        ])
+        #expect(try encoded(returnedData) == encoded(compact))
         #expect(try encoded(returnedError) == encoded(error))
         #expect(projected["nextSteps"]?.arrayValue?.first?.stringValue == "Do not replay input.")
     }
@@ -460,16 +474,17 @@ struct AgentOutputProjectionTests {
             #expect(projected["didError"]?.boolValue == true)
             #expect(projected["nextSteps"]?.arrayValue?.first?.stringValue == "Do not replay input.")
             let data = try #require(projected["data"])
-            for (key, expected) in [("context", context), ("action", receipt), ("quarantine", quarantine), ("cache", cache)] {
+            let compactReceipt = CLIOutputValue.object(["cleanup": .string("uncertain"), "enqueuedEventCount": .integer(1)])
+            for (key, expected) in [("action", compactReceipt), ("quarantine", quarantine), ("cache", cache)] {
                 let actual = try #require(data[key])
                 #expect(try encoded(actual) == encoded(expected))
             }
+            #expect(data["context"] == nil && data["screen"] != nil)
             let batchStep = try #require(data["batch"]?["steps"]?.arrayValue?.first)
-            let keptContext = try #require(batchStep["context"])
             let keptReceipt = try #require(batchStep["receipt"])
             let nestedError = try #require(batchStep["error"])
-            #expect(try encoded(keptContext) == encoded(context))
-            #expect(try encoded(keptReceipt) == encoded(receipt))
+            #expect(batchStep["context"] == nil)
+            #expect(try encoded(keptReceipt) == encoded(compactReceipt))
             #expect(try encoded(nestedError) == encoded(shownError))
             #expect(try encoded(projected).count < 20 * 1024)
         }
@@ -489,7 +504,9 @@ struct AgentOutputProjectionTests {
         let decoded = try JSONDecoder().decode(CLIOutputValue.self, from: CLIOutput.rendered(output))
         #expect(decoded["data"]?["detail"]?["text"]?.stringValue == exact)
         let returnedDetail = try #require(decoded["data"]?["detail"])
-        #expect(try encoded(returnedDetail) == encoded(detail))
+        // The ref, field and offset repeat the request.
+        #expect(try encoded(returnedDetail) == encoded(.object(["totalLength": .integer(Int64(exact.unicodeScalars.count)),
+            "text": .string(exact)])))
     }
 
     @Test("A complete adaptive batch keeps input evidence and omits duplicate success fields")
@@ -501,7 +518,7 @@ struct AgentOutputProjectionTests {
             let steps = try #require(projected["data"]?["batch"]?["steps"]?.arrayValue)
             #expect(steps.count == 2)
             #expect(projected["data"]?["batch"]?["completedSteps"]?.scalarText == "2")
-            #expect(projected["data"]?["batch"]?["replayed"]?.boolValue == false)
+            #expect(projected["data"]?["batch"]?["replayed"] == nil)
             #expect(projected["data"]?["batch"]?["totalSteps"] == nil)
             #expect(projected["data"]?["batch"]?["rolledBack"] == nil)
             for (old, step) in zip(oldSteps, steps) {
@@ -514,15 +531,17 @@ struct AgentOutputProjectionTests {
                     let actual = try #require(step[key])
                     #expect(try encoded(actual) == encoded(expected))
                 }
-                for key in ["outcome", "enqueuedEventCount", "cleanup"] {
+                for key in ["outcome", "enqueuedEventCount"] {
                     let expected = try #require(old["receipt"]?[key])
                     let actual = try #require(step["receipt"]?[key])
                     #expect(try encoded(actual) == encoded(expected))
                 }
+                #expect(step["receipt"]?["cleanup"] == nil)
             }
             let capture = try #require(projected["data"]?["capture"])
             #expect(capture["snapshotID"]?.stringValue == snapshotID)
-            #expect(projected["data"]?["cache"]?["requiresRefresh"]?.boolValue == false)
+            // A current capture needs no cache state.
+            #expect(projected["data"]?["cache"] == nil)
         }
         let full = try AgentOutputProjection.project(original, view: .full)
         #expect(try encoded(full) == encoded(original))
@@ -546,8 +565,8 @@ struct AgentOutputProjectionTests {
         #expect(try encoded(full) == encoded(original))
     }
 
-    @Test("Final capture failure preserves the complete batch evidence")
-    func finalCaptureFailureKeepsIntermediateCaches() throws {
+    @Test("A failed batch keeps every step's status, input evidence and the batch size")
+    func finalCaptureFailureKeepsStepEvidence() throws {
         var original = try completedBatchResult()
         original = try replacing(original, path: ["didError"], with: .bool(true))
         original = try replacing(original, path: ["error"], with: .object([
@@ -556,17 +575,24 @@ struct AgentOutputProjectionTests {
         original = try replacing(original, path: ["data", "cache"], with: .object([
             "status": .string("invalidated"), "requiresRefresh": .bool(true)]))
         let projected = try AgentOutputProjection.project(original, view: .reading)
-        let expected = try #require(original["data"]?["batch"])
-        let actual = try #require(projected["data"]?["batch"])
-        #expect(try encoded(actual) == encoded(expected))
+        let batch = try #require(projected["data"]?["batch"])
+        #expect(batch["totalSteps"]?.scalarText == "2" && batch["completedSteps"]?.scalarText == "2")
+        let steps = try #require(batch["steps"]?.arrayValue)
+        for step in steps {
+            guard case let .object(fields) = step else { throw FixtureError.invalidPath }
+            #expect(Set(fields.keys) == ["index", "action", "status", "receipt"])
+            #expect(step["receipt"]?["outcome"]?.stringValue == "enqueuedAndDrained")
+            #expect(step["receipt"]?["enqueuedEventCount"]?.scalarText == "2")
+        }
+        #expect(projected["data"]?["cache"]?["requiresRefresh"]?.boolValue == true)
+        #expect(try encoded(AgentOutputProjection.project(original, view: .full)) == encoded(original))
     }
 
-    @Test("Partial or malformed success cannot hide intermediate state")
-    func incompleteBatchKeepsIntermediateCaches() throws {
+    @Test("A partial or malformed success keeps the batch size; only a verified success omits it")
+    func incompleteBatchKeepsTotal() throws {
         let valid = try completedBatchResult()
         let variants = [
             try replacing(valid, path: ["data", "batch", "completedSteps"], with: .integer(1)),
-            try replacing(valid, path: ["data", "batch", "totalSteps"], with: .string("2")),
             try replacing(valid, path: ["data", "batch", "stoppedAt"], with: .integer(2)),
             try replacing(valid, path: ["data", "batch", "replayed"], with: .bool(true)),
             try replacing(valid, path: ["data", "batch", "rolledBack"], with: .bool(true)),
@@ -582,16 +608,22 @@ struct AgentOutputProjectionTests {
         ]
         for original in variants {
             let projected = try AgentOutputProjection.project(original, view: .reading)
-            let expected = try #require(original["data"]?["batch"])
-            let actual = try #require(projected["data"]?["batch"])
-            #expect(try encoded(actual) == encoded(expected))
+            #expect(projected["data"]?["batch"]?["totalSteps"]?.scalarText == "2")
         }
-        let extraCacheField = try replacing(valid,
-            path: ["data", "batch", "steps", "0", "cache", "nativeEvidence"], with: .string("keep"))
-        let projected = try AgentOutputProjection.project(extraCacheField, view: .reading)
-        let steps = try #require(projected["data"]?["batch"]?["steps"]?.arrayValue)
-        #expect(steps[0]["cache"]?["nativeEvidence"]?.stringValue == "keep")
-        #expect(steps[1]["cache"] == nil)
+        let uncertain = try AgentOutputProjection.project(variants[5], view: .reading)
+        #expect(uncertain["data"]?["batch"]?["steps"]?.arrayValue?[1]["receipt"]?["cleanup"]?.stringValue == "uncertain")
+        let completed = try AgentOutputProjection.project(valid, view: .reading)
+        #expect(completed["data"]?["batch"]?["totalSteps"] == nil)
+    }
+
+    @Test("A completed batch with a focus step also omits its batch size")
+    func focusStepBatchIsCompact() throws {
+        var original = try completedBatchResult()
+        original = try replacing(original, path: ["data", "batch", "steps", "1", "action"], with: .string("type"))
+        original = try replacing(original, path: ["data", "batch", "steps", "1", "receipt", "kind"], with: .string("focusAndType"))
+        let projected = try AgentOutputProjection.project(original, view: .reading)
+        #expect(projected["data"]?["batch"]?["totalSteps"] == nil)
+        #expect(projected["data"]?["batch"]?["steps"]?.arrayValue?[1]["receipt"]?["kind"]?.stringValue == "focusAndType")
     }
 
     private func completedBatchResult() throws -> CLIOutputValue {

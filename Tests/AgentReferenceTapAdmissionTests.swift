@@ -1,3 +1,4 @@
+import AXeCore
 import Foundation
 import FBSimulatorControl
 import Testing
@@ -18,6 +19,15 @@ struct AgentReferenceTapAdmissionTests {
         #expect(request.screenUUID == UUID(uuidString: fixture.context.screenUUID))
         #expect(request.agentAdmission == nil && request.agent == nil && request.keyboard == nil)
         #expect(!admission.requiresNativeIdentity)
+    }
+
+    @Test("A tap row also admits a hold, a double-tap and a drag")
+    func tapRowsAdmitImpliedGestures() throws {
+        let fixture = try Fixture()
+        for action in [RuntimeElementAction.tap, .longPress, .touch] {
+            _ = try fixture.snapshot.node(ref: "e2", requiredAction: action)
+        }
+        _ = try fixture.snapshot.dragNode(ref: "e2")
     }
 
     @Test("Only a visible, enabled tap-capable reference can open an owned tap")

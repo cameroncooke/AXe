@@ -35,8 +35,9 @@ struct AgentModePublicErrorProjectionTests {
             #expect(output["error"]?["code"]?.stringValue == "nativeActionFailed")
             #expect(output["data"]?["action"]?["outcome"]?.stringValue == "failedBeforeInput")
             #expect(output["data"]?["action"]?["enqueuedEventCount"]?.scalarText == "0")
-            #expect(output["data"]?["action"]?["cleanup"]?.stringValue == "notNeeded")
-            #expect(output["data"]?["action"]?["replayed"]?.boolValue == false)
+            // The compact views omit the default cleanup and the constant replay flag.
+            #expect(output["data"]?["action"]?["cleanup"]?.stringValue == (view == .full ? "notNeeded" : nil))
+            #expect(output["data"]?["action"]?["replayed"]?.boolValue == (view == .full ? false : nil))
         }
     }
 
@@ -115,7 +116,7 @@ struct AgentModePublicErrorProjectionTests {
             #expect(!text.contains(objectID) && !text.contains("private-tree-label"))
             #expect(output["data"]?["action"]?["enqueuedEventCount"]?.scalarText == "2")
             #expect(output["data"]?["action"]?["cleanup"]?.stringValue == "uncertain")
-            #expect(output["data"]?["action"]?["replayed"]?.boolValue == false)
+            #expect(output["data"]?["action"]?["replayed"]?.boolValue == (view == .full ? false : nil))
             #expect(output["data"]?["quarantine"]?["persisted"]?.boolValue == true)
             #expect(output["data"]?["batch"]?["completedSteps"]?.scalarText == "0")
             #expect(output["data"]?["batch"]?["stoppedAt"]?.scalarText == "1")
@@ -191,10 +192,10 @@ struct AgentModePublicErrorProjectionTests {
             #expect(output["data"]?["quarantine"]?["recordPath"]?.stringValue == "/private-fixture")
             #expect(output["data"]?["quarantine"]?["persisted"]?.boolValue == false)
             #expect(output["data"]?["action"]?["enqueuedEventCount"]?.scalarText == "2")
-            #expect(output["data"]?["action"]?["slider"]?["reasonTruncated"]?.boolValue == true)
+            #expect(output["data"]?["action"]?["slider"]?["reasonTruncated"]?.boolValue == (view == .full ? true : nil))
             let stored = try #require(output["data"]?["batch"]?["steps"]?.arrayValue?.first)
             #expect(stored["receipt"]?["cleanup"]?.stringValue == "uncertain")
-            #expect(stored["receipt"]?["replayed"]?.boolValue == false)
+            #expect(stored["receipt"]?["replayed"]?.boolValue == (view == .full ? false : nil))
             #expect(stored["receipt"]?["quarantine"]?["recordPath"]?.stringValue == "/private-fixture")
         }
     }

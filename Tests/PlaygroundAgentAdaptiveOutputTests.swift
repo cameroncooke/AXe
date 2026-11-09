@@ -34,7 +34,8 @@ struct PlaygroundAgentAdaptiveOutputTests {
                 let requiredText = Set(allCanonical.filter { $0.action == "text" && !redundant.contains($0.ref) }.map(\.ref))
                 let returnedRefs = Set(compact.map(\.ref))
                 #expect(requiredText.isSubset(of: returnedRefs))
-                #expect(current["view"]?.stringValue == "reading")
+                // The view, like other request echoes, is not repeated in compact output.
+                #expect(current["view"] == nil && current["seq"] == nil)
             }
         }
         #expect(try session.document.read() == before)
@@ -48,17 +49,16 @@ struct PlaygroundAgentAdaptiveOutputTests {
         let original = try #require(initial.value["data"]?["capture"])
         let snapshot = try #require(original["snapshotID"]?.stringValue)
         let hash = try #require(original["screenHash"]?.stringValue)
-        let sequence = try scalar(original["seq"])
         let expiry = try scalar(original["expiresInSeconds"])
         try await Task.sleep(for: .milliseconds(1100))
         let reply = try await command(session, ["describe-ui", "--agent", "--since-screen-hash", hash])
         let reused = try #require(reply.value["data"]?["capture"])
         #expect(reused["snapshotID"]?.stringValue == snapshot)
         #expect(reused["unchanged"]?.boolValue == true)
-        #expect(try scalar(reused["seq"]) > sequence)
         #expect(try scalar(reused["expiresInSeconds"]) < expiry)
         #expect(reused["rows"] == nil)
-        #expect(reply.value["data"]?["cache"]?["requiresRefresh"]?.boolValue == false)
+        // A current capture needs no cache state in compact output.
+        #expect(reply.value["data"]?["cache"] == nil)
         #expect(try session.document.read() == before)
     }
 
@@ -138,10 +138,8 @@ struct PlaygroundAgentAdaptiveOutputTests {
                 let chunk = try await command(session, ["describe-ui", "--agent", "--snapshot-id", snapshot,
                     "--read-ref", ref, "--text-field", "label", "--text-offset", String(offset), "--text-limit", "64"])
                 let detail = try #require(chunk.value["data"]?["detail"])
-                #expect(detail["ref"]?.stringValue == ref && detail["field"]?.stringValue == "label")
                 #expect(detail["text"]?.stringValue == String(repeating: "\"", count: 64))
                 #expect(detail["totalLength"]?.scalarText == "900000")
-                #expect(detail["offset"]?.scalarText == String(offset))
                 if offset == 0 { #expect(detail["nextOffset"]?.scalarText == "64") }
                 else { #expect(detail["nextOffset"] == nil) }
             }
@@ -196,7 +194,7 @@ struct PlaygroundAgentAdaptiveOutputTests {
 
         let space = try await command(session, ["key", "44", "--agent", "--snapshot-id", old.snapshot, "--ref", old.ref])
         let action = try #require(space.value["data"]?["action"])
-        try #require(action["outcome"]?.stringValue == "enqueuedAndDrained" && action["replayed"]?.boolValue == false)
+        try #require(action["outcome"]?.stringValue == "enqueuedAndDrained" && action["replayed"] == nil)
         let spacedState = try await session.document.waitFor("one normal trailing-space key") {
             $0.text == seed + " " && $0.textChanges == before.textChanges + 1 && $0.activeWindowTouches == 0
         }
@@ -209,7 +207,7 @@ struct PlaygroundAgentAdaptiveOutputTests {
 
         let backspace = try await command(session, ["key", "42", "--agent", "--snapshot-id", spaced.snapshot, "--ref", spaced.ref])
         let deleted = try #require(backspace.value["data"]?["action"])
-        try #require(deleted["outcome"]?.stringValue == "enqueuedAndDrained" && deleted["replayed"]?.boolValue == false)
+        try #require(deleted["outcome"]?.stringValue == "enqueuedAndDrained" && deleted["replayed"] == nil)
         let finalState = try await session.document.waitFor("one normal backspace restores exact spaces") {
             $0.text == seed && $0.textChanges == spacedState.textChanges + 1 && $0.activeWindowTouches == 0
         }
@@ -355,8 +353,9 @@ struct PlaygroundAgentAdaptiveOutputTests {
 
     private func requireCompletedTap(_ reply: Reply) throws {
         let action = try #require(reply.value["data"]?["action"])
-        try #require(action["kind"]?.stringValue == "tap" && action["outcome"]?.stringValue == "enqueuedAndDrained")
-        try #require(action["cleanup"]?.stringValue != "uncertain" && action["replayed"]?.boolValue == false)
+        // Compact receipts omit the command's own kind, the default cleanup and the constant replay flag.
+        try #require(action["kind"] == nil && action["outcome"]?.stringValue == "enqueuedAndDrained")
+        try #require(action["cleanup"] == nil && action["replayed"] == nil)
         try #require(action["enqueuedEventCount"]?.scalarText == "2")
     }
 
@@ -374,7 +373,6 @@ struct PlaygroundAgentAdaptiveOutputTests {
         let read = try await command(session, ["describe-ui", "--agent", "--snapshot-id", snapshot,
             "--read-ref", resetRow.ref, "--text-field", "id", "--text-limit", "64"])
         let detail = try #require(read.value["data"]?["detail"])
-        try #require(detail["ref"]?.stringValue == resetRow.ref && detail["field"]?.stringValue == "id")
         try #require(detail["text"]?.stringValue == "agent-examples.reset" && detail["nextOffset"] == nil)
         let frame = try #require(detail["frame"])
         let x = try coordinate(frame["x"])

@@ -16,7 +16,7 @@ struct AgentPageEnrichmentTests {
         #expect(capture["rows"]?.arrayValue?.last?.stringValue?.hasPrefix("e68|") == true)
         #expect(capture["page"]?["nextOffset"]?.scalarText == "68")
         #expect(capture["page"]?["total"]?.scalarText == "81")
-        #expect(capture["page"]?["extraReads"]?.scalarText == "0")
+        #expect(capture["page"]?["extraReads"] == nil)
         #expect(capture["page"]?["incomplete"] == nil)
         #expect(try same(enriched["data"]?["action"], original["data"]?["action"]))
         #expect(try same(enriched["data"]?["batch"], original["data"]?["batch"]))
