@@ -28,6 +28,7 @@ struct PlaygroundControlsDocument: PlaygroundObservedDocument {
     let scheduleGeneration: Int
     let text: String
     let textFocused: Bool
+    let keyboardVisible: Bool
     let slider: Double
     let switchOn: Bool
     let listOffsetY: Double

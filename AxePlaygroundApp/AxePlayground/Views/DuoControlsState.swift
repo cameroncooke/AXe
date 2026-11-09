@@ -18,6 +18,7 @@ struct DuoControlsState: Encodable {
     let switchOn: Bool
     let text: String
     let textFocused: Bool
+    let keyboardVisible: Bool
     let listOffsetY: Double
     let pageOffsetY: Double
     let canvasOffsetX: Double

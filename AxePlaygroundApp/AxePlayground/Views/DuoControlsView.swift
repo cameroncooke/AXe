@@ -34,6 +34,7 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
     private var rotation: CGFloat = 0
     private var lastSize = CGSize.zero
     private var resetting = false
+    private var keyboardVisible = false
 
     override var shouldAutorotate: Bool { true }
     override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .all }
@@ -42,6 +43,11 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
         super.viewDidLoad()
         view.backgroundColor = .systemBackground
         view.accessibilityIdentifier = "feature.screen"
+        // UIKit scrolls the focused field above the keyboard while the keyboard animates in.
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardDidShow),
+            name: UIResponder.keyboardDidShowNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(keyboardDidHide),
+            name: UIResponder.keyboardDidHideNotification, object: nil)
         let outer = UIStackView()
         outer.axis = .vertical
         outer.spacing = 6
@@ -350,6 +356,9 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
         publish("reset")
     }
 
+    @objc private func keyboardDidShow() { keyboardVisible = true; publish("keyboardDidShow") }
+    @objc private func keyboardDidHide() { keyboardVisible = false; publish("keyboardDidHide") }
+
     private func increment(_ name: String) { counts[name, default: 0] += 1; publish(name) }
 
     private func publish(_ event: String) {
@@ -369,7 +378,7 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
             sequence: sequence, event: event, counts: counts, advancedSliders: targets.sliderValues,
             waitTargetVisible: !targets.target.isHidden, waitDuplicateVisible: !targets.duplicate.isHidden,
             targetAppearedUptime: targets.appearedUptime, scheduleGeneration: targets.scheduleGeneration, slider: slider.value, switchOn: toggle.isOn,
-            text: field.text ?? "", textFocused: field.isFirstResponder, listOffsetY: Double(listScroll.contentOffset.y),
+            text: field.text ?? "", textFocused: field.isFirstResponder, keyboardVisible: keyboardVisible, listOffsetY: Double(listScroll.contentOffset.y),
             pageOffsetY: Double(mainScroll.contentOffset.y), canvasOffsetX: Double(canvas.contentOffset.x), canvasOffsetY: Double(canvas.contentOffset.y),
             pinchScale: Double(pinchScale), rotationRadians: Double(rotation), panX: Double(panDelta.x), panY: Double(panDelta.y),
             touchX: Double(touchPoint.x), touchY: Double(touchPoint.y), width: Double(lastSize.width), height: Double(lastSize.height),
