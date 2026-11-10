@@ -8,7 +8,7 @@ enum SelectedSliderEndpoint: String, ExpressibleByArgument {
 }
 
 struct SelectedAXOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Optional: refuse unless this app PID is frontmost. Without it, selected AX uses the app that is frontmost when the command starts. With --agent it asserts the snapshot or frontmost app PID.")
+    @Option(name: .customLong("expected-pid"), help: "Selected or agent: require this frontmost app PID.")
     var expectedPID: Int32?
 
     /// `allowed` is true for a selected AX operation, where the PID is an optional guard.

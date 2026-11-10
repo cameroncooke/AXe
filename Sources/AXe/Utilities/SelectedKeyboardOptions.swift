@@ -3,9 +3,9 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedKeyboardOptions: ParsableArguments {
-    @Option(name: .customLong("expected-pid"), help: "Selected keyboard, optional: refuse unless this app PID is frontmost. Without it, AXe uses the app that is frontmost when the command starts. With --agent it asserts the snapshot owner PID.")
+    @Option(name: .customLong("expected-pid"), help: "Selected or agent: require this frontmost app PID.")
     var expectedPID: Int32?
-    @Option(name: .customLong("focus-id"), help: "Selected keyboard: exact ID of an already focused TextField. No focus action or fallback.")
+    @Option(name: .customLong("focus-id"), help: "ID of the focused TextField (required when selected).")
     var focusID: String?
 
     func validate(input: SelectedInputOptions) throws {

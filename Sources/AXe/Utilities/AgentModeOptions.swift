@@ -4,13 +4,13 @@ import Foundation
 extension AgentOutputView: ExpressibleByArgument {}
 
 struct AgentModeOptions: ParsableArguments {
-    @Flag(name: .customLong("agent"), help: "Use the optional agent snapshot and action layer. The default command path stays stateless.")
+    @Flag(name: .customLong("agent"), help: "Agent mode: act on snapshot refs; print JSON results.")
     var enabled = false
 
-    @Option(name: .customLong("view"), help: "Agent output: reading (default), navigation, or full canonical detail. Raw commands are unchanged.")
+    @Option(name: .customLong("view"), help: "Agent only: result detail; reading by default.")
     var view: AgentOutputView?
 
-    @Option(name: .customLong("snapshot-id"), help: "Agent only: UUID of the snapshot that owns this ref or coordinate action.", transform: { raw in
+    @Option(name: .customLong("snapshot-id"), help: "Agent only: snapshot ID from the latest capture.", transform: { raw in
         guard let uuid = UUID(uuidString: raw) else {
             throw ValidationError("--snapshot-id must be a UUID.")
         }
@@ -18,7 +18,7 @@ struct AgentModeOptions: ParsableArguments {
     })
     var snapshotID: UUID?
 
-    @Option(name: .customLong("ref"), help: "Agent only: element ref from the specified snapshot.")
+    @Option(name: .customLong("ref"), help: "Agent only: a ref from that snapshot, such as e12.")
     var elementRef: String?
 
     func validate() throws {

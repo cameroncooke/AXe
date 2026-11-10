@@ -4,13 +4,13 @@ import Foundation
 enum SimulatorInputMode: String, ExpressibleByArgument { case legacy, selected }
 
 struct SelectedInputOptions: ParsableArguments {
-    @Option(name: .customLong("input-mode"), help: "legacy preserves the existing route; selected uses the owned input session with target checks.")
+    @Option(name: .customLong("input-mode"), help: "Input route: legacy, or selected to bind one screen and check the target before input.")
     var mode: SimulatorInputMode = .legacy
 
-    @Option(name: .customLong("screen-id"), help: "Selected input only, optional: refuse unless this screen is active. Requires --screen-uuid. Without the pair, AXe uses the screen that is active when the command starts.")
+    @Option(name: .customLong("screen-id"), help: "Selected input: refuse unless this screen is active.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Selected input only, optional: the active screen's UUID from axe displays. Requires --screen-id.")
+    @Option(name: .customLong("screen-uuid"), help: "Selected input: that screen's UUID from axe displays; pass both.")
     var screenUUID: String?
 
     func validate() throws {

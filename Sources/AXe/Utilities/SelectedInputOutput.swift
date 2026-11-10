@@ -2,7 +2,7 @@ import ArgumentParser
 import Foundation
 
 struct SelectedOutputOptions: ParsableArguments {
-    @Flag(name: .customLong("verbose"), help: "Print the full input receipt as JSON, including context, target checks and cleanup evidence, where AXe owns the input (selected input, and ordinary input on the iPhone Duo and DTUHID simulators).")
+    @Flag(name: .customLong("verbose"), help: "Print the full input receipt as JSON where available.")
     var verbose = false
 }
 
