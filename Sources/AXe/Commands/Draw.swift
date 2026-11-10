@@ -17,35 +17,33 @@ struct Draw: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Move one finger through a list of points to draw a line or shape.",
         discussion: """
-        Each point is x,y in logical points in the current orientation, the same units as tap -x -y.
-        The finger goes down at the first point, moves in straight lines through every point in order
-        and lifts at the last. --close returns to the first point. The whole stroke takes --duration.
+        Each point is x,y in points in the current orientation, the units of tap -x -y. The finger goes down at the first point, moves in straight lines through the rest and lifts at the last. Every point must be on the active screen.
 
         Examples:
-          axe draw 100,400 300,400 --udid UDID
-          axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid UDID
-          axe draw 60,500 120,420 180,500 240,420 300,500 --udid UDID
+          axe draw 100,400 300,400 --udid <UDID>
+          axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid <UDID>
+          axe draw 60,500 120,420 180,500 240,420 300,500 --udid <UDID>
         """
     )
 
     static let maximumPoints = 1_000
 
-    @Argument(help: "Two to 1,000 points, each x,y in logical points.")
+    @Argument(help: "2 to 1000 points, each x,y.")
     var points: [SelectedHIDCompleteGesture.Point] = []
 
-    @Option(name: .customLong("duration"), help: "Seconds the whole stroke takes, in (0, 30] (default 1).")
+    @Option(name: .customLong("duration"), help: "Seconds the whole stroke takes, above 0 to 30.")
     var duration: Double = 1
 
     @Flag(name: .customLong("close"), help: "Return to the first point at the end.")
     var close = false
 
-    @Option(name: .customLong("pre-delay"), help: "Delay before the stroke in seconds.")
+    @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the stroke, 0 to 10.")
     var preDelay: Double?
 
-    @Option(name: .customLong("post-delay"), help: "Delay after the stroke in seconds.")
+    @Option(name: .customLong("post-delay"), help: "Seconds to wait after the stroke, 0 to 10.")
     var postDelay: Double?
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions

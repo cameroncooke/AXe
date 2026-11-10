@@ -131,98 +131,97 @@ struct Gesture: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a preset swipe, a pinch or another multi-touch gesture.",
         discussion: """
-        Presets swipe across the screen: scroll-up, scroll-down, scroll-left, scroll-right,
-        swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge, swipe-from-bottom-edge.
+        Presets: scroll-up, scroll-down, scroll-left, scroll-right, swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge and swipe-from-bottom-edge. Physical devices do not support swipe-from-right-edge.
 
-        Coordinate gestures use logical points on the active screen:
-          pinch             --scale above 1 zooms in, below 1 zooms out. Without -x/-y it pinches
-                            at the centre of the screen; without --radius it starts a quarter of
-                            the screen's shorter side from the centre.
+        Coordinate gestures take points in the current orientation:
+          pinch             --scale, and optionally -x/-y and --radius
           double-tap        -x/-y
-          rotate            -x/-y, --radius and --degrees (clockwise)
-          two-finger-tap    -x/-y and --x2/--y2; two-finger-hold also needs --hold
-          two-finger-swipe  both starts and --end-x/--end-y/--end-x2/--end-y2
+          rotate            -x/-y, --radius, --degrees
+          two-finger-tap    -x/-y, --x2/--y2
+          two-finger-hold   -x/-y, --x2/--y2, --hold
+          two-finger-swipe  -x/-y, --x2/--y2, --end-x/--end-y, --end-x2/--end-y2
+
+        A pinch without -x/-y uses the centre of the screen, and without --radius a quarter of its shorter side. With --agent, double-tap and pinch act on --ref instead of coordinates.
 
         Examples:
-          axe gesture scroll-up --udid UDID
-          axe gesture pinch --scale 2 --udid UDID
-          axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid UDID
-          axe gesture rotate -x 200 -y 400 --radius 80 --degrees 90 --udid UDID
-          axe gesture two-finger-swipe -x 150 -y 500 --x2 250 --y2 500 --end-x 150 --end-y 300 --end-x2 250 --end-y2 300 --udid UDID
+          axe gesture scroll-up --udid <UDID>
+          axe gesture pinch --scale 2 --udid <UDID>
+          axe gesture rotate -x 200 -y 400 --radius 80 --degrees 90 --udid <UDID>
+          axe gesture swipe-from-left-edge --udid <UDID>
         """
     )
     
-    @Argument(help: "A preset, pinch, double-tap, rotate, two-finger-tap, two-finger-hold or two-finger-swipe.")
+    @Argument(help: "A preset or a coordinate gesture, listed above.")
     var gesture: GestureAction
 
-    @Option(name: .customShort("x"), help: "Selected gesture center or first contact X in logical points.")
+    @Option(name: .customShort("x"), help: "Centre or first contact X in points.")
     var centerX: Double?
 
-    @Option(name: .customShort("y"), help: "Selected gesture center or first contact Y in logical points.")
+    @Option(name: .customShort("y"), help: "Centre or first contact Y in points.")
     var centerY: Double?
 
-    @Option(name: .long, help: "Pinch/rotate only: explicit positive radius in logical points.")
+    @Option(name: .long, help: "pinch, rotate: start radius in points; required for rotate and agent pinch.")
     var radius: Double?
 
-    @Option(name: .long, help: "Pinch only: final radius divided by starting radius; positive and not 1.")
+    @Option(name: .long, help: "pinch: end radius divided by start radius, not 1; above 1 zooms in.")
     var scale: Double?
     
-    @Option(name: .long, help: "Rotate only: nonzero clockwise angle in -360...360 degrees.")
+    @Option(name: .long, help: "rotate: clockwise angle in degrees, -360 to 360, not 0.")
     var degrees: Double?
 
-    @Option(name: .customLong("x2"), help: "Two-finger actions only: second contact X in logical points.")
+    @Option(name: .customLong("x2"), help: "Two-finger gestures: second contact X in points.")
     var secondX: Double?
 
-    @Option(name: .customLong("y2"), help: "Two-finger actions only: second contact Y in logical points.")
+    @Option(name: .customLong("y2"), help: "Two-finger gestures: second contact Y in points.")
     var secondY: Double?
 
-    @Option(name: .customLong("end-x"), help: "Two-finger-swipe only: first contact end X in logical points.")
+    @Option(name: .customLong("end-x"), help: "two-finger-swipe: end X of the first contact.")
     var endX: Double?
 
-    @Option(name: .customLong("end-y"), help: "Two-finger-swipe only: first contact end Y in logical points.")
+    @Option(name: .customLong("end-y"), help: "two-finger-swipe: end Y of the first contact.")
     var endY: Double?
 
-    @Option(name: .customLong("end-x2"), help: "Two-finger-swipe only: second contact end X in logical points.")
+    @Option(name: .customLong("end-x2"), help: "two-finger-swipe: end X of the second contact.")
     var secondEndX: Double?
 
-    @Option(name: .customLong("end-y2"), help: "Two-finger-swipe only: second contact end Y in logical points.")
+    @Option(name: .customLong("end-y2"), help: "two-finger-swipe: end Y of the second contact.")
     var secondEndY: Double?
 
-    @Option(name: .long, help: "Contact hold in seconds (0, 10]; required for two-finger-hold.")
+    @Option(name: .long, help: "Seconds each touch is held, above 0 to 10; required for two-finger-hold.")
     var hold: Double?
 
-    @Option(name: .long, help: "Double-tap only: release-to-next-down interval (0, 10], default 0.1 seconds.")
+    @Option(name: .long, help: "double-tap: seconds between the taps, above 0 to 10 (default 0.1).")
     var interval: Double?
 
-    @Option(name: .long, help: "Edge presets only: positive start inset in logical points (default 20); opposite inset stays 20.")
+    @Option(name: .long, help: "Edge presets: start distance from the edge in points (default 20).")
     var edgeInset: Double?
 
-    @Option(name: .customLong("screen-width"), help: "Screen width in points (default: 390 for iPhone 15).")
+    @Option(name: .customLong("screen-width"), help: "Presets: screen width in points, up to 2000. Defaults to 390; the iPhone Duo, selected input and physical devices measure it.")
     var screenWidth: Double?
     
-    @Option(name: .customLong("screen-height"), help: "Screen height in points (default: 844 for iPhone 15).")
+    @Option(name: .customLong("screen-height"), help: "Presets: screen height in points, up to 3000. Defaults to 844; the iPhone Duo, selected input and physical devices measure it.")
     var screenHeight: Double?
     
-    @Option(name: .customLong("duration"), help: "Motion duration in seconds (preset default, or 0.6 for pinch/rotate/two-finger-swipe).")
+    @Option(name: .customLong("duration"), help: "Seconds the motion takes, above 0 to 10 (default 0.5 scroll, 0.3 edge, 0.6 pinch, rotate, two-finger-swipe).")
     var duration: Double?
     
-    @Option(name: .customLong("delta"), help: "Preset touch spacing; pinch/rotate/two-finger-swipe use maximum spacing in logical points (default 5).")
+    @Option(name: .customLong("delta"), help: "Distance between touch samples in points, up to 200 (default 25 scroll, 50 edge, 5 pinch, rotate, two-finger-swipe).")
     var delta: Double?
     
-    @Option(name: .customLong("pre-delay"), help: "Delay before starting the gesture in seconds.")
+    @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the gesture, 0 to 10.")
     var preDelay: Double?
     
-    @Option(name: .customLong("post-delay"), help: "Delay after completing the gesture in seconds.")
+    @Option(name: .customLong("post-delay"), help: "Seconds to wait after the gesture, 0 to 10.")
     var postDelay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent gesture only: optional assertion of the snapshot owner PID.")
+    @Option(name: .customLong("expected-pid"), help: "Agent only: require this frontmost app PID.")
     var expectedPID: Int32?
 
     func validate() throws {

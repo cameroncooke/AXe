@@ -43,26 +43,24 @@ enum ButtonType: String, CaseIterable, ExpressibleByArgument {
 
 struct Button: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a hardware button on a simulator or physical device.",
+        abstract: "Press a hardware button.",
         discussion: """
-        Available buttons: apple-pay, home, lock, side-button, siri
-        Selected mode supports all five buttons. An optional --screen-id/--screen-uuid pair guards
-        the active context; without it AXe uses the active screen. Buttons act on the whole device. Transport evidence does not prove a UI, lock or power state.
-        
+        Physical devices support home, siri and lock; lock needs --allow-lock, and you must unlock the device yourself.
+
         Examples:
-          axe button home --udid SIMULATOR_UDID
-          axe button lock --duration 2.0 --udid SIMULATOR_UDID
-          axe button siri --udid SIMULATOR_UDID
+          axe button home --udid <UDID>
+          axe button lock --duration 2 --udid <UDID>
+          axe button siri --udid <UDID>
         """
     )
     
-    @Argument(help: "The button to press.")
+    @Argument(help: "Button to press.")
     var buttonType: ButtonType
     
-    @Option(name: .customLong("duration"), help: "Duration to hold the button in seconds (optional).")
+    @Option(name: .customLong("duration"), help: "Seconds to hold the button, up to 10.")
     var duration: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @Flag(name: .customLong("allow-lock"), help: "Allow the lock button on a physical device.")

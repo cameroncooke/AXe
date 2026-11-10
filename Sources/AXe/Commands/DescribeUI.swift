@@ -3,16 +3,24 @@ import Foundation
 
 struct DescribeUI: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Describe the accessibility hierarchy of a booted simulator or physical device."
+        abstract: "Print the accessibility tree as JSON.",
+        discussion: """
+        --point prints only the element at one point. With --agent it prints a compact snapshot whose refs other agent commands act on; see the AXe skill.
+
+        Examples:
+          axe describe-ui --udid <UDID>
+          axe describe-ui --point 200,400 --udid <UDID>
+          axe describe-ui --agent --view navigation --udid <UDID>
+        """
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @Option(
         name: .customLong("point"),
         help: ArgumentHelp(
-            "Describe one element at x,y. Physical devices and selected mode use oriented logical display points.",
+            "Describe only the element at x,y in points.",
             valueName: "x,y"
         )
     )
@@ -23,25 +31,25 @@ struct DescribeUI: PhysicalDeviceCommand {
     @OptionGroup var agentMode: AgentModeOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
 
-    @Option(name: .customLong("since-screen-hash"), help: "Agent only: return an unchanged capture when a fresh screen hash matches.")
+    @Option(name: .customLong("since-screen-hash"), help: "Agent only: return a short unchanged result while the screen still has this hash.")
     var sinceScreenHash: String?
 
-    @Option(name: .customLong("row-offset"), help: "Agent only: first global row in the snapshot table, in 0...12288. Reuse --snapshot-id for the next page.")
+    @Option(name: .customLong("row-offset"), help: "Agent only: first row to return, 0 to 12288; pass --snapshot-id for later pages.")
     var rowOffset: Int?
 
-    @Option(name: .customLong("row-limit"), help: "Agent only: maximum total rows in this page, in 1...64 (default 64).")
+    @Option(name: .customLong("row-limit"), help: "Agent only: rows to return, 1 to 64 (default 64).")
     var rowLimit: Int?
 
-    @Option(name: .customLong("read-ref"), help: "Agent only: read one field from an exact snapshot reference without input. Requires --snapshot-id.")
+    @Option(name: .customLong("read-ref"), help: "Agent only: read one field of this ref without input; needs --snapshot-id.")
     var readRef: String?
 
-    @Option(name: .customLong("text-field"), help: "Read-ref field: label (default), value, id, or custom-actions (JSON array text).")
+    @Option(name: .customLong("text-field"), help: "--read-ref field: label (default), value, id or custom-actions.")
     var textField: AgentModeTextQuery.Field?
 
-    @Option(name: .customLong("text-offset"), help: "Read-ref starting Unicode scalar offset (default 0).")
+    @Option(name: .customLong("text-offset"), help: "--read-ref: first Unicode scalar to return (default 0).")
     var textOffset: Int?
 
-    @Option(name: .customLong("text-limit"), help: "Read-ref Unicode scalars per chunk, in 1...4096 (default 1024).")
+    @Option(name: .customLong("text-limit"), help: "--read-ref: Unicode scalars to return, 1 to 4096 (default 1024).")
     var textLimit: Int?
 
     func validate() throws {

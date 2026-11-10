@@ -5,47 +5,30 @@ import FBSimulatorControl
 
 struct Type: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Type text by entering a sequence of characters.",
+        abstract: "Type text using the US keyboard layout.",
         discussion: """
-        Input Methods:
-        1. Direct text: axe type "Hello World" --udid UDID
-        2. From stdin: echo "Hello World!" | axe type --stdin --udid UDID
-        3. From file: axe type --file text.txt --udid UDID
-        
+        Pass the text as an argument, with --stdin or with --file. AXe sends key presses to the focused field; characters outside the US layout, such as é or £, fail before anything is typed. Physical devices and selected input take at most 256 UTF-8 bytes. With --agent, --focus taps the --ref field before typing.
+
         Examples:
-        • Simple text: axe type "Hello World" --udid UDID
-        • Agent focus and type: axe type "Hello" --agent --focus --snapshot-id UUID --ref e2 --udid UDID
-        • With spaces: axe type "Hello, how are you?" --udid UDID
-        • Special characters: axe type 'Hello!' --udid UDID
-        
-        Shell Escaping Tips:
-        • Use double quotes for text with spaces: "Hello World"
-        • Use single quotes for text with special characters: 'Hello!'
-        • For complex text or automation, prefer --stdin or --file methods
-        
-        Character Support:
-        • Only US keyboard characters are supported via HID keycodes
-        • Supported: A-Z, a-z, 0-9, and symbols: !@#$%^&*()_+-={}[]|\\:";'<>?,./`~
-        • Not supported: International characters (£€¥), accented letters (éñü), etc.
-        • This is a limitation of the underlying HID keyboard protocol
-        
-        Note: iOS may apply smart punctuation spacing to some characters.
+          axe type 'Hello, world!' --udid <UDID>
+          printf 'line one\\nline two' | axe type --stdin --udid <UDID>
+          axe type --file message.txt --udid <UDID>
         """
     )
     
-    @Argument(help: "The text to type. Use quotes for text with spaces or special characters.")
+    @Argument(help: "Text to type.")
     var text: String?
     
-    @Flag(name: .customLong("stdin"), help: "Read text from standard input.")
+    @Flag(name: .customLong("stdin"), help: "Read the text from standard input.")
     var useStdin: Bool = false
     
-    @Option(name: .customLong("file"), help: "Read text from the specified file.")
+    @Option(name: .customLong("file"), help: "Read the text from this file.")
     var inputFile: String?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
-    @Flag(name: .customLong("focus"), help: "Agent only: physically tap the referenced TextField, verify its focus, then type. Returns two phase receipts; input is never replayed.")
+    @Flag(name: .customLong("focus"), help: "Agent only: tap the --ref TextField and wait for focus before typing.")
     var focusBeforeTyping = false
 
     @OptionGroup var selectedInput: SelectedInputOptions

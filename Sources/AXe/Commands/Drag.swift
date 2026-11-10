@@ -3,7 +3,14 @@ import Foundation
 
 struct Drag: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform a low-level point-to-point drag using explicit touch move events."
+        abstract: "Drag from one point to another with explicit touch moves.",
+        discussion: """
+        The touch rests briefly at both ends and moves in --steps events, which suits drag and drop. With --agent, --ref replaces the start point.
+
+        Examples:
+          axe drag --start-x 100 --start-y 500 --end-x 300 --end-y 500 --udid <UDID>
+          axe drag --start-x 200 --start-y 300 --end-x 200 --end-y 700 --duration 1.5 --udid <UDID>
+        """
     )
 
     private static let defaultDuration: TimeInterval = 0.6
@@ -13,38 +20,38 @@ struct Drag: PhysicalDeviceCommand {
     static let initialHold: TimeInterval = 0.05
     static let finalHold: TimeInterval = 0.05
 
-    @Option(name: .customLong("start-x"), help: "The X coordinate of the starting point.")
+    @Option(name: .customLong("start-x"), help: "Start X in points.")
     var startX: Double?
 
-    @Option(name: .customLong("start-y"), help: "The Y coordinate of the starting point.")
+    @Option(name: .customLong("start-y"), help: "Start Y in points.")
     var startY: Double?
 
-    @Option(name: .customLong("end-x"), help: "The X coordinate of the ending point.")
+    @Option(name: .customLong("end-x"), help: "End X in points.")
     var endX: Double
 
-    @Option(name: .customLong("end-y"), help: "The Y coordinate of the ending point.")
+    @Option(name: .customLong("end-y"), help: "End Y in points.")
     var endY: Double
 
-    @Option(name: .customLong("duration"), help: "Duration of the drag movement in seconds.")
+    @Option(name: .customLong("duration"), help: "Seconds the movement takes.")
     var duration: Double = Self.defaultDuration
 
-    @Option(name: .customLong("steps"), help: "Number of touch move events to emit during the drag.")
+    @Option(name: .customLong("steps"), help: "Number of touch moves, 1 to 1000.")
     var steps: Int = Self.defaultSteps
 
-    @Option(name: .customLong("pre-delay"), help: "Delay before starting the drag in seconds.")
+    @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the drag, 0 to 10.")
     var preDelay: Double?
 
-    @Option(name: .customLong("post-delay"), help: "Delay after completing the drag in seconds.")
+    @Option(name: .customLong("post-delay"), help: "Seconds to wait after the drag, 0 to 10.")
     var postDelay: Double?
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    @Option(name: .customLong("expected-pid"), help: "Agent only: require this frontmost app PID.")
     var expectedPID: Int32?
 
     func validate() throws {

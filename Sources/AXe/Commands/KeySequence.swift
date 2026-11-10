@@ -5,27 +5,23 @@ import FBSimulatorControl
 
 struct KeySequence: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a sequence of keys by their keycodes on a simulator or physical device.",
+        abstract: "Press several keys in order by HID keycode.",
         discussion: """
-        Press multiple keys in sequence using their HID keycode values.
-        Each key will be pressed and released before the next key is pressed.
-        Agent mode requires a current focused TextField snapshot/ref; --expected-pid is optional.
-        It checks focus before each key down; input is never replayed automatically.
-        
+        Each key is pressed and released before the next. With --agent, pass the --snapshot-id and --ref of the focused TextField.
+
         Examples:
-          axe key-sequence --keycodes 11,8,15,15,18 --udid SIMULATOR_UDID    # Type "hello"
-          axe key-sequence --keycodes 40,40,40 --udid SIMULATOR_UDID        # Press Enter 3 times
-          axe key-sequence --keycodes 42,42 --agent --snapshot-id SNAPSHOT_ID --ref e1 --udid SIMULATOR_UDID
+          axe key-sequence --keycodes 11,8,15,15,18 --udid <UDID>    # hello
+          axe key-sequence --keycodes 42,42,42 --delay 0.2 --udid <UDID>
         """
     )
     
-    @Option(name: .customLong("keycodes"), help: "Comma-separated list of HID keycodes to press in sequence.")
+    @Option(name: .customLong("keycodes"), help: "Comma-separated HID keycodes, 0 to 255, at most 100.")
     var keycodesString: String
     
-    @Option(name: .customLong("delay"), help: "Delay between key presses in seconds (default: 0.1).")
+    @Option(name: .customLong("delay"), help: "Seconds between keys, 0 to 5 (default 0.1).")
     var delay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
     
     @OptionGroup var selectedInput: SelectedInputOptions

@@ -5,39 +5,23 @@ import FBSimulatorControl
 
 struct KeyCombo: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a key while holding one or more modifier keys on a simulator or physical device.",
+        abstract: "Press a key while holding modifier keys.",
         discussion: """
-        Hold modifier keys and press another key as one complete sequence.
-        Agent mode requires a current focused TextField snapshot/ref; --expected-pid is optional.
-        It checks focus before each key down; OS recipient control is not atomic.
-        Modifier keys are held down, the target key is pressed and released,
-        then modifier keys are released in reverse order (LIFO).
-
-        Common modifier keycodes:
-          224 - Left Control
-          225 - Left Shift
-          226 - Left Alt/Option
-          227 - Left Command (GUI)
-          228 - Right Control
-          229 - Right Shift
-          230 - Right Alt/Option
-          231 - Right Command (GUI)
+        AXe presses the modifiers in order, presses and releases the key, then releases the modifiers in reverse order. Modifiers: 224 Control, 225 Shift, 226 Option, 227 Command, and 228 to 231 for the right-hand keys; physical devices and selected input accept only these. With --agent, pass the --snapshot-id and --ref of the focused TextField.
 
         Examples:
-          axe key-combo --modifiers 227 --key 4 --udid SIMULATOR_UDID          # Cmd+A (Select All)
-          axe key-combo --modifiers 227 --key 6 --udid SIMULATOR_UDID          # Cmd+C (Copy)
-          axe key-combo --modifiers 227 --key 25 --udid SIMULATOR_UDID         # Cmd+V (Paste)
-          axe key-combo --modifiers 227,225 --key 4 --udid SIMULATOR_UDID      # Cmd+Shift+A
+          axe key-combo --modifiers 227 --key 4 --udid <UDID>        # Cmd+A
+          axe key-combo --modifiers 227,225 --key 4 --udid <UDID>    # Cmd+Shift+A
         """
     )
 
-    @Option(name: .customLong("modifiers"), help: "Comma-separated list of modifier keycodes to hold (0-255).")
+    @Option(name: .customLong("modifiers"), help: "Comma-separated modifier keycodes to hold, 0 to 255, at most 8.")
     var modifiersString: String
 
-    @Option(name: .customLong("key"), help: "The HID keycode to press while modifiers are held (0-255).")
+    @Option(name: .customLong("key"), help: "HID keycode to press, 0 to 255.")
     var key: Int
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions

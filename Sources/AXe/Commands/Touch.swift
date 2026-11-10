@@ -5,35 +5,34 @@ import FBSimulatorControl
 
 struct Touch: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform precise touch down/up events at specific coordinates.",
+        abstract: "Send a touch down, a touch up, or both, at one point.",
         discussion: """
-        Perform low-level touch events for advanced gesture control.
-        You can either perform a single touch down, touch up, or both.
-        
+        --down with --up makes one press held for --delay seconds, such as a long press; a standalone physical-device touch needs both. With --input-mode selected, --down prints a contact token: pass it as --contact-token to move the contact (--down) or lift it (--up). With --agent, --ref replaces -x and -y.
+
         Examples:
-          axe touch -x 100 -y 200 --down --udid SIMULATOR_UDID        # Touch down at (100, 200)
-          axe touch -x 100 -y 200 --up --udid SIMULATOR_UDID          # Touch up at (100, 200)
-          axe touch -x 100 -y 200 --down --up --udid SIMULATOR_UDID   # Touch down then up (like tap)
-          axe touch -x 100 -y 200 --down --up --delay 1.0 --udid SIMULATOR_UDID # Long press (hold for 1s)
+          axe touch -x 100 -y 200 --down --up --udid <UDID>
+          axe touch -x 100 -y 200 --down --up --delay 1.0 --udid <UDID>    # long press
+          axe touch -x 100 -y 200 --down --udid <UDID>
+          axe touch -x 100 -y 200 --up --udid <UDID>
         """
     )
     
-    @Option(name: .customShort("x"), help: "The X coordinate of the touch point.")
+    @Option(name: .customShort("x"), help: "X coordinate in points.")
     var pointX: Double?
     
-    @Option(name: .customShort("y"), help: "The Y coordinate of the touch point.")
+    @Option(name: .customShort("y"), help: "Y coordinate in points.")
     var pointY: Double?
     
-    @Flag(name: .customLong("down"), help: "Perform touch down event.")
+    @Flag(name: .customLong("down"), help: "Touch down.")
     var touchDown: Bool = false
     
-    @Flag(name: .customLong("up"), help: "Perform touch up event.")
+    @Flag(name: .customLong("up"), help: "Touch up.")
     var touchUp: Bool = false
     
-    @Option(name: .customLong("delay"), help: "Delay between touch down and up events in seconds (if both are specified).")
+    @Option(name: .customLong("delay"), help: "Seconds between down and up, 0 to 10 (default 0.1); needs --down and --up.")
     var delay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
 
@@ -41,10 +40,10 @@ struct Touch: PhysicalDeviceCommand {
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    @Option(name: .customLong("expected-pid"), help: "Agent only: require this frontmost app PID.")
     var expectedPID: Int32?
 
-    @Option(name: .customLong("contact-token"), help: "Selected input only: token returned by a retained down; down moves it and up releases it.")
+    @Option(name: .customLong("contact-token"), help: "Selected input only: contact token printed by an earlier --down.")
     var contactToken: String?
 
     func validate() throws {

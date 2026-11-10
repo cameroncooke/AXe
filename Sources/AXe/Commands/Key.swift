@@ -5,34 +5,23 @@ import FBSimulatorControl
 
 struct Key: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Press a single key by keycode on a simulator or physical device.",
+        abstract: "Press one key by HID keycode.",
         discussion: """
-        Press individual keys using their HID keycode values.
-        Agent mode sends one default down/up to a current focused TextField reference.
-        It requires --snapshot-id and --ref; --expected-pid is an optional app assertion. Duration and batch use reject.
-        
-        Common keycodes:
-          40 - Return/Enter
-          42 - Backspace
-          43 - Tab
-          44 - Space
-          58-67 - F1-F10
-          224-231 - Modifier keys (Ctrl, Shift, Alt, etc.)
-        
+        Common keycodes: 40 Return, 41 Escape, 42 Backspace, 43 Tab, 44 Space, 4 to 29 the letters a to z. With --agent, pass the --snapshot-id and --ref of the focused TextField.
+
         Examples:
-          axe key 40 --udid SIMULATOR_UDID                    # Press Enter
-          axe key 44 --udid SIMULATOR_UDID                    # Press Space
-          axe key 42 --duration 1.0 --udid SIMULATOR_UDID    # Hold Backspace for 1 second
+          axe key 40 --udid <UDID>
+          axe key 42 --duration 1 --udid <UDID>
         """
     )
     
-    @Argument(help: "The HID keycode to press (0-255).")
+    @Argument(help: "HID keycode, 0 to 255.")
     var keycode: Int
     
-    @Option(name: .customLong("duration"), help: "Duration to hold the key in seconds (optional; unavailable with --agent).")
+    @Option(name: .customLong("duration"), help: "Seconds to hold the key, up to 10; not with --agent.")
     var duration: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions

@@ -4,8 +4,15 @@ import FBSimulatorControl
 
 struct Slider: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Set a slider percentage, or move to a verified native endpoint.",
-        discussion: "Selected and agent modes accept exactly one --endpoint or finite --value in 0...100. Agent mode requires a current slider snapshot/ref, without selectors; --expected-pid is optional."
+        abstract: "Set a slider to a percentage and confirm the new value.",
+        discussion: """
+        Find the slider with --id or --label. Simulators only. With --input-mode selected or --agent, --endpoint can replace --value; with --agent, --ref replaces --id and --label.
+
+        Examples:
+          axe slider --id volume --value 75 --udid <UDID>
+          axe slider --label Brightness --value 30 --wait-timeout 5 --udid <UDID>
+          axe slider --input-mode selected --id volume --endpoint maximum --udid <UDID>
+        """
     )
 
     private static let directDragSteps = 120
@@ -20,19 +27,19 @@ struct Slider: AsyncParsableCommand {
     private static let lowRangeCoordinateOffset = 0.0268
     private static let highRangeCoordinateOffset = 0.0271
 
-    @Option(name: [.customLong("id")], help: "Set the slider matching AXUniqueId (accessibilityIdentifier).")
+    @Option(name: [.customLong("id")], help: "Find the slider by accessibility identifier.")
     var elementID: String?
 
-    @Option(name: [.customLong("label")], help: "Set the slider matching AXLabel (accessibilityLabel).")
+    @Option(name: [.customLong("label")], help: "Find the slider by accessibility label.")
     var elementLabel: String?
 
-    @Option(name: [.customLong("element-type")], help: "Filter matches to this exact case-sensitive accessibility type, usually Slider. Selected endpoints keep unique selector and native Slider role checks.")
+    @Option(name: [.customLong("element-type")], help: "Only match elements of this exact accessibility type, usually Slider.")
     var elementType: String?
 
-    @Option(name: [.customLong("value")], help: "Target slider value as a percentage from 0 to 100.")
+    @Option(name: [.customLong("value")], help: "Target value as a percentage, 0 to 100.")
     var value: Double?
 
-    @Option(name: .customLong("endpoint"), help: "Selected AX or agent mode: minimum or maximum of the verified native slider domain.")
+    @Option(name: .customLong("endpoint"), help: "Selected input or --agent only: move to the minimum or maximum.")
     var endpoint: SelectedSliderEndpoint?
 
     @OptionGroup var selectedInput: SelectedInputOptions
@@ -40,13 +47,13 @@ struct Slider: AsyncParsableCommand {
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the slider before failing (0 = no waiting, default).")
+    @Option(name: .customLong("wait-timeout"), help: "Seconds to wait for the slider to appear.")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility reads while waiting.")
     var pollInterval: Double = 0.25
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator.")
     var simulatorUDID: String
 
     func validate() throws {

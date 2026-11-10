@@ -5,55 +5,63 @@ import FBSimulatorControl
 
 struct Tap: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
+        abstract: "Tap a point, or an element found by accessibility.",
+        discussion: """
+        Pass -x and -y, or one of --id, --label and --value; --element-type narrows a selector. On success it prints the tapped point.
+
+        Examples:
+          axe tap -x 200 -y 400 --udid <UDID>
+          axe tap --id SaveButton --element-type Button --udid <UDID>
+          axe tap --label Done --wait-timeout 5 --udid <UDID>
+        """
     )
 
-    @Flag(name: .customLong("semantic-press"), help: "Send one AXPress to an exact native CheckBox ID and confirm a Boolean value change. Simulator targets require selected AX.")
+    @Flag(name: .customLong("semantic-press"), help: "Press the native CheckBox with this --id through accessibility and confirm its value changed. Simulators need --input-mode selected.")
     var semanticPress = false
 
-    @Option(name: .customShort("x"), help: "The X coordinate of the point to tap.")
+    @Option(name: .customShort("x"), help: "X coordinate of the tap in points.")
     var pointX: Double?
 
-    @Option(name: .customShort("y"), help: "The Y coordinate of the point to tap.")
+    @Option(name: .customShort("y"), help: "Y coordinate of the tap in points.")
     var pointY: Double?
 
-    @Option(name: [.customLong("id")], help: "Tap the activation point of the element matching AXUniqueId (accessibilityIdentifier). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("id")], help: "Tap the element with this accessibility identifier.")
     var elementID: String?
 
-    @Option(name: [.customLong("label")], help: "Tap the activation point of the element matching AXLabel (accessibilityLabel). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("label")], help: "Tap the element with this accessibility label.")
     var elementLabel: String?
 
-    @Option(name: [.customLong("value")], help: "Tap the activation point of the element matching AXValue (the current value of a control). Ignored if -x and -y are provided.")
+    @Option(name: [.customLong("value")], help: "Tap the element with this accessibility value.")
     var elementValue: String?
 
-    @Option(name: .customLong("label-contains"), help: "Agent only: match one native label containing this case-sensitive literal substring. Cannot be combined with another target.")
+    @Option(name: .customLong("label-contains"), help: "Agent only: tap the one element whose label contains this text (case-sensitive).")
     var labelContains: String?
 
-    @Option(name: .customLong("label-regex"), help: "Agent only: match one native label with a Foundation regular expression, case-sensitive by default. Use ^/$ to anchor the match. Maximum 128 UTF-8 bytes and a shared 100 ms query budget.")
+    @Option(name: .customLong("label-regex"), help: "Agent only: tap the one element whose label matches this regular expression, at most 128 bytes.")
     var labelRegex: String?
 
-    @Option(name: .customLong("frame"), help: "Agent selector only: AND-filter a complete native frame with minX, maxX, minY or maxY bounds in current logical UI points (key=value[,key=value]). Omitted edges use current screen bounds. No refs or coordinates.")
+    @Option(name: .customLong("frame"), help: "Agent only: keep selector matches inside these bounds in points, such as minY=100,maxY=400.")
     var selectorFrame: String?
 
-    @Option(name: [.customLong("element-type")], help: "Filter matches by exact accessibility type (e.g. Button, TextField, Switch). Selected mode: ordinary --id/--label/--value taps only.")
+    @Option(name: [.customLong("element-type")], help: "Only match elements of this accessibility type, such as Button or Switch.")
     var elementType: String?
 
-    @Option(name: .customLong("pre-delay"), help: "Delay before tapping in seconds.")
+    @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the tap, 0 to 10.")
     var preDelay: Double?
 
-    @Option(name: .customLong("post-delay"), help: "Delay after tapping in seconds.")
+    @Option(name: .customLong("post-delay"), help: "Seconds to wait after the tap, 0 to 10.")
     var postDelay: Double?
 
-    @Option(name: .customLong("tap-style"), help: "Tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected ordinary taps also accept automatic with the same switch-role policy, checked again before input. Physical taps hold for 0.1 seconds on broker input (selected, agent, Duo and other verified DTUHID devices) and 0.25 seconds on the direct legacy route; simulator taps insert no hold. Omitted: automatic on ordinary taps, physical on selected taps. Selected semantic press rejects explicit styles.")
+    @Option(name: .customLong("tap-style"), help: "Event style: automatic touches switches and sends a simulator tap otherwise; physical always touches; simulator always sends a simulator tap. Default automatic, or physical with selected input or --agent.")
     var tapStyle: TapStyle?
 
-    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting. Selected ordinary taps accept finite values up to 30 seconds; only a missing target is retried before input.")
+    @Option(name: .customLong("wait-timeout"), help: "Seconds to wait for an --id, --label or --value match to appear; at most 30 with selected input.")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25). Selected active polling accepts finite values in 0.05...30 seconds; selected, agent and physical taps accept it only with a positive wait.")
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility reads while waiting (default 0.25; 0.05 to 30 with selected input).")
     var pollInterval: Double?
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
 

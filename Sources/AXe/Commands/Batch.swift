@@ -3,106 +3,70 @@ import Foundation
 
 struct Batch: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Execute ordered interaction steps on a simulator or physical device.",
+        abstract: "Run input steps in order in one command.",
         discussion: """
-        Batch executes multiple interaction steps in one command to reduce overhead.
-        Steps are executed in order.
-        --agent accepts 1...8 JSON tap/type steps with native IDs or published refs.
-        Supply exactly one --file steps.json or --steps-json '<JSON document>'.
-        Ref JSON includes one snapshotID and ref on every step; do not mix refs with IDs.
-        Optional --expected-pid asserts that app PID for every step.
-        It resolves each target again, stops on failed action/refresh or changed device context,
-        and reports completed steps without rollback or replay. See the agent guide for JSON.
-        Legacy mode uses one simulator/HID session and supports --continue-on-error.
-        A physical device uses one input session for ordered steps and stops on failure.
-        Physical batches accept coordinate taps, preset gestures and supported physical input.
-        The batch releases any held touch when it ends.
-        Simulator selection, agent mode and custom simulator batch settings are unavailable.
-        On Duo, one measured display/session is fixed for the whole ordinary batch.
-        Folding, rotation, cancellation or an input failure stops later input without replay.
-        --continue-on-error still permits pre-input step errors while that session is valid.
-        The batch releases its remaining input before exit; no contact transfers to another command.
-        Batch-level selected mode sends each complete step through the selected owner.
-        It stops on any failure and reports the failing step's error; on success it prints the
-        plain batch summary. --verbose also prints one JSON receipt per attempted step.
-        Without --screen-id/--screen-uuid each step uses the screen that is active when it starts.
-        Earlier steps are not undone. AX targets and focus are read afresh per step.
-        Selected mode has no whole-batch exclusive lock or cross-step context token.
-        Selected button steps (home, side-button, siri, lock, apple-pay) use device-wide routes with
-        active-screen admission. They prove transport and release, not UI or security state. Retained
-        touch and semantic press are not supported in selected batches.
-        Selected type --stdin reads 1–256 UTF-8 bytes at its ordered step, before input ownership.
-        It preserves newlines and uses the existing US keyboard conversion. Close the input to
-        finish the read; there is no EOF deadline or task cancellation during a blocked read.
-        Use --step or --file for the batch commands: batch --stdin consumes stdin itself.
-        A later type --stdin sees EOF and rejects empty input; no input is replayed.
-        Selected sleep accepts finite non-negative seconds with no total cap. It waits on the
-        host without an input lease; a typed host-wait receipt has no request or broker ID.
-        Cancellation or SIGINT/SIGTERM observed during that wait stops later steps.
-        Signal handling is wait-only, not a whole-batch cancellation guarantee.
-        Keyboard steps require --focus-id; per-step --expected-pid is an optional guard.
+        Each step is an AXe command line without --udid. Steps run in order in one input session; a failed step stops the batch, and earlier steps are not undone. Blank lines and lines starting with # are skipped.
 
-        Legacy step commands:
-          tap, swipe, gesture, draw, touch, type, button, key, key-sequence, key-combo
+        Steps: tap, swipe, gesture, draw, touch, type, button, key, key-sequence, key-combo and sleep <seconds>. Selected input also accepts slider and drag.
 
-        Batch-only pseudo-step:
-          sleep <seconds>
+        With --agent, pass a JSON document of 1 to 8 tap and type steps with --file or --steps-json; see the batch reference in the AXe skill.
 
         Examples:
-          axe batch --udid SIMULATOR_UDID --step "tap --id BackButton" --step "type 'hello'"
-          axe batch --udid SIMULATOR_UDID --file steps.txt
-          cat steps.txt | axe batch --udid SIMULATOR_UDID --stdin
+          axe batch --udid <UDID> --step "tap --id BackButton" --step "type 'hello'"
+          axe batch --udid <UDID> --file steps.txt
+          axe batch --udid <UDID> --step "tap --label Search" --step "sleep 0.5"
+          axe batch --agent --udid <UDID> --file steps.json
         """
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
     @OptionGroup var selectedInput: SelectedInputOptions
 
-    @Flag(name: .customLong("agent"), help: "Execute 1...8 JSON tap/type steps with native IDs or one snapshot's refs and one agent result.")
+    @Flag(name: .customLong("agent"), help: "Run a JSON document of 1 to 8 tap and type steps.")
     var agentMode = false
 
-    @Option(name: .customLong("view"), help: "Agent output: reading (default), navigation, or full canonical detail. Raw commands are unchanged.")
+    @Option(name: .customLong("view"), help: "Agent only: result detail; reading by default.")
     var agentView: AgentOutputView?
 
-    @Option(name: .customLong("expected-pid"), help: "Agent batch only: optionally require this app PID for every step.")
+    @Option(name: .customLong("expected-pid"), help: "Agent only: require this frontmost app PID.")
     var expectedPID: Int32?
 
-    @Option(name: .customLong("step"), help: "Step to execute. Repeat for multiple steps.")
+    @Option(name: .customLong("step"), help: "One step, such as \"tap --id Save\". Repeat for more steps.")
     var steps: [String] = []
 
-    @Option(name: .customLong("file"), help: "Read steps from a file: one step per line, or JSON with --agent.")
+    @Option(name: .customLong("file"), help: "Read steps from this file, one per line, or the JSON document with --agent.")
     var file: String?
 
-    @Option(name: .customLong("steps-json"), help: "Agent only: inline JSON document, instead of --file. The same 16384-byte and eight-step limits apply.")
+    @Option(name: .customLong("steps-json"), help: "Agent only: the JSON document inline, at most 16384 bytes.")
     var stepsJSON: String?
 
-    @Flag(name: .customLong("stdin"), help: "Read steps from stdin (one step per line).")
+    @Flag(name: .customLong("stdin"), help: "Read steps from standard input, one per line.")
     var useStdin: Bool = false
 
-    @Option(name: .customLong("ax-cache"), help: "Accessibility snapshot cache policy for selector-based taps.")
+    @Option(name: .customLong("ax-cache"), help: "When selector taps reuse the accessibility tree.")
     var axCachePolicy: AXCachePolicy = .perBatch
 
-    @Option(name: .customLong("type-submission"), help: "Type step submission mode.")
+    @Option(name: .customLong("type-submission"), help: "How type steps send their key events.")
     var typeSubmissionMode: TypeSubmissionMode = .chunked
 
-    @Option(name: .customLong("type-chunk-size"), help: "Maximum HID events per chunk when type-submission is chunked (default: 200).")
+    @Option(name: .customLong("type-chunk-size"), help: "Key events per chunk with --type-submission chunked (default 200).")
     var typeChunkSize: Int?
 
-    @Option(name: .customLong("tap-style"), help: "Legacy default tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected mode uses per-step styles only: batch-level automatic is accepted as the default but does not change step style; physical and simulator reject.")
+    @Option(name: .customLong("tap-style"), help: "Default style of tap steps, as in tap --tap-style; selected input accepts only automatic.")
     var tapStyle: TapStyle = .automatic
 
-    @Flag(name: .customLong("continue-on-error"), help: "Continue after step errors. Duo still stops after context loss or native input failure.")
+    @Flag(name: .customLong("continue-on-error"), help: "Simulators: run the remaining steps after a failed step. The iPhone Duo still stops after a screen change or input failure.")
     var continueOnError: Bool = false
 
-    @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for selector-based elements before failing (0 = no waiting).")
+    @Option(name: .customLong("wait-timeout"), help: "Seconds selector taps wait for their element to appear.")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility reads while waiting (default 0.25).")
     var pollInterval: Double?
 
-    @Flag(name: .customLong("verbose"), help: "Enable verbose logging to stderr. Selected batch: print each step's full JSON receipt instead of the summary.")
+    @Flag(name: .customLong("verbose"), help: "Log progress to stderr; with selected input, print each step's JSON receipt instead.")
     var verbose: Bool = false
 
     func validate() throws {

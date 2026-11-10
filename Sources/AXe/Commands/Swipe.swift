@@ -6,34 +6,41 @@ import FBSimulatorControl
 
 struct Swipe: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform a swipe gesture from one point to another on the screen."
+        abstract: "Swipe in a straight line from one point to another.",
+        discussion: """
+        With --agent, swipe inside an element with --ref and --direction instead of coordinates.
+
+        Examples:
+          axe swipe --start-x 200 --start-y 600 --end-x 200 --end-y 300 --udid <UDID>
+          axe swipe --start-x 350 --start-y 400 --end-x 50 --end-y 400 --udid <UDID>
+        """
     )
     
-    @Option(name: .customLong("start-x"), help: "The X coordinate of the starting point.")
+    @Option(name: .customLong("start-x"), help: "Start X in points.")
     var startX: Double?
     
-    @Option(name: .customLong("start-y"), help: "The Y coordinate of the starting point.")
+    @Option(name: .customLong("start-y"), help: "Start Y in points.")
     var startY: Double?
     
-    @Option(name: .customLong("end-x"), help: "The X coordinate of the ending point.")
+    @Option(name: .customLong("end-x"), help: "End X in points.")
     var endX: Double?
     
-    @Option(name: .customLong("end-y"), help: "The Y coordinate of the ending point.")
+    @Option(name: .customLong("end-y"), help: "End Y in points.")
     var endY: Double?
     
-    @Option(name: .customLong("duration"), help: "Duration of the swipe in seconds.")
+    @Option(name: .customLong("duration"), help: "Seconds the swipe takes (default 1).")
     var duration: Double?
     
-    @Option(name: .customLong("delta"), help: "Distance between touch samples. Physical devices use logical points.")
+    @Option(name: .customLong("delta"), help: "Distance between touch samples in points (default 50).")
     var delta: Double?
     
-    @Option(name: .customLong("pre-delay"), help: "Delay before starting the swipe in seconds.")
+    @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the swipe, 0 to 10.")
     var preDelay: Double?
     
-    @Option(name: .customLong("post-delay"), help: "Delay after completing the swipe in seconds.")
+    @Option(name: .customLong("post-delay"), help: "Seconds to wait after the swipe, 0 to 10.")
     var postDelay: Double?
     
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
 
@@ -41,13 +48,13 @@ struct Swipe: PhysicalDeviceCommand {
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
-    @Option(name: .customLong("expected-pid"), help: "Agent only: optionally assert the snapshot or frontmost app PID.")
+    @Option(name: .customLong("expected-pid"), help: "Agent only: require this frontmost app PID.")
     var expectedPID: Int32?
 
-    @Option(name: .customLong("direction"), help: "Agent ref swipe only: up, down, left or right within the current ref bounds.")
+    @Option(name: .customLong("direction"), help: "Agent only: swipe up, down, left or right inside the --ref element.")
     var agentDirection: RuntimeSwipeDirection?
 
-    @Option(name: .customLong("distance"), help: "Agent ref swipe only: fraction of the ref bounds in (0,1], default 1.")
+    @Option(name: .customLong("distance"), help: "Agent only: fraction of the element to cross, above 0 to 1 (default 1).")
     var agentDistance: Double?
 
     func validate() throws {
