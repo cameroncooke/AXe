@@ -5,25 +5,25 @@ import Foundation
 
 struct Clipboard: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Manage one simulator clipboard through public CoreDevice commands.",
+        abstract: "Copy text to a simulator's clipboard.",
         subcommands: [ClipboardCopy.self])
 }
 
 private struct ClipboardCopy: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "copy",
-        abstract: "Copy UTF-8 stdin to one simulator clipboard and verify exact readback. Does not insert text.",
+        abstract: "Copy UTF-8 text from stdin to a booted simulator's clipboard.",
         discussion: """
-        Requires 1...65536 UTF-8 bytes and one exact booted simulator UUID.
-        Preserves all bytes, including line endings and combining characters.
-        Replaces the general clipboard, which can be shared with the Mac or other devices.
-        Prints the byte count and SHA-256 of the verified copy. No automatic Paste, fallback, retry or restore.
+        AXe copies the bytes unchanged, reads them back to verify, and prints the byte count and SHA-256. The copy replaces the clipboard, which can be shared with the Mac; it does not paste.
+
+        Example:
+          printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UDID>
         """)
 
-    @Flag(name: .customLong("stdin"), help: "Read exact UTF-8 bytes from stdin until EOF (1...64 KiB).")
+    @Flag(name: .customLong("stdin"), help: "Read the text from standard input, 1 to 65536 bytes (required).")
     var useStdin = false
 
-    @Option(name: .customLong("udid"), help: "Exact booted simulator UUID; names, booted and all are not accepted.")
+    @Option(name: .customLong("udid"), help: "UDID of the booted simulator.")
     var simulatorUDID: String
 
     func validate() throws {

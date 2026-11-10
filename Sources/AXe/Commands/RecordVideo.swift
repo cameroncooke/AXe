@@ -7,38 +7,45 @@ import AVFoundation
 struct RecordVideo: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "record-video",
-        abstract: "Record a simulator or physical device display to an H.264 MP4 file."
+        abstract: "Record the screen to an H.264 MP4 file.",
+        discussion: """
+        Stop with Ctrl+C or SIGTERM; AXe then finishes the file and prints its path. On a simulator, --follow-active-display follows folds and rotations in one movie, and --screen-id with --screen-uuid records one screen and fails if it stops being active.
+
+        Examples:
+          axe record-video --udid <UDID> --fps 15 --output recording.mp4
+          axe record-video --udid <UDID> --fps 3 --scale 0.5 --output device.mp4
+        """
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
-    @Option(help: "Frames per second (1-30, default: 10)")
+    @Option(help: "Frames per second, 1 to 30.")
     var fps: Int = 10
 
-    @Option(help: "Quality factor (1-100) controlling bitrate (default: 80)")
+    @Option(help: "Encoding quality, 1 to 100; higher uses a higher bitrate.")
     var quality: Int = 80
 
-    @Option(help: "Scale factor (0.1-1.0, default: 1.0)")
+    @Option(help: "Frame scale factor, 0.1 to 1.")
     var scale: Double = 1.0
 
-    @Option(help: "Output MP4 file path. Defaults to axe-video-<timestamp>.mp4 in the current directory.")
+    @Option(help: "MP4 file path or existing directory (default: axe-video-<timestamp>.mp4 in the current directory).")
     var output: String?
 
-    @Flag(name: .customLong("follow-active-display"), help: "Follow measured display changes on one boot, fitting upright frames into a fixed video canvas.")
+    @Flag(name: .customLong("follow-active-display"), help: "Simulators: follow screen changes, such as folds and rotations, in one fixed-size video.")
     var followActiveDisplay = false
 
-    @Option(name: .customLong("screen-id"), help: "Record this measured active display; requires --screen-uuid.")
+    @Option(name: .customLong("screen-id"), help: "Simulators: record this screen; fail if it stops being active.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from axe displays; no retargeting.")
+    @Option(name: .customLong("screen-uuid"), help: "That screen's UUID from axe displays; pass both.")
     var screenUUID: String?
 
     @Option(name: .customLong("expected-boot"),
         help: ArgumentHelp("Selected or follow-active recording only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
-    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid, --follow-active-display or a physical device: print the full recording receipt as JSON. Simulator receipts include the first and last context reads.")
+    @Flag(name: .customLong("verbose"), help: "Print the full recording receipt as JSON (physical devices, --screen-id or --follow-active-display).")
     var verbose = false
 
     func validate() throws {

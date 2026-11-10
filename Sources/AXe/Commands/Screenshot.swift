@@ -6,26 +6,31 @@ import FBSimulatorControl
 struct Screenshot: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "screenshot",
-        abstract: "Capture a PNG screenshot from a simulator or physical device."
+        abstract: "Save a PNG screenshot and print its path.",
+        discussion: """
+        Examples:
+          axe screenshot --udid <UDID> --output screen.png
+          axe screenshot --udid <UDID>
+        """
     )
 
-    @Option(help: "The UDID of the simulator or physical device.")
+    @Option(help: "UDID of the simulator or physical device.")
     var udid: String
 
-    @Option(help: "Output PNG file path. Defaults to a name based on the target and timestamp in the current directory.")
+    @Option(help: "PNG file path or existing directory (default: a timestamped name in the current directory).")
     var output: String?
 
-    @Option(name: .customLong("screen-id"), help: "Capture this measured active display; requires --screen-uuid.")
+    @Option(name: .customLong("screen-id"), help: "Simulators: capture this screen only if it is active.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from axe displays; no retargeting.")
+    @Option(name: .customLong("screen-uuid"), help: "That screen's UUID from axe displays; pass both.")
     var screenUUID: String?
 
     @Option(name: .customLong("expected-boot"),
         help: ArgumentHelp("Selected capture only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
-    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid: print the full capture receipt as JSON, including the context read before and after.")
+    @Flag(name: .customLong("verbose"), help: "With --screen-id: print the full capture receipt as JSON.")
     var verbose = false
 
     func validate() throws {

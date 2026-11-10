@@ -5,18 +5,19 @@ import FBSimulatorControl
 
 struct Displays: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Show a simulator's screens: which one is active, its size in points, its orientation, and the hinge angle on iPhone Duo.",
+        abstract: "Show a simulator's screens, their sizes in points, the active one and the hinge angle.",
         discussion: """
-        Waits for a fold or rotation to finish before reading. Sizes are logical points, the units
-        every AXe coordinate uses. Pass the active screen's id and uuid to --screen-id and
-        --screen-uuid when a command should refuse to act on any other screen.
+        Waits for a fold or rotation to finish before reading. Sizes are in points, the units of every AXe coordinate. Pass the active screen's id and uuid as --screen-id and --screen-uuid when a command must refuse to act on any other screen.
+
+        Example:
+          axe displays --udid <UDID>
         """
     )
 
-    @Option(name: .customLong("udid"), help: "The simulator UDID.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator.")
     var simulatorUDID: String
 
-    @Flag(name: .customLong("verbose"), help: "Print the full display measurements as JSON: pixels, native orientation, boot identity and read times.")
+    @Flag(name: .customLong("verbose"), help: "Print the full display measurements as JSON, including pixels and boot identity.")
     var verbose = false
 
     func validate() throws {

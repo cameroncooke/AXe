@@ -4,9 +4,13 @@ import Foundation
 
 struct Shutdown: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Shut down one simulator and confirm its Shutdown state. This is not a lock or power-button action.")
+        abstract: "Shut down one simulator and confirm that it stopped.",
+        discussion: """
+        Example:
+          axe shutdown --udid <UDID>
+        """)
 
-    @Option(name: .customLong("udid"), help: "Exact simulator UUID. Names, booted and all are not accepted.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator; names and booted are not accepted.")
     var simulatorUDID: String
 
     func validate() throws {

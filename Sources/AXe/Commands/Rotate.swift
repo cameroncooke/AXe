@@ -5,17 +5,23 @@ import FBSimulatorControl
 
 struct Rotate: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Rotate a physical device or the iPhone Duo left or right.",
-        discussion: "Sends one request and never repeats it. On a physical device, AXe waits until the display reaches the orientation the device reports. On the iPhone Duo, it shows the active screen afterwards. Without --screen-id and --screen-uuid, AXe uses the screen that is active when the command starts. With them, the command refuses if that screen is no longer active.")
-    @Argument(help: "Direction: left or right.") var direction: String
-    @Option(name: .customLong("udid"), help: "Simulator or physical device UDID.") var simulatorUDID: String
-    @Option(name: .customLong("screen-id"), help: "Duo only, optional: refuse unless this screen is active. Requires --screen-uuid.") var screenID: UInt32?
-    @Option(name: .customLong("screen-uuid"), help: "Duo only, optional: refuse unless this screen is active. Requires --screen-id.") var screenUUID: String?
+        abstract: "Rotate the iPhone Duo or a physical device left or right.",
+        discussion: """
+        AXe waits until the screen reaches the new orientation; on the iPhone Duo it then prints the active screen. This is not the two-finger gesture rotate.
+
+        Examples:
+          axe rotate left --udid <UDID>
+          axe rotate right --udid <UDID>
+        """)
+    @Argument(help: "left or right.") var direction: String
+    @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator or physical device.") var simulatorUDID: String
+    @Option(name: .customLong("screen-id"), help: "iPhone Duo: refuse unless this screen is active.") var screenID: UInt32?
+    @Option(name: .customLong("screen-uuid"), help: "That screen's UUID from axe displays; pass both.") var screenUUID: String?
     @Option(name: .customLong("expected-boot"),
         help: ArgumentHelp("Refuse unless the simulator boot identity is PID:SECONDS:MICROSECONDS.", visibility: .hidden))
     var expectedBoot: String?
-    @Option(name: .customLong("timeout"), help: "Seconds to wait for the rotation, 0.5...15.") var timeout: Double = 8
-    @Flag(name: .customLong("verbose"), help: "Duo only: print the full broker reply as JSON: context before and after, receipts and boot identity.")
+    @Option(name: .customLong("timeout"), help: "Seconds to wait for the rotation, 0.5 to 15.") var timeout: Double = 8
+    @Flag(name: .customLong("verbose"), help: "iPhone Duo: print the full reply as JSON instead of the summary.")
     var verbose = false
 
     func validate() throws {

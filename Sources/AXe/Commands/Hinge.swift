@@ -10,12 +10,12 @@ struct Hinge: AsyncParsableCommand {
 
     struct Read: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Show the hinge angle iOS senses and the posture: closed, partially open or open.")
-        @Option(name: .customLong("udid"), help: "Simulator UDID.") var simulatorUDID: String
+            abstract: "Show the hinge angle and posture.")
+        @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator.") var simulatorUDID: String
         @Option(name: .customLong("expected-boot"),
             help: ArgumentHelp("Refuse unless the simulator boot identity is PID:SECONDS:MICROSECONDS.", visibility: .hidden))
         var expectedBoot: String?
-        @Flag(name: .customLong("verbose"), help: "Print the full broker reply as JSON: samples, capability and boot identity.")
+        @Flag(name: .customLong("verbose"), help: "Print the full reply as JSON instead of the summary.")
         var verbose = false
 
         func validate() throws {
@@ -47,10 +47,16 @@ struct Hinge: AsyncParsableCommand {
 
     struct Set: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
-            abstract: "Move the hinge, wait for the screens to settle, and show the new angle and active screen.",
-            discussion: "Sends one request and never repeats it. The command pins the simulator boot it reads when it starts and fails if the simulator restarts before the hinge reaches the angle.")
+            abstract: "Move the hinge and show the new angle and active screen.",
+            discussion: """
+            By default AXe waits for the screens to settle after the move. A simulator restart during the move fails with bootChanged.
+
+            Examples:
+              axe hinge set tabletop --udid <UDID>
+              axe hinge set 120 --no-wait --udid <UDID>
+            """)
         @Argument(
-            help: "Angle in degrees (0...180), or closed (0), tabletop (90), open (180). Names are case-sensitive.",
+            help: "Angle in degrees, 0 to 180, or closed, tabletop (90) or open.",
             transform: { text in
                 switch text {
                 case "closed": return 0
@@ -63,12 +69,12 @@ struct Hinge: AsyncParsableCommand {
                     return degrees
                 }
             }) var degrees: Double
-        @Option(name: .customLong("udid"), help: "Simulator UDID.") var simulatorUDID: String
+        @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator.") var simulatorUDID: String
         @Option(name: .customLong("expected-boot"),
             help: ArgumentHelp("Refuse unless the simulator boot identity is PID:SECONDS:MICROSECONDS.", visibility: .hidden))
         var expectedBoot: String?
-        @Option(name: .customLong("tolerance"), help: "Mechanical match tolerance in degrees, 0...1.") var tolerance: Double = 0.5
-        @Option(name: .customLong("timeout"), help: "Seconds to wait for the hinge to reach the angle, 0.5...15.") var timeout: Double = 8
+        @Option(name: .customLong("tolerance"), help: "Allowed difference from the angle in degrees, 0 to 1.") var tolerance: Double = 0.5
+        @Option(name: .customLong("timeout"), help: "Seconds to wait for the hinge to reach the angle, 0.5 to 15.") var timeout: Double = 8
         @Flag(name: .customLong("no-wait"), help: "Return when the hinge reaches the angle, without waiting for the screens to settle.")
         var noWait = false
         @Option(name: .customLong("wait-for-screen-id"),
@@ -85,7 +91,7 @@ struct Hinge: AsyncParsableCommand {
         @Option(name: .customLong("readiness-timeout"),
             help: ArgumentHelp("Seconds to wait for the expected screen, 0.5...15 (default 8); requires both wait-for options.", visibility: .hidden))
         var readinessTimeout: Double?
-        @Flag(name: .customLong("verbose"), help: "Print the full broker reply as JSON: receipts, samples and boot identity.")
+        @Flag(name: .customLong("verbose"), help: "Print the full reply as JSON instead of the summary.")
         var verbose = false
 
         func validate() throws {

@@ -14,33 +14,41 @@ struct StreamVideo: AsyncParsableCommand {
 
     static let configuration = CommandConfiguration(
         commandName: "stream-video",
-        abstract: "Stream frames from a simulator or physical device to stdout."
+        abstract: "Stream screen frames to stdout until stopped.",
+        discussion: """
+        Formats: mjpeg (multipart JPEG), raw (a 4-byte big-endian length, then a JPEG), ffmpeg (concatenated JPEGs), bgra (packed BGRA pixels) and, on a physical device, h264 (H.264 Annex B). Frames go to stdout and messages to stderr; keep them apart. --fps is an upper limit. Stop with Ctrl+C or SIGTERM.
+
+        Examples:
+          axe stream-video --udid <UDID> --fps 10 --format mjpeg > stream.mjpeg
+          axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \\
+            ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 output.mp4
+        """
     )
 
-    @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
-    @Option(help: "Output format: mjpeg, raw, ffmpeg, bgra, or native H.264 Annex B on physical devices (h264). Default: mjpeg.")
+    @Option(help: "Stream format: mjpeg, raw, ffmpeg, bgra, or h264 on a physical device.")
     var format: OutputFormat = .mjpeg
 
     // Optional so that native h264 can refuse an explicit value, including the default.
-    @Option(name: .customLong("fps"), help: "Frames per second (1-30, default: 10)")
+    @Option(name: .customLong("fps"), help: "Frames per second, 1 to 30 (default 10); not with h264.")
     var requestedFPS: Int?
 
-    @Option(name: .customLong("quality"), help: "JPEG quality (1-100, default: 80)")
+    @Option(name: .customLong("quality"), help: "JPEG quality, 1 to 100 (default 80); not with h264.")
     var requestedQuality: Int?
 
-    @Option(name: .customLong("scale"), help: "Scale factor (0.1-1.0, default: 1.0)")
+    @Option(name: .customLong("scale"), help: "Frame scale factor, 0.1 to 1 (default 1); not with h264.")
     var requestedScale: Double?
 
     var fps: Int { requestedFPS ?? 10 }
     var quality: Int { requestedQuality ?? 80 }
     var scale: Double { requestedScale ?? 1 }
 
-    @Option(name: .customLong("screen-id"), help: "Stream this measured active display; requires --screen-uuid.")
+    @Option(name: .customLong("screen-id"), help: "Simulators: stream this screen; stop if it changes.")
     var screenID: UInt32?
 
-    @Option(name: .customLong("screen-uuid"), help: "Exact display UUID from axe displays; no retargeting.")
+    @Option(name: .customLong("screen-uuid"), help: "That screen's UUID from axe displays; pass both.")
     var screenUUID: String?
 
     @Option(name: .customLong("expected-boot"),
