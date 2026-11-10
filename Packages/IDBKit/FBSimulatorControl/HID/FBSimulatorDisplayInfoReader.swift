@@ -72,11 +72,15 @@ public enum FBSimulatorDisplayInfoReader {
   }
 
   /// The active panel must be the selected one, with the selected geometry and rotation.
+  /// `acceptSteadyLitInactive` is true only when `FBSimulatorDisplaySteadiness` has proved this
+  /// lit inactive report steady and consistent with the hinge.
   public static func snapshot(_ response: FBSimulatorDisplayInfoResponse, simulatorUDID: UUID,
-                       expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation) throws -> ActivePanelReadback {
+                       expectedPanels: [ActivePanelIdentity], selected: ActivePanelExpectation,
+                       acceptSteadyLitInactive: Bool = false) throws -> ActivePanelReadback {
     do {
       try Self.validateExpected(expectedPanels, selected: selected)
-      let snapshot = try catalogSnapshot(response, simulatorUDID: simulatorUDID, expectedPanels: expectedPanels)
+      let snapshot = try catalogSnapshot(response, simulatorUDID: simulatorUDID, expectedPanels: expectedPanels,
+        acceptSteadyLitInactive: acceptSteadyLitInactive)
       let panel = snapshot.activePanel
       guard panel.identity == selected.identity else {
         throw ActivePanelValidationError.inactiveSelection(requested: selected.identity, observed: panel.identity)
@@ -98,11 +102,12 @@ public enum FBSimulatorDisplayInfoReader {
 
   /// Every integrated panel must match the independent host catalogue entry.
   public static func discovery(_ response: FBSimulatorDisplayInfoResponse, simulatorUDID: UUID,
-                        expectedCatalog: [ActivePanelCatalogEntry]) throws -> ActivePanelReadback {
+                        expectedCatalog: [ActivePanelCatalogEntry],
+                        acceptSteadyLitInactive: Bool = false) throws -> ActivePanelReadback {
     do {
       try Self.validateCatalog(expectedCatalog)
       let snapshot = try catalogSnapshot(response, simulatorUDID: simulatorUDID,
-        expectedPanels: expectedCatalog.map(\.identity))
+        expectedPanels: expectedCatalog.map(\.identity), acceptSteadyLitInactive: acceptSteadyLitInactive)
       for panel in snapshot.panels {
         guard let expected = expectedCatalog.first(where: { $0.identity == panel.identity }),
               panel.nativePixelWidth == expected.nativePixelWidth, panel.nativePixelHeight == expected.nativePixelHeight,
@@ -144,7 +149,8 @@ public enum FBSimulatorDisplayInfoReader {
   }
 
   public static func catalogSnapshot(_ response: FBSimulatorDisplayInfoResponse, simulatorUDID: UUID,
-                              expectedPanels: [ActivePanelIdentity]) throws -> ActivePanelSnapshot {
+                              expectedPanels: [ActivePanelIdentity],
+                              acceptSteadyLitInactive: Bool = false) throws -> ActivePanelSnapshot {
     let rows = response.rows
     guard !rows.isEmpty, rows.count <= 32 else { throw ActivePanelValidationError.invalidDisplayCount }
     guard Set(rows.map(\.displayID)).count == rows.count, Set(rows.map(\.uniqueID)).count == rows.count else {
@@ -187,16 +193,22 @@ public enum FBSimulatorDisplayInfoReader {
     } else {
       guard panels.allSatisfy({ $0.active != nil }) else { throw ActivePanelValidationError.missingActiveFlag }
       // During a fold the incoming panel becomes active while the outgoing one is still lit, or the
-      // reverse, for about 150-240 ms. Any lit inactive display means the configuration is changing.
-      if rows.contains(where: { $0.active == false && Self.litBacklightStates.contains($0.backlightState ?? "") }) {
-        throw FBSimulatorContextError.changedDuringRead
-      }
+      // reverse, for about 150-240 ms, and the inner panel stays lit for 3 s after a close. A lit
+      // inactive display means the configuration is changing, unless the caller proved the report
+      // steady and consistent with the hinge (see FBSimulatorLitInactivePolicy).
+      let litInactive = FBSimulatorLitInactivePolicy.hasLitInactivePanel(rows)
       let active = panels.filter { $0.active == true }
+      if litInactive {
+        guard acceptSteadyLitInactive, active.count == 1,
+              let only = active.first, Self.litBacklightStates.contains(only.backlightState ?? "") else {
+          throw FBSimulatorContextError.changedDuringRead
+        }
+      }
       guard active.count == 1, let only = active.first else {
         throw ActivePanelValidationError.activeStateUnavailable(active.count)
       }
       panel = only
-      basis = .explicitActiveFlag
+      basis = litInactive ? .steadyExplicitActiveFlag : .explicitActiveFlag
     }
     return ActivePanelSnapshot(requestedSimulatorUDID: simulatorUDID, sourceCommandType: action,
       sourceJSONVersion: 0, sourceVersion: response.coreDeviceVersion, activePanel: panel,

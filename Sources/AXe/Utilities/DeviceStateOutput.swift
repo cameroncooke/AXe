@@ -171,7 +171,7 @@ enum DeviceState {
             return try await DisplayTransition.settledDiscovery(for: simulator)
         } catch FBSimulatorContextError.changedDuringRead {
             throw CLIOutputFailure(code: "screensDidNotSettle",
-                message: "The screens were still changing after \(DeviceStateText.number(DisplayTransition.settleBudgetSeconds)) s. Read them again.")
+                message: "The screens were still changing after \(DeviceStateText.number(DisplayTransition.settleBudgetSeconds)) s. Read them again. If the hinge is not moving, the simulator's display report may be stale: open and close the hinge once with axe hinge set.")
         }
     }
 

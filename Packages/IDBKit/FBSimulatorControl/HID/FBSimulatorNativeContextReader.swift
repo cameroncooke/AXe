@@ -148,11 +148,14 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     guard let activeRotation = ActivePanelRotation(rawValue: selected.currentOrientation) else {
       throw FBSimulatorContextError.unavailable("Active-panel guest rotation is unavailable")
     }
+    // The hinge sample already read for this observation decides a lit inactive report.
+    let verdict = await FBSimulatorDisplaySteadiness.shared.verdict(info,
+      simulatorUDID: simulator.udid, bootIdentity: bootBefore) { hingeBefore }
     let active = try FBSimulatorDisplayInfoReader.snapshot(info, simulatorUDID: simulatorID,
       expectedPanels: joinedPanels,
       selected: ActivePanelExpectation(identity: ActivePanelIdentity(displayID: screenID, uniqueID: screenUniqueID),
         nativePixelWidth: before.nativePixelSize.width, nativePixelHeight: before.nativePixelSize.height,
-        scale: before.scale, rotation: activeRotation))
+        scale: before.scale, rotation: activeRotation), acceptSteadyLitInactive: verdict == .steady)
     let hingeAfter = capability.hinge == .supported ? try await FBSimulatorHingeReader.read(for: simulator) : nil
     let afterCatalog = try Self.hostCatalog(
       await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)

@@ -54,6 +54,9 @@ public enum ActivePanelSchemaPolicy: String, Codable, Sendable {
 
 public enum ActivePanelSelectionBasis: String, Codable, Sendable {
     case explicitActiveFlag
+    /// The explicit flag of a report with a lit inactive panel that stayed unchanged and matched
+    /// the hinge for longer than a fold takes (`FBSimulatorLitInactivePolicy`).
+    case steadyExplicitActiveFlag
     case verifiedSingleIntegratedPanel
 }
 

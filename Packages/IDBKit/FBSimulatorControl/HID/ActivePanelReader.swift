@@ -27,10 +27,23 @@ public enum ActivePanelReader {
             return ActivePanelCatalogEntry(identity: ActivePanelIdentity(displayID: display.screenID, uniqueID: uniqueID),
                 nativePixelWidth: display.nativePixelSize.width, nativePixelHeight: display.nativePixelSize.height, scale: display.scale)
         }
-        // The guest's own CoreDevice display report, read in-process.
-        let readback = try FBSimulatorDisplayInfoReader.discovery(
-            await FBSimulatorDisplayInfoReader.read(for: simulator),
-            simulatorUDID: simulatorID, expectedCatalog: catalog)
+        // The guest's own CoreDevice display report, read in-process. A lit inactive panel that
+        // matches the hinge is read again until it has stayed unchanged for longer than a fold takes
+        // (FBSimulatorLitInactivePolicy); a close's 3 s dwell ends first and reads as ordinary.
+        var response = try await FBSimulatorDisplayInfoReader.read(for: simulator)
+        let settleDeadline = started + FBSimulatorLitInactivePolicy.steadySeconds + 1
+        var verdict = FBSimulatorLitInactiveVerdict.ordinary
+        while true {
+            verdict = await FBSimulatorDisplaySteadiness.shared.verdict(response,
+                simulatorUDID: simulator.udid, bootIdentity: bootBefore) {
+                capability.hinge == .supported ? try await FBSimulatorHingeReader.read(for: simulator) : nil
+            }
+            guard verdict == .settling, ProcessInfo.processInfo.systemUptime < settleDeadline else { break }
+            try await Task.sleep(nanoseconds: 100_000_000)
+            response = try await FBSimulatorDisplayInfoReader.read(for: simulator)
+        }
+        let readback = try FBSimulatorDisplayInfoReader.discovery(response, simulatorUDID: simulatorID,
+            expectedCatalog: catalog, acceptSteadyLitInactive: verdict == .steady)
         let after = try FBSimulatorNativeContextReader.hostCatalog(
             await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)
         let bootAfter = try FBSimulatorNativeContextReader.bootIdentity(simulator.udid)
