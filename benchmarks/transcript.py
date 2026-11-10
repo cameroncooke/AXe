@@ -112,8 +112,9 @@ def captures(value, call, line):
         data = value.get("data", {})
         raw = data.get("capture")
         cache = data.get("cache", {})
-        # A refusal before input may carry the current screen, marked as a refreshed table.
-        refreshed = cache.get("status") == "refreshed"
+        # A refusal before input may carry the current screen. A full reply marks it as a refreshed table.
+        # A compact reply omits the cache object unless a refresh is required, and its capture is then current.
+        refreshed = cache.get("status") == "refreshed" or "cache" not in data
         if not isinstance(raw, dict) or cache.get("requiresRefresh") or (value.get("didError") and not refreshed):
             return output
         rows = raw.get("rows")

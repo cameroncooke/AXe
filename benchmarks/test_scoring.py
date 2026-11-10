@@ -126,6 +126,18 @@ class ScoringTests(unittest.TestCase):
             stale = {"schema": "axe.output.agent-result", "didError": True, "data": {"cache": cache, "capture": {"rows": rows}}}
             self.assertEqual(captures(stale, 1, 2), [], cache)
 
+    def test_compact_refusal_without_a_cache_object_carries_the_current_screen(self):
+        # Compact replies omit data.cache unless a refresh is required; the capture is then current.
+        compact = {"schema": "axe.output.agent-result", "schemaVersion": "2", "didError": True,
+                   "error": {"code": "targetCovered", "message": "Another control is at the tap point."},
+                   "data": {"action": {"enqueuedEventCount": 0, "outcome": "failedBeforeInput"},
+                            "capture": {"rows": ["e12|tap|button|Edit|", "e39|text|text|MCP Contact Benchmark|"]}}}
+        self.assertEqual([n.label for n in captures(compact, 1, 2)[0].nodes], ["Edit", "MCP Contact Benchmark"])
+        invalidated = {"schema": "axe.output.agent-result", "didError": True,
+                       "data": {"cache": {"reason": "observationFailed", "requiresRefresh": True, "status": "invalidated"},
+                                "capture": {"rows": ["e12|tap|button|Edit|"]}}}
+        self.assertEqual(captures(invalidated, 1, 2), [])
+
     def test_batch_partial_receipt_does_not_assume_all_steps_ran(self):
         command = "axe batch --agent --steps-json '{\"steps\":[{\"action\":\"tap\",\"ref\":\"e1\"},{\"action\":\"tap\",\"ref\":\"e2\"}]}'"
         call = Call(1, "id", "Bash", command, {}, 1, text=json.dumps({"schema": "axe.output.agent-result", "didError": True, "data": {"batch": {"completedSteps": 1}}}))
