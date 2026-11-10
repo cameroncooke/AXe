@@ -141,33 +141,51 @@ struct GestureConvenienceTests {
         #expect(throws: (any Error).self) { _ = try Swipe.parse(line + ["--max-swipes", "3", "--udid", udid]) }
     }
 
-    /// A screen that changes with every scroll, so the loop never takes it for the end of the content.
-    private func moving(_ reads: Int, visible: Bool) -> ScrollUntilOptions.Observation {
-        .init(visible: visible, signature: "screen \(reads)")
+    /// A list that moves one step with every scroll and shows the element after `shownAfter` scrolls.
+    private final class FakeList {
+        var scrolls = 0, reads = 0
+        let shownAfter: Int?
+        init(shownAfter: Int?) { self.shownAfter = shownAfter }
+        func observe() -> ScrollUntilOptions.Observation {
+            reads += 1
+            return .init(visible: shownAfter.map { scrolls >= $0 } ?? false, signature: "position \(scrolls)")
+        }
     }
 
-    @Test func scrollingStopsAtTheFirstReadThatSeesTheElement() async throws {
+    @Test func scrollingStopsAtTheFirstReadThatSeesTheElementAtRest() async throws {
         let until = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid]).until
-        var reads = 0, scrolls = 0
-        try await until.run(.label("Row 40"), observe: { reads += 1; return moving(reads, visible: reads == 3) }, scroll: { scrolls += 1 })
-        #expect(reads == 3 && scrolls == 2)
+        let list = FakeList(shownAfter: 2)
+        try await until.run(.label("Row 40"), observe: { list.observe() }, scroll: { list.scrolls += 1 })
+        // Three reads to find it, and one more that shows the screen has stopped moving.
+        #expect(list.scrolls == 2 && list.reads == 4)
         // Already on screen: no input at all.
-        reads = 0; scrolls = 0
-        try await until.run(.label("Row 40"), observe: { reads += 1; return moving(reads, visible: true) }, scroll: { scrolls += 1 })
-        #expect(reads == 1 && scrolls == 0)
+        let shown = FakeList(shownAfter: 0)
+        try await until.run(.label("Row 40"), observe: { shown.observe() }, scroll: { shown.scrolls += 1 })
+        #expect(shown.scrolls == 0 && shown.reads == 2)
+    }
+
+    @Test func anElementSeenWhileTheContentStillMovesIsReadAgainUntilItRests() async throws {
+        let until = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid]).until
+        // The element is visible at once, but the content glides for three more reads.
+        var reads = 0
+        try await until.run(.label("Row 40"), observe: {
+            reads += 1
+            return .init(visible: true, signature: "position \(min(reads, 4))")
+        }, scroll: { Issue.record("An element already on screen needs no scroll") })
+        #expect(reads == 5)
     }
 
     @Test func scrollingGivesUpAfterTheLimitWithElementNotFound() async throws {
         let until = try Gesture.parse(["scroll-down", "--until-id", "missing", "--max-swipes", "2", "--udid", udid]).until
-        var reads = 0, scrolls = 0
+        let list = FakeList(shownAfter: nil)
         do {
-            try await until.run(.id("missing"), observe: { reads += 1; return moving(reads, visible: false) }, scroll: { scrolls += 1 })
+            try await until.run(.id("missing"), observe: { list.observe() }, scroll: { list.scrolls += 1 })
             Issue.record("A missing element was reported as found")
         } catch let error as CLIError {
             #expect(error.code == .elementNotFound && error.errorDescription.contains("2 scrolls"))
         }
         // One read before each scroll and one after the last.
-        #expect(scrolls == 2 && reads == 3)
+        #expect(list.scrolls == 2 && list.reads == 3)
     }
 
     @Test func scrollingStopsWhenAScrollMovesNothing() async throws {

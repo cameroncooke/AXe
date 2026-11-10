@@ -15,6 +15,9 @@ struct ScrollUntilOptions: ParsableArguments {
     static let defaultMaxSwipes = 10
     /// Content keeps moving, or bounces back from its end, after the finger lifts; the next read waits this long.
     static let settle: TimeInterval = 0.4
+    /// How often, and how many times at most, a visible element is read again until the screen is at rest.
+    static let restInterval: TimeInterval = 0.25
+    static let restReads = 8
 
     /// One read of the screen: whether the element can be tapped where it is, and what the screen holds.
     struct Observation: Equatable {
@@ -42,9 +45,10 @@ struct ScrollUntilOptions: ParsableArguments {
         }
     }
 
-    /// Reads, then scrolls and reads again, until the element is visible. It reads before the first
-    /// scroll, so an element already on screen costs no input, and it stops as soon as a scroll moves
-    /// nothing: the content is at its end, and more scrolls would only make it bounce.
+    /// Reads, then scrolls and reads again, until the element is visible and the screen is at rest, so
+    /// the next command can tap it. It reads before the first scroll, so an element already on screen
+    /// costs no input, and it stops as soon as a scroll moves nothing: the content is at its end, and
+    /// more scrolls would only make it bounce.
     func run(_ query: AccessibilityQuery, observe: () async throws -> Observation,
              scroll: () async throws -> Void) async throws {
         let limit = maxSwipes ?? Self.defaultMaxSwipes
@@ -54,7 +58,17 @@ struct ScrollUntilOptions: ParsableArguments {
         }
         var before: Observation?
         for scrolls in 0...limit {
-            let seen = try await observe()
+            var seen = try await observe()
+            if seen.visible {
+                // The content may still be gliding or bouncing back from its end. A tap sent then only
+                // stops it, so wait until two reads in a row are the same.
+                for _ in 0..<Self.restReads {
+                    try await Task.sleep(for: .seconds(Self.restInterval))
+                    let next = try await observe()
+                    if next == seen { break }
+                    seen = next
+                }
+            }
             if seen.visible {
                 CLIOutput.message("✓ \(name) is on screen after \(scrolls) scroll\(scrolls == 1 ? "" : "s")")
                 return
