@@ -67,7 +67,7 @@ struct Key: PhysicalDeviceCommand {
     }
 
     func agentRequest() throws -> SelectedHIDRequest {
-        let events = try SelectedKeyboardRequest.primitives(from: selectedKeyboardEvent())
+        let events = try KeyboardPrimitives.from(selectedKeyboardEvent())
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .keyPress,
             expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID,
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)

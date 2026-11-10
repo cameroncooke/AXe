@@ -280,10 +280,10 @@ extension HIDBroker {
         guard unlink(path) == 0 || errno == ENOENT else { throw posixError("unlink") }
     }
 
-    static func readMessage(from descriptor: Int32) throws -> Data {
+    static func readMessage(from descriptor: Int32, maximumBytes: Int = maximumMessageBytes) throws -> Data {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 4096)
-        while data.count <= maximumMessageBytes {
+        while data.count <= maximumBytes {
             let count = Darwin.read(descriptor, &buffer, buffer.count)
             if count < 0 {
                 if errno == EINTR { continue }

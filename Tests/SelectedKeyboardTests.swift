@@ -53,12 +53,12 @@ struct SelectedKeyboardTests {
     }
 
     @Test func textAndChordUseExactExistingKeyOrder() throws {
-        let text = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent("A"))
+        let text = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent("A"))
         #expect(text.map(\.event) == [.keyboard(direction: .down, keyCode: 225),
             .keyboard(direction: .down, keyCode: 4), .keyboard(direction: .up, keyCode: 4),
             .keyboard(direction: .up, keyCode: 225)])
         let command = try KeyCombo.parse(["--modifiers", "227,225", "--key", "4"] + options)
-        let events = try SelectedKeyboardRequest.primitives(from: command.selectedKeyboardEvent()).map(\.event)
+        let events = try KeyboardPrimitives.from(command.selectedKeyboardEvent()).map(\.event)
         #expect(events == [.keyboard(direction: .down, keyCode: 227), .keyboard(direction: .down, keyCode: 225),
             .keyboard(direction: .down, keyCode: 4), .keyboard(direction: .up, keyCode: 4),
             .keyboard(direction: .up, keyCode: 225), .keyboard(direction: .up, keyCode: 227)])
@@ -73,7 +73,7 @@ struct SelectedKeyboardTests {
             #expect(!owner.inFlight && owner.token == nil)
         }
         #expect(throws: (any Error).self) {
-            _ = try SelectedKeyboardRequest.primitives(from: .touch(direction: .down, x: 1, y: 1))
+            _ = try KeyboardPrimitives.from(.touch(direction: .down, x: 1, y: 1))
         }
         #expect(throws: (any Error).self) {
             _ = try FBSimulatorHIDSession.preflight(.keyboard(direction: .down, keyCode: 4), observation: observation())

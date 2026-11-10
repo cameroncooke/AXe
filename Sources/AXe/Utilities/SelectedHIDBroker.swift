@@ -53,8 +53,21 @@ enum SelectedHIDBroker {
     private static func encoded(_ request: SelectedHIDRequest) throws -> Data {
         try request.validate()
         var data = try JSONEncoder().encode(request); data.append(10)
-        guard data.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
+        guard data.count <= maximumRequestBytes(request) else { throw SelectedHIDFailure.invalid("Request too large") }
         return data
+    }
+
+    /// Ordinary keyboard input may carry long text; every other request keeps the 64 KiB bound.
+    private static func maximumRequestBytes(_ request: SelectedHIDRequest) -> Int {
+        request.legacyKeyboard == nil ? HIDBroker.maximumMessageBytes : LegacyDuoKeyboard.maximumMessageBytes
+    }
+
+    /// Reads one request from an admitted client. The larger read bound applies only to ordinary keyboard input.
+    static func readRequest(from descriptor: Int32) throws -> SelectedHIDRequest {
+        let bytes = try HIDBroker.readMessage(from: descriptor, maximumBytes: LegacyDuoKeyboard.maximumMessageBytes)
+        let request = try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
+        guard bytes.count <= maximumRequestBytes(request) else { throw SelectedHIDFailure.invalid("Request too large") }
+        return request
     }
 
     private static func readyDescriptor(simulatorUDID: String) throws -> Int32 {
@@ -156,9 +169,7 @@ enum SelectedHIDBroker {
                             try configureClient(client)
                             try HIDBroker.writeHandshake(ready: ready, version: SelectedHIDRequest.version, to: client)
                             guard ready else { throw SelectedHIDFailure.busy }
-                            let bytes = try HIDBroker.readMessage(from: client)
-                            guard bytes.count <= HIDBroker.maximumMessageBytes else { throw SelectedHIDFailure.invalid("Request too large") }
-                            return try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
+                            return try readRequest(from: client)
                         }
                         var response: SelectedHIDResponse
                         let timer = request.timing == true ? PhaseTimer() : nil

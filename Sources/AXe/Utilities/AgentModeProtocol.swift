@@ -47,8 +47,8 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidFocusAndType", "Focus and type requires one snapshot/ref and text, without other targets, actions or timing options.")
             }
             // Validate all text before a focus tap, including private broker callers.
-            let events = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
-            try SelectedKeyboardRequest.validateEvents(events)
+            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
+            try KeyboardPrimitives.validate(events, limits: .selected)
         }
         if kind == .read {
             guard snapshotID != nil, let readReference, let textQuery,

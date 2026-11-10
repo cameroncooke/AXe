@@ -45,46 +45,47 @@ struct SelectedKeyboardRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Selected keyboard requires an exact native TextField in the expected process")
             }
         }
-        try Self.validateEvents(events)
-    }
-
-    static func validateEvents(_ events: [SelectedKeyboardPrimitive]) throws {
-        guard !events.isEmpty, events.count <= Self.maximumEvents else {
-            throw SelectedHIDFailure.invalid("Selected keyboard requires 1...1024 events")
-        }
-        var held = Set<UInt32>()
-        var delay = 0.0
-        var downs = 0
-        for event in events {
-            switch event {
-            case .down(let code):
-                guard code <= 255, held.insert(code).inserted else {
-                    throw SelectedHIDFailure.invalid("Selected keyboard key down is invalid or already held")
-                }
-                downs += 1
-            case .up(let code):
-                guard code <= 255, held.remove(code) != nil else {
-                    throw SelectedHIDFailure.invalid("Selected keyboard key up has no matching down")
-                }
-            case .delay(let seconds):
-                guard seconds.isFinite, (0...10).contains(seconds) else {
-                    throw SelectedHIDFailure.invalid("Selected keyboard delay must be finite and in 0...10 seconds")
-                }
-                delay += seconds
-            }
-        }
-        guard held.isEmpty, downs > 0, delay <= 20 else {
-            throw SelectedHIDFailure.invalid("Selected keyboard must release every key within a bounded complete sequence")
-        }
+        try KeyboardPrimitives.validate(events, limits: .selected)
     }
 
     var event: FBSimulatorHIDEvent { .composite(events.map(\.event)) }
 
-    static func primitives(from event: FBSimulatorHIDEvent) throws -> [SelectedKeyboardPrimitive] {
+    static func textEvent(_ text: String) throws -> FBSimulatorHIDEvent {
+        guard !text.isEmpty, text.utf8.count <= maximumTextBytes else {
+            throw SelectedHIDFailure.invalid("Selected text requires 1...256 UTF-8 bytes")
+        }
+        return .composite(try TextToHIDEvents.convertTextToHIDEvents(text))
+    }
+}
+
+/// Keyboard primitives from a HID event, and their one validator. Each route passes its limits.
+enum KeyboardPrimitives {
+    struct Limits {
+        /// Starts every refusal, such as "Selected keyboard".
+        let name: String
+        /// Nil allows any number of events.
+        let maximumEvents: Int?
+        /// Ordinary input keeps repeated modifier downs, each released by its own up.
+        let allowsRepeatedDown: Bool
+        /// Nil allows any delay the native clock can represent.
+        let maximumDelay: Double?
+        let maximumTotalDelay: Double?
+
+        static let selected = Limits(name: "Selected keyboard", maximumEvents: SelectedKeyboardRequest.maximumEvents,
+            allowsRepeatedDown: false, maximumDelay: 10, maximumTotalDelay: 20)
+        /// One complete key or key-combo command: at most eight modifiers and one target key.
+        static let rawBroker = Limits(name: "Raw keyboard", maximumEvents: 18, allowsRepeatedDown: true,
+            maximumDelay: 10, maximumTotalDelay: 10)
+        /// The ordinary commands' contract: long text, repeated modifiers and long key-sequence delays.
+        static let ordinary = Limits(name: "Ordinary keyboard", maximumEvents: nil, allowsRepeatedDown: true,
+            maximumDelay: nil, maximumTotalDelay: nil)
+    }
+
+    static func from(_ event: FBSimulatorHIDEvent, limits: Limits = .selected) throws -> [SelectedKeyboardPrimitive] {
         var result: [SelectedKeyboardPrimitive] = []
         func append(_ value: FBSimulatorHIDEvent, depth: Int) throws {
-            guard depth <= 8, result.count < maximumEvents else {
-                throw SelectedHIDFailure.invalid("Selected keyboard event exceeds its bounds")
+            guard depth <= 8, result.count < limits.maximumEvents ?? .max else {
+                throw SelectedHIDFailure.invalid("\(limits.name) event exceeds its bounds")
             }
             switch value {
             case .keyboard(.down, let code): result.append(.down(code))
@@ -92,7 +93,7 @@ struct SelectedKeyboardRequest: Codable, Sendable {
             case .delay(let seconds): result.append(.delay(seconds))
             default:
                 guard let children = value.subEvents else {
-                    throw SelectedHIDFailure.invalid("Selected keyboard cannot contain non-keyboard input")
+                    throw SelectedHIDFailure.invalid("\(limits.name) cannot contain non-keyboard input")
                 }
                 for child in children { try append(child, depth: depth + 1) }
             }
@@ -101,11 +102,43 @@ struct SelectedKeyboardRequest: Codable, Sendable {
         return result
     }
 
-    static func textEvent(_ text: String) throws -> FBSimulatorHIDEvent {
-        guard !text.isEmpty, text.utf8.count <= maximumTextBytes else {
-            throw SelectedHIDFailure.invalid("Selected text requires 1...256 UTF-8 bytes")
+    /// At least one key, every key released, and delays within the limits.
+    static func validate(_ events: [SelectedKeyboardPrimitive], limits: Limits) throws {
+        let name = limits.name
+        if let maximum = limits.maximumEvents {
+            guard !events.isEmpty, events.count <= maximum else {
+                throw SelectedHIDFailure.invalid("\(name) requires 1...\(maximum) events")
+            }
         }
-        return .composite(try TextToHIDEvents.convertTextToHIDEvents(text))
+        var held: [UInt32: Int] = [:]
+        var delay = 0.0
+        var downs = 0
+        for event in events {
+            switch event {
+            case .down(let code):
+                guard code <= 255, limits.allowsRepeatedDown || held[code] == nil else {
+                    throw SelectedHIDFailure.invalid("\(name) key down is invalid or already held")
+                }
+                held[code, default: 0] += 1
+                downs += 1
+            case .up(let code):
+                guard code <= 255, let count = held[code] else {
+                    throw SelectedHIDFailure.invalid("\(name) key up has no matching down")
+                }
+                held[code] = count == 1 ? nil : count - 1
+            case .delay(let seconds):
+                guard seconds.isFinite, seconds >= 0,
+                      seconds <= limits.maximumDelay ?? Double(UInt64.max) / 1_000_000_000 else {
+                    throw SelectedHIDFailure.invalid(limits.maximumDelay.map {
+                        "\(name) delay must be finite and in 0...\(Int($0)) seconds"
+                    } ?? "\(name) delay is invalid")
+                }
+                delay += seconds
+            }
+        }
+        guard held.isEmpty, downs > 0, delay <= limits.maximumTotalDelay ?? .infinity else {
+            throw SelectedHIDFailure.invalid("\(name) must release every key within a bounded complete sequence")
+        }
     }
 }
 

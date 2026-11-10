@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 86
+    static let version = 87
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -131,7 +131,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             return
         }
         if let legacyKeyboard {
-            try legacyKeyboard.validate(requestID: requestID)
+            try legacyKeyboard.validate()
             return
         }
         if let rotation {

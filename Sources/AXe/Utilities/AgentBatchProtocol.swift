@@ -83,8 +83,8 @@ struct AgentBatchStep: Codable, Sendable {
             guard focus == nil else { throw AgentModeFailure("mixedBatchPayload", "Only a type step can focus its field.") }
         case .type:
             guard let text else { throw AgentModeFailure("missingBatchText", "A type step requires literal text.") }
-            let events = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
-            try SelectedKeyboardRequest.validateEvents(events)
+            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
+            try KeyboardPrimitives.validate(events, limits: .selected)
         }
     }
 }

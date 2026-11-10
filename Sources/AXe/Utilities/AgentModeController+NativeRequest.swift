@@ -141,7 +141,7 @@ extension AgentModeController {
             }
             try SelectedKeyboardFocusPolicy.validate(node, expectedPID: pid, fieldTarget: chosenTarget)
             plannedKeyboard = SelectedKeyboardRequest(expectedPID: pid, fieldTarget: chosenTarget,
-                events: try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text)))
+                events: try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text)))
         case .swipe:
             guard let node, let ref = mode.ref, let cached, let direction = mode.direction,
                   let original = cached.snapshot.elements.first(where: { $0.ref == ref }) else {

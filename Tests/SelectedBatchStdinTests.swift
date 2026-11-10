@@ -57,7 +57,7 @@ struct SelectedBatchStdinTests {
         let direct = try command.selectedRequest(standardInput: directPipe.fileHandleForReading)
         let keyboard = try #require(batch.keyboard)
         #expect(keyboard.events.map(\.event) == direct.keyboard?.events.map(\.event))
-        let expected = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
+        let expected = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
         #expect(keyboard.events.map(\.event) == expected.map(\.event))
         #expect(keyboard.expectedPID == 123 && keyboard.focusID == "field")
         #expect(batch.screenID == direct.screenID && batch.screenUUID == direct.screenUUID)
@@ -182,7 +182,7 @@ struct SelectedBatchStdinTests {
         let source = useFile ? ["--file", file.path] : ["--", text]
         let item = try request(["type", "--expected-pid", "123", "--focus-id", "field"] + source,
             stdin: pipe.fileHandleForReading)
-        let expected = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent(text))
+        let expected = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
         #expect(item.keyboard?.events.map(\.event) == expected.map(\.event))
         #expect(try pipe.fileHandleForReading.readToEnd() == Data("d".utf8))
         let legacy = try Type.parse(["--udid", udid] + source)

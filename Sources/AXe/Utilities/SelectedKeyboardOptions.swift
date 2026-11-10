@@ -32,7 +32,7 @@ struct SelectedKeyboardOptions: ParsableArguments {
         }
         var request = try input.baseRequest(operation: .complete, token: nil, primitives: [])
         request.keyboard = SelectedKeyboardRequest(expectedPID: expectedPID, focusID: focusID,
-            events: try SelectedKeyboardRequest.primitives(from: event))
+            events: try KeyboardPrimitives.from(event))
         try request.validate()
         return request
     }

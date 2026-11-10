@@ -130,13 +130,9 @@ enum LegacyDuoInput {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
             throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
-        let endpoint = try SelectedHIDBroker.endpoint(simulatorUDID: simulatorUDID)
-        let requestID = UUID()
-        let keyboard = try LegacyDuoKeyboard.prepare(event, requestID: requestID, endpoint: endpoint)
-        defer { try? keyboard.removeIfOwned(endpoint: endpoint) }
-        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, legacyKeyboard: keyboard)
+            primitives: [], expectedContext: context, legacyKeyboard: try LegacyDuoKeyboard(event))
         try await SignalScope.cancellingOnSignal {
             try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
         }

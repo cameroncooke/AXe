@@ -102,7 +102,7 @@ struct SelectedBatchRoutingTests {
 
     @Test func literalOptionTextIsNotAnOverrideAfterSeparator() throws {
         let actual = try request("type --expected-pid 123 --focus-id field -- --screen-id")
-        let expected = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent("--screen-id"))
+        let expected = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent("--screen-id"))
         #expect(actual.keyboard?.events.map(\.event) == expected.map(\.event))
     }
 
@@ -111,7 +111,7 @@ struct SelectedBatchRoutingTests {
         defer { try? FileManager.default.removeItem(at: file) }
         try Data("A\nb\n".utf8).write(to: file)
         let actual = try request("type --file '\(file.path)' --expected-pid 123 --focus-id field")
-        let expected = try SelectedKeyboardRequest.primitives(from: SelectedKeyboardRequest.textEvent("A\nb\n"))
+        let expected = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent("A\nb\n"))
         #expect(actual.keyboard?.events.map(\.event) == expected.map(\.event))
         #expect(actual.keyboard?.focusID == "field" && actual.keyboard?.expectedPID == 123)
     }

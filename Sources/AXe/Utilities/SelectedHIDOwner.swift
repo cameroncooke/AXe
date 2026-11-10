@@ -114,8 +114,7 @@ final class SelectedHIDOwner {
             if request.expectedContext != nil, session != nil {
                 throw SelectedHIDFailure.invalid("Context-bound input requires a fresh complete session")
             }
-            let legacyKeyboardEvents = try await request.legacyKeyboard?.consume(
-                endpoint: SelectedHIDBroker.endpoint(simulatorUDID: simulatorUDID))
+            let legacyKeyboardEvents = try request.legacyKeyboard?.primitives()
             try Task.checkCancellation()
             if session == nil { try await open(request) }
             guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned session") }
