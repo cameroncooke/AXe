@@ -73,6 +73,18 @@ struct AgentSwipePathTests {
         #expect(try preset.primitives(logicalSize: CGSize(width: 402, height: 874)).last?.kind == .up)
     }
 
+    @Test("A scroll-until step on a device has at least eight moves, however short the swipe")
+    func restingPathHasEnoughMoves() throws {
+        let short = try Swipe.parse(["--udid", "00008140-000415942291401C",
+            "--start-x", "206", "--start-y", "912", "--end-x", "114", "--end-y", "912", "--until-label", "Watercolor"])
+        let moves = try short.restingPath.primitives(logicalSize: CGSize(width: 440, height: 956))
+            .filter { $0.kind != .delay }.count - 2
+        #expect(moves == 8 && short.restingPath.endsAtRest == true)
+        let long = try Swipe.parse(["--udid", "00008140-000415942291401C",
+            "--start-x", "200", "--start-y", "800", "--end-x", "200", "--end-y", "200", "--until-label", "Privacy"])
+        #expect(long.restingPath.delta == 50)
+    }
+
     @Test("Only a swipe may end at rest")
     func onlySwipeEndsAtRest() throws {
         var drag = SelectedHIDPath(kind: .drag, startX: 10, startY: 10, endX: 100, endY: 100,

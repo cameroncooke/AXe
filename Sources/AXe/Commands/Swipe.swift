@@ -162,6 +162,10 @@ struct Swipe: PhysicalDeviceCommand {
     var restingPath: SelectedHIDPath {
         var path = selectedPath
         path.endsAtRest = true
+        // At least eight moves: with two, a 92-point swipe did not scroll a strip on a physical iPhone.
+        if let startX = path.startX, let startY = path.startY, let endX = path.endX, let endY = path.endY {
+            path.delta = min(path.delta ?? 50, max(1, hypot(endX - startX, endY - startY) / 8))
+        }
         return path
     }
 

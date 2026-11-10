@@ -571,6 +571,8 @@ struct Gesture: PhysicalDeviceCommand {
                         // Each step ends at rest; see `Swipe.restingPath`.
                         var path = try selectedPath()
                         path.endsAtRest = true
+                        // A scroll preset is at least 200 points long; 25 points a move gives eight or more.
+                        path.delta = min(path.delta ?? 50, 25)
                         try await PhysicalDeviceGestures.path(path, edge: edge, on: input)
                     })
             } else {

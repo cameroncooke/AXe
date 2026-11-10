@@ -17,8 +17,10 @@ struct PhysicalSemanticPressReceipt: Codable, Sendable {
 }
 
 enum PhysicalAccessibility {
-    /// Upper bound for one tree read: the pushed tree pair plus any live translator lookups.
-    static let readBudget: TimeInterval = 6
+    /// Upper bound for one tree read: the pushed tree pair plus any live translator lookups. A device takes
+    /// about 0.9 s plus 44 ms per element (measured on an iPad Pro: 148 elements in 7.3 s, 188 in 9.1 s), so
+    /// this allows about 330 elements; the 6 s it used to be failed every screen above about 115.
+    static let readBudget: TimeInterval = 20
 
     static func projectionEntries(_ archive: PhysicalAXTreeArchive) -> [FBPhysicalAXTreeProjection.Entry] {
         archive.entries.map {

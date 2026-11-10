@@ -164,7 +164,10 @@ final class DeviceAccessibilitySession: @unchecked Sendable {
             socket.finishWrites()
         }
         _ = try send("clientNeedsAccessibility:", argument: NSNumber(value: true))
-        let retryAt = ContinuousClock.now + .milliseconds(2_500)
+        // A device that has sent nothing is asked once more. Asking restarts a tree it is still
+        // building, and the first part of a large tree takes several seconds (about 0.9 s plus 15 ms per
+        // element), so the second request waits 6 s: at 2.5 s it added 2.3 s to a 148-element read.
+        let retryAt = ContinuousClock.now + .milliseconds(6_000)
         var retryNeeded = true
         var firstTree = true
         var admission = PhysicalAXTreeAdmission()
