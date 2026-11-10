@@ -124,7 +124,7 @@ struct KeyCombo: PhysicalDeviceCommand {
         logger.info().log("Pressing key combo: modifiers=\(modifiersString), key=\(key)")
 
         try await LegacyDuoInput.performKeyboard(
-            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: true,
+            try hidEvent(), simulatorUDID: simulatorUDID, logger: logger,
             verbose: selectedOutput.verbose
         )
 

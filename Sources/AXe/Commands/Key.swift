@@ -106,7 +106,7 @@ struct Key: PhysicalDeviceCommand {
         }
 
         try await LegacyDuoInput.performKeyboard(
-            hidEvent, simulatorUDID: simulatorUDID, logger: logger, persistentOrdinaryKeyboard: duration == nil,
+            hidEvent, simulatorUDID: simulatorUDID, logger: logger,
             verbose: selectedOutput.verbose
         )
         

@@ -33,12 +33,6 @@ struct HIDBrokerRetainedContact: Equatable {
 
 private struct HIDBrokerRequest: Codable {
     let primitives: [HIDBrokerPrimitive]
-    let keyboard: HIDBrokerKeyboardRequest?
-
-    init(primitives: [HIDBrokerPrimitive], keyboard: HIDBrokerKeyboardRequest? = nil) {
-        self.primitives = primitives
-        self.keyboard = keyboard
-    }
 }
 
 struct HIDBrokerBootIdentity: Equatable {
@@ -73,14 +67,6 @@ enum HIDBroker {
         descriptorProvider: () throws -> Int32
     ) throws {
         try send(HIDBrokerRequest(primitives: primitives), descriptorProvider: descriptorProvider)
-    }
-
-    static func sendKeyboardEvent(_ event: FBSimulatorHIDEvent, simulatorUDID: String) throws {
-        let keyboard = try HIDBrokerKeyboardRequest(event: event)
-        let endpoint = try endpointPath(simulatorUDID: simulatorUDID)
-        try send(HIDBrokerRequest(primitives: [], keyboard: keyboard)) {
-            try connectToReadyBroker(simulatorUDID: simulatorUDID, endpoint: endpoint)
-        }
     }
 
     private static func send(_ request: HIDBrokerRequest, descriptorProvider: () throws -> Int32) throws {
@@ -244,25 +230,9 @@ enum HIDBroker {
         do {
             let data = try await offMain { try readMessage(from: client) }
             let request = try JSONDecoder().decode(HIDBrokerRequest.self, from: data)
-            if let keyboard = request.keyboard {
-                guard request.primitives.isEmpty else {
-                    throw CLIError(errorDescription: "A keyboard request cannot include touches.", code: .invalidArguments)
-                }
-                try keyboard.validate()
-                let activeSession = try await HIDInteractor.makeSession(for: simulatorUDID, logger: logger)
-                session = activeSession
-                do {
-                    try await HIDInteractor.performHIDEvent(keyboard.event, in: activeSession, logger: logger)
-                } catch {
-                    // A failed send may have entered the guest. Retire this connection without replay.
-                    shouldContinue = false
-                    throw error
-                }
-            } else {
-                try await perform(request.primitives, simulatorUDID: simulatorUDID,
-                    session: &session, retainedContact: &retainedContact,
-                    shouldContinue: &shouldContinue, logger: logger)
-            }
+            try await perform(request.primitives, simulatorUDID: simulatorUDID,
+                session: &session, retainedContact: &retainedContact,
+                shouldContinue: &shouldContinue, logger: logger)
             // A completed UP releases common input ownership before the client receives success.
             // A failed request keeps the prior ownership policy; it is never declared clear here.
             if retainedContact == nil { session = nil }
@@ -307,6 +277,10 @@ enum HIDBroker {
 
     /// The broker is the trust boundary: refuse the whole request before its first event.
     static func validate(_ primitives: [HIDBrokerPrimitive]) throws {
+        // An empty list, such as a keyboard request from an older build, has nothing to send.
+        guard !primitives.isEmpty else {
+            throw CLIError(errorDescription: "The input request has no touch events.", code: .invalidArguments)
+        }
         guard primitives.count <= 1024 else {
             throw CLIError(errorDescription: "The input request has too many touch events.", code: .invalidArguments)
         }

@@ -73,9 +73,6 @@ enum KeyboardPrimitives {
 
         static let selected = Limits(name: "Selected keyboard", maximumEvents: SelectedKeyboardRequest.maximumEvents,
             allowsRepeatedDown: false, maximumDelay: 10, maximumTotalDelay: 20)
-        /// One complete key or key-combo command: at most eight modifiers and one target key.
-        static let rawBroker = Limits(name: "Raw keyboard", maximumEvents: 18, allowsRepeatedDown: true,
-            maximumDelay: 10, maximumTotalDelay: 10)
         /// The ordinary commands' contract: long text, repeated modifiers and long key-sequence delays.
         static let ordinary = Limits(name: "Ordinary keyboard", maximumEvents: nil, allowsRepeatedDown: true,
             maximumDelay: nil, maximumTotalDelay: nil)

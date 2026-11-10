@@ -114,17 +114,12 @@ enum LegacyDuoInput {
         _ event: FBSimulatorHIDEvent,
         simulatorUDID: String,
         logger: AxeLogger,
-        persistentOrdinaryKeyboard: Bool = false,
         verbose: Bool = false
     ) async throws {
         guard let context = try await captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger, forKeyboard: true
         )?.context else {
-            if persistentOrdinaryKeyboard {
-                try HIDBroker.sendKeyboardEvent(event, simulatorUDID: simulatorUDID)
-            } else {
-                try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
-            }
+            try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, logger: logger)
             return
         }
         guard let uuid = UUID(uuidString: context.screenUUID) else {
