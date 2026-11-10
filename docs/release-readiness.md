@@ -97,11 +97,11 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 - [~] The 17 older end-to-end suites that `make e2e` never runs: run them, then wire in or delete
 - [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
 - [ ] Unused IDBKit command families
-- [ ] Stale documentation
+- [x] Stale documentation (see Phase 9)
 
 ## Phase 4: simplify the architecture
 
-- [ ] One shared simulator-or-device routing mechanism for commands
+- [~] One shared simulator-or-device routing mechanism for commands (commit `bdd9ddcce`; rest of the wave in progress)
 - [ ] Merge or remove redundant input routes
 - [ ] Split or shrink oversized files
 
@@ -232,10 +232,19 @@ Follow-ups: document that turning VoiceOver on shows this alert; keep agents off
 
 ## Phase 9: documentation
 
-- [ ] README
-- [ ] Skill (`Skills/CLI/axe`) and its bundled copy
-- [ ] CHANGELOG
-- [ ] Command help text
+- [x] README: rewritten as a user guide, 647 lines to 302
+- [x] Skill (`Skills/CLI/axe`) and its bundled copy
+- [x] CHANGELOG: the unreleased section now describes v2 as its net change against v1.8.0 (about 210 bullets to 25)
+- [x] `docs/device-support.md`: the 590-line working log replaced by a 57-line design and limitations document (the log stays in git history)
+- [~] Command help text
+
+Verification (commits `762e228b3` to `cb6cc95f2`):
+
+- Every command line and JSON shape in the README was run or read from `--help` and the schemas; example output came from a booted iPhone simulator.
+- The doc-checking unit tests (21), the script tests (19, including the Playground count check) and `scripts/check-changelog-released.py v2` pass.
+- `skill-check` 1.2.0 on `Skills/CLI/axe`: 100 of 100, no errors or warnings; `diff -r` against the bundled copy is clean.
+- CHANGELOG "Fixed" keeps only bugs confirmed to exist in v1.8.0 (110 bullets to 7); attributions #64, #68, #77 and #80 are kept.
+- Left out because they could not be verified: Duo `displays` and `hinge` example output (described in words), and `button siri` on physical devices.
 
 ## Open items for the owner
 
