@@ -390,7 +390,7 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 - [x] A PencilKit screen in the Playground (`Sketch`, `c1995e53f`): a `PKCanvasView` with the system tool picker. A finger draws, so `axe draw` leaves real ink. The screen reports the stroke count, the selected tool and the last stroke's ink.
 - [x] A painting made with axe alone (`scripts/demos/paint-sunset.py`): a sunset with a sun, mountains, a tree, a boat, stars and birds. 78 strokes from 235 axe commands in 4.5 minutes on the iPhone 18 Pro simulator. Tools and line weights are chosen in the tool picker by accessibility label, opacity by dragging the picker's slider, colours by tapping the system colour picker's grid. Picture and recording: `e2e-results/sketch-demo/sunset-iphone-sim.png` and `.mp4` (keep).
 - [~] End-to-end checks for it (`ea1115840`): `PlaygroundSketchTests` (4 cases, on the iPhone, iPad and Duo profiles) and a device check, "PencilKit ink and tool picker". Written and compiled; not run, at the owner's instruction.
-- [ ] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks: tracked item by item in Phase 11
+- [x] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks: closed, item by item, in Phase 11
 
 What the painting found:
 
@@ -423,31 +423,39 @@ AXe has every gesture type the other two have and is the only one that can draw.
 
 ## Phase 11: gesture gaps, bugs from the painting and the remaining refactors
 
-Gaps against FlowDeck and RocketSim (from the table in Phase 10):
+Gaps against FlowDeck and RocketSim (from the table in Phase 10), all closed in `a551b96ff`:
 
-- [ ] G1. Long press on an element chosen by `--id` or `--label`, without agent mode (FlowDeck `tap --duration`, RocketSim `long-press`)
-- [ ] G2. Double tap on an element chosen by `--id` or `--label`, without agent mode (FlowDeck `double-tap`)
-- [ ] G3. Two-finger tap on an element (RocketSim `tap --touches 2`)
-- [ ] G4. An adjustable hold before a drag starts to move, for drag-to-reorder (FlowDeck `swipe --hold`)
-- [ ] G5. Scroll until an element is visible (FlowDeck `scroll --until`)
-- [ ] G6. A distance for direction swipes (FlowDeck `swipe --distance`)
-- [ ] G7. A Control Centre swipe (RocketSim `swipe --direction control-center`)
+- [x] G1. Long press on an element: `tap --hold <seconds>` with `--id`, `--label`, `--value` or a point
+- [x] G2. Double tap on an element: `tap --count 2`
+- [x] G3. Two-finger tap on an element: `tap --touches 2` (two contacts 40 points apart; with `--hold`, a two-finger long press)
+- [x] G4. Hold before a drag: `drag --hold <seconds>`
+- [x] G5. Scroll until an element is visible: `gesture scroll-* --until-id` or `--until-label`, with `--max-swipes` (default 10)
+- [x] G6. Distance for direction swipes: `gesture scroll-* --distance <fraction of the screen>`
+- [x] G7. Control Centre: the `swipe-from-top-right-corner` preset
+
+Evidence for G1 to G7:
+
+- Unit tests: 13 new (`GestureConvenienceTests`); the whole suite passes, 858 tests.
+- Live on the iPhone 18 Pro simulator and the physical iPad Pro, read back from the Drawing screen, which records every contact: `tap --hold 1.2` one contact of 1.20 s (1.21 s on the iPad); `tap --id --hold 0.8` 0.80 s at the element's centre; `--count 2` two contacts; `--touches 2` two fingers; `drag --hold 0.7` 1.36 s against 0.72 s without it, both 200 points long; `scroll-down --distance 0.5` moved 437 of 874 points (694.5 of 1389 on the iPad); `scroll-up --until-id` found a row 14 below the last visible one after 2 scrolls, sent nothing on a second run ("after 0 scrolls") and failed with `elementNotFound` for a missing element.
+- Control Centre opened on the simulator from the home screen and on the physical iPad from the Playground; on the iPad it was closed again with a tap and the device stayed unlocked. It does not open from a screen that defers system gestures (the Drawing screen shows the system's grabber instead), as a finger would not.
+- End-to-end: a new suite, `PlaygroundGestureConvenienceTests` (8 cases), passes alone on the iPhone, iPad and Duo simulators (`e2e-results/sketch-gestures-2`). Two new device checks: "long press and other touch gestures" passes on both devices; "scroll distance and scroll until" passed on the iPhone and failed once on the iPad when a screen read taken while the list was still moving came back invalid. Scroll-until now retries that read up to three times (`47f7cec06`).
 
 Bugs and limits found while painting:
 
-- [ ] B1. `axe slider` fails with `unsupportedValueDomain` on a slider that reports a percentage ("80%") and no numeric range, such as the tool picker's opacity slider
-- [ ] B2. A tap sent about 0.6 s after the tool picker expanded did nothing, once. Not yet known whether AXe sent it to a view that was still animating or lost it
-- [ ] B3. The system colour picker exposes no accessibility elements (it draws in another process), so its grid can only be tapped by position. A system limit; to be documented, not fixed
-- [ ] B4. The painting script's colour grid positions are measured for one screen size only
+- [~] B1. `axe slider` fails with `unsupportedValueDomain` on a slider that reports a percentage ("80%") and no numeric range. A fix is written (a percentage slider is 0 to 100 in whole steps) but not built or tried
+- [ ] B2. A tap sent about 0.6 s after the tool picker expanded did nothing, once. Not yet investigated
+- [x] B3. The system colour picker exposes no accessibility elements (it draws in another process). A system limit. The Sketch screen now has ten named colour swatches (`sketch.colour.<name>`), so checks pick colours without it
+- [x] B4. The painting script's colour grid positions are measured for one screen size. Unchanged in the demo script, which says so; the end-to-end checks use the swatches instead and run on every screen size
 
-Verification still owed for Phase 10:
+PencilKit checks:
 
-- [ ] `PlaygroundSketchTests` alone on the iPhone, iPad and Duo simulators, and the "PencilKit ink and tool picker" check alone on both devices
+- [x] `PlaygroundSketchTests` alone on the iPhone, iPad and Duo simulators: 4 of 4 cases on each (`e2e-results/sketch-isolated-1`), and "PencilKit ink and tool picker" on both devices after the check was changed to use only elements a device lists (`cea002db1`)
+- [~] A picture in the checks (`4c6501a46`): a fifth simulator case and the device check paint sky and grass in marker washes, a sun with rays, a house, a tree and two birds, with three tools, three weights and nine colours, and save `sketch-picture.png`. The first run failed on a repeated point in the roof's fill (`79ca2f220`) and the device check on its dismiss tap (`76f538fd9`); the rerun is in progress
 
 Input-stack refactors carried over from Phase 4:
 
-- [ ] SEL-16. `SelectedHIDRequest` as header fields plus an enum payload
-- [ ] SEL-17. Fold the ordinary input route into the selected route, with a timing comparison
+- [~] SEL-16. `SelectedHIDRequest` now has header fields and one `Payload` enum instead of thirteen optional fields (`986ecf927`). A mixed request cannot be built or decoded, and the validation that policed mixes is gone; 42 files, 21 fewer lines. Unit suite passes (858). Not yet run end to end on the selected, agent and Duo routes
+- [ ] SEL-17. Fold the ordinary input route into the selected route. Not started: in the timing run of Phase 8 a selected tap took 0.183 s and a plain tap 0.153 s, so the fold may make plain taps slower, which `AGENTS.md` counts as a regression. To be measured and put to the owner before any change
 
 ## Open items for the owner
 
