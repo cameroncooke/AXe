@@ -27,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Ordinary `tap`, `swipe`, `drag`, gesture presets and complete `touch --down --up` on simulators reuse one input connection instead of opening and draining a new one per command. On iPhone 18 Pro a swipe takes about 1.2 s (v1.8.0: 1.9 s), a drag 1.7 s (2.5 s), a touch 0.25 s (1.1 s) and a preset 0.7 s (1.25 s); repeated taps about 0.15-0.2 s. Physical-style taps on this route hold for 0.1 seconds.
+- Ordinary `tap`, `swipe`, `drag`, `draw`, gesture presets and complete `touch --down --up` on simulators reuse one input connection instead of opening and draining a new one per command, and once that connection is up they no longer measure the screen themselves before sending. On iPhone 18 Pro a swipe takes about 1.15 s (v1.8.0: 1.9 s), a drag 1.7 s (2.5 s), a touch 0.2 s (1.1 s) and a preset 0.65 s (1.25 s); repeated taps about 0.08 s. Physical-style taps on this route hold for 0.1 seconds.
 - Plain `describe-ui` reads the tree directly, with the accessibility bootstrap only after an empty tree or a failed point read, and reads each element's attributes in one request; a description takes about 0.3 s instead of 0.5 s. Output is unchanged.
 - Commands print a short, consistent result: state commands print their state, input commands print nothing except `tap`, `slider` and `batch`, and media commands print the path. Errors print a message without Swift type descriptions; `--verbose` adds the full receipt and never changes the exit status or code. SIGINT or SIGTERM exits with 128 + the signal.
 - The AXe skill that `axe init` installs is rewritten around agent mode, with references for batches, devices, settings and recording.

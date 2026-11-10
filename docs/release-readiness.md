@@ -7,8 +7,8 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the two suites and the two device checks that today's changes touch pass at `c96e375c9`: Sketch and gesture conveniences on the iPhone, iPad and Duo simulators, and "PencilKit ink and tool picker" and "scroll distance and scroll until" on the iPhone 16 Pro Max and iPad Pro, with the car painted on all five. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Since that run: a PencilKit screen and a painted car in the checks (Phase 10), the gesture conveniences and SEL-16 (Phase 11), and a device speed-up, the Device MCP comparison, a scroll-until fix and a higher limit for device tree reads (Phase 12). Still to do: SEL-17 (measure first) and the slider on percentage sliders (B1). Last update 10 November, about 14:45.
-- Simulators: unit tests 867 of 867; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
+- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the iPhone, iPad and Duo simulators at `4ac61b349`. The device checks last passed at `c96e375c9`, before this change, which does not touch the device path. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. One item is open: the slider on percentage sliders (B1). Last update 10 November, about 18:30.
+- Simulators: unit tests 876 of 876; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
 - Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
 - Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
@@ -457,7 +457,7 @@ PencilKit checks:
 Input-stack refactors carried over from Phase 4:
 
 - [x] SEL-16. `SelectedHIDRequest` now has header fields and one `Payload` enum instead of thirteen optional fields (`986ecf927`). A mixed request cannot be built or decoded, and the validation that policed mixes is gone; 42 files, 21 fewer lines. Unit suite passes. End to end, run alone at `76f538fd9` (`e2e-results/sketch-sel16-1`): 17 of 17 suite runs passed across the three simulators (core, agent, agent pinch, ordinary regression and Sketch on the iPhone and iPad; Duo core, hardware, selected batch keyboard, selected Home batch, hinge window, agent, agent pinch and Sketch on the Duo), and 6 of 6 device checks
-- [ ] SEL-17. Fold the ordinary input route into the selected route. Measured on 10 November (see "SEL-17 measurement" in Phase 12): for the same input the selected route is 65 to 105 ms faster per command, not slower. The earlier 0.183 s against 0.153 s compared different tap styles. Not changed yet; waiting for the owner's decision on the narrower fold proposed there
+- [x] SEL-17, in the narrower form the measurement supported (`d4b9952fd`): plain tap, swipe, drag, draw, scroll presets and complete touch let a running broker bind the screen, as selected input does. Keyboard commands and split touches keep their route, because selected input has different rules for them. Detail and evidence under "SEL-17 change" in Phase 12
 
 ## Phase 12: device speed, the Device MCP comparison and scroll-until (10 November, afternoon)
 
@@ -553,6 +553,37 @@ Plain commands and `--input-mode selected` commands were run alternately, 20 to 
 - What a fold cannot include without changing behaviour: `key`, `type` and the other keyboard commands (selected keyboard input requires `--focus-id` of the focused field; plain does not), a `touch --down` followed later by a separate `touch --up` (selected uses a contact token), the plain default tap style, and the plain swipe's own event list, which ends with a repeated last point to stop the content gliding.
 - Proposed, not done: a narrower fold. Plain tap, swipe, drag, draw, scroll presets and complete `touch --down --up` on current simulators let the broker bind the active screen instead of measuring it in the client, keeping their events, defaults and output. Expected: about 70 ms off each of those commands and the 0.6 to 0.9 s after a touch gone. Keyboard and split touches stay as they are.
 
+SEL-17 change (10 November, evening; the owner approved the narrower fold):
+
+- [x] Where the time went, with temporary timing in a plain tap of 150 ms: loading the simulator set in the client 64 ms, reading the active screen 10 ms, reading its geometry 8 ms, the exchange with the broker 40 ms.
+- [x] The change (`d4b9952fd`): when a broker is already running, a plain tap at a point, swipe, drag, draw, scroll or edge preset and complete `touch --down --up` send their input for the broker to bind to the active screen. The events, defaults and output are unchanged. With no broker running, or when the broker refuses before input, the command takes the measured route as before, so the first command after a boot and every refusal message are the same as in the previous build (checked for an off-screen tap, swipe, drag and draw). Commands that read or override the screen first keep the measured route: a tap by selector, a pre-delay, an explicit screen size, scroll-until and scroll inside an element.
+- [x] A complete touch is now one contact, like a tap, on both routes. That removes the 0.6 to 0.9 s the next command paid.
+- [x] Unit tests: 876 of 876, 9 new (the request's rules, the wire round trip, which refusals allow a fallback, the tap and touch contacts against the old events, the preset layout against the client's, and a connect that never starts a broker). The wire version is 90.
+
+Medians in ms, previous build (`c96e375c9`) then this one, in alternating blocks (`e2e-results/sel17/`):
+
+| Command | iPhone before | iPhone after | Duo before | Duo after |
+| --- | --- | --- | --- | --- |
+| Tap | 139 | 78 | 161 | 92 |
+| Tap, 0.1 s hold | 259 | 200 | 268 | 214 |
+| Swipe, 0.3 s | 495 | 440 | 504 | 458 |
+| Drag, 0.3 s | 666 | 604 | 662 | 597 |
+| Draw, 3 points | 633 | 571 | 633 | 563 |
+| `gesture scroll-down` | 713 | 654 | 723 | 670 |
+| `touch --down --up`, repeated | 922 | 200 | 874 | 209 |
+| Tap after a touch | 820 | 88 | 802 | 101 |
+
+Isolated end-to-end runs of the suites that use plain touch input, never the full matrix:
+
+| Run | Commit | iPhone | iPad | Duo |
+| --- | --- | --- | --- | --- |
+| `e2e-results/plain-bound-1` | `d4b9952fd` | 9 of 10 suites | 7 of 8 suites | 15 of 16 suites |
+| `e2e-results/plain-bound-2` | `4ac61b349` | Sketch 5 of 5 | Sketch 5 of 5 | Sketch 5 of 5 |
+
+- The suites: core, drawing, zoom, Sketch, gesture conveniences, ordinary regression, ordinary input, ordinary batch and the two input handover suites on the iPhone; the first eight on the iPad; on the Duo its core, gesture, coordinate and scroll coverage, tap style, retained input, motion options, navigation, batch coverage, legacy batch interruption and horizontal preset suites, with drawing, zoom, Sketch, gesture conveniences and input handover.
+- [x] The one failure in the first run, on all three simulators, was the car: with taps 60 ms quicker, the first colour tap after a tool's options closed landed while they were still closing and the app ignored it. The picture player now confirms the first colour after each tool change (`4ac61b349`). This is the app's timing, and a faster tool reaches it sooner; scripts that tap straight after dismissing something may meet the same.
+- Not rerun: the agent, keyboard, media and hinge groups, which do not use the changed commands, and the device checks, which use a different broker.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -561,7 +592,8 @@ Plain commands and `--input-mode selected` commands were run alternately, 20 to 
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
 - The selected input path stops input when its display or motion feed is more than 0.5 s old. That tripped twice on the Duo: the display feed (0.57 s) at a load average above 100, with input quarantined, and the motion feed (0.51 s) at a load average of about 40, released cleanly. The limit is deliberate; it needs a decision on whether busy machines get more margin.
 - The early-boot accessibility wedge ("No translation object" or every read timing out until reboot) hit three Duo suites on 10 November. The matrix's boot gate does not catch it; a rerun on a fresh boot passes.
-- Folding the "ordinary" input route into the selected route (audit item SEL-17) is measured and not done. The numbers favour it; it changes the path of every plain tap, swipe, drag, draw and scroll on current simulators, so it needs the owner's go-ahead and isolated reruns of the ordinary suites.
+- The plain keyboard commands (`key`, `type`, `key-sequence`, `key-combo`) and a `touch --down` lifted by a later `touch --up` still measure the screen in the client. Selected input has different rules for both (a focus identifier, a contact token), so folding them in would change behaviour.
+- On the Duo, about 1 plain command in 1,000 stopped mid-input ("Input stopped") with the new route: 4 in about 3,700, against 0 in 680 with the previous build. The samples are too small to show a difference, and both routes use the same session and the same freshness check, which is the open item two bullets above.
 
 ## Future improvements
 
@@ -590,7 +622,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 137 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 140 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -731,3 +763,6 @@ All 137 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `bad29dfa8` | build: Add make release-check, the quick release checks in one run |
 | `37bf37ae3` | docs(changelog): Bring the unreleased section up to date |
 | `0e9cff650` | docs(release): Record the release check and the CHANGELOG review |
+| `8c1e45ac6` | docs(release): Record the SEL-17 timing of plain against selected input |
+| `d4b9952fd` | perf(input): Let a running broker bind the screen for plain touch commands |
+| `4ac61b349` | test(e2e): Confirm the first colour after a tool change in the picture player |
