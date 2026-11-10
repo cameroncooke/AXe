@@ -9,7 +9,7 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 - State: in progress.
 - Commits made by this audit: see the commit log at the end.
-- Blockers: none yet.
+- Blockers: 1 open (physical devices unreachable through CoreDevice since about 22:45). See Blockers.
 
 ## Phase 0: baseline
 
@@ -51,9 +51,9 @@ The third and fourth are one owner with two admission styles and can be merged.
 
 ## Phase 2: bug fixes
 
-- [~] Device support bugs (separate worktree, branch `audit/device-fixes`)
+- [~] Device support bugs: fixed on branch `audit/device-fixes` (7 commits, 886 unit tests pass), merge into `v2` pending; final device run blocked
 - [x] Simulator input and broker bugs
-- [~] Agent mode bugs (separate worktree, branch `audit/agent-fixes`)
+- [~] Agent mode bugs: fixed on branch `audit/agent-fixes` (13 commits, 905 unit tests pass), merge into `v2` pending
 
 Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
 
@@ -65,6 +65,24 @@ Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`)
 - `hinge read` on the iPhone gives `noHinge` and exit 1 with and without `--verbose`. A selected tap on a missing ID gives `targetRejected` both ways.
 - Playground groups on the iPhone simulator: `PlaygroundOrdinaryRegressionTests` 5 of 5 and `PlaygroundInputHandoverTests` 3 of 3.
 - Net change: 617 lines added, 1,010 removed.
+
+Device wave evidence (branch `audit/device-fixes`):
+
+- Fixed: a device drag lost the wait before its first move and the whole `--duration` with `--steps 1` (fixture tests for 1, 4 and 60 steps); a gesture's post-delay ran inside the broker; the end-to-end harness left capture processes running after a failed check; a cold command spawned `devicectl list devices` twice; a redundant display read before an element tap; a leaked UDP receiver; duplicate helpers and dead cases.
+- One audit finding was wrong, measured on the iPad: reusing one `deviceinfo` connection is slower than a fresh one (a second request after a 0.5 s pause usually got no reply in 3 s; a fresh read takes 13 to 38 ms).
+- iPad timings, median of 5, before and after: cold `describe-ui` 2.62 to 2.20 s, cold `tap --id` 4.13 to 3.96 s, cold coordinate tap 1.64 to 1.19 s; warm `describe-ui` 1.97 to 1.82 s, warm coordinate tap 0.83 to 0.73 s.
+- `make e2e-devices` on the pre-fix build: iPhone 9 of 9 checks. iPad 1 of 9 at first because a "VoiceOver Gestures" alert covered the Playground; after one tap on OK, element tap, screenshot, raw stream, MP4 and rotation (4 of 4 turns) passed.
+- `make e2e-devices` could not build the Playground at first because its Xcode project is no longer checked in; the script now generates it with XcodeGen.
+- Not verified: a final device run on the fixed build (see Blockers), the drag timing on a device, and the top-edge swipe in landscape.
+
+Agent-mode wave evidence (branch `audit/agent-fixes`):
+
+- Fixed: an in-call retry could act on a different control at the same place (it now requires the same native object); certain refusals were retried five times for nothing; focus-and-type retries dropped their plan; paging a changed snapshot returned another snapshot's first page as a success; ticking text refused every action; a caller's invalid request cleared another caller's snapshot; `--focus-id` reported a batch error. `axe agent` refuses plain-HTTP base URLs for remote hosts.
+- New refusal codes agents can branch on: `targetCovered`, `busy`, `observationFailed`, `displayChanged`, `waitTimedOut`, `waitCancelled`, `inputIncomplete`, `cleanupUncertain`, `responseTooLarge`, `invalidExpectedPID`.
+- Compact replies lost their constant and internal fields: `describe-ui --agent` 1,901 to 1,785 bytes, `tap --agent` 2,045 to 1,850 bytes on the Playground. The v2 schema matches what is emitted.
+- Timing before and after, two alternating runs under load 11 to 21: describe 332 and 513 ms before, 360 and 423 ms after; tap 810 and 1,264 ms before, 939 and 1,009 ms after. The runs disagree in direction, so no difference is shown either way. A traced ref tap makes the same three reads in both builds.
+- Playground agent groups on the new build: iPhone 19 of 21 suites first time (slider and type passed on rerun; both failed on timeouts under load), iPad all passed.
+- `AgentModeController.swift` and `AgentModeSnapshot.swift` are split into smaller files (pure moves).
 
 Not done, with reasons: the audit's claim that the second DTUHID readiness wait is a no-op was wrong
 (the first wait is skipped when `dtuhidd` is not yet a child process), so it is kept.
@@ -143,7 +161,8 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 ## Phase 8: verification
 
 - [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
-- [~] Second run on `v2` after the input-stack wave
+- [x] Second run on `v2` after the input-stack wave: iPhone 24 of 27 suites, iPad 5 of 5, Duo did not run
+- [~] Triage of the three failing iPhone cases (typing and Return, agent slider, agent focus-and-type)
 - [ ] Unit tests
 - [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
 - [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad
@@ -156,6 +175,14 @@ environmental reasons, so it says nothing about the code.
 - iPhone: all 27 suites failed. A "VoiceOver Gestures" system alert covered the Playground. It appeared when the settings checks turned VoiceOver on, and it stays up after VoiceOver is turned off. One tap on OK dismissed it.
 - Duo: only 4 suites ran. `axe displays` did not succeed within the 180-second boot budget for one group while three agents were building and testing (load average up to 145 on 18 cores).
 - iPad: all 5 suites passed.
+
+Second run (`e2e-results/20261109T232340Z`, 47 minutes, on `v2` after the input-stack wave): 194 cases
+ran, 3 failed. No Duo suite ran: `axe displays` refused for the whole 180-second budget with "The
+screens were still changing after 8 s". `devicectl device info displays` showed why: the outer screen
+active and the inner screen inactive but with its backlight still `activeOn`, which AXe reads as a fold
+in progress. Opening and closing the hinge once cleared it. Three later reboots of the same simulator
+(closed, shut down while open, and the test matrix's own sequence) all settled within 20 seconds, so the
+trigger is not yet known. The same state appeared on a second Duo simulator used by an agent.
 
 Follow-ups: document that turning VoiceOver on shows this alert; keep agents off the E2E simulators
 (already the rule; the settings agent ran before the rule existed).
@@ -183,7 +210,8 @@ Decisions made without the owner, with the reason.
 
 ## Blockers
 
-None yet.
+- **Physical devices unreachable through CoreDevice (open).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
+- **Duo screens intermittently read as "still changing" after boot (investigating).** Described under Phase 8. Workaround: fold the Duo open and closed once.
 
 ## Commit log
 
@@ -201,3 +229,10 @@ None yet.
 | `7ad37746a` | Build each command's events once; share signal scoping (wire version 85) |
 | `8d1c5a0f8` | Remove unused coordinate helpers and dead wrappers |
 | `01ac672d3` | Text size alone decides Larger Accessibility Sizes |
+| `8f8f4a061` | Code every error; compact results by default |
+| `a6fc4426d` | Payload schema for every command result |
+| `526878eac` | Legacy edge insets on the measured size; slider failure codes |
+| `aab61ae57` | Document result shapes, error codes and the payload schema |
+| `342581d55` | Keep framework dumps out of messages |
+
+Commits from `379715af0` onwards are unsigned: 1Password stopped answering signing requests.
