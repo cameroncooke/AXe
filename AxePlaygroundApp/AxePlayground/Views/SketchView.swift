@@ -30,10 +30,13 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
     private let inks = UILabel()
     private let extent = UILabel()
 
-    /// Swatches in the order they are shown; the identifier is `sketch.colour.<name>`.
+    /// Swatches in the order they are shown, ten to a row; the identifier is `sketch.colour.<name>`.
+    /// Five tones each of red and grey and three of glass let a picture be shaded by tone.
     static let colours: [(name: String, hex: UInt32)] = [
-        ("sky", 0x6EC6FF), ("sun", 0xFFD60A), ("orange", 0xFF9500), ("grass", 0x34C759), ("leaf", 0x1E7D32),
-        ("wood", 0x8B5A2B), ("red", 0xD62828), ("white", 0xFFFFFF), ("night", 0x1D3557), ("black", 0x000000),
+        ("red1", 0x4A0808), ("red2", 0x7A0F0F), ("red3", 0xB01717), ("red4", 0xD93025), ("red5", 0xF0705C),
+        ("glass1", 0x14212E), ("glass2", 0x2C4A66), ("glass3", 0x7FA6C9), ("cream", 0xFFF1BF), ("amber", 0xFF9F0A),
+        ("grey1", 0x121314), ("grey2", 0x3A3F45), ("grey3", 0x7D858C), ("grey4", 0xB9C0C6), ("grey5", 0xE3E7EA),
+        ("road", 0x555B62), ("shadow", 0x1B1D20), ("wall", 0xBFCBD6), ("white", 0xFFFFFF), ("black", 0x000000),
     ]
     private var popWasEnabled: [UIGestureRecognizer: Bool] = [:]
 
@@ -69,21 +72,28 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
             row.spacing = 12
             row.distribution = .fill
         }
-        let swatches = UIStackView(arrangedSubviews: Self.colours.enumerated().map { index, colour in
+        let buttons: [UIButton] = Self.colours.enumerated().map { index, colour in
             let button = UIButton(type: .custom)
             button.backgroundColor = Self.colour(colour.hex)
-            button.layer.cornerRadius = 6
+            button.layer.cornerRadius = 5
             button.layer.borderWidth = 1
             button.layer.borderColor = UIColor.separator.cgColor
             button.tag = index
             button.accessibilityIdentifier = "sketch.colour." + colour.name
             button.accessibilityLabel = colour.name + " colour"
-            button.heightAnchor.constraint(equalToConstant: 30).isActive = true
+            button.heightAnchor.constraint(equalToConstant: 24).isActive = true
             button.addTarget(self, action: #selector(pickColour(_:)), for: .touchUpInside)
             return button
-        })
-        swatches.spacing = 6
-        swatches.distribution = .fillEqually
+        }
+        let swatchRows = stride(from: 0, to: buttons.count, by: 10).map { start -> UIStackView in
+            let row = UIStackView(arrangedSubviews: Array(buttons[start..<min(start + 10, buttons.count)]))
+            row.spacing = 5
+            row.distribution = .fillEqually
+            return row
+        }
+        let swatches = UIStackView(arrangedSubviews: swatchRows)
+        swatches.axis = .vertical
+        swatches.spacing = 4
 
         // A finger draws; without this only Apple Pencil does. One finger never scrolls the canvas.
         canvas.drawingPolicy = .anyInput

@@ -51,71 +51,41 @@ struct PlaygroundSketchTests {
         #expect(widths[1] > widths[0] && heights[1] > heights[0])
     }
 
-    /// The one case that looks like a drawing: a blue sky and green grass in marker washes, a sun with
-    /// rays, a house, a tree and two birds. It uses three tools, three line weights and nine colours.
-    @Test("A picture is painted with three tools, three weights and nine colours")
+    /// The one case that looks like a drawing: a shaded 3D car. A small model is lit and projected into
+    /// flat faces, each filled in one of five tones of red, with watercolour washes for the wall and the
+    /// cast shadow, crayon for the road, fountain-pen lines and pencil hatching. The picture is
+    /// scripts/fixtures/sketch-car.json and scripts/sketch_picture.py plays it through the axe CLI: it
+    /// picks every tool and line weight in the tool picker, scrolling its strip to the tools that start
+    /// out of view, and every colour from the screen's swatches.
+    @Test("A shaded 3D car is painted with five tools")
     func paintsAPicture() async throws {
+        let environment = ProcessInfo.processInfo.environment
+        let player = try #require(environment["AXE_SKETCH_PLAYER_PATH"], "Set the picture player through the Playground matrix.")
+        let picture = try #require(environment["AXE_SKETCH_PICTURE_PATH"], "Set the picture through the Playground matrix.")
         let sketch = try await SketchCanvas.open()
-        var strokes = 0
-        func paint(_ points: [(Double, Double)], seconds: Double? = nil) async throws {
-            try await sketch.stroke(points.map(sketch.point), seconds: seconds)
-            strokes += 1
+        let folder = environment["AXE_E2E_ARTIFACT_DIR"] ?? NSTemporaryDirectory()
+        let output = folder + "/sketch-car-\(UUID().uuidString.prefix(8)).png"
+        // "current" paints on the screen that is already open, so the Duo keeps the layout this suite set up.
+        let command = ["python3", player, try TestHelpers.getAxePath(), sketch.app.simulatorUDID, "current", picture, output]
+            .map(shellQuote).joined(separator: " ")
+        let result = try await CommandRunner.run(command, timeout: 900)
+        let summary = try #require(result.output.split(separator: "\n").last { $0.hasPrefix("PAINTED ") },
+                                   "The player printed no result: \(result.output.suffix(600))")
+        print(summary)
+        var fields: [String: String] = [:]
+        for part in summary.split(separator: " ").dropFirst() {
+            let pair = part.split(separator: "=", maxSplits: 1).map(String.init)
+            if pair.count == 2 { fields[pair[0]] = pair[1] }
         }
-
-        // Sky and grass: washes with the heaviest marker, whose band is about 52 points tall.
-        _ = try await sketch.use("Marker", weight: "Very Heavy")
-        let band = 52 / sketch.frame.height
-        var row = band / 2
-        try await sketch.colour("sky")
-        while row + band / 2 <= 0.62 { try await paint([(0.01, row), (0.99, row)], seconds: 0.4); row += band }
-        let horizon = row - band / 2
-        try await sketch.colour("grass")
-        while row - band / 2 < 0.97 { try await paint([(0.01, min(row, 1 - band / 2)), (0.99, min(row, 1 - band / 2))], seconds: 0.4); row += band }
-        try await sketch.wait(for: strokes)
-
-        // Everything solid uses Monoline: opaque, and one width at any speed.
-        _ = try await sketch.use("Monoline", weight: "Very Heavy")
-        let sun = (0.80, 0.16), radius = 0.07 * sketch.frame.width
-        try await sketch.colour("sun")
-        try await sketch.stroke(sketch.disc(at: sun, radius: radius)); strokes += 1
-        try await sketch.colour("orange")
-        for ray in 0..<6 {
-            let angle = Double(ray) / 6 * 2 * Double.pi + 0.3
-            let centre = sketch.point(sun)
-            try await sketch.stroke([1.5, 2.3].map { CGPoint(x: centre.x + radius * $0 * cos(angle), y: centre.y + radius * $0 * sin(angle)) },
-                                    seconds: 0.3)
-            strokes += 1
-        }
-        try await sketch.colour("red")      // the house
-        try await sketch.stroke(sketch.fill(from: 0.14, to: 0.42, top: { _ in horizon - 0.10 }, bottom: { _ in horizon + 0.14 })); strokes += 1
-        try await sketch.colour("wood")     // its roof, then the tree's trunk
-        try await sketch.stroke(sketch.fill(from: 0.10, to: 0.46, top: { horizon - 0.22 + abs($0 - 0.28) / 0.18 * 0.12 }, bottom: { _ in horizon - 0.10 })); strokes += 1
-        try await sketch.stroke(sketch.fill(from: 0.70, to: 0.74, top: { _ in horizon - 0.12 }, bottom: { _ in horizon + 0.12 })); strokes += 1
-        try await sketch.colour("white")    // the door
-        try await sketch.stroke(sketch.fill(from: 0.25, to: 0.31, top: { _ in horizon + 0.02 }, bottom: { _ in horizon + 0.14 })); strokes += 1
-        try await sketch.colour("leaf")     // the tree's crown
-        try await sketch.stroke(sketch.disc(at: (0.72, horizon - 0.20), radius: 0.10 * sketch.frame.width)); strokes += 1
-
-        // Two birds with the pen.
-        _ = try await sketch.use("Pen", weight: "Medium")
-        try await sketch.colour("black")
-        for (u, v) in [(0.30, 0.12), (0.47, 0.22)] {
-            try await paint([(u - 0.04, v), (u - 0.02, v - 0.015), (u, v), (u + 0.02, v - 0.015), (u + 0.04, v)], seconds: 0.3)
-        }
-
-        let state = try await sketch.wait(for: strokes)
-        let inks = sketch.app.value("sketch.inks", in: state) ?? ""
-        print("Painted \(strokes) strokes with inks: \(inks)")
-        #expect(inks == "marker #6EC6FF, marker #34C759, monoline #FFD60A, monoline #FF9500, monoline #D62828, "
-            + "monoline #8B5A2B, monoline #FFFFFF, monoline #1E7D32, pen #000000")
-        let extent = (sketch.app.value("sketch.bounds", in: state) ?? "").split(separator: ",").compactMap { Double($0) }
-        try #require(extent.count == 4)
-        #expect(extent[2] - extent[0] >= sketch.frame.width * 0.9 && extent[3] - extent[1] >= sketch.frame.height * 0.85,
-                "The picture covers \(extent) of \(sketch.frame)")
-        // Keep the picture with the run's artifacts.
-        if let directory = ProcessInfo.processInfo.environment["AXE_E2E_ARTIFACT_DIR"] {
-            try await sketch.app.run(["screenshot", "--output", directory + "/sketch-picture-\(UUID().uuidString.prefix(8)).png"])
-        }
+        // The player checked every stroke and ink against the app as it finished. Read the app again here.
+        let state = try await sketch.app.state()
+        let strokes = try #require(fields["strokes"].flatMap { Int($0) })
+        #expect(strokes >= 120 && sketch.app.value("sketch.strokeCount", in: state) == String(strokes))
+        #expect(fields["tools"] == "crayon,fountainpen,monoline,pencil,watercolor")
+        let inks = (sketch.app.value("sketch.inks", in: state) ?? "").components(separatedBy: ", ")
+        #expect(inks.count >= 20 && inks.contains("monoline #B01717") && inks.contains("watercolor #1B1D20")
+            && inks.contains("crayon #555B62"), "inks: \(inks)")
+        #expect(FileManager.default.fileExists(atPath: output))
     }
 
     @Test("Clear removes every stroke")
@@ -198,51 +168,6 @@ struct SketchCanvas {
         try await app.run(["tap", "-x", String(Int(line.x + line.width / 2)), "-y", String(Int(line.y + line.height / 2))])
         _ = try await app.waitFor("\(tool) options to close") { !app.elements(in: $0).contains(where: isWeight) }
         return try await selectedTool().width
-    }
-
-    /// Selects a tool if another is selected, then gives it a line weight. Returns its width.
-    func use(_ tool: String, weight: String) async throws -> Double {
-        if try await selectedTool().label != tool { try await select(tool) }
-        return try await setWeight(weight, of: tool)
-    }
-
-    /// Gives the selected tool one of the screen's named colours.
-    func colour(_ name: String) async throws {
-        try await app.run(["tap", "--id", "sketch.colour." + name])
-    }
-
-    /// One stroke through screen points, without waiting for the app to report it.
-    func stroke(_ points: [CGPoint], seconds: Double? = nil) async throws {
-        // draw refuses a point that repeats the one before it, which a fill makes where its edges meet.
-        var arguments: [String] = []
-        for point in points.map({ String(format: "%.1f,%.1f", $0.x, $0.y) }) where point != arguments.last { arguments.append(point) }
-        let duration = seconds ?? max(0.3, min(10, 0.022 * Double(arguments.count)))
-        try await app.run(["draw"] + arguments + ["--duration", String(format: "%.2f", duration)])
-    }
-
-    @discardableResult
-    func wait(for strokes: Int) async throws -> UIElement {
-        try await app.waitFor("\(strokes) ink strokes") { app.value("sketch.strokeCount", in: $0) == String(strokes) }
-    }
-
-    /// A spiral from the centre outwards that leaves no gaps at the heaviest Monoline weight.
-    func disc(at centre: (Double, Double), radius: Double, spacing: Double = 4.2) -> [CGPoint] {
-        let middle = point(centre), turns = max(1, radius / spacing), count = Int(28 * turns)
-        return (1...count).map { index in
-            let fraction = Double(index) / Double(count), angle = fraction * turns * 2 * Double.pi
-            return CGPoint(x: middle.x + radius * fraction * cos(angle), y: middle.y + radius * fraction * sin(angle))
-        }
-    }
-
-    /// One zigzag stroke that fills the area between two functions of the horizontal fraction.
-    func fill(from left: Double, to right: Double, top: (Double) -> Double, bottom: (Double) -> Double,
-              spacing: Double = 4.2) -> [CGPoint] {
-        let columns = max(2, Int((right - left) * frame.width / spacing))
-        return (0...columns).flatMap { column -> [CGPoint] in
-            let u = left + (right - left) * Double(column) / Double(columns)
-            let ends = [point((u, top(u))), point((u, bottom(u)))]
-            return column.isMultiple(of: 2) ? ends : ends.reversed()
-        }
     }
 
     /// Draws through canvas-relative points, waits for the stroke and returns its bounds in screen points.

@@ -234,6 +234,14 @@
   ],
   "driverFiles": [
     {
+      "environment": "AXE_SKETCH_PLAYER_PATH",
+      "source": "scripts/sketch_picture.py"
+    },
+    {
+      "environment": "AXE_SKETCH_PICTURE_PATH",
+      "source": "scripts/fixtures/sketch-car.json"
+    },
+    {
       "environment": "AXE_VERIFY_DUO_CONTROLS_PATH",
       "source": "scripts/verification/verify-duo-controls.py"
     },
@@ -255,6 +263,10 @@
     }
   ],
   "suiteRequirements": {
+    "PlaygroundSketchTests": [
+      "AXE_SKETCH_PLAYER_PATH",
+      "AXE_SKETCH_PICTURE_PATH"
+    ],
     "PlaygroundDuoInterruptionTests": [
       "AXE_DUO_STATE_CHANGE_PATH"
     ],

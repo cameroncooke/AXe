@@ -8,7 +8,6 @@ video frames. A check fails on any mismatch; nothing is retried except tree read
 """
 import argparse
 import json
-import math
 from pathlib import Path
 import re
 import signal
@@ -16,7 +15,10 @@ import subprocess
 import sys
 import time
 
+from sketch_picture import PictureFailed, SketchPlayer
+
 BUNDLE = 'com.cameroncooke.AxePlayground'
+SKETCH_PICTURE = Path(__file__).resolve().parent / 'fixtures/sketch-car.json'
 
 
 class CheckFailed(Exception):
@@ -297,101 +299,28 @@ class Device:
         return f'triangle {corners}: bounds {bounds}, duration {value(tree, "drawing.last.duration")} s'
 
     def sketch(self):
-        """Paints a picture on a PencilKit canvas: sky and grass in marker washes, a sun with rays, a house,
-        a tree and two birds, with three tools, three line weights and nine colours."""
-        # A device lists real elements only: the status labels and the picker's buttons, not the canvas view.
-        tree = self.runner.launch(self.udid, 'sketch', 'sketch.strokeCount')
-        value = lambda tree, name: str((element(tree, name) or {}).get('AXValue'))
-        centre = lambda frame: (round(frame['x'] + frame['width'] / 2), round(frame['y'] + frame['height'] / 2))
-        buttons = lambda tree, label: [node for node in walk(tree) if node.get('type') == 'Button'
-                                       and node.get('AXLabel') == label and node.get('frame')]
-        tools = lambda tree: {name: buttons(tree, name)[0]['frame'] for name in ('Pen', 'Monoline', 'Marker') if buttons(tree, name)}
-        tap = lambda frame: self.runner.axe_ok(self.udid, 'tap', '-x', str(centre(frame)[0]), '-y', str(centre(frame)[1]))
-        if len(tools(tree)) < 3:
-            # A narrow screen shows the picker as one round button, the selected tool, until it is tapped.
-            require(tools(tree), 'the tool picker is missing from the tree')
-            tap(next(iter(tools(tree).values())))
-            tree = self.wait_for('the tool picker to expand', lambda tree: len(tools(tree)) == 3)
-        left, top, width, height = (float(v) for v in value(tree, 'sketch.drawable').split(','))
-        height = min(height, min(frame['y'] for frame in tools(tree).values()) - 16 - top)
-        require(width > 100 and height > 100, f'no room to draw: {width}x{height}')
-        P = lambda u, v: (left + width * u, top + height * v)
-        state = dict(strokes=0)
-        # A tap on this label closes a tool's options. The options hide it from the tree while they are open.
-        outside = element(tree, 'sketch.strokeCount')['frame']
+        """Paints the shaded 3D car on a PencilKit canvas: scripts/fixtures/sketch-car.json, played by
+        scripts/sketch_picture.py. It picks five tools and their weights in the tool picker, scrolling its
+        strip to the tools that start out of view, and twenty colours from the screen's swatches."""
+        self.runner.launch(self.udid, 'sketch', 'sketch.strokeCount')
 
-        def draw(points, seconds=None):
-            # draw refuses a point that repeats the one before it, which a fill makes where its edges meet.
-            arguments = []
-            for point in (f'{x:.1f},{y:.1f}' for x, y in points):
-                if not arguments or arguments[-1] != point:
-                    arguments.append(point)
-            seconds = seconds or max(0.3, min(10, 0.022 * len(arguments)))
-            self.runner.axe_ok(self.udid, 'draw', *arguments, '--duration', f'{seconds:.2f}')
-            state['strokes'] += 1
+        def axe(*arguments):
+            data, error = self.runner.axe_json(self.udid, *arguments, timeout=120)
+            if error:
+                raise PictureFailed(f"axe {' '.join(arguments[:2])} failed with {error}")
+            return data
 
-        def use(tool, weight):
-            """Select the tool, open its options with a second tap, pick the weight and close the options."""
-            tree = self.runner.tree(self.udid)
-            if not value(tree, 'sketch.tool').startswith(tool.lower() + ' '):
-                tap(tools(tree)[tool])
-                tree = self.wait_for(f'{tool} to be selected', lambda tree: value(tree, 'sketch.tool').startswith(tool.lower() + ' '))
-            tap(tools(tree)[tool])
-            tree = self.wait_for(f'{tool} options', lambda tree: buttons(tree, 'Weight'))
-            choice = next((node for node in buttons(tree, 'Weight') if node.get('AXValue') == weight), None)
-            require(choice, f'{tool} has no {weight} weight')
-            tap(choice['frame'])
-            tap(outside)
-            self.wait_for(f'{tool} options to close', lambda tree: not buttons(tree, 'Weight'))
-
-        colour = lambda name: self.runner.axe_ok(self.udid, 'tap', '--id', 'sketch.colour.' + name)
-
-        def disc(u, v, radius, spacing=4.2):
-            cx, cy = P(u, v); turns = max(1, radius / spacing); count = int(28 * turns)
-            return [(cx + radius * (i / count) * math.cos(i / count * turns * 2 * math.pi),
-                     cy + radius * (i / count) * math.sin(i / count * turns * 2 * math.pi)) for i in range(1, count + 1)]
-
-        def fill(u0, u1, upper, lower, spacing=4.2):
-            columns = max(2, int((u1 - u0) * width / spacing)); points = []
-            for column in range(columns + 1):
-                u = u0 + (u1 - u0) * column / columns
-                ends = [P(u, upper(u)), P(u, lower(u))]
-                points += ends if column % 2 == 0 else ends[::-1]
-            return points
-
-        use('Marker', 'Very Heavy')
-        band = 52 / height; row = band / 2
-        colour('sky')
-        while row + band / 2 <= 0.62:
-            draw([P(0.01, row), P(0.99, row)], 0.4); row += band
-        horizon = row - band / 2
-        colour('grass')
-        while row - band / 2 < 0.97:
-            draw([P(0.01, min(row, 1 - band / 2)), P(0.99, min(row, 1 - band / 2))], 0.4); row += band
-        use('Monoline', 'Very Heavy')
-        sun, radius = (0.80, 0.16), 0.07 * width
-        colour('sun'); draw(disc(*sun, radius))
-        colour('orange')
-        for ray in range(6):
-            angle = ray / 6 * 2 * math.pi + 0.3; cx, cy = P(*sun)
-            draw([(cx + radius * k * math.cos(angle), cy + radius * k * math.sin(angle)) for k in (1.5, 2.3)], 0.3)
-        colour('red'); draw(fill(0.14, 0.42, lambda u: horizon - 0.10, lambda u: horizon + 0.14))
-        colour('wood'); draw(fill(0.10, 0.46, lambda u: horizon - 0.22 + abs(u - 0.28) / 0.18 * 0.12, lambda u: horizon - 0.10))
-        draw(fill(0.70, 0.74, lambda u: horizon - 0.12, lambda u: horizon + 0.12))
-        colour('white'); draw(fill(0.25, 0.31, lambda u: horizon + 0.02, lambda u: horizon + 0.14))
-        colour('leaf'); draw(disc(0.72, horizon - 0.20, 0.10 * width))
-        use('Pen', 'Medium')
-        colour('black')
-        for u, v in ((0.30, 0.12), (0.47, 0.22)):
-            draw([P(u - 0.04, v), P(u - 0.02, v - 0.015), P(u, v), P(u + 0.02, v - 0.015), P(u + 0.04, v)], 0.3)
-
-        tree = self.wait_for(f"{state['strokes']} ink strokes", lambda tree: value(tree, 'sketch.strokeCount') == str(state['strokes']), timeout=20)
-        expected = ('marker #6EC6FF, marker #34C759, monoline #FFD60A, monoline #FF9500, monoline #D62828, '
-                    'monoline #8B5A2B, monoline #FFFFFF, monoline #1E7D32, pen #000000')
-        require(value(tree, 'sketch.inks') == expected, f"inks used: {value(tree, 'sketch.inks')}")
-        picture = self.folder / 'sketch-picture.png'
+        try:
+            player = SketchPlayer(axe, lambda: self.runner.tree(self.udid))
+            strokes = player.play(json.loads(SKETCH_PICTURE.read_text()))
+            player.check()
+        except PictureFailed as error:
+            raise CheckFailed(str(error))
+        tools = sorted({ink.split(' ')[0] for ink in player.inks})
+        require(strokes >= 120 and len(tools) == 5, f'{strokes} strokes with {tools}')
+        picture = self.folder / 'sketch-car.png'
         self.runner.axe_ok(self.udid, 'screenshot', '--output', str(picture))
-        return f"{state['strokes']} strokes, 3 tools, 9 colours; picture {picture}"
+        return f"{strokes} strokes, {len(player.inks)} inks, tools {', '.join(tools)}; picture {picture}"
 
     def stroke(self, count):
         """The Drawing screen's last stroke once it has recorded `count` completed strokes."""
