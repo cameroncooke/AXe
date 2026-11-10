@@ -141,7 +141,7 @@ struct Gesture: PhysicalDeviceCommand {
           two-finger-hold   -x/-y, --x2/--y2, --hold
           two-finger-swipe  -x/-y, --x2/--y2, --end-x/--end-y, --end-x2/--end-y2
 
-        A pinch without -x/-y uses the centre of the screen, and without --radius a quarter of its shorter side. With --agent, double-tap and pinch act on --ref instead of coordinates.
+        A pinch without -x/-y uses the centre of the screen, and without --radius a quarter of its shorter side, or less so that both ends stay 16 points inside the screen. With --agent, double-tap and pinch act on --ref instead of coordinates.
 
         Examples:
           axe gesture scroll-up --udid <UDID>

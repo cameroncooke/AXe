@@ -31,13 +31,25 @@ struct GestureDefaultRouteTests {
         let explicit = try Gesture.parse(["pinch", "-x", "50", "-y", "60", "--radius", "12", "--scale", "1.5", "--udid", udid])
             .selectedPinch().resolved(logicalSize: CGSize(width: 402, height: 874))
         #expect(explicit.centerX == 50 && explicit.centerY == 60 && explicit.radius == 12)
+        // A default radius never ends on the screen edge: scale 2 on a 440-point-wide screen would reach x = 440.
+        let wide = try Gesture.parse(["pinch", "--scale", "2", "--udid", udid]).selectedPinch()
+            .resolved(logicalSize: CGSize(width: 440, height: 956))
+        #expect(wide.radius == 102 && (wide.radius ?? 0) * 2 == 220 - SelectedHIDPinch.defaultEdgeMargin)
+        // Pinching in starts at the wider end, which a quarter already keeps inside.
+        let inward = try Gesture.parse(["pinch", "--scale", "0.5", "--udid", udid]).selectedPinch()
+            .resolved(logicalSize: CGSize(width: 440, height: 956))
+        #expect(inward.radius == 110)
+        // An explicit centre near an edge limits the default radius to the room it has.
+        let offCentre = try Gesture.parse(["pinch", "-x", "100", "-y", "400", "--scale", "2", "--udid", udid]).selectedPinch()
+            .resolved(logicalSize: CGSize(width: 440, height: 956))
+        #expect(offCentre.radius == 42)
         #expect(throws: (any Error).self) { _ = try Gesture.parse(["pinch", "-x", "50", "--scale", "2", "--udid", udid]) }
         #expect(throws: (any Error).self) { _ = try Gesture.parse(["pinch", "--udid", udid]) }
     }
 
     @Test func defaultPinchBuildsOnTheBoundScreen() throws {
         let context = try FBSimulatorHIDDisplayContext(hidTarget: 3,
-            nativePixelSize: CGSize(width: 300, height: 600), scale: 3, rotation: .rot0)
+            nativePixelSize: CGSize(width: 1200, height: 2400), scale: 3, rotation: .rot0)
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: udid, bootIdentity: "local-check",
             screenID: 3, screenUniqueID: "00000000-0000-0000-0000-000000000003", axDisplayID: 3,
             displayContext: context, poseRevision: "local-check")
@@ -45,8 +57,8 @@ struct GestureDefaultRouteTests {
         guard case let .twoFingerTouch(direction, first, second)? = event.subEvents?.first else {
             Issue.record("Pinch does not start with a paired contact"); return
         }
-        // A 100 x 200 screen: centre (50, 100), radius 25.
-        #expect(direction == .down && first == CGPoint(x: 25, y: 100) && second == CGPoint(x: 75, y: 100))
+        // A 400 x 800 screen: centre (200, 400), radius 100.
+        #expect(direction == .down && first == CGPoint(x: 100, y: 400) && second == CGPoint(x: 300, y: 400))
     }
 
     @Test func helpNoLongerAsksForSelectedInput() async throws {

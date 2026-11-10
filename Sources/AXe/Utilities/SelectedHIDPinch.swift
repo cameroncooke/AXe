@@ -3,10 +3,14 @@ import FBSimulatorControl
 
 /// One complete two-contact gesture. The owner supplies the fresh selected observation.
 /// Without a centre the pinch is at the centre of the screen; without a radius it starts a quarter of
-/// the screen's shorter side from the centre. The owner fills both from the display it binds.
+/// the screen's shorter side from the centre, or closer when its wider end would otherwise come within
+/// `defaultEdgeMargin` points of a screen edge. The owner fills both from the display it binds.
 struct SelectedHIDPinch: Codable, Sendable {
     static let maximumSegments = 500
     static let maximumEventCount = 1024
+    /// Space a default radius leaves between the wider end of the motion and the nearest screen edge.
+    /// A contact on the edge itself is outside a device's display and can start a system edge gesture.
+    static let defaultEdgeMargin = 16.0
     var centerX: Double?
     var centerY: Double?
     let scale: Double
@@ -45,7 +49,12 @@ struct SelectedHIDPinch: Codable, Sendable {
         var value = self
         value.centerX = centerX ?? logicalSize.width / 2
         value.centerY = centerY ?? logicalSize.height / 2
-        value.radius = radius ?? min(logicalSize.width, logicalSize.height) / 4
+        if radius == nil, let x = value.centerX, let y = value.centerY {
+            let quarter = min(logicalSize.width, logicalSize.height) / 4
+            let reach = min(x, logicalSize.width - x, y, logicalSize.height - y) - Self.defaultEdgeMargin
+            // A centre closer to an edge than the margin keeps the quarter; the bounds check then decides.
+            value.radius = reach > 0 ? min(quarter, reach / max(scale, 1)) : quarter
+        }
         try value.validate()
         return value
     }
