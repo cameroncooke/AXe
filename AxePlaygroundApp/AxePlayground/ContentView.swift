@@ -82,6 +82,10 @@ struct ContentView: View {
             ZoomView()
                 .navigationTitle("Zoom")
                 .navigationBarTitleDisplayMode(.inline)
+        case "sketch":
+            SketchView()
+                .navigationTitle("Sketch")
+                .navigationBarTitleDisplayMode(.inline)
         case "gesture-presets":
             GesturePresetsView()
         case "landscape-coordinate-test":
@@ -147,6 +151,7 @@ struct MainMenuView: View {
             ("gesture-presets", "Gesture Presets", "Multi-touch gesture display"),
             ("drawing", "Drawing", "Records drawn strokes as screen-space paths"),
             ("zoom", "Zoom", "Pinch to zoom a scroll view in and out"),
+            ("sketch", "Sketch", "PencilKit canvas with the system tool picker"),
             ("landscape-coordinate-test", "Landscape Coordinates", "Verifies orientation-aware taps"),
             ("switch-test", "Switch Test", "SwiftUI and UIKit switch controls"),
             ("tab-view-test", "TabView Test", "Standard SwiftUI tab switching")
