@@ -63,7 +63,9 @@ struct PlaygroundOrdinaryRegressionTests {
         let session = try await PlaygroundAgentFeatureSession.open()
         let selectedTap = selected ? session.selectedFlags + ["--expected-pid", String(session.pid)] : []
         _ = try await session.command(["tap", "--id", "feature.text", "--tap-style", "physical"] + selectedTap)
-        let focused = try await session.document.waitFor("ordinary-device field focus") { $0.textFocused && $0.activeWindowTouches == 0 }
+        _ = try await session.document.waitFor("ordinary-device field focus") { $0.textFocused && $0.activeWindowTouches == 0 }
+        // Selected typing refuses a field that is still scrolling above the rising keyboard.
+        let focused = try await session.waitForSettledKeyboard()
         let keyboardFlags = selected ? session.selectedFlags + ["--expected-pid", String(session.pid), "--focus-id", "feature.text"] : []
         let text = "A!q7"
         let result = try await session.command(["type", text] + keyboardFlags)

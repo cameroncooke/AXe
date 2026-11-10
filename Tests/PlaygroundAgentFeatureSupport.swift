@@ -204,19 +204,23 @@ struct PlaygroundAgentFeatureSession {
             "--id", "feature.text", "--element-type", "TextField"])
         try requireHIDSuccess(result, kind: "tap", events: 2)
         _ = try await document.waitFor("real TextField focus") { $0.textFocused && $0.activeWindowTouches == 0 }
-        // Once the keyboard has shown, UIKit scrolls the page to keep the field above it: on iPhone
-        // the page moved 0 to 17 pt over ~0.3 s, starting within 80 ms of keyboardDidShow. A state
-        // read during that scroll differs from a later one with no input sent.
+        let focused = try await waitForSettledKeyboard()
+        try #require(focused.count("textFocused") == before.count("textFocused") + 1)
+        _ = try contacts(after: before, in: focused, count: 1)
+    }
+
+    /// Once the keyboard has shown, UIKit scrolls the page to keep the focused field above it: on
+    /// iPhone the page moved 0 to 17 pt over ~0.3 s, starting within 80 ms of keyboardDidShow. A
+    /// state read during that scroll differs from a later one with no input sent, and selected
+    /// keyboard input refuses a field that moves between its own admission read and the first key.
+    func waitForSettledKeyboard() async throws -> PlaygroundControlsDocument {
         _ = try await document.waitFor("software keyboard shown") { $0.keyboardVisible }
         var settledOffset: Double?
         var equalReads = 0
-        _ = try await document.waitFor("page settled above the keyboard") { value in
+        return try await document.waitFor("page settled above the keyboard") { value in
             if value.pageOffsetY == settledOffset { equalReads += 1 } else { settledOffset = value.pageOffsetY; equalReads = 0 }
             return equalReads >= 2
         }
-        let focused = try document.read()
-        try #require(focused.count("textFocused") == before.count("textFocused") + 1)
-        _ = try contacts(after: before, in: focused, count: 1)
     }
 
     func dismissKeyboard() async throws {
