@@ -457,7 +457,7 @@ PencilKit checks:
 Input-stack refactors carried over from Phase 4:
 
 - [x] SEL-16. `SelectedHIDRequest` now has header fields and one `Payload` enum instead of thirteen optional fields (`986ecf927`). A mixed request cannot be built or decoded, and the validation that policed mixes is gone; 42 files, 21 fewer lines. Unit suite passes. End to end, run alone at `76f538fd9` (`e2e-results/sketch-sel16-1`): 17 of 17 suite runs passed across the three simulators (core, agent, agent pinch, ordinary regression and Sketch on the iPhone and iPad; Duo core, hardware, selected batch keyboard, selected Home batch, hinge window, agent, agent pinch and Sketch on the Duo), and 6 of 6 device checks
-- [ ] SEL-17. Fold the ordinary input route into the selected route. Not started: in the timing run of Phase 8 a selected tap took 0.183 s and a plain tap 0.153 s, so the fold may make plain taps slower, which `AGENTS.md` counts as a regression. To be measured and put to the owner before any change
+- [ ] SEL-17. Fold the ordinary input route into the selected route. Measured on 10 November (see "SEL-17 measurement" in Phase 12): for the same input the selected route is 65 to 105 ms faster per command, not slower. The earlier 0.183 s against 0.153 s compared different tap styles. Not changed yet; waiting for the owner's decision on the narrower fold proposed there
 
 ## Phase 12: device speed, the Device MCP comparison and scroll-until (10 November, afternoon)
 
@@ -531,6 +531,28 @@ Release check and CHANGELOG (10 November, late afternoon):
 - [x] `make release-check` (`bad29dfa8`) runs the quick checks in one go and reports each: released CHANGELOG sections unchanged, script tests, the two skill copies identical, skill lint, no open items in this log, packaging dry run, unit tests. First run: 6 pass, and "readiness log" fails on the two open items in Phase 11, as it should.
 - [x] CHANGELOG reviewed against v1.8.0 by comparing every command and option in the source: 10 new commands, all described; 77 new options, none removed. Three corrections: the `screensDidNotSettle` entry left Fixed (the Duo is new in this release), the scroll-until entry says each scroll stops with the finger, and the device entry names `draw`, taps by selector and the time a screen read takes.
 
+SEL-17 measurement (10 November, about 15:10; load average 4 to 9; scripts in `e2e-results/sel17/`):
+
+Plain commands and `--input-mode selected` commands were run alternately, 20 to 30 times each, on the iPhone 18 Pro and iPhone Duo simulators, with the same points and durations. Medians in ms:
+
+| Command | iPhone plain | iPhone selected | Duo plain | Duo selected |
+| --- | --- | --- | --- | --- |
+| Tap, simulator style (no hold) | 158 | 87 | 173 | 99 |
+| Tap, physical style (0.1 s hold) | 263 | 196 | 287 | 203 |
+| Tap, each route's default | 159 | 186 | 186 | 213 |
+| Swipe, 0.3 s | 502 | 436 | 526 | 441 |
+| Drag, 0.3 s | 670 | 597 | 718 | 653 |
+| `gesture scroll-down` | 720 | 630 | 758 | 653 |
+| Draw, 3 points, 0.3 s | 635 | 560 | 671 | 592 |
+| `touch --down --up`, repeated | 904 | 195 | about 1,050 | 216 |
+
+- [x] For the same input, selected is faster on every command, by 65 to 105 ms. In 30 alternating pairs on the iPhone the selected swipe, drag and scroll were faster 30 times out of 30.
+- [x] The earlier figure (selected tap 0.183 s, plain tap 0.153 s) compared different taps. A plain tap defaults to the simulator style, with no hold; a selected tap at a point holds the touch for 0.1 s by default.
+- [x] Where the 70 ms goes: a plain command loads the simulator set and measures the active screen in the client before it sends anything; a selected command sends its request at once and the broker, which already holds that state, binds the active screen. Naming the screen with `--screen-id` and `--screen-uuid` saves the broker a further 17 ms.
+- [x] A cost found on the plain route: after a plain `touch --down --up`, the next plain command of any kind takes 0.6 to 0.9 s longer (iPhone: a tap 911 ms instead of 156, a swipe 1,075 instead of 505; still 0.4 s longer after a 2 s pause). The plain touch path closes its input session and display feed when the finger lifts, which the other commands do not. A selected touch takes 195 ms and leaves nothing behind. The CHANGELOG's "a touch 0.25 s" is right for the touch itself and does not mention this.
+- What a fold cannot include without changing behaviour: `key`, `type` and the other keyboard commands (selected keyboard input requires `--focus-id` of the focused field; plain does not), a `touch --down` followed later by a separate `touch --up` (selected uses a contact token), the plain default tap style, and the plain swipe's own event list, which ends with a repeated last point to stop the content gliding.
+- Proposed, not done: a narrower fold. Plain tap, swipe, drag, draw, scroll presets and complete `touch --down --up` on current simulators let the broker bind the active screen instead of measuring it in the client, keeping their events, defaults and output. Expected: about 70 ms off each of those commands and the 0.6 to 0.9 s after a touch gone. Keyboard and split touches stay as they are.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -539,7 +561,7 @@ Release check and CHANGELOG (10 November, late afternoon):
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
 - The selected input path stops input when its display or motion feed is more than 0.5 s old. That tripped twice on the Duo: the display feed (0.57 s) at a load average above 100, with input quarantined, and the motion feed (0.51 s) at a load average of about 40, released cleanly. The limit is deliberate; it needs a decision on whether busy machines get more margin.
 - The early-boot accessibility wedge ("No translation object" or every read timing out until reboot) hit three Duo suites on 10 November. The matrix's boot gate does not catch it; a rerun on a fresh boot passes.
-- Folding the "ordinary" input route into the selected route (audit item SEL-17) is not done: it changes the path of every ordinary tap and needs a quiet machine to benchmark against v1.8.0.
+- Folding the "ordinary" input route into the selected route (audit item SEL-17) is measured and not done. The numbers favour it; it changes the path of every plain tap, swipe, drag, draw and scroll on current simulators, so it needs the owner's go-ahead and isolated reruns of the ordinary suites.
 
 ## Future improvements
 
@@ -568,7 +590,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 136 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 137 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -708,3 +730,4 @@ All 136 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `a1ee6c835` | docs(release): Note batching the car picture's strokes as a future improvement |
 | `bad29dfa8` | build: Add make release-check, the quick release checks in one run |
 | `37bf37ae3` | docs(changelog): Bring the unreleased section up to date |
+| `0e9cff650` | docs(release): Record the release check and the CHANGELOG review |
