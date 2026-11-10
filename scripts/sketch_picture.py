@@ -133,6 +133,17 @@ class SketchPlayer:
                 last = error
         raise PictureFailed(f'the picker has no {name} tool: {last}')
 
+    def resting_frame(self, name):
+        """The tool's frame once two reads in a row agree on it."""
+        frame = self.tool_frames(self.tree()).get(name)
+        for _ in range(8):
+            time.sleep(0.25)
+            again = self.tool_frames(self.tree()).get(name)
+            if again and again == frame:
+                return frame
+            frame = again
+        raise PictureFailed(f'{name} did not come to rest in the picker')
+
     def use(self, name, weight=None):
         """Selects a tool, and with a weight opens its options with a second tap and picks it."""
         if (name, weight) == (self.tool, self.weight):
@@ -144,6 +155,9 @@ class SketchPlayer:
             self.wait(f'{name} to be selected', lambda tree: self.value(tree, 'sketch.tool').startswith(ink + ' '))
             self.selected = ink
         if weight:
+            # The strip can slide a tool that was selected at its edge into full view, so the tool is
+            # tapped again only where two reads in a row place it.
+            frame = self.resting_frame(name)
             self.tap(frame)      # a tap on the selected tool opens its options
             tree = self.wait(f'{name} options', lambda tree: self.buttons(tree, 'Weight'))
             choice = next((node for node in self.buttons(tree, 'Weight') if node.get('AXValue') == weight), None)
