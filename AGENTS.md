@@ -21,6 +21,9 @@ When reading issues:
 
 ## Build and test
 - `scripts/build.sh` (default, `dev`, `clean`) runs `rm -rf build_products build_derived_data`, and so does `scripts/build.sh frameworks-if-needed` (used by `make build`, `make test`, `make e2e`, `./test-runner.sh` and the benchmarks) whenever it rebuilds stale IDBKit frameworks. Never keep anything that must survive under `build_products/`.
+- The full end-to-end suite (`make e2e`, the whole matrix on iPhone, iPad and Duo) is extremely expensive: it takes hours and ties up the machine and the E2E simulators. Never run it after a small change, to confirm a fix, or because a change touches a shared path.
+- For a failure or a fix, run only the affected suites in isolation: `scripts/test-playground-matrix.py` with `--only <iphone|ipad|duo>` and one `--group <Suite>` per suite (see "Focused checks" in `docs/playground-testing.md`). Add the suites that share a changed test helper or script, and the few that exercise a changed product path. Assume the rest still pass.
+- Run the full suite once, when a significant portion of the whole project is finished, such as the end of a release's work. A wave of fixes, a merge or a single risky commit is not that point. If in doubt, do not run it; ask.
 
 ## Performance
 - An ordinary simulator interaction must be as fast as in the current release (the latest release tag). This applies to every input route, including selected and agent modes.
