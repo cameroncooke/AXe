@@ -597,7 +597,12 @@ The owner asked for the benchmark against the last run and the baseline, without
 - The harness reports no ranked comparison with the baseline: the skill, the harness and the Weather app source have changed since it was accepted, so the baseline belongs to another contract. The figures are side by side, not ranked.
 - [x] Per-command time is unchanged from 8 November in the Reminders transcripts: a tap 0.72 s today and 0.76 s then; typing 2.68 and 2.66 s; a read 0.22 and 0.20 s. Agent commands were not part of today's plain-input change.
 - [x] Contacts was graded unverified because of the benchmark's grader, not AXe. A compact refusal reply omits `data.cache`, as documented, and the transcript reader then ignored its capture, which is where the saved card was last seen. Fixed in the grader (`96f6ebe53`; 195 benchmark tests pass); the same evidence passes. The recorded reports in history still say unverified.
-- [ ] Reminders is worse today and it is not this build: the AXe binary kept from the 8 November run, run today, failed the same way (30 calls, 338 s). In every run today the tap on the second reminder's circle, sent about five seconds after the first was completed, reports success and leaves the reminder incomplete; on 8 November that tap was retried inside the call and completed it. The agent then takes screenshots and opens Show Completed to find out, which is where the extra calls and the read-only violation come from. Not investigated further; the simulator was booted today and had been up for days on 8 November.
+- [ ] Reminders is worse today and it is not this build: the AXe binary kept from the 8 November run, run today, failed the same way (30 calls, 338 s). Investigated on 10 November, late evening; the on-screen cause is found and what switches it on is not (evidence in `e2e-results/benchmark-reminders/`):
+  - What happens, from screenshots taken four times a second during a failing run: the first reminder is completed and its row stays on screen. On a healthy simulator Reminders removes that row by itself about 2.2 s after it is completed. Here it stays until the next touch, 4 s or more later. That touch is the agent's tap on the second reminder's circle, so the list reshuffles under the tap, the circle is left looking filled, the title stays black and the reminder is not completed. AXe's reply is accurate: two events sent, and the returned capture says "Incomplete".
+  - It is a state of the simulator, not of the build or of the Reminders session. On the benchmark simulator the same scripted sequence completed the reminder 30 times out of 30 until 19:25 and failed 12 times out of 12 after a benchmark run at 19:29; relaunching Reminders did not clear it and the earlier reboot had. On the development simulator it never failed (about 20 tries). When the row has already gone, AXe sees the changed screen, retries inside the call and the tap lands (`retried: true`), which is what every passing run shows.
+  - Ruled out as the switch, each tried on a healthy simulator: the delay between the two taps (1.3 to 6.6 s), reading the screen or taking screenshots in between, Show Completed, deleting a list, taps in the form the benchmark's preparation uses, relaunching Reminders straight into a read, and the device settings (identical on both simulators).
+  - Not done: finding which step of a benchmark run switches it on. The next step would be to reboot the benchmark simulator, confirm it is healthy, then run the preparation and the task one part at a time with the two-tap test after each.
+  - A mistake of mine during this: after I relaunched Reminders a test script kept adding reminders on the overview screen and created 115 in the default list of the benchmark simulator. I deleted them and the three scratch lists; the simulator's Reminders is back to its recorded inventory.
 - [ ] Weather: `type --focus` on the search field failed with `nativeActionFailed` in 3 runs of 3 today and in none on 8 November; the agent typed again without `--focus` each time. Not checked with the 8 November binary, so it may be the build or today's simulator.
 - A first run, straight after I booted the benchmark simulator, is in history but not in the table: Weather's first three reads failed with `observationFailed` for 25 seconds after launch, which is the freshly booted simulator.
 - `./benchmarks/run doctor` fails with `'setupAxe'` when `build_products/axe` does not exist. A run builds it; doctor should say so. Not fixed.
@@ -640,7 +645,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 142 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 143 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -786,3 +791,4 @@ All 142 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `4ac61b349` | test(e2e): Confirm the first colour after a tool change in the picture player |
 | `829069eeb` | docs(release): Record the plain-input change, its timings and its isolated runs |
 | `96f6ebe53` | fix(bench): Read the current screen from a compact refusal reply |
+| `d0f87e0e0` | docs(release): Record the agent benchmark against the last run and the baseline |
