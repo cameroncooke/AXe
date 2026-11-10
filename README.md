@@ -141,7 +141,7 @@ axe stream-video --udid "$UDID" --fps 30 --format ffmpeg | \
   ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
 ```
 
-`stream-video` formats are `mjpeg` (multipart JPEG), `raw` (4-byte big-endian length, then a JPEG), `ffmpeg` (concatenated JPEGs) and `bgra` (packed pixels; dimensions on stderr). On a physical device `--format h264` streams native H.264 Annex B. Stream bytes go to stdout and diagnostics to stderr; keep them separate. `--fps` is an upper limit. On the iPhone Duo, `record-video --follow-active-display` follows folds and rotations into one movie, and `--screen-id` with `--screen-uuid` captures one screen and fails if it stops being active; see the [recording reference](Skills/CLI/axe/references/recording-reference.md).
+`stream-video` formats are `mjpeg` (multipart JPEG), `raw` (4-byte big-endian length, then a JPEG), `ffmpeg` (concatenated JPEGs) and `bgra` (packed pixels; a selected-screen stream prints its width and height on stderr, the ordinary simulator stream does not, so pass `--screen-id` and `--screen-uuid` when you need them). On a physical device `--format h264` streams native H.264 Annex B. Stream bytes go to stdout and diagnostics to stderr; keep them separate. `--fps` is an upper limit. On any simulator, `record-video --follow-active-display` follows the active screen through folds and rotations into one fixed-size movie, and `--screen-id` with `--screen-uuid` captures one screen and fails if it stops being active; see the [recording reference](Skills/CLI/axe/references/recording-reference.md).
 
 ## Displays, hinge and rotation
 
