@@ -87,8 +87,8 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("type-submission"), help: "Type step submission mode.")
     var typeSubmissionMode: TypeSubmissionMode = .chunked
 
-    @Option(name: .customLong("type-chunk-size"), help: "Maximum HID events per chunk when type-submission is chunked.")
-    var typeChunkSize: Int = 200
+    @Option(name: .customLong("type-chunk-size"), help: "Maximum HID events per chunk when type-submission is chunked (default: 200).")
+    var typeChunkSize: Int?
 
     @Option(name: .customLong("tap-style"), help: "Legacy default tap event style: automatic uses physical touch for switches/toggles and simulator tap for other targets; simulator always uses FBSimulator tapAt; physical uses touch down/up. Selected mode uses per-step styles only: batch-level automatic is accepted as the default but does not change step style; physical and simulator reject.")
     var tapStyle: TapStyle = .automatic
@@ -99,8 +99,8 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for selector-based elements before failing (0 = no waiting).")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active.")
-    var pollInterval: Double = 0.25
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25).")
+    var pollInterval: Double?
 
     @Flag(name: .customLong("verbose"), help: "Enable verbose logging to stderr. Selected batch: print each step's full JSON receipt instead of the summary.")
     var verbose: Bool = false
@@ -121,8 +121,8 @@ struct Batch: AsyncParsableCommand {
             guard (file != nil) != (stepsJSON != nil), steps.isEmpty, !useStdin,
                   selectedInput.screenID == nil, selectedInput.screenUUID == nil,
                   selectedInput.mode != .selected, !continueOnError, !verbose, axCachePolicy == .perBatch,
-                  typeSubmissionMode == .chunked, typeChunkSize == 200, tapStyle == .automatic,
-                  waitTimeout == 0, pollInterval == 0.25 else {
+                  typeSubmissionMode == .chunked, typeChunkSize == nil, tapStyle == .automatic,
+                  waitTimeout == 0, pollInterval == nil else {
                 throw ValidationError("Agent batch requires exactly one --file or --steps-json JSON source; screen, legacy batch settings, stdin and continued errors are unsupported.")
             }
         } else if expectedPID != nil {
@@ -130,7 +130,7 @@ struct Batch: AsyncParsableCommand {
         }
         if selectedInput.mode == .selected {
             guard !continueOnError, axCachePolicy == .perBatch, typeSubmissionMode == .chunked,
-                  typeChunkSize == 200, tapStyle == .automatic, waitTimeout == 0, pollInterval == 0.25 else {
+                  typeChunkSize == nil, tapStyle == .automatic, waitTimeout == 0, pollInterval == nil else {
                 throw ValidationError("Selected batch stops on failure and does not use legacy cache, type chunk, tap-style or polling settings.")
             }
         }
@@ -141,7 +141,7 @@ struct Batch: AsyncParsableCommand {
                 : "Specify exactly one step source: --step, --file, or --stdin.")
         }
 
-        guard typeChunkSize > 0 else {
+        if let typeChunkSize, typeChunkSize <= 0 {
             throw ValidationError("--type-chunk-size must be greater than 0.")
         }
 
@@ -149,7 +149,7 @@ struct Batch: AsyncParsableCommand {
             throw ValidationError("--wait-timeout must be non-negative.")
         }
 
-        if waitTimeout > 0 {
+        if waitTimeout > 0, let pollInterval {
             guard pollInterval > 0 else {
                 throw ValidationError("--poll-interval must be greater than 0 when --wait-timeout is active.")
             }
@@ -196,8 +196,8 @@ struct Batch: AsyncParsableCommand {
     @MainActor
     private func runPhysicalBatch(on device: CoreDevice) async throws {
         guard !agentMode, selectedInput.mode == .legacy, !continueOnError, !verbose,
-              axCachePolicy == .perBatch, typeSubmissionMode == .chunked, typeChunkSize == 200,
-              tapStyle != .simulator, waitTimeout == 0, pollInterval == 0.25 else {
+              axCachePolicy == .perBatch, typeSubmissionMode == .chunked, typeChunkSize == nil,
+              tapStyle != .simulator, waitTimeout == 0, pollInterval == nil else {
             throw AutomationTarget.unsupportedOnDevice(
                 "Use ordinary input and default batch settings on a physical device. Physical batches stop after a failure.")
         }
@@ -218,8 +218,8 @@ struct Batch: AsyncParsableCommand {
             owner = nil
         }
         let context = BatchContext(simulatorUDID: simulatorUDID, axCachePolicy: axCachePolicy,
-            typeSubmissionMode: typeSubmissionMode, typeChunkSize: typeChunkSize, tapStyle: tapStyle,
-            waitTimeout: waitTimeout, pollInterval: pollInterval, duoOwner: owner,
+            typeSubmissionMode: typeSubmissionMode, typeChunkSize: typeChunkSize ?? 200, tapStyle: tapStyle,
+            waitTimeout: waitTimeout, pollInterval: pollInterval ?? 0.25, duoOwner: owner,
             duoLogicalSize: measured.map { ($0.logicalWidth, $0.logicalHeight) })
 
         if let owner, let measured {

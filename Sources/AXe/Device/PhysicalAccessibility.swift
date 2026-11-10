@@ -20,18 +20,6 @@ enum PhysicalAccessibility {
     /// Upper bound for one tree read: the pushed tree pair plus any live translator lookups.
     static let readBudget: TimeInterval = 6
 
-    static func semanticPress(identifier: String, for device: CoreDevice) async throws -> PhysicalSemanticPressReceipt {
-        try await PhysicalDeviceInput.withSession(for: device) { input in
-            try await input.semanticPress(identifier: identifier)
-        }
-    }
-
-    static func read(for device: CoreDevice, timeout: TimeInterval = readBudget) async throws -> PhysicalAccessibilitySnapshot {
-        try await PhysicalDeviceInput.withSession(for: device) { input in
-            try await input.readAccessibility(timeout: timeout)
-        }
-    }
-
     static func projectionEntries(_ archive: PhysicalAXTreeArchive) -> [FBPhysicalAXTreeProjection.Entry] {
         archive.entries.map {
             FBPhysicalAXTreeProjection.Entry(requestType: $0.requestType, pid: $0.pid,

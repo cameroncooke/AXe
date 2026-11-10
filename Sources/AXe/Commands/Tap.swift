@@ -50,8 +50,8 @@ struct Tap: AsyncParsableCommand {
     @Option(name: .customLong("wait-timeout"), help: "Maximum seconds to poll for the element before failing (0 = no waiting, default). Only applies to --id/--label/--value targeting. Selected ordinary taps accept finite values up to 30 seconds; only a missing target is retried before input.")
     var waitTimeout: Double = 0
 
-    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25). Selected active polling accepts finite values in 0.05...30 seconds; a non-default interval requires a positive wait.")
-    var pollInterval: Double = 0.25
+    @Option(name: .customLong("poll-interval"), help: "Seconds between accessibility tree polls when --wait-timeout is active (default: 0.25). Selected active polling accepts finite values in 0.05...30 seconds; selected, agent and physical taps accept it only with a positive wait.")
+    var pollInterval: Double?
 
     @Option(name: .customLong("udid"), help: "The UDID of the simulator or physical device.")
     var simulatorUDID: String
@@ -147,7 +147,7 @@ struct Tap: AsyncParsableCommand {
             throw ValidationError("--wait-timeout must be non-negative.")
         }
 
-        if waitTimeout > 0 {
+        if waitTimeout > 0, let pollInterval {
             guard pollInterval > 0 else {
                 throw ValidationError("--poll-interval must be greater than 0 when --wait-timeout is active.")
             }
@@ -156,7 +156,7 @@ struct Tap: AsyncParsableCommand {
 
     private func validateAgent() throws {
         try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
-        guard !semanticPress, waitTimeout == 0, pollInterval == 0.25 else {
+        guard !semanticPress, waitTimeout == 0, pollInterval == nil else {
             throw ValidationError("Agent tap does not accept semantic press or polling overrides.")
         }
         let selectors = [elementID, elementLabel, elementValue, labelContains, labelRegex].compactMap { $0 }
@@ -257,7 +257,7 @@ struct Tap: AsyncParsableCommand {
 
     private func selectedWaitPolicy(hasCoordinates: Bool) throws -> SelectedAXWaitPolicy? {
         if hasCoordinates || semanticPress {
-            guard waitTimeout == 0, pollInterval == 0.25 else {
+            guard waitTimeout == 0, pollInterval == nil else {
                 throw ValidationError("Selected coordinate taps and semantic press do not support polling options.")
             }
             return nil
@@ -266,12 +266,12 @@ struct Tap: AsyncParsableCommand {
             throw ValidationError("Selected --wait-timeout must be finite and in 0...30 seconds.")
         }
         guard waitTimeout > 0 else {
-            guard pollInterval == 0.25 else {
+            guard pollInterval == nil else {
                 throw ValidationError("Selected --poll-interval requires a positive --wait-timeout.")
             }
             return nil
         }
-        let policy = SelectedAXWaitPolicy(timeoutSeconds: waitTimeout, pollIntervalSeconds: pollInterval)
+        let policy = SelectedAXWaitPolicy(timeoutSeconds: waitTimeout, pollIntervalSeconds: pollInterval ?? 0.25)
         do { try policy.validate() }
         catch { throw ValidationError(error.localizedDescription) }
         return policy
@@ -286,13 +286,12 @@ struct Tap: AsyncParsableCommand {
         guard !hasSimulatorOnlyOptions else {
             throw AutomationTarget.unsupportedOnDevice("Physical semantic press does not accept agent mode or simulator display and process options.")
         }
-        guard let elementID, !elementID.isEmpty,
-              elementID == elementID.trimmingCharacters(in: .whitespacesAndNewlines),
-              elementID.utf8.count <= 4096 else {
-            throw ValidationError("Physical --semantic-press requires one exact --id of at most 4096 UTF-8 bytes.")
+        // The broker validates the identifier itself.
+        guard let elementID else {
+            throw ValidationError("Physical --semantic-press requires one exact --id.")
         }
         guard pointX == nil, pointY == nil, elementLabel == nil, elementValue == nil, elementType == nil,
-              tapStyle == nil, preDelay == nil, postDelay == nil, waitTimeout == 0, pollInterval == 0.25 else {
+              tapStyle == nil, preDelay == nil, postDelay == nil, waitTimeout == 0, pollInterval == nil else {
             throw ValidationError("Physical --semantic-press accepts only --id and --udid. Remove coordinates, other selectors, style, delays and polling.")
         }
         return elementID
@@ -310,7 +309,7 @@ struct Tap: AsyncParsableCommand {
         }
         if pointX != nil || pointY != nil {
             guard elementID == nil, elementLabel == nil, elementValue == nil, elementType == nil,
-                  waitTimeout == 0, pollInterval == 0.25 else {
+                  waitTimeout == 0, pollInterval == nil else {
                 throw ValidationError("Physical coordinate taps do not accept selectors or polling options.")
             }
         }
@@ -342,15 +341,13 @@ struct Tap: AsyncParsableCommand {
                 throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
             }
             if let identifier {
-                let receipt = try await PhysicalAccessibility.semanticPress(identifier: identifier, for: device)
-                if selectedOutput.verbose { try CLIOutput.writeJSON(receipt) }
-                guard receipt.identifier == identifier, receipt.stateBefore != receipt.stateAfter,
-                      (1...4).contains(receipt.readbackCount), receipt.outcome == "switchValueChangedObserved",
-                      receipt.delivery == "nativeReplyAccepted" else {
-                    throw CLIOutputFailure(code: "semanticPressUnconfirmed",
-                        message: "The device did not confirm a Boolean switch value change after the press. Check the current switch state before another action.")
+                // The broker returns a receipt only for a confirmed value change.
+                let receipt = try await PhysicalDeviceInput.withSession(for: device) { input in
+                    try await input.semanticPress(identifier: identifier)
                 }
-                if !selectedOutput.verbose {
+                if selectedOutput.verbose {
+                    try CLIOutput.writeJSON(receipt)
+                } else {
                     let output = SemanticPressOutput(identifier: identifier, before: receipt.stateBefore,
                         after: receipt.stateAfter)
                     try DeviceState.emit(output, text: [output.text])
@@ -406,7 +403,7 @@ struct Tap: AsyncParsableCommand {
                 query: query,
                 simulatorUDID: simulatorUDID,
                 waitTimeout: waitTimeout,
-                pollInterval: pollInterval,
+                pollInterval: pollInterval ?? 0.25,
                 elementType: elementType,
                 logger: logger
             )

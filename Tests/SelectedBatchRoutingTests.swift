@@ -33,7 +33,9 @@ struct SelectedBatchRoutingTests {
 
     @Test(arguments: [["--continue-on-error"], ["--ax-cache", "none"],
         ["--type-submission", "composite"], ["--type-chunk-size", "2"],
-        ["--tap-style", "physical"], ["--wait-timeout", "1"], ["--poll-interval", "0.1"]])
+        ["--tap-style", "physical"], ["--wait-timeout", "1"], ["--poll-interval", "0.1"],
+        // An explicit default is still a legacy setting.
+        ["--type-chunk-size", "200"], ["--poll-interval", "0.25"]])
     func selectedBatchRejectsLegacyTuning(extra: [String]) throws {
         #expect(throws: (any Error).self) {
             _ = try Batch.parse(["--udid", udid, "--step", "tap -x 10 -y 20"] + selection + extra)
@@ -44,7 +46,8 @@ struct SelectedBatchRoutingTests {
         let command = try Batch.parse(["--udid", udid, "--step", "gesture scroll-up", "--continue-on-error"])
         #expect(command.selectedInput.mode == .legacy && command.continueOnError)
         #expect(command.axCachePolicy == .perBatch && command.typeSubmissionMode == .chunked)
-        #expect(command.typeChunkSize == 200 && command.waitTimeout == 0 && command.pollInterval == 0.25)
+        // Omitted chunk size and poll interval take their defaults (200 and 0.25) when the batch runs.
+        #expect(command.typeChunkSize == nil && command.waitTimeout == 0 && command.pollInterval == nil)
     }
 
     @Test(arguments: ["tap -x 10 -y 20", "tap --id feature.tap --expected-pid 123",

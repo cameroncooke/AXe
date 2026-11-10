@@ -23,14 +23,19 @@ struct StreamVideo: AsyncParsableCommand {
     @Option(help: "Output format: mjpeg, raw, ffmpeg, bgra, or native H.264 Annex B on physical devices (h264). Default: mjpeg.")
     var format: OutputFormat = .mjpeg
 
-    @Option(help: "Frames per second (1-30, default: 10)")
-    var fps: Int = 10
+    // Optional so that native h264 can refuse an explicit value, including the default.
+    @Option(name: .customLong("fps"), help: "Frames per second (1-30, default: 10)")
+    var requestedFPS: Int?
 
-    @Option(help: "JPEG quality (1-100, default: 80)")
-    var quality: Int = 80
+    @Option(name: .customLong("quality"), help: "JPEG quality (1-100, default: 80)")
+    var requestedQuality: Int?
 
-    @Option(help: "Scale factor (0.1-1.0, default: 1.0)")
-    var scale: Double = 1.0
+    @Option(name: .customLong("scale"), help: "Scale factor (0.1-1.0, default: 1.0)")
+    var requestedScale: Double?
+
+    var fps: Int { requestedFPS ?? 10 }
+    var quality: Int { requestedQuality ?? 80 }
+    var scale: Double { requestedScale ?? 1 }
 
     @Option(name: .customLong("screen-id"), help: "Stream this measured active display; requires --screen-uuid.")
     var screenID: UInt32?
@@ -71,7 +76,7 @@ struct StreamVideo: AsyncParsableCommand {
             throw ValidationError("Scale must be between 0.1 and 1.0")
         }
 
-        if format == .h264, fps != 10 || quality != 80 || scale != 1 {
+        if format == .h264, requestedFPS != nil || requestedQuality != nil || requestedScale != nil {
             throw ValidationError("Native --format h264 uses device encoding settings. Omit --fps, --quality and --scale.")
         }
     }

@@ -54,18 +54,12 @@ struct Rotate: AsyncParsableCommand {
         }
     }
 
-    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try validateDeviceOptions()
-        try validate()
-        _ = try await input.rotate(direction == "left" ? .left : .right, timeout: timeout)
-    }
-
     func run() async throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
            let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
             try validateDeviceOptions()
             try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
+                try await input.rotate(direction == "left" ? .left : .right, timeout: timeout)
             }
             let output = RotateOutput(udid: simulatorUDID, direction: direction, previousRotation: nil, activeScreen: nil)
             try DeviceState.emit(output, text: output.textLines)

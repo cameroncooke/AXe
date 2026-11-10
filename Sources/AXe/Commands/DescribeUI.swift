@@ -94,7 +94,9 @@ struct DescribeUI: AsyncParsableCommand {
                 throw AutomationTarget.unsupportedOnDevice("Physical describe-ui does not accept agent mode or simulator display and process options.")
             }
             if let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-                let snapshot = try await PhysicalAccessibility.read(for: device)
+                let snapshot = try await PhysicalDeviceInput.withSession(for: device) { input in
+                    try await input.readAccessibility()
+                }
                 let data: Data
                 if let point = try parsedPoint() {
                     data = try PhysicalAccessibilityCommands.pointJSON(at: point.cgPoint, in: snapshot)

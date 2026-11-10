@@ -41,7 +41,7 @@ enum PhysicalAccessibilityCommands {
     }
 
     static func tap(query: AccessibilityQuery, elementType: String?, waitTimeout: TimeInterval,
-                    pollInterval: TimeInterval, on input: PhysicalDeviceInput) async throws {
+                    pollInterval requestedPollInterval: TimeInterval?, on input: PhysicalDeviceInput) async throws {
         if let elementType, elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw CLIOutputFailure(code: "invalidArguments", message: "Physical --element-type must not be empty.")
         }
@@ -49,11 +49,12 @@ enum PhysicalAccessibilityCommands {
             throw CLIOutputFailure(code: "invalidArguments", message: "Physical --wait-timeout must be 0 to 30 seconds.")
         }
         let allowedPollInterval = SelectedAXWaitPolicy.minimumPollInterval...SelectedAXWaitPolicy.maximumPollInterval
+        let pollInterval = requestedPollInterval ?? 0.25
         if waitTimeout > 0 {
             guard pollInterval.isFinite, allowedPollInterval.contains(pollInterval) else {
                 throw CLIOutputFailure(code: "invalidArguments", message: "Physical --poll-interval must be 0.05 to 30 seconds.")
             }
-        } else if pollInterval != 0.25 {
+        } else if requestedPollInterval != nil {
             throw CLIOutputFailure(code: "invalidArguments", message: "Physical --poll-interval requires a positive --wait-timeout.")
         }
 

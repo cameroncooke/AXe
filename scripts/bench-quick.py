@@ -28,6 +28,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import statistics
 import subprocess
@@ -109,16 +110,13 @@ def walk(node):
         yield from walk(node.get('children') or [])
 
 
-def tap_location(nodes):
-    for node in walk(nodes):
-        if str(node.get('AXLabel', '')).startswith('Tap Location'):
-            value = str(node.get('AXValue', '')).replace('x:', '').replace('y:', '')
-            parts = value.rsplit(',', 1)
-            try:
-                return int(parts[0].replace(',', '')), int(parts[1].replace(',', ''))
-            except (IndexError, ValueError):
-                return None
-    return None
+def tap_location(tree):
+    """The point Tap Test recorded, parsed as scripts/test-physical-devices.py does."""
+    node = next((n for n in walk(tree) if str(n.get('AXLabel', '')).startswith('Tap Location')), None)
+    if not node:
+        return None
+    match = re.fullmatch(r'x:([\d,]+),y:([\d,]+)', str(node.get('AXValue')))
+    return (int(match.group(1).replace(',', '')), int(match.group(2).replace(',', ''))) if match else None
 
 
 def launch_tap_test(binary, udid, simulator):
@@ -153,7 +151,7 @@ def launch_tap_test(binary, udid, simulator):
              'unlock the target and dismiss any alert, then run again.')
 
 
-def commands_for(simulator, full, width, height):
+def commands_for(simulator, full, width, height, scratch):
     """Commands per route. Tap points stay inside the Tap Test area, away from the title card."""
     raw_point = (int(width * 0.4), int(height * 0.55))
     selected_point = (int(width * 0.6), int(height * 0.65))
@@ -173,7 +171,7 @@ def commands_for(simulator, full, width, height):
         step = f'tap -x {raw_point[0]} -y {raw_point[1]}'
         commands['tap --id'] = ['tap', '--id', 'tap-test-area']
         commands['batch 3 taps'] = ['batch', '--step', step, '--step', step, '--step', step]
-        commands['screenshot'] = ['screenshot', '--output', str(Path(tempfile.mkdtemp()) / 'screen.png')]
+        commands['screenshot'] = ['screenshot', '--output', str(scratch / 'screen.png')]
     return commands, last_point
 
 
@@ -207,14 +205,16 @@ udid_holder = []
 
 
 def main():
+    scratch = Path(tempfile.mkdtemp(prefix='axe-bench-quick-'))
     try:
-        run_main()
+        run_main(scratch)
     finally:
         if udid_holder:
             stop_brokers(udid_holder[0])
+        shutil.rmtree(scratch, ignore_errors=True)
 
 
-def run_main():
+def run_main(scratch):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--baseline', required=True, help='baseline axe payload binary')
     parser.add_argument('--candidate', help='candidate axe payload binary (default: the baseline, with --self-check)')
@@ -249,7 +249,7 @@ def run_main():
     nodes = launch_tap_test(binaries['candidate'], args.udid, bool(simulator))
     root = next((n for n in walk(nodes) if n.get('frame')), {})
     width, height = root.get('frame', {}).get('width', 400), root.get('frame', {}).get('height', 800)
-    commands, last_point = commands_for(bool(simulator), args.full, width, height)
+    commands, last_point = commands_for(bool(simulator), args.full, width, height, scratch)
     names = ['cold describe-ui'] + list(commands)
     blocks = {label: {name: [] for name in names} for label in binaries}
     output_bytes = {}

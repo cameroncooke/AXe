@@ -46,4 +46,13 @@ struct SelectedStreamOptionsTests {
             _ = try StreamVideo.parse(["--udid", "TEST"] + options)
         }
     }
+
+    @Test("Native h264 refuses any explicit encoding option, including the default value")
+    func nativeH264RefusesExplicitDefaults() throws {
+        let device = ["--udid", "00008140-001A2B3C4D5E6F70", "--format", "h264"]
+        _ = try StreamVideo.parse(device)
+        for option in [["--fps", "10"], ["--quality", "80"], ["--scale", "1"]] {
+            #expect(throws: (any Error).self) { _ = try StreamVideo.parse(device + option) }
+        }
+    }
 }

@@ -157,9 +157,10 @@ struct Button: AsyncParsableCommand {
     func run() async throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
            let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            let button = try physicalButtonTarget()
+            // Refuse an unavailable button before connecting to the device.
+            _ = try physicalButtonTarget()
             try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await input.pressButton(button, hold: duration ?? 0.08, allowLock: allowLock)
+                try await physicalButton(on: input)
             }
             return
         }
