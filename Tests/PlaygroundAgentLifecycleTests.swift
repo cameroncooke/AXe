@@ -180,8 +180,9 @@ struct PlaygroundAgentLifecycleTests {
         let session = try await open("concurrent-busy")
         let initial = try await session.capture()
         let before = try session.document.read()
-        let arguments = ["touch", "--down", "--up", "--delay", "4"]
-            + (try session.contextArguments(initial, identifier: "feature.tap"))
+        // The canonical view: the receipt check reads its kind, cleanup and cache state.
+        let arguments = canonicalAgentArguments(["touch", "--down", "--up", "--delay", "4"]
+            + (try session.contextArguments(initial, identifier: "feature.tap")))
             + ["--udid", session.agent.udid]
         try JSONEncoder().encode(arguments).write(to: session.artifacts.appendingPathComponent("owned-hold-argv.json"))
         let process = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: arguments,
