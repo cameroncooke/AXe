@@ -96,14 +96,27 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 - [x] Stale or duplicate tests (commit `49a587d4`: one shared AX-node fixture replaces 20 private copies; dead suites removed)
 - [~] The 17 older end-to-end suites that `make e2e` never runs: run them, then wire in or delete
 - [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
-- [~] Unused IDBKit code: removed on branch `audit/idbkit-prune` (7 commits, 82 files, 6,456 lines), merge pending
+- [x] Unused IDBKit code removed (7 commits ending `085823b4f`: 82 files, 6,456 lines; FBControlCore 4.86 MB to 3.63 MB, FBSimulatorControl 15.58 MB to 14.24 MB; the IDBKit test target passed 262 Swift Testing and 9 XCTest tests before and after; the universal build succeeds)
 - [x] Stale documentation (see Phase 9)
 
 ## Phase 4: simplify the architecture
 
-- [~] One shared simulator-or-device routing mechanism for commands (commit `bdd9ddcce`; rest of the wave in progress)
-- [ ] Merge or remove redundant input routes
-- [ ] Split or shrink oversized files
+- [x] One shared simulator-or-device routing mechanism for commands (`bdd9ddcce`: one `PhysicalDeviceCommand` protocol used by 13 commands and the physical batch; every refusal now happens before a device lease)
+- [x] Merge duplicate payloads: one path payload for swipe, drag and draw (`f3060e258`); Home as a button kind (`9cfd54a05`); one keyboard primitive list, with the temporary-file side channel replaced by a compact encoding (`bdbde8021`); the raw broker's keyboard branch removed (`d6fa0cf73`)
+- [x] Test-oracle checks moved out of the product path: the owner decides success, the client checks error, outcome and bound screen (`5d18508a7`)
+- [x] `LegacyDuo*` renamed to `OrdinaryBroker*`, since it serves every DTUHID simulator and is not legacy (`48ca3215e`)
+- [x] Split oversized files (`AgentModeController.swift`, `AgentModeSnapshot.swift`, in the agent-mode wave)
+- [ ] Not done: `SelectedHIDRequest` as header fields plus an enum payload (SEL-16), and folding the ordinary route into the selected route (SEL-17); see Open items
+
+Verification of the architecture wave (7 commits, Sources net 269 lines fewer):
+
+- Unit tests: 945 at the end of the wave. New tests pin the ordinary swipe, drag and draw events and limits; they passed on the old type before the change and unchanged after it. A unit test sends 60,000 characters through the broker's real read path and compares the events.
+- Benchmarks, old and new builds alternated, median in ms, on the iPhone simulator at load 11 to 14: tap 279 and 282, swipe 637 and 631, `key 40` 385 and 384, key-combo 456 and 441, type 729 and 734. On the Duo, 30 extra tap pairs at load 12: median paired difference −0.5 ms, new build faster in 15 of 30.
+- Playground groups on the final build: iPhone ordinary regression 8 of 8, input handover 3 of 3, raw keyboard broker 1 of 1; Duo raw long text 1 of 1, typing interruption 1 of 1, input handover 3 of 3, motion options 6 of 6, core 17 of 20 (the 3 failures were `simctl launch` exiting 3 under load).
+- Known failing: the Duo selected Home batch group, on the text of a refusal message (being fixed in the polish wave).
+- Not verified: device routing on hardware; keys on a simulator without a shared owner.
+
+Merged state at 03:12: frameworks rebuilt after the IDBKit prune, `swift test --skip Playground` ran 952 tests with one failure, the load-sensitive stream backpressure test, which passed when rerun alone (load average 58 at the time).
 
 ## Phase 5: output contracts
 
@@ -227,7 +240,7 @@ Triage of the three iPhone failures from the second run:
 
 The machine load during these runs was 8 to 261 on 18 cores, so a clean end-to-end verdict needs a run with no agents working.
 
-Duo "screens still changing" refusal, investigated on branch `audit/duo-display` (commit `e698010b1`, merge pending):
+Duo "screens still changing" refusal, investigated and fixed (merged into `v2`):
 
 | Scenario | Trials | Inner screen reported lit while inactive | Cleared by itself |
 | --- | --- | --- | --- |
@@ -253,7 +266,7 @@ Follow-ups: document that turning VoiceOver on shows this alert; keep agents off
 - [x] Skill (`Skills/CLI/axe`) and its bundled copy
 - [x] CHANGELOG: the unreleased section now describes v2 as its net change against v1.8.0 (about 210 bullets to 25)
 - [x] `docs/device-support.md`: the 590-line working log replaced by a 57-line design and limitations document (the log stays in git history)
-- [~] Command help text
+- [x] Command help text (4 commits: 44 help pages from 8,346 words to 6,829; `batch` 831 words to 402; only help strings changed)
 
 Verification (commits `762e228b3` to `cb6cc95f2`):
 
@@ -286,7 +299,7 @@ Decisions made without the owner, with the reason.
 ## Blockers
 
 - **Physical devices unreachable through CoreDevice (open).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
-- **Duo screens read as "still changing" when nothing moves (fixed on a branch, merge pending).** Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
+- **Duo screens read as "still changing" when nothing moves (fixed and merged; the final quiet run must confirm).** Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
 
 ## Commit log
 
