@@ -1,5 +1,7 @@
 {
   "PlaygroundCoreTests": 9,
+  "PlaygroundDrawingTests": 5,
+  "PlaygroundZoomTests": 2,
   "PlaygroundKeyboardTests": 1,
   "PlaygroundAgentTests": 4,
   "PlaygroundAgentAdaptiveOutputTests": 4,

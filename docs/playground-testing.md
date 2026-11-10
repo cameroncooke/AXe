@@ -62,17 +62,17 @@ The result directory must be new. Earlier failed output is never replaced. The d
 
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
-| Core controls | 21 | 17 | 248 | Find, tap, type, scroll, swipe, drag, switches, sliders, retained contacts and batches |
+| Core controls | 28 | 24 | 255 | Find, tap, type, scroll, swipe, drag, draw, pinch, switches, sliders, retained contacts and batches |
 | Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
 | Keyboard and hardware | 3 | 1 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 0 | 0 | 28 | Selected PNG, video, streams, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **171** | **23** | **514** | **708 case executions** |
+| **Total** | **178** | **30** | **521** | **729 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
-The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases and three raw/selected input handover cases. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
+The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases, three raw/selected input handover cases and the seven drawing and zoom cases that every device runs. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
 
 ## Physical devices
 
@@ -101,6 +101,8 @@ and `AXE_E2E_ALLOW_PROVISIONING_UPDATES=1` to let Xcode register a new device wh
 | `doctor` | All readiness checks ready |
 | Coordinate taps | Tap Test records each tap at the exact point |
 | Typing and keys | The text field holds `axe e2e`, then `axe e2` after backspace |
+| Drawing | `draw` with `--close` through a triangle: Drawing records one stroke from and back to the first corner, within 2 points of the corners' bounds, one contact, not cancelled |
+| Pinch | `gesture pinch --scale 2`, then `0.5`, at the default centre and radius: Zoom records one zoom in above 1.3, then one zoom out at least 0.3 lower |
 | Element tap and point lookup | `describe-ui --point` finds `media-pattern-next`; `tap --id` advances the marker phase |
 | Screenshot | Upright: four squares, eight edge samples and the app's current phase |
 | Raw stream and MP4 recording | Upright decoded frames across one marker change; SIGINT exits 0 |
@@ -114,7 +116,7 @@ After an unconfirmed turn the next tap may refuse with `displayOrientationMismat
 (iPhone); it fails if a refused tap reaches the app or a landed tap misses, and the result counts the
 two outcomes apart. It requires at least two confirmed turns.
 
-The suite does not exercise swipes, drags, gestures, two-finger input, edge presets, standalone `touch`,
+The suite does not exercise swipes, drags, gestures other than pinch, other two-finger input, edge presets, standalone `touch`,
 batches with held contacts, key sequences and combinations, hardware buttons, semantic press, the lock
 refusal or `deviceStreamReplaced`. See [device-support.md](device-support.md) for which of these have
 live checks.

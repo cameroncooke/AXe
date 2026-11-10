@@ -24,6 +24,7 @@
     "PlaygroundClipboardTests.swift",
     "PlaygroundColdInputHandoverTests.swift",
     "PlaygroundCoreTests.swift",
+    "PlaygroundDrawingTests.swift",
     "PlaygroundDuoAdditionalInterruptionTests.swift",
     "PlaygroundDuoAgentInterruptionTests.swift",
     "PlaygroundDuoBatchCoverageTests.swift",
@@ -77,6 +78,8 @@
   "profiles": {
     "iphone": [
       "PlaygroundCoreTests",
+      "PlaygroundDrawingTests",
+      "PlaygroundZoomTests",
       "PlaygroundOrdinaryRegressionTests",
       "PlaygroundInputHandoverTests",
       "PlaygroundColdInputHandoverTests",
@@ -106,6 +109,8 @@
     ],
     "ipad": [
       "PlaygroundCoreTests",
+      "PlaygroundDrawingTests",
+      "PlaygroundZoomTests",
       "PlaygroundOrdinaryRegressionTests",
       "PlaygroundAgentTests",
       "PlaygroundKeyboardTests",
@@ -113,6 +118,8 @@
     ],
     "duo": [
       "PlaygroundDuoCoreTests",
+      "PlaygroundDrawingTests",
+      "PlaygroundZoomTests",
       "PlaygroundInputHandoverTests",
       "PlaygroundDuoGestureCoverageTests",
       "PlaygroundDuoCoordinateCoverageTests",
@@ -358,16 +365,22 @@
     "core-controls": {
       "iphone": [
         "PlaygroundCoreTests",
+        "PlaygroundDrawingTests",
+        "PlaygroundZoomTests",
         "PlaygroundOrdinaryRegressionTests",
         "PlaygroundInputHandoverTests",
         "PlaygroundColdInputHandoverTests"
       ],
       "ipad": [
         "PlaygroundCoreTests",
+        "PlaygroundDrawingTests",
+        "PlaygroundZoomTests",
         "PlaygroundOrdinaryRegressionTests"
       ],
       "duo": [
         "PlaygroundDuoCoreTests",
+        "PlaygroundDrawingTests",
+        "PlaygroundZoomTests",
         "PlaygroundInputHandoverTests",
         "PlaygroundDuoGestureCoverageTests",
         "PlaygroundDuoCoordinateCoverageTests",
@@ -497,6 +510,8 @@
   },
   "suiteSources": {
     "PlaygroundCoreTests": "PlaygroundCoreTests.swift",
+    "PlaygroundDrawingTests": "PlaygroundDrawingTests.swift",
+    "PlaygroundZoomTests": "PlaygroundDrawingTests.swift",
     "PlaygroundOrdinaryRegressionTests": "PlaygroundOrdinaryRegressionTests.swift",
     "PlaygroundAgentTests": "PlaygroundAgentTests.swift",
     "PlaygroundAgentSelectorTests": "PlaygroundAgentSelectorTests.swift",

@@ -214,6 +214,8 @@ class Device:
             return self.results
         self.record('coordinate taps', self.taps)
         self.record('typing and keys', self.typing)
+        self.record('draw a closed triangle', self.drawing)
+        self.record('pinch in and out', self.pinch)
         self.record('element tap and point lookup', self.markers)
         self.record('screenshot', self.screenshot)
         self.record('raw stream', self.raw_stream)
@@ -255,6 +257,48 @@ class Device:
         value = element(self.runner.tree(self.udid), 'text-input-field').get('AXValue')
         require(value == 'axe e2', f'value after backspace is {value!r}')
         return 'typed "axe e2e" and deleted one character'
+
+    def wait_for(self, description, matches, timeout=10):
+        deadline = time.monotonic() + timeout
+        while True:
+            tree = self.runner.tree(self.udid)
+            if matches(tree):
+                return tree
+            require(time.monotonic() < deadline, f'timed out waiting for {description}')
+            time.sleep(0.3)
+
+    def drawing(self):
+        tree = self.runner.launch(self.udid, 'drawing', 'drawing.canvas')
+        frame = element(tree, 'drawing.canvas')['frame']
+        corners = [(round(frame['x'] + frame['width'] * x), round(frame['y'] + frame['height'] * y))
+                   for x, y in [(0.5, 0.2), (0.8, 0.8), (0.2, 0.8)]]
+        self.runner.axe_ok(self.udid, 'draw', *[f'{x},{y}' for x, y in corners], '--close')
+        value = lambda tree, name: str(element(tree, name).get('AXValue'))
+        tree = self.wait_for('one completed stroke', lambda tree: value(tree, 'drawing.strokeCount') == '1'
+                             and value(tree, 'drawing.active') == 'false')
+        start = tuple(float(v) for v in value(tree, 'drawing.last.start').split(','))
+        end = tuple(float(v) for v in value(tree, 'drawing.last.end').split(','))
+        bounds = [float(v) for v in value(tree, 'drawing.last.bounds').split(',')]
+        expected = [min(x for x, _ in corners), min(y for _, y in corners), max(x for x, _ in corners), max(y for _, y in corners)]
+        near = lambda a, b: all(abs(p - q) <= 2 for p, q in zip(a, b))
+        require(near(start, corners[0]) and near(end, corners[0]), f'stroke went {start} to {end}, expected {corners[0]} both ways')
+        require(near(bounds, expected), f'stroke bounds {bounds}, expected {expected}')
+        require(value(tree, 'drawing.last.maxTouches') == '1' and value(tree, 'drawing.last.cancelled') == 'false',
+                f'stroke had {value(tree, "drawing.last.maxTouches")} contacts, cancelled {value(tree, "drawing.last.cancelled")}')
+        return f'triangle {corners}: bounds {bounds}, duration {value(tree, "drawing.last.duration")} s'
+
+    def pinch(self):
+        self.runner.launch(self.udid, 'zoom', 'zoom.surface')
+        value = lambda tree, name: str(element(tree, name).get('AXValue'))
+        self.runner.axe_ok(self.udid, 'gesture', 'pinch', '--scale', '2')
+        tree = self.wait_for('one zoom in', lambda tree: value(tree, 'zoom.events') == '1' and value(tree, 'zoom.last') == 'in')
+        zoomed = float(value(tree, 'zoom.scale'))
+        require(zoomed > 1.3, f'pinch out to scale 2 zoomed only to {zoomed}')
+        self.runner.axe_ok(self.udid, 'gesture', 'pinch', '--scale', '0.5')
+        tree = self.wait_for('one zoom out', lambda tree: value(tree, 'zoom.events') == '2' and value(tree, 'zoom.last') == 'out')
+        back = float(value(tree, 'zoom.scale'))
+        require(back < zoomed - 0.3, f'pinch in to scale 0.5 went from {zoomed} to {back}')
+        return f'scale 1.00 -> {zoomed} -> {back}'
 
     def markers(self):
         tree = self.runner.launch(self.udid, 'media-pattern', 'media-pattern-next')
