@@ -9,12 +9,23 @@ frameworks. Edit the sources here directly; there is no upstream checkout or pat
 The sources started from Meta's [IDB](https://github.com/facebook/idb) at upstream commit
 `e682506725e9efefb9c43b8b917c0b12eb2a5939`, with AXe's Duo changes applied.
 
-Only what AXe uses is kept:
+This copy contains:
 
-- `FBControlCore` and `FBSimulatorControl`. `FBDeviceControl`, `XCTestBootstrap`, the simulator REPL and
-  XCTest commands, and the IDB companion, CLI and Python client are not included.
+- `FBControlCore` and `FBSimulatorControl`, trimmed to the simulator support AXe uses: the
+  simulator set and lifecycle (boot, shutdown, connect), application install and launch with the
+  process-spawn, launchctl and file-container code they depend on, screenshots, video recording and
+  streaming, the framebuffer, HID input (Indigo and DTUHID) and accessibility.
 - `PrivateHeaders` for the private Apple frameworks these two compile against.
-- `FBSimulatorHIDEventTransportTests`, AXe's test target for this code.
+- `FBSimulatorHIDEventTransportTests`, AXe's test target for this code. `make test` and CI do not
+  run it; run it with the `xcodebuild test` command under Building.
+
+Removed from upstream: `FBDeviceControl`, `XCTestBootstrap`, the IDB companion, CLI and Python
+client, and these parts of the two frameworks AXe never calls: the XCTest, REPL, instruments and
+xctrace commands; the keychain, media, settings (including status bar overrides and defaults
+modification), DAP server, memory, notification, location, log, debugger and crash-log commands;
+the `AsynciOSTarget` protocol that composed the async command families; and the utilities only
+those used (`FBFutureContextManager`, `FBSocketServer`, crash-log parsing and storage, codesigning,
+developer disk images, the XCTest shim configuration, and some async helpers).
 
 Upstream changes are not merged automatically. Port anything useful by hand, as ordinary changes.
 

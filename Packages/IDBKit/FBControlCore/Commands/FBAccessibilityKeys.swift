@@ -9,8 +9,8 @@ import Foundation
 
 /// Keys for accessibility element dictionaries.
 ///
-/// The raw values are the on-the-wire JSON keys (and the CLI `--key` names);
-/// they are pinned by golden tests and must not change.
+/// The raw values are the JSON keys of AXe's accessibility output
+/// (`describe-ui`); changing one changes that output.
 public enum FBAXKeys: String, Sendable {
   case label = "AXLabel"
   case frame = "AXFrame"
