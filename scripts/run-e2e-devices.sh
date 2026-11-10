@@ -17,6 +17,8 @@
 #                                       needs the iOS 27.1 SDK or later.
 #   AXE_E2E_DEVICES                     Space-separated hardware UDIDs to test (default: every paired device)
 #   AXE_E2E_SKIP_ROTATION=1             Leave device orientation unchanged
+#   AXE_E2E_CHECKS                      Comma-separated check names to run alone, as the output prints
+#                                       them, for example "pinch in and out" (default: every check)
 #   AXE_E2E_ALLOW_PROVISIONING_UPDATES=1  Let Xcode register devices and update profiles while signing
 #   AXE_E2E_RESULTS                     Results folder (default: e2e-results/ in the repository)
 set -euo pipefail
@@ -112,4 +114,8 @@ xcrun swiftc -O -parse-as-library -o "$RUN/MediaPatternCheck" scripts/fixtures/M
 arguments=(--axe "$RUN/payload/axe" --checker "$RUN/MediaPatternCheck" --output "$RUN/checks")
 for udid in $DEVICES; do arguments+=(--device "$udid"); done
 [[ "${AXE_E2E_SKIP_ROTATION:-}" == 1 ]] && arguments+=(--skip-rotation)
+if [[ -n "${AXE_E2E_CHECKS:-}" ]]; then
+    IFS=',' read -r -a checks <<<"$AXE_E2E_CHECKS"
+    for check in "${checks[@]}"; do arguments+=(--check "$check"); done
+fi
 python3 scripts/test-physical-devices.py "${arguments[@]}"

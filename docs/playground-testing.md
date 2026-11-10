@@ -94,6 +94,8 @@ failure. Each tree read is tried up to three times. The Playground needs the iOS
 
 Keep each device unlocked, awake and in Developer Mode. Set `AXE_E2E_DEVICES` to a space-separated
 list of hardware UDIDs to test only those, `AXE_E2E_SKIP_ROTATION=1` to leave orientation unchanged,
+`AXE_E2E_CHECKS` to a comma-separated list of check names (as the output prints them, for example
+`"pinch in and out"`) to rerun only those after a fix,
 and `AXE_E2E_ALLOW_PROVISIONING_UPDATES=1` to let Xcode register a new device while signing.
 
 | Check | Read back from |

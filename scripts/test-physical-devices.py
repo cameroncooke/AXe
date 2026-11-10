@@ -188,9 +188,14 @@ def stream(runner, udid, command, path, taps, total, label):
     return round(time.monotonic() - stopping, 2)
 
 
+ROTATION = 'rotation with taps'
+CONCURRENT = 'concurrent capture and input'
+
+
 class Device:
-    def __init__(self, runner, udid, name, skip_rotation):
+    def __init__(self, runner, udid, name, skip_rotation, only=()):
         self.runner, self.udid, self.name, self.skip_rotation = runner, udid, name, skip_rotation
+        self.only = set(only)
         self.folder = runner.output / udid
         self.folder.mkdir()
         self.results = []
@@ -212,18 +217,18 @@ class Device:
         self.record('doctor', self.doctor)
         if not self.results[-1]['ok']:
             return self.results
-        self.record('coordinate taps', self.taps)
-        self.record('typing and keys', self.typing)
-        self.record('draw a closed triangle', self.drawing)
-        self.record('pinch in and out', self.pinch)
-        self.record('element tap and point lookup', self.markers)
-        self.record('screenshot', self.screenshot)
-        self.record('raw stream', self.raw_stream)
-        self.record('MP4 recording', self.recording)
-        self.record('native H.264 over 20 seconds', self.native)
-        if not self.skip_rotation:
-            self.record('rotation with taps', self.rotation)
+        for check, function in self.checks().items():
+            if (not self.only or check in self.only) and not (check == ROTATION and self.skip_rotation):
+                self.record(check, function)
         return self.results
+
+    def checks(self):
+        """Every check after the doctor, by the name it reports under, in run order."""
+        return {'coordinate taps': self.taps, 'typing and keys': self.typing,
+                'draw a closed triangle': self.drawing, 'pinch in and out': self.pinch,
+                'element tap and point lookup': self.markers, 'screenshot': self.screenshot,
+                'raw stream': self.raw_stream, 'MP4 recording': self.recording,
+                'native H.264 over 20 seconds': self.native, ROTATION: self.rotation}
 
     def doctor(self):
         data = self.runner.axe_ok(self.udid, 'doctor')
@@ -465,6 +470,8 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='New result directory.')
     parser.add_argument('--device', action='append', default=[], help='Hardware UDID to test (repeatable). Default: all.')
     parser.add_argument('--skip-rotation', action='store_true', help='Leave the device orientation unchanged.')
+    parser.add_argument('--check', action='append', default=[], metavar='NAME',
+                        help='Run only this check, by the name it reports under (repeatable). The doctor always runs.')
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=False)
     runner = Runner(args.axe, args.checker, args.output)
@@ -479,10 +486,13 @@ def main():
     if not listed:
         sys.exit('No physical iPhone or iPad is connected. Connect and unlock one, then run make e2e-devices again.')
 
-    devices = [Device(runner, d['udid'], d.get('name') or d['udid'], args.skip_rotation) for d in listed]
+    devices = [Device(runner, d['udid'], d.get('name') or d['udid'], args.skip_rotation, args.check) for d in listed]
+    unknown = set(args.check) - set(devices[0].checks()) - {CONCURRENT}
+    if unknown:
+        sys.exit(f'No such check: {", ".join(sorted(unknown))}. Checks: {", ".join([*devices[0].checks(), CONCURRENT])}')
     results = [result for device in devices for result in device.run()]
     ready = [d for d in devices if d.results and d.results[0]['ok']]
-    if len(ready) >= 2:
+    if len(ready) >= 2 and (not args.check or CONCURRENT in args.check):
         results += concurrent(runner, ready)
 
     (args.output / 'results.json').write_text(json.dumps(dict(checks=results, treeRetries=runner.tree_retries),
