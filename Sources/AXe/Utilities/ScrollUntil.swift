@@ -45,30 +45,34 @@ struct ScrollUntilOptions: ParsableArguments {
         }
     }
 
-    /// Reads, then scrolls and reads again, until the element is visible and the screen is at rest, so
-    /// the next command can tap it. It reads before the first scroll, so an element already on screen
-    /// costs no input, and it stops as soon as a scroll moves nothing: the content is at its end, and
-    /// more scrolls would only make it bounce.
-    func run(_ query: AccessibilityQuery, observe: () async throws -> Observation,
+    /// Reads, then scrolls and reads again, until the element is visible with the screen at rest, so the
+    /// next command can tap it. Content keeps gliding after a scroll, by about as far again as the finger
+    /// moved, so every read waits until two reads in a row match before it is judged: an element seen
+    /// mid-glide may be gone a moment later, and a tap sent mid-glide only stops the content.
+    /// It reads before the first scroll, so an element already on screen costs no input, and it stops as
+    /// soon as a scroll moves nothing: the content is at its end, and more scrolls would only bounce it.
+    /// `waitsForRest` is false where one read takes longer than the glide, as on a physical device.
+    func run(_ query: AccessibilityQuery, waitsForRest: Bool = true, observe: () async throws -> Observation,
              scroll: () async throws -> Void) async throws {
         let limit = maxSwipes ?? Self.defaultMaxSwipes
         let name: String
         switch query {
         case .id(let value), .label(let value), .value(let value): name = value
         }
+        func atRest() async throws -> Observation {
+            var seen = try await observe()
+            guard waitsForRest else { return seen }
+            for _ in 0..<Self.restReads {
+                try await Task.sleep(for: .seconds(Self.restInterval))
+                let next = try await observe()
+                if next == seen { break }
+                seen = next
+            }
+            return seen
+        }
         var before: Observation?
         for scrolls in 0...limit {
-            var seen = try await observe()
-            if seen.visible {
-                // The content may still be gliding or bouncing back from its end. A tap sent then only
-                // stops it, so wait until two reads in a row are the same.
-                for _ in 0..<Self.restReads {
-                    try await Task.sleep(for: .seconds(Self.restInterval))
-                    let next = try await observe()
-                    if next == seen { break }
-                    seen = next
-                }
-            }
+            let seen = try await atRest()
             if seen.visible {
                 CLIOutput.message("✓ \(name) is on screen after \(scrolls) scroll\(scrolls == 1 ? "" : "s")")
                 return
@@ -126,16 +130,28 @@ struct ScrollUntilOptions: ParsableArguments {
         }
         let hit = (try? JSONDecoder().decode([AccessibilityElement].self, from: data))
             ?? (try? JSONDecoder().decode(AccessibilityElement.self, from: data)).map { [$0] } ?? []
-        return Observation(visible: contains(match.element, in: hit), signature: signature)
+        return Observation(visible: owns(match.element, hit: hit), signature: signature)
     }
 
-    /// Whether the lookup's result is the wanted element or holds it.
-    static func contains(_ wanted: AccessibilityElement, in elements: [AccessibilityElement]) -> Bool {
-        elements.contains { element in
-            let same = element.type == wanted.type
-                && element.normalizedUniqueId == wanted.normalizedUniqueId
-                && element.normalizedLabel == wanted.normalizedLabel
-            return same || contains(wanted, in: element.children ?? [])
+    /// Whether a lookup at the element's centre found the element itself, something that holds it, or
+    /// one of its own parts: a row's centre is usually its label, and a tool button's its icon.
+    static func owns(_ wanted: AccessibilityElement, hit: [AccessibilityElement]) -> Bool {
+        hit.contains { found in
+            contains(wanted, in: [found]) || contains(found, in: wanted.children ?? [])
         }
+    }
+
+    /// Whether `wanted` is one of the elements or inside one of them.
+    static func contains(_ wanted: AccessibilityElement, in elements: [AccessibilityElement]) -> Bool {
+        elements.contains { same($0, wanted) || contains(wanted, in: $0.children ?? []) }
+    }
+
+    /// The same identifier and label in the same place. The type is not compared: a lookup at a point
+    /// can name it differently from the tree (a list row is a Group in the tree and a Button at its point).
+    private static func same(_ a: AccessibilityElement, _ b: AccessibilityElement) -> Bool {
+        guard a.normalizedUniqueId == b.normalizedUniqueId, a.normalizedLabel == b.normalizedLabel else { return false }
+        guard let first = a.frame, let second = b.frame else { return a.frame == nil && b.frame == nil }
+        return abs(first.x - second.x) < 1 && abs(first.y - second.y) < 1
+            && abs(first.width - second.width) < 1 && abs(first.height - second.height) < 1
     }
 }

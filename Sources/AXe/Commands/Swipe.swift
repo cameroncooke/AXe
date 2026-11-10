@@ -163,7 +163,7 @@ struct Swipe: PhysicalDeviceCommand {
 
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
         if let query = until.query {
-            try await until.run(query,
+            try await until.run(query, waitsForRest: false,
                 observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
                 scroll: { try await PhysicalDeviceGestures.path(selectedPath, on: input) })
         } else {

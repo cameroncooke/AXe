@@ -560,7 +560,7 @@ struct Gesture: PhysicalDeviceCommand {
             default: edge = .none
             }
             if let query = until.query {
-                try await until.run(query,
+                try await until.run(query, waitsForRest: false,
                     observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
                     scroll: { try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input) })
             } else {

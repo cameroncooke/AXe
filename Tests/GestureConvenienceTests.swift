@@ -141,38 +141,45 @@ struct GestureConvenienceTests {
         #expect(throws: (any Error).self) { _ = try Swipe.parse(line + ["--max-swipes", "3", "--udid", udid]) }
     }
 
-    /// A list that moves one step with every scroll and shows the element after `shownAfter` scrolls.
+    /// A list that moves one step with every scroll, up to `length` steps, and shows the element after
+    /// `shownAfter` scrolls.
     private final class FakeList {
         var scrolls = 0, reads = 0
-        let shownAfter: Int?
-        init(shownAfter: Int?) { self.shownAfter = shownAfter }
+        let shownAfter: Int?, length: Int
+        init(shownAfter: Int?, length: Int = .max) { self.shownAfter = shownAfter; self.length = length }
         func observe() -> ScrollUntilOptions.Observation {
             reads += 1
-            return .init(visible: shownAfter.map { scrolls >= $0 } ?? false, signature: "position \(scrolls)")
+            return .init(visible: shownAfter.map { scrolls >= $0 } ?? false, signature: "position \(min(scrolls, length))")
         }
     }
 
-    @Test func scrollingStopsAtTheFirstReadThatSeesTheElementAtRest() async throws {
+    @Test func scrollingStopsAtTheFirstRestingReadThatSeesTheElement() async throws {
         let until = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid]).until
         let list = FakeList(shownAfter: 2)
         try await until.run(.label("Row 40"), observe: { list.observe() }, scroll: { list.scrolls += 1 })
-        // Three reads to find it, and one more that shows the screen has stopped moving.
-        #expect(list.scrolls == 2 && list.reads == 4)
+        // Every look is two matching reads: before the first scroll and after each of the two.
+        #expect(list.scrolls == 2 && list.reads == 6)
         // Already on screen: no input at all.
         let shown = FakeList(shownAfter: 0)
         try await until.run(.label("Row 40"), observe: { shown.observe() }, scroll: { shown.scrolls += 1 })
         #expect(shown.scrolls == 0 && shown.reads == 2)
+        // On a physical device one read is slower than the glide, so each look is one read.
+        let device = FakeList(shownAfter: 2)
+        try await until.run(.label("Row 40"), waitsForRest: false, observe: { device.observe() }, scroll: { device.scrolls += 1 })
+        #expect(device.scrolls == 2 && device.reads == 3)
     }
 
-    @Test func anElementSeenWhileTheContentStillMovesIsReadAgainUntilItRests() async throws {
+    @Test func anElementIsJudgedOnlyOnceTheContentRests() async throws {
         let until = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid]).until
-        // The element is visible at once, but the content glides for three more reads.
-        var reads = 0
+        // The element is in view while the content glides for three reads, and gone when it comes to rest.
+        var reads = 0, scrolls = 0
         try await until.run(.label("Row 40"), observe: {
             reads += 1
-            return .init(visible: true, signature: "position \(min(reads, 4))")
-        }, scroll: { Issue.record("An element already on screen needs no scroll") })
-        #expect(reads == 5)
+            if scrolls == 0 { return .init(visible: reads < 4, signature: "gliding \(min(reads, 4))") }
+            return .init(visible: true, signature: "after a scroll")
+        }, scroll: { scrolls += 1 })
+        // Seen mid-glide does not count: it scrolled once more and found it at rest.
+        #expect(scrolls == 1 && reads == 7)
     }
 
     @Test func scrollingGivesUpAfterTheLimitWithElementNotFound() async throws {
@@ -184,25 +191,21 @@ struct GestureConvenienceTests {
         } catch let error as CLIError {
             #expect(error.code == .elementNotFound && error.errorDescription.contains("2 scrolls"))
         }
-        // One read before each scroll and one after the last.
-        #expect(list.scrolls == 2 && list.reads == 3)
+        #expect(list.scrolls == 2 && list.reads == 6)
     }
 
     @Test func scrollingStopsWhenAScrollMovesNothing() async throws {
         let until = try Gesture.parse(["scroll-left", "--until-label", "Missing", "--max-swipes", "20", "--udid", udid]).until
-        var reads = 0, scrolls = 0
+        // The content moves twice, then is at its end: the third scroll changes nothing.
+        let list = FakeList(shownAfter: nil, length: 2)
         do {
-            // The content moves twice, then is at its end: the third scroll changes nothing.
-            try await until.run(.label("Missing"), observe: {
-                reads += 1
-                return .init(visible: false, signature: "screen \(min(reads, 3))")
-            }, scroll: { scrolls += 1 })
+            try await until.run(.label("Missing"), observe: { list.observe() }, scroll: { list.scrolls += 1 })
             Issue.record("A missing element was reported as found")
         } catch let error as CLIError {
             #expect(error.code == .elementNotFound && error.errorDescription.contains("stopped moving after 2 scrolls"))
         }
         // It does not keep bouncing the content against its end for the other 17 scrolls.
-        #expect(scrolls == 3 && reads == 4)
+        #expect(list.scrolls == 3 && list.reads == 8)
     }
 
     @Test func aScreenSignatureChangesWhenAnElementMoves() throws {
@@ -214,5 +217,34 @@ struct GestureConvenienceTests {
         }
         #expect(ScrollUntilOptions.signature(of: try tree(y: 100)) == ScrollUntilOptions.signature(of: try tree(y: 100)))
         #expect(ScrollUntilOptions.signature(of: try tree(y: 100)) != ScrollUntilOptions.signature(of: try tree(y: 60)))
+    }
+
+    @Test func anElementOwnsItsCentreWhenTheLookupFindsItItsParentOrItsOwnPart() throws {
+        func elements(_ json: String) throws -> [AccessibilityElement] {
+            try JSONDecoder().decode([AccessibilityElement].self, from: Data(json.utf8))
+        }
+        let row = try elements("""
+            [{"type":"Cell","AXUniqueId":"row-5","frame":{"x":0,"y":100,"width":400,"height":44},"children":[
+              {"type":"StaticText","AXLabel":"Row 5","frame":{"x":16,"y":110,"width":80,"height":24}}]}]
+            """)[0]
+        // The lookup at a row's centre returns its label.
+        let label = try elements(#"[{"type":"StaticText","AXLabel":"Row 5","frame":{"x":16,"y":110,"width":80,"height":24}}]"#)
+        #expect(ScrollUntilOptions.owns(row, hit: label))
+        #expect(ScrollUntilOptions.owns(row, hit: [row]))
+        // A lookup at a point can give the same element another type.
+        let asButton = try elements(#"[{"type":"Button","AXUniqueId":"row-5","frame":{"x":0,"y":100,"width":400,"height":44}}]"#)
+        #expect(ScrollUntilOptions.owns(row, hit: asButton))
+        // The lookup returns a container that holds the row.
+        let table = try elements("""
+            [{"type":"Table","frame":{"x":0,"y":0,"width":400,"height":800},"children":[
+              {"type":"Cell","AXUniqueId":"row-5","frame":{"x":0,"y":100,"width":400,"height":44}}]}]
+            """)
+        #expect(ScrollUntilOptions.owns(row, hit: table))
+        // Another control covers the centre.
+        let cover = try elements(#"[{"type":"Button","AXLabel":"Color picker","frame":{"x":0,"y":100,"width":400,"height":44}}]"#)
+        #expect(!ScrollUntilOptions.owns(row, hit: cover))
+        // The same kind of element somewhere else is not this one.
+        let other = try elements(#"[{"type":"StaticText","AXLabel":"Row 5","frame":{"x":16,"y":300,"width":80,"height":24}}]"#)
+        #expect(!ScrollUntilOptions.owns(row, hit: other))
     }
 }
