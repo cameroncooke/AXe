@@ -7,7 +7,7 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the iPhone, iPad and Duo simulators at `4ac61b349`. The device checks last passed at `c96e375c9`, before this change, which does not touch the device path. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. One item is open: the slider on percentage sliders (B1). Last update 10 November, about 18:30.
+- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the three simulators at `4ac61b349`. The agent benchmark at `829069eeb` matches the last run on Weather and Contacts; Reminders is worse today with this build and with the 8 November binary alike, which is open below. The device checks last passed at `c96e375c9`. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Open: the slider on percentage sliders (B1) and the two benchmark findings in Phase 12. Last update 10 November, about 19:30.
 - Simulators: unit tests 876 of 876; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
 - Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
@@ -584,6 +584,24 @@ Isolated end-to-end runs of the suites that use plain touch input, never the ful
 - [x] The one failure in the first run, on all three simulators, was the car: with taps 60 ms quicker, the first colour tap after a tool's options closed landed while they were still closing and the app ignored it. The picture player now confirms the first colour after each tool change (`4ac61b349`). This is the app's timing, and a faster tool reaches it sooner; scripts that tap straight after dismissing something may meet the same.
 - Not rerun: the agent, keyboard, media and hinge groups, which do not use the changed commands, and the device checks, which use a different broker.
 
+Agent benchmark, AXe only, simulators (10 November, evening; `benchmarks/artifacts/20261110T174245Z-74bbfd15c2d9`):
+
+The owner asked for the benchmark against the last run and the baseline, without the third-party tools. Three repeats per app at `829069eeb` (v1.8.0-405), model `claude-opus-4-7`, on the benchmark simulator once it was warm. Ranges over the repeats:
+
+| Task | Accepted baseline (v1.8.0-185) | Last run, 8 November (v1.8.0-257) | This run (v1.8.0-405) |
+| --- | --- | --- | --- |
+| Weather | 16 to 19 calls, 206 to 227 s, 7.0k to 7.7k tokens, passed | 19 to 20 calls, 123 to 134 s, 9.1k to 10.6k tokens, passed 3 of 3 | 20 calls, 116 to 124 s, 8.9k to 9.7k tokens, passed 3 of 3 |
+| Contacts | 11 to 12 calls, 144 to 168 s, 8.4k to 9.0k tokens, passed | 12 calls, 96 to 101 s, 10.5k to 10.9k tokens, passed 3 of 3 | 12 calls, 95 to 112 s, 9.7k to 10.0k tokens; recorded unverified 3 of 3, passes when regraded |
+| Reminders | 20 to 25 calls, 195 to 312 s, 8.6k to 10.3k tokens, passed | 17 to 18 calls, 94 to 100 s, 11.4k to 11.7k tokens, passed 3 of 3 | 26 to 28 calls, 230 to 293 s, 12.2k to 13.0k tokens; failed 2, unverified 1 |
+
+- The harness reports no ranked comparison with the baseline: the skill, the harness and the Weather app source have changed since it was accepted, so the baseline belongs to another contract. The figures are side by side, not ranked.
+- [x] Per-command time is unchanged from 8 November in the Reminders transcripts: a tap 0.72 s today and 0.76 s then; typing 2.68 and 2.66 s; a read 0.22 and 0.20 s. Agent commands were not part of today's plain-input change.
+- [x] Contacts was graded unverified because of the benchmark's grader, not AXe. A compact refusal reply omits `data.cache`, as documented, and the transcript reader then ignored its capture, which is where the saved card was last seen. Fixed in the grader (`96f6ebe53`; 195 benchmark tests pass); the same evidence passes. The recorded reports in history still say unverified.
+- [ ] Reminders is worse today and it is not this build: the AXe binary kept from the 8 November run, run today, failed the same way (30 calls, 338 s). In every run today the tap on the second reminder's circle, sent about five seconds after the first was completed, reports success and leaves the reminder incomplete; on 8 November that tap was retried inside the call and completed it. The agent then takes screenshots and opens Show Completed to find out, which is where the extra calls and the read-only violation come from. Not investigated further; the simulator was booted today and had been up for days on 8 November.
+- [ ] Weather: `type --focus` on the search field failed with `nativeActionFailed` in 3 runs of 3 today and in none on 8 November; the agent typed again without `--focus` each time. Not checked with the 8 November binary, so it may be the build or today's simulator.
+- A first run, straight after I booted the benchmark simulator, is in history but not in the table: Weather's first three reads failed with `observationFailed` for 25 seconds after launch, which is the freshly booted simulator.
+- `./benchmarks/run doctor` fails with `'setupAxe'` when `build_products/axe` does not exist. A run builds it; doctor should say so. Not fixed.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -622,7 +640,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 140 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 142 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -766,3 +784,5 @@ All 140 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `8c1e45ac6` | docs(release): Record the SEL-17 timing of plain against selected input |
 | `d4b9952fd` | perf(input): Let a running broker bind the screen for plain touch commands |
 | `4ac61b349` | test(e2e): Confirm the first colour after a tool change in the picture player |
+| `829069eeb` | docs(release): Record the plain-input change, its timings and its isolated runs |
+| `96f6ebe53` | fix(bench): Read the current screen from a compact refusal reply |
