@@ -3,13 +3,22 @@ import Foundation
 
 struct Settings: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Read and change device-wide settings on a simulator or physical device.",
+        abstract: "Read and change device settings, the simulated location and the status bar.",
+        discussion: """
+        Works on booted simulators and connected iPhones and iPads through xcrun devicectl, which needs Xcode 27 or later. Status bar overrides work on simulators only.
+
+        Examples:
+          axe settings show --udid <UDID>
+          axe settings set --udid <UDID> --appearance dark --text-size large
+          axe settings location set --latitude 51.5 --longitude -0.12 --udid <UDID>
+          axe settings status-bar preset screenshot --udid <UDID>
+        """,
         subcommands: [SettingsShow.self, SettingsSet.self, SettingsLocation.self, SettingsStatusBar.self])
 }
 
 /// The target option shared by every settings command.
 struct SettingsTarget: ParsableArguments {
-    @Option(name: .customLong("udid"), help: "The simulator or device UDID.")
+    @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var udid: String
 
     func validate() throws {
@@ -37,10 +46,10 @@ struct SettingsShow: AsyncParsableCommand {
 
 struct SettingsSet: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "set",
-        abstract: "Change one or more settings, then show the result.")
+        abstract: "Change one or more settings, then show them all.")
 
     @OptionGroup var target: SettingsTarget
-    @Option(help: "Interface style.") var appearance: SettingAppearance?
+    @Option(help: "Light or dark appearance.") var appearance: SettingAppearance?
     @Option(help: "Text size. An accessibility size turns Larger Accessibility Sizes on; a standard size turns it off.")
     var textSize: SettingTextSize?
     @Option(help: "Increase Contrast.") var increaseContrast: SettingSwitch?
@@ -48,9 +57,9 @@ struct SettingsSet: AsyncParsableCommand {
     @Option(help: "Reduce Transparency.") var reduceTransparency: SettingSwitch?
     @Option(help: "Button Shapes (Show Borders).") var showBorders: SettingSwitch?
     @Option(help: "Liquid Glass style, where the device offers one.") var liquidGlass: LiquidGlassStyle?
-    @Option(help: "0 (translucent) to 1 (opaque).") var liquidGlassOpacity: Double?
+    @Option(help: "Liquid Glass opacity, 0 (translucent) to 1 (opaque).") var liquidGlassOpacity: Double?
     @Option(help: "Colour filter; off disables it.") var colorFilter: ColorFilterChoice?
-    @Option(help: "0.25 to 1; not for grayscale.") var colorFilterIntensity: Double?
+    @Option(help: "Colour filter intensity, 0.25 to 1; not for grayscale.") var colorFilterIntensity: Double?
     @Option(help: "VoiceOver.") var voiceover: SettingSwitch?
 
     var change: SettingsChange {
@@ -86,8 +95,8 @@ struct SettingsLocation: AsyncParsableCommand {
         static let configuration = CommandConfiguration(abstract: "Simulate a fixed coordinate until cleared.")
 
         @OptionGroup var target: SettingsTarget
-        @Option(parsing: .unconditional, help: "Degrees, -90 to 90.") var latitude: Double
-        @Option(parsing: .unconditional, help: "Degrees, -180 to 180.") var longitude: Double
+        @Option(parsing: .unconditional, help: "Latitude in degrees, -90 to 90.") var latitude: Double
+        @Option(parsing: .unconditional, help: "Longitude in degrees, -180 to 180.") var longitude: Double
 
         func validate() throws {
             guard (-90...90).contains(latitude) else { throw ValidationError("--latitude must be from -90 to 90.") }
@@ -105,7 +114,7 @@ struct SettingsLocation: AsyncParsableCommand {
     }
 
     struct Clear: AsyncParsableCommand {
-        static let configuration = CommandConfiguration(abstract: "Stop location simulation.")
+        static let configuration = CommandConfiguration(abstract: "Stop simulating the location.")
 
         @OptionGroup var target: SettingsTarget
 
@@ -157,7 +166,7 @@ struct SettingsLocation: AsyncParsableCommand {
 
 struct SettingsStatusBar: AsyncParsableCommand {
     static let configuration = CommandConfiguration(commandName: "status-bar",
-        abstract: "Override what the status bar shows.",
+        abstract: "Override what the status bar shows on a simulator.",
         subcommands: [Show.self, Clear.self, Preset.self, Set.self])
 
     /// Runs one change, then reads the status bar back.
@@ -198,9 +207,9 @@ struct SettingsStatusBar: AsyncParsableCommand {
         @Option(help: "Text to show as the time, such as 9:41.") var time: String?
         @Option(help: "Data network type.")
         var dataNetwork: StatusBarDataNetwork?
-        @Option(help: "0 to 3; 0 shows no connection.") var wifiBars: Int?
-        @Option(help: "0 to 5; 0 shows no connection.") var cellularBars: Int?
-        @Option(help: "0 to 100.") var batteryLevel: Int?
+        @Option(help: "Wi-Fi bars, 0 to 3; 0 shows no connection.") var wifiBars: Int?
+        @Option(help: "Cellular bars, 0 to 5; 0 shows no connection.") var cellularBars: Int?
+        @Option(help: "Battery level in percent, 0 to 100.") var batteryLevel: Int?
         @Option(help: "Battery state.") var batteryState: StatusBarBatteryState?
 
         var change: StatusBarChange {

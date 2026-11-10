@@ -5,40 +5,34 @@ import Foundation
 struct AgentCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "agent",
-        abstract: "Use a natural-language goal and TypeSafe AI to operate an iOS Simulator.",
+        abstract: "Reach a natural-language goal on a simulator with TypeSafe AI.",
         discussion: """
-        The agent observes the frontmost application's accessibility hierarchy, gives TypeSafe AI a
-        bounded set of valid AXe operations, validates the returned choices, and executes one action
-        at a time. Screenshots are not sent to the model.
+        AXe reads the frontmost app's accessibility tree, asks TypeSafe AI's Jev model for one action at a time and checks each action before sending it; screenshots are not sent. Set TYPESAFE_API_KEY. Text that the goal does not state also needs AXE_TEXT_MODEL_API_KEY for an OpenAI-compatible text model. This command is separate from the --agent option of other commands.
 
         Examples:
-          axe agent "Open Settings and turn on Airplane Mode" --udid SIMULATOR_UDID
-          axe agent "Open Notes and create a note saying 'Buy milk'" --udid SIMULATOR_UDID
-
-        Set TYPESAFE_API_KEY before running the command. Free-text values are taken directly from the
-        goal when unambiguous. Other TYPE_TEXT actions require AXE_TEXT_MODEL_API_KEY (or
-        TEXT_MODEL_API_KEY) and an OpenAI-compatible text model.
+          axe agent "Open Settings and turn on Airplane Mode" --udid <UDID>
+          axe agent "Create a note saying 'Buy milk'" --trace trace.json --udid <UDID>
         """
     )
 
-    @Argument(help: "The complete outcome the agent should achieve on the simulator.")
+    @Argument(help: "The outcome to reach, in plain language.")
     var goal: String
 
-    @Option(name: .customLong("udid"), help: "The UDID of the booted simulator.")
+    @Option(name: .customLong("udid"), help: "UDID of the booted simulator.")
     var simulatorUDID: String
 
-    @Option(name: .customLong("max-steps"), help: "Maximum simulator actions before stopping (default: 40).")
+    @Option(name: .customLong("max-steps"), help: "Most actions before stopping, 1 to 200.")
     var maximumSteps: Int = 40
 
-    @Option(name: .customLong("model"), help: "TypeSafe model. Defaults to TYPESAFE_MODEL, TYPESAFE_DEFAULT_MODEL or jev-latest.")
+    @Option(name: .customLong("model"), help: "TypeSafe model (default: TYPESAFE_MODEL, TYPESAFE_DEFAULT_MODEL or jev-latest).")
     var model: String?
 
-    @Option(name: .customLong("base-url"), help: "TypeSafe API base URL. Defaults to TYPESAFE_BASE_URL or https://api.typesafe.ai.")
+    @Option(name: .customLong("base-url"), help: "TypeSafe API base URL, HTTPS unless on this Mac (default: TYPESAFE_BASE_URL or https://api.typesafe.ai).")
     var baseURL: String?
 
     @Option(
         name: .customLong("minimum-action-probability"),
-        help: "Refuse executable actions below this selected probability, from 0 to 1 (default: 0)."
+        help: "Refuse actions that the model rates below this probability, 0 to 1."
     )
     var minimumActionProbability: Double = 0
 

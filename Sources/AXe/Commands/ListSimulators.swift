@@ -5,7 +5,7 @@ import FBSimulatorControl
 
 struct ListSimulators: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Lists all available simulators. Use axe displays --udid <UDID> for one simulator's screens and hinge."
+        abstract: "List every simulator with its UDID and state."
     )
 
     func run() async throws {

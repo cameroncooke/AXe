@@ -2,7 +2,7 @@ import ArgumentParser
 import FBControlCore
 
 struct ListDevices: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "List known physical iPhones and iPads.")
+    static let configuration = CommandConfiguration(abstract: "List the physical iPhones and iPads that Xcode knows, with any readiness problems.")
 
     func run() async throws {
         let devices = try await CoreDeviceInventory.list()
@@ -52,9 +52,15 @@ struct ListDevices: AsyncParsableCommand {
 }
 
 struct Doctor: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Check if a simulator or physical device is ready.")
+    static let configuration = CommandConfiguration(abstract: "Check whether a simulator or physical device is ready for AXe.",
+        discussion: """
+        A physical device must be paired, in Developer Mode, connected, unlocked, with its developer disk image and screenshot service available; a simulator must be booted. A failed check exits nonzero.
 
-    @Option(help: "The UDID of the simulator or physical device.")
+        Example:
+          axe doctor --udid <UDID>
+        """)
+
+    @Option(help: "UDID of the simulator or physical device.")
     var udid: String
 
     @MainActor

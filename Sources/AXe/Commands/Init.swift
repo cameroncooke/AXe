@@ -5,7 +5,15 @@ import Foundation
 struct Init: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "init",
-        abstract: "Install AXe skill files for detected AI clients."
+        abstract: "Install the AXe skill for AI clients.",
+        discussion: """
+        By default it installs into ~/.claude/skills and ~/.agents/skills for each client it finds. Without a terminal, pass --client, --dest or --print.
+
+        Examples:
+          axe init
+          axe init --client claude --force
+          axe init --print
+        """
     )
 
     enum Client: String, ExpressibleByArgument, CaseIterable {
@@ -14,19 +22,19 @@ struct Init: AsyncParsableCommand {
         case agents
     }
 
-    @Option(help: "Target client: auto, claude, or agents. Defaults to auto-detect.")
+    @Option(help: "Client to install for; auto installs for every client found.")
     var client: Client = .auto
 
-    @Option(help: "Custom destination skills directory (overrides --client).")
+    @Option(help: "Install into this skills directory instead.")
     var dest: String?
 
-    @Flag(help: "Overwrite an existing installed skill.")
+    @Flag(help: "Replace an installed skill.")
     var force: Bool = false
 
-    @Flag(help: "Remove installed AXe skill from target directories.")
+    @Flag(help: "Remove the installed skill.")
     var uninstall: Bool = false
 
-    @Flag(name: .customLong("print"), help: "Print bundled skill content to stdout.")
+    @Flag(name: .customLong("print"), help: "Print the bundled SKILL.md to stdout.")
     var printSkill: Bool = false
 
     func validate() throws {

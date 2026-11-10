@@ -9,12 +9,17 @@ struct Axe: AsyncParsableCommand {
     static let _ensureSharedApp = NSApplication.shared
 
     static let configuration = CommandConfiguration(
-        abstract: "Automate iOS simulators or connected iPhones and iPads.",
+        abstract: "Automate iOS simulators and connected iPhones and iPads.",
         discussion: """
-        Output: --output text|json selects one command result. Put it before the command for all
-        commands. Non-media commands also accept it after the command. Screenshot and record-video
-        keep their file-path --output option after the command. Agent mode defaults to JSON; commands
-        without --agent or --output keep their released output. Binary streaming cannot use this option.
+        Every command needs --udid; AXe never picks a device. Coordinates are points in the current orientation, the units axe displays reports. A failure prints Error: <message> to stderr and exits nonzero.
+
+        Put --output json before the command for one JSON result object; agent mode prints JSON by default. After screenshot and record-video, --output is the file path.
+
+        Examples:
+          axe list-simulators
+          axe describe-ui --udid <UDID>
+          axe tap --label Continue --udid <UDID>
+          axe --output json screenshot --udid <UDID> --output screen.png
         """,
         version: VERSION,
         subcommands: [
