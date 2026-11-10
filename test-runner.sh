@@ -97,7 +97,6 @@ show_usage() {
     echo "  GestureTests        Run only gesture tests"
     echo "  ListSimulatorsTests Run only list simulators tests"
     echo "  RecordVideoTests    Run only record video tests"
-    echo "  StreamVideoDebugTests Run only stream video debug tests"
     echo "  StreamVideoTests    Run only stream video tests"
     echo ""
     echo "Examples:"
@@ -158,7 +157,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoDebugTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PhotosButtonLeafE2ETests|PresentationFixtureTests)
+        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PhotosButtonLeafE2ETests|PresentationFixtureTests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -605,7 +604,6 @@ run_tests() {
             "PlaygroundAgentTests"
             "PresentationFixtureTests"
             "RecordVideoTests"
-            "StreamVideoDebugTests"
             "StreamVideoTests"
             "SwipeTests"
             "DragTests"

@@ -91,71 +91,53 @@ struct AgentModeNumericKeyboardTests {
     }
 
     private func make(variant: String = "valid") throws -> Fixture {
-        let field = Node(type: "TextField", key: 2, id: "editor", frame: Frame(x: 16, y: 90, width: 300, height: 44),
+        let field = node(type: "TextField", key: 2, id: "editor", frame: Frame(x: 16, y: 90, width: 300, height: 44),
             focused: variant != "unfocused")
-        let area = Node(type: "ScrollArea", key: 3, id: "form", frame: Frame(x: 16, y: 39, width: 370, height: 1455))
-        var keys: [Node] = []
+        let area = node(type: "ScrollArea", key: 3, id: "form", frame: Frame(x: 16, y: 39, width: 370, height: 1455))
+        var keys: [AXNodeFixture] = []
         for digit in 0...9 {
             let x = 5.0 + Double(digit % 3) * 132.0
             let y = 596.0 + Double(digit / 3) * 54.0
             let bounds = Frame(x: x, y: y, width: 126, height: 50)
-            let key = Node(type: "Button", key: UInt64(100 + digit), label: String(digit), frame: bounds)
+            let key = node(type: "Button", key: UInt64(100 + digit), label: String(digit), frame: bounds)
             keys.append(key)
         }
-        keys.append(Node(type: "Button", key: 120, label: "Delete", frame: Frame(x: 270, y: 758, width: 126, height: 50)))
+        keys.append(node(type: "Button", key: 120, label: "Delete", frame: Frame(x: 270, y: 758, width: 126, height: 50)))
         if variant == "missing-digit" { keys.removeFirst() }
         if variant == "duplicate-digit" { keys[0].label = "1" }
         if variant == "missing-delete" { keys.removeLast() }
-        var marker = Node(type: "Group", key: 11, id: variant == "unmarked" ? "app.dialpad" : "UIKeyboardLayoutStar Preview",
+        var marker = node(type: "Group", key: 11, id: variant == "unmarked" ? "app.dialpad" : "UIKeyboardLayoutStar Preview",
             frame: Frame(x: 0, y: 589, width: 402, height: 227), children: keys)
         if variant == "hidden" { marker.hidden = true }
         if variant == "disabled" { marker.enabled = false }
         if variant == "foreign" { marker.pid = 5678 }
-        let dictation = Node(type: "Button", key: 12, id: "dictation", label: "Dictate",
+        let dictation = node(type: "Button", key: 12, id: "dictation", label: "Dictate",
             frame: Frame(x: 326, y: 810, width: 60, height: 60))
-        var dock = Node(type: "Group", key: 10, frame: Frame(x: 0, y: 572, width: 402, height: 302),
+        var dock = node(type: "Group", key: 10, frame: Frame(x: 0, y: 572, width: 402, height: 302),
             children: [marker, dictation])
-        if variant == "floating" { dock.frame.height = 244; dock.children = [marker] }
+        if variant == "floating" { dock.frame?.height = 244; dock.children = [marker] }
         if variant == "app-control" {
-            dock.children.append(Node(type: "Button", key: 13, id: "app.action", label: "Continue",
+            dock.children?.append(node(type: "Button", key: 13, id: "app.action", label: "Continue",
                 frame: Frame(x: 10, y: 820, width: 50, height: 30)))
         }
-        var root = Node(type: "Application", key: 1, frame: Frame(x: 0, y: 0, width: 402, height: 874),
+        var root = node(type: "Application", key: 1, frame: Frame(x: 0, y: 0, width: 402, height: 874),
             children: [field, area, dock])
-        if variant == "duplicate-marker" { root.children.append(marker) }
-        let native = try JSONDecoder().decode(FBSimulatorAXNode.self, from: JSONEncoder().encode(root))
-        let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
-            #"{"bootIdentity":"boot","screenID":1,"screenUUID":"DF1FB281-4CCC-4A62-88D3-635D18FAD832","logicalWidth":402,"logicalHeight":874,"rotationDegrees":0,"nativePixelWidth":1206,"nativePixelHeight":2622,"scale":3,"poseRevision":"rigid"}"#.utf8))
+        if variant == "duplicate-marker" { root.children?.append(marker) }
+        let native = try root.decoded()
+        let context = try SelectedHIDContext.fixture(boot: "boot", screenID: 1,
+            screenUUID: "DF1FB281-4CCC-4A62-88D3-635D18FAD832", width: 402, height: 874, rotation: 0,
+            pixelWidth: 1206, pixelHeight: 2622, pose: "rigid")
         return Fixture(snapshot: try AgentModeSnapshot(roots: [native],
             nativeIdentityMetadata: .init(complete: variant != "incomplete"), context: context),
             area: native.children[1], context: context)
     }
 
-    private struct Frame: Encodable {
-        var x: Double, y: Double, width: Double, height: Double
-    }
-    private struct Node: Encodable {
-        var type: String
-        var key: UInt64
-        var id: String? = nil
-        var label: String? = nil
-        var frame: Frame
-        var focused = false
-        var enabled = true
-        var hidden = false
-        var pid: Int32 = 1234
-        var children: [Node] = []
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", frame, focused, enabled, hidden, pid, children, nativeIdentity
-        }
-        func encode(to encoder: Encoder) throws {
-            var values = encoder.container(keyedBy: CodingKeys.self)
-            try values.encode(type, forKey: .type); try values.encodeIfPresent(id, forKey: .id)
-            try values.encodeIfPresent(label, forKey: .label); try values.encode(frame, forKey: .frame)
-            try values.encode(focused, forKey: .focused); try values.encode(enabled, forKey: .enabled)
-            try values.encode(hidden, forKey: .hidden); try values.encode(pid, forKey: .pid)
-            try values.encode(children, forKey: .children)
-            try values.encode(FBSimulatorAXNativeIdentity(pid: pid, objectID: key), forKey: .nativeIdentity)
-        }
-    }
+    private typealias Frame = AXNodeFixture.Frame
+}
+
+/// `key` becomes the native identity with the node's `pid` at encode time.
+private func node(type: String, key: UInt64, id: String? = nil, label: String? = nil, frame: AXNodeFixture.Frame,
+                  focused: Bool = false, children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: id, label: label, frame: frame, pid: 1234, focused: focused, enabled: true,
+        hidden: false, nativeObjectID: key, children: children)
 }

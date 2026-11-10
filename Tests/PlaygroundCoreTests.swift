@@ -189,7 +189,7 @@ struct CorePlaygroundSession {
 
     @discardableResult
     func run(_ arguments: [String]) async throws -> String {
-        let command = ([axePath] + arguments + ["--udid", udid]).map(Self.quote).joined(separator: " ")
+        let command = ([axePath] + arguments + ["--udid", udid]).map(shellQuote).joined(separator: " ")
         do {
             return try await CommandRunner.run(command, timeout: 30).output
         } catch {
@@ -202,7 +202,7 @@ struct CorePlaygroundSession {
             "xcrun", "simctl", "launch", "--terminate-running-process", udid,
             "com.cameroncooke.AxePlayground", "--launch-arg", "screen=\(screen)",
         ]
-        _ = try await CommandRunner.run(arguments.map(Self.quote).joined(separator: " "), timeout: 30)
+        _ = try await CommandRunner.run(arguments.map(shellQuote).joined(separator: " "), timeout: 30)
         let ready = try await waitFor("screen \(screen), identifier \(readyID)") { state in
             UIStateParser.findElement(in: state, withIdentifier: readyID) != nil
         }
@@ -334,9 +334,5 @@ struct CorePlaygroundSession {
             return nil
         }
         return raw.contains("%") || number > 1 ? number : number * 100
-    }
-
-    private static func quote(_ argument: String) -> String {
-        "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }

@@ -84,7 +84,7 @@ struct AgentBatchReferencePlanTests {
             snapshot: original)
         var changed = controls()
         changed[2].label = "77"
-        changed[3].value = "0"
+        changed[3].value = .string("0")
         let fresh = try snapshot(changed)
         #expect(original.nativeFingerprint != fresh.nativeFingerprint)
         #expect(try plan.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234).selectorValue == "7")
@@ -94,14 +94,14 @@ struct AgentBatchReferencePlanTests {
     @Test("Calculator result glyphs can resize while fresh native input evidence remains exact")
     func resultGlyphBoundsCanChange() throws {
         var zero = controls()
-        zero[2].frame = .init(x: 344, y: 250.5, width: 34, height: 67)
+        zero[2].frame = frame(x: 344, y: 250.5, width: 34, height: 67)
         let original = try snapshot(zero)
         let plan = try plan(#"[{"action":"tap","ref":"e2"},{"action":"tap","ref":"e3"}]"#,
             snapshot: original)
         var five = zero
         five[2].label = "5"
-        five[2].frame.x = 345
-        five[2].frame.width = 33
+        five[2].frame?.x = 345
+        five[2].frame?.width = 33
         let fresh = try snapshot(five)
         let target = try plan.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234)
         #expect(target.node.label == "7" && target.node.frame == original.nodes[2].frame)
@@ -117,19 +117,19 @@ struct AgentBatchReferencePlanTests {
 
     @Test("Container and control descendant frames remain bound")
     func protectedGeometryCannotChange() throws {
-        let group = Node(type: "Group", label: "Controls", children: controls())
+        let group = node(type: "Group", label: "Controls", children: controls())
         let grouped = try snapshot([group])
         let groupPlan = try plan(#"[{"action":"tap","ref":"e3"}]"#, snapshot: grouped)
         var movedGroup = group
-        movedGroup.frame.x += 1
+        movedGroup.frame?.x += 1
         #expect(throws: (any Error).self) {
             try groupPlan.resolve(index: 0, snapshot: snapshot([movedGroup]), context: context(), pid: 1234)
         }
 
         var buttonNodes = controls()
-        buttonNodes[1].children = [Node(type: "StaticText", label: "7")]
+        buttonNodes[1].children = [node(type: "StaticText", label: "7")]
         let buttonPlan = try self.plan(#"[{"action":"tap","ref":"e2"}]"#, snapshot: snapshot(buttonNodes))
-        buttonNodes[1].children[0].frame.x += 1
+        buttonNodes[1].children?[0].frame?.x += 1
         #expect(throws: (any Error).self) {
             try buttonPlan.resolve(index: 0, snapshot: snapshot(buttonNodes), context: context(), pid: 1234)
         }
@@ -146,15 +146,15 @@ struct AgentBatchReferencePlanTests {
 
     @Test("Typing retains a unique focused field ID and rejects new keyboard layout")
     func typingUsesNativeFocusIdentity() throws {
-        var field = Node(type: "TextField", label: "Search", identifier: "field")
+        var field = node(type: "TextField", label: "Search", identifier: "field")
         field.focused = true
-        let original = try snapshot([field, Node(type: "StaticText", label: "Search", identifier: "field")])
+        let original = try snapshot([field, node(type: "StaticText", label: "Search", identifier: "field")])
         let plan = try plan(#"[{"action":"type","ref":"e2","text":"London"}]"#, snapshot: original)
-        field.value = "London"
-        let changed = try snapshot([field, Node(type: "StaticText", label: "Search", identifier: "field")])
+        field.value = .string("London")
+        let changed = try snapshot([field, node(type: "StaticText", label: "Search", identifier: "field")])
         let resolved = try plan.resolve(index: 0, snapshot: changed, context: context(), pid: 1234)
         #expect(resolved.selectorKind == .id && resolved.selectorValue == "field")
-        let keyboard = try snapshot([field, Node(type: "Button", label: "A", frame: .init(y: 700))])
+        let keyboard = try snapshot([field, node(type: "Button", label: "A", frame: frame(y: 700))])
         #expect(throws: (any Error).self) {
             try plan.resolve(index: 0, snapshot: keyboard, context: context(), pid: 1234)
         }
@@ -168,13 +168,13 @@ struct AgentBatchReferencePlanTests {
     func layoutChangesReject() throws {
         let plan = try plan(#"[{"action":"tap","ref":"e2"},{"action":"tap","ref":"e3"}]"#,
             snapshot: snapshot(controls()))
-        var variants: [[Node]] = []
+        var variants: [[AXNodeFixture]] = []
         var changed = controls(); changed[1].label = "8"; variants.append(changed)
-        changed = controls(); changed[1].frame.x += 1; variants.append(changed)
+        changed = controls(); changed[1].frame?.x += 1; variants.append(changed)
         changed = controls(); changed[1].hidden = true; variants.append(changed)
         changed = controls(); changed[1].enabled = false; variants.append(changed)
         changed = controls(); changed[1].focused = true; variants.append(changed)
-        changed = controls(); changed.append(Node(type: "Button", label: "Overlay")); variants.append(changed)
+        changed = controls(); changed.append(node(type: "Button", label: "Overlay")); variants.append(changed)
         changed = controls(); let movedChild = changed.removeLast()
         changed[0].children = [movedChild]; variants.append(changed)
         for nodes in variants {
@@ -188,10 +188,10 @@ struct AgentBatchReferencePlanTests {
     func inertAdditionsKeepTheLayout() throws {
         let plan = try plan(#"[{"action":"tap","ref":"e2"},{"action":"tap","ref":"e3"}]"#,
             snapshot: snapshot(controls()))
-        var variants: [[Node]] = []
-        var changed = controls(); changed.append(Node(type: "Group", label: "", frame: .init(x: 8, y: 370, width: 300, height: 400))); variants.append(changed)
-        changed = controls(); changed.append(Node(type: "Button", label: "Hidden", frame: .init(x: 10, y: 300), hidden: true)); variants.append(changed)
-        changed = controls(); changed.append(Node(type: "Button", label: "Below", frame: .init(x: 10, y: 2000))); variants.append(changed)
+        var variants: [[AXNodeFixture]] = []
+        var changed = controls(); changed.append(node(type: "Group", label: "", frame: frame(x: 8, y: 370, width: 300, height: 400))); variants.append(changed)
+        changed = controls(); changed.append(node(type: "Button", label: "Hidden", frame: frame(x: 10, y: 300), hidden: true)); variants.append(changed)
+        changed = controls(); changed.append(node(type: "Button", label: "Below", frame: frame(x: 10, y: 2000))); variants.append(changed)
         for nodes in variants {
             _ = try plan.resolve(index: 1, snapshot: snapshot(nodes), context: context(), pid: 1234)
         }
@@ -200,7 +200,7 @@ struct AgentBatchReferencePlanTests {
     @Test("Text container labels remain identity evidence")
     func ordinaryTextExceptionIsNarrow() throws {
         var original = controls()
-        original[2].children = [Node(type: "StaticText", label: "child")]
+        original[2].children = [node(type: "StaticText", label: "child")]
         let plan = try plan(#"[{"action":"tap","ref":"e2"}]"#, snapshot: snapshot(original))
         var changed = original
         changed[2].label = "new container label"
@@ -209,9 +209,9 @@ struct AgentBatchReferencePlanTests {
         }
 
         var buttonNodes = controls()
-        buttonNodes[1].children = [Node(type: "StaticText", label: "7")]
+        buttonNodes[1].children = [node(type: "StaticText", label: "7")]
         let buttonPlan = try self.plan(#"[{"action":"tap","ref":"e2"}]"#, snapshot: snapshot(buttonNodes))
-        buttonNodes[1].children[0].label = "8"
+        buttonNodes[1].children?[0].label = "8"
         #expect(throws: (any Error).self) {
             try buttonPlan.resolve(index: 0, snapshot: snapshot(buttonNodes), context: context(), pid: 1234)
         }
@@ -272,9 +272,9 @@ struct AgentBatchReferencePlanTests {
             snapshot: snapshot(form()))
         // The keyboard appears, the form scrolls up and the first field holds its text.
         var moved = form()
-        moved[0].value = "MCP"; moved[0].focused = true
-        moved[0].frame.y -= 60; moved[1].frame.y -= 60
-        let keyboard = moved + [Node(type: "Button", label: "return", frame: .init(x: 300, y: 760))]
+        moved[0].value = .string("MCP"); moved[0].focused = true
+        moved[0].frame?.y -= 60; moved[1].frame?.y -= 60
+        let keyboard = moved + [node(type: "Button", label: "return", frame: frame(x: 300, y: 760))]
         let after = try snapshot(keyboard)
         // Without the rebase, the original layout no longer admits the later tap.
         #expect(throws: (any Error).self) {
@@ -286,7 +286,7 @@ struct AgentBatchReferencePlanTests {
         #expect(try rebased.resolve(index: 2, snapshot: after, context: context(), pid: 1234).node.label == "Done")
         // Layout immutability resumes from the new baseline.
         var shifted = keyboard
-        shifted[2].frame.x += 1
+        shifted[2].frame?.x += 1
         #expect(throws: (any Error).self) {
             try rebased.resolve(index: 2, snapshot: snapshot(shifted), context: context(), pid: 1234)
         }
@@ -296,12 +296,12 @@ struct AgentBatchReferencePlanTests {
     func focusRebaseRejectsChangedTargets() throws {
         let tapPlan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"tap","ref":"e4"}]"#,
             snapshot: snapshot(form()))
-        var variants: [[Node]] = []
+        var variants: [[AXNodeFixture]] = []
         var changed = form(); changed[2].label = "Cancel"; variants.append(changed)
         changed = form(); changed[2].enabled = false; variants.append(changed)
         changed = form(); changed[2].hidden = true; variants.append(changed)
-        changed = form(); changed.append(Node(type: "Button", label: "Done", frame: .init(x: 200, y: 40))); variants.append(changed)
-        changed = form(); changed[2].frame.y = 2000; variants.append(changed)
+        changed = form(); changed.append(node(type: "Button", label: "Done", frame: frame(x: 200, y: 40))); variants.append(changed)
+        changed = form(); changed[2].frame?.y = 2000; variants.append(changed)
         for nodes in variants {
             #expect(throws: (any Error).self) {
                 try tapPlan.rebased(afterFocusStep: 0, snapshot: snapshot(nodes), context: context(), pid: 1234)
@@ -313,7 +313,7 @@ struct AgentBatchReferencePlanTests {
         // A later field whose value changed is a changed state, not a moved control.
         let fieldPlan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
             snapshot: snapshot(form()))
-        changed = form(); changed[1].value = "autocorrected"
+        changed = form(); changed[1].value = .string("autocorrected")
         #expect(throws: (any Error).self) {
             try fieldPlan.rebased(afterFocusStep: 0, snapshot: snapshot(changed), context: context(), pid: 1234)
         }
@@ -327,9 +327,9 @@ struct AgentBatchReferencePlanTests {
             snapshot: snapshot(fields))
         // Typing filled the first field, moved the form and changed the keyboard's suggestions.
         var typed = fields
-        typed[0].value = "MCP"
-        typed[1].frame.y -= 20
-        let suggestions = typed + [Node(type: "Button", label: "“MCP”", frame: .init(x: 10, y: 700))]
+        typed[0].value = .string("MCP")
+        typed[1].frame?.y -= 20
+        let suggestions = typed + [node(type: "Button", label: "“MCP”", frame: frame(x: 10, y: 700))]
         let fresh = try snapshot(suggestions)
         #expect(try plan.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234).node.identifier == "last")
         var renamed = suggestions
@@ -338,7 +338,7 @@ struct AgentBatchReferencePlanTests {
             try plan.resolve(index: 1, snapshot: snapshot(renamed), context: context(), pid: 1234)
         }
         var autocorrected = suggestions
-        autocorrected[1].value = "changed"
+        autocorrected[1].value = .string("changed")
         #expect(throws: (any Error).self) {
             try plan.resolve(index: 1, snapshot: snapshot(autocorrected), context: context(), pid: 1234)
         }
@@ -351,7 +351,7 @@ struct AgentBatchReferencePlanTests {
         let plan = try plan(#"[{"action":"type","ref":"e2","text":"MCP","focus":true},{"action":"type","ref":"e3","text":"B","focus":true}]"#,
             snapshot: snapshot(fields, complete: true))
         var same = fields
-        same[1].frame.y -= 60
+        same[1].frame?.y -= 60
         _ = try plan.rebased(afterFocusStep: 0, snapshot: snapshot(same, complete: true), context: context(), pid: 1234)
         var replaced = same
         replaced[1].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 303)
@@ -373,18 +373,18 @@ struct AgentBatchReferencePlanTests {
             snapshot: snapshot(fields, complete: true))
         // Step one's field takes focus and text; step two's field loses focus; both move.
         var after = fields
-        after[0].focused = true; after[0].value = "MCP"; after[0].frame.y -= 60
-        after[1].focused = false; after[1].frame.y -= 60
+        after[0].focused = true; after[0].value = .string("MCP"); after[0].frame?.y -= 60
+        after[1].focused = false; after[1].frame?.y -= 60
         let fresh = try snapshot(after, complete: true)
         let rebased = try plan.rebased(afterFocusStep: 0, snapshot: fresh, context: context(), pid: 1234)
         let target = try rebased.resolve(index: 1, snapshot: fresh, context: context(), pid: 1234)
         #expect(target.node.nativeIdentity?.objectID == 102)
     }
 
-    private func form() -> [Node] {
-        [Node(type: "TextField", label: "First name", identifier: "first", frame: .init(x: 20, y: 160, width: 300), role: "AXTextField"),
-         Node(type: "TextField", label: "Last name", identifier: "last", frame: .init(x: 20, y: 220, width: 300), role: "AXTextField"),
-         Node(type: "Button", label: "Done", frame: .init(x: 300, y: 40))]
+    private func form() -> [AXNodeFixture] {
+        [node(type: "TextField", label: "First name", identifier: "first", frame: frame(x: 20, y: 160, width: 300), role: "AXTextField"),
+         node(type: "TextField", label: "Last name", identifier: "last", frame: frame(x: 20, y: 220, width: 300), role: "AXTextField"),
+         node(type: "Button", label: "Done", frame: frame(x: 300, y: 40))]
     }
 
     private let table = UUID(uuidString: "3FF70D78-26DA-4314-B37B-4CB57D2A1A85")!
@@ -403,59 +403,40 @@ struct AgentBatchReferencePlanTests {
             snapshot: snapshot, context: context(), pid: 1234)
     }
 
-    private func snapshot(_ controls: [Node], complete: Bool = false) throws -> AgentModeSnapshot {
-        let roots = [Node(type: "Application", label: "Example", frame: .init(width: 390, height: 844), children: controls)]
-        let native = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(roots))
-        guard complete else { return try AgentModeSnapshot(roots: native, context: context()) }
+    private func snapshot(_ controls: [AXNodeFixture], complete: Bool = false) throws -> AgentModeSnapshot {
+        let roots = [node(type: "Application", label: "Example", frame: frame(width: 390, height: 844), children: controls)]
+        guard complete else { return try AgentModeSnapshot(roots: AXNodeFixture.decode(roots), context: context()) }
         // A complete identity read reports the root and every control, as the native reader does.
         var identified = roots
         identified[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 1)
-        for index in identified[0].children.indices where identified[0].children[index].nativeIdentity == nil {
-            identified[0].children[index].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: UInt64(900 + index))
+        for index in controls.indices where controls[index].nativeIdentity == nil {
+            identified[0].children?[index].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: UInt64(900 + index))
         }
-        let complete = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(identified))
-        return try AgentModeSnapshot(roots: complete,
+        return try AgentModeSnapshot(roots: AXNodeFixture.decode(identified),
             nativeIdentityMetadata: .init(complete: true, reason: nil), context: context())
     }
 
     private func context(boot: String = "1:2:3", screenID: Int = 1, rotation: Int = 0,
                          pose: String = "mechanicalDegrees=180") throws -> SelectedHIDContext {
-        try JSONDecoder().decode(SelectedHIDContext.self, from: Data("""
-        {"bootIdentity":"\(boot)","screenID":\(screenID),"screenUUID":"DF1FB281-4CCC-4A62-88D3-635D18FAD832",
-         "logicalWidth":390,"logicalHeight":844,"rotationDegrees":\(rotation),
-         "nativePixelWidth":1170,"nativePixelHeight":2532,"scale":3,"poseRevision":"\(pose)"}
-        """.utf8))
+        try .fixture(boot: boot, screenID: screenID, screenUUID: "DF1FB281-4CCC-4A62-88D3-635D18FAD832",
+            width: 390, height: 844, rotation: rotation, pixelWidth: 1170, pixelHeight: 2532, pose: pose)
     }
 
-    private func controls() -> [Node] {
-        [Node(type: "Button", label: "Clear", frame: .init(x: 10)),
-         Node(type: "Button", label: "7", frame: .init(x: 110)),
-         Node(type: "StaticText", label: "0", frame: .init(x: 210)),
-         Node(type: "Switch", label: "Animations", value: "1", frame: .init(x: 10, y: 100))]
+    private func controls() -> [AXNodeFixture] {
+        [node(type: "Button", label: "Clear", frame: frame(x: 10)),
+         node(type: "Button", label: "7", frame: frame(x: 110)),
+         node(type: "StaticText", label: "0", frame: frame(x: 210)),
+         node(type: "Switch", label: "Animations", value: "1", frame: frame(x: 10, y: 100))]
     }
+}
 
-    private struct Node: Encodable {
-        struct Frame: Encodable {
-            var x = 0.0
-            var y = 0.0
-            var width = 80.0
-            var height = 44.0
-        }
-        let type: String
-        var label: String
-        var identifier: String? = nil
-        var value: String? = nil
-        var frame = Frame()
-        var children: [Node] = []
-        let pid: Int32 = 1234
-        var focused = false
-        var enabled = true
-        var hidden = false
-        var nativeIdentity: FBSimulatorAXNativeIdentity? = nil
-        var role: String? = nil
-        private enum CodingKeys: String, CodingKey {
-            case type, label = "AXLabel", identifier = "AXUniqueId", value = "AXValue"
-            case frame, children, pid, focused, enabled, hidden, nativeIdentity, role
-        }
-    }
+private func frame(x: Double = 0, y: Double = 0, width: Double = 80, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
+
+private func node(type: String, label: String, identifier: String? = nil, value: String? = nil,
+                  frame: AXNodeFixture.Frame = frame(), role: String? = nil, hidden: Bool = false,
+                  children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: identifier, label: label, value: value.map { .string($0) }, role: role,
+        frame: frame, pid: 1234, focused: false, enabled: true, hidden: hidden, children: children)
 }

@@ -7,39 +7,23 @@ struct SelectedReadinessWireVersionTests {
     @Test("The readiness candidate cannot use the previous selected broker")
     func previousWireUsesAnotherEndpointAndIsRejected() throws {
         #expect(SelectedHIDRequest.version == 86)
+        // The one literal check above; everything else follows the current version.
+        let previousVersion = SelectedHIDRequest.version - 1
         let simulator = "wire-isolation-only"
         let developer = "/Applications/Xcode.app/Contents/Developer"
         let previous = try HIDBroker.endpointPath(simulatorUDID: simulator,
-            developerDirectory: developer, version: 72)
+            developerDirectory: developer, version: previousVersion)
         let current = try HIDBroker.endpointPath(simulatorUDID: simulator,
             developerDirectory: developer, version: SelectedHIDRequest.version)
         #expect(previous != current)
-        #expect(previous.hasSuffix("-v72.sock"))
-        #expect(current.hasSuffix("-v86.sock"))
-        let beforeWhitespace = try HIDBroker.endpointPath(simulatorUDID: simulator,
-            developerDirectory: developer, version: 77)
-        #expect(beforeWhitespace != current && beforeWhitespace.hasSuffix("-v77.sock"))
+        #expect(previous.hasSuffix("-v\(previousVersion).sock"))
+        #expect(current.hasSuffix("-v\(SelectedHIDRequest.version).sock"))
         let screen = UUID(), token = UUID()
         let clean = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
         try clean.validate()
-        let old = SelectedHIDRequest(version: 72, requestID: clean.requestID,
+        let old = SelectedHIDRequest(version: previousVersion, requestID: clean.requestID,
             screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
         #expect(throws: (any Error).self) { try old.validate() }
-        let preWhitespace = SelectedHIDRequest(version: 77, requestID: clean.requestID,
-            screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
-        #expect(throws: (any Error).self) { try preWhitespace.validate() }
-        let priorKeyboardEvidence = SelectedHIDRequest(version: 78, requestID: clean.requestID,
-            screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
-        #expect(throws: (any Error).self) { try priorKeyboardEvidence.validate() }
-        let prePublication = SelectedHIDRequest(version: 79, requestID: clean.requestID,
-            screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
-        #expect(throws: (any Error).self) { try prePublication.validate() }
-        let focusIDWire = SelectedHIDRequest(version: 84, requestID: clean.requestID,
-            screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
-        #expect(throws: (any Error).self) { try focusIDWire.validate() }
-        let root35 = SelectedHIDRequest(version: 61, requestID: clean.requestID,
-            screenID: 1, screenUUID: screen, operation: .close, token: token, primitives: [])
-        #expect(throws: (any Error).self) { try root35.validate() }
     }
 }

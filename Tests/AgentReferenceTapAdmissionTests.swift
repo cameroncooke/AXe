@@ -48,11 +48,11 @@ struct AgentReferenceTapAdmissionTests {
         #expect(accepted.visibleFingerprint == fixture.snapshot.visibleFingerprint)
         #expect(accepted.selectorKind == .label && accepted.selectorValue == "5")
         try accepted.target?.validate(same[0].children[0])
-        var variants: [[Fixture.Node]] = []
+        var variants: [[AXNodeFixture]] = []
         var nodes = fixture.controls; nodes[2].label = "Motion"; variants.append(nodes)
-        nodes = fixture.controls; nodes[2].value = "0"; variants.append(nodes)
-        nodes = fixture.controls; nodes[0].frame.x += 1; variants.append(nodes)
-        nodes = fixture.controls; nodes.append(.init(type: "Button", label: "Overlay")); variants.append(nodes)
+        nodes = fixture.controls; nodes[2].value = .string("0"); variants.append(nodes)
+        nodes = fixture.controls; nodes[0].frame?.x += 1; variants.append(nodes)
+        nodes = fixture.controls; nodes.append(node(type: "Button", label: "Overlay")); variants.append(nodes)
         for changed in variants {
             let roots = try fixture.roots(changed)
             #expect(throws: (any Error).self) {
@@ -108,7 +108,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var changed = harness.fixture.controls
-        changed[2].value = "0"
+        changed[2].value = .string("0")
         harness.state.ownedRoots = try harness.fixture.roots(changed)
         harness.state.describeRoots = harness.state.ownedRoots
         let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
@@ -172,7 +172,7 @@ struct AgentReferenceTapAdmissionTests {
         let (snapshot, _) = try await harness.describe()
         // The screen moved on since the agent's capture, as when a dismissed sheet reveals a pushed card.
         var changed = harness.fixture.controls
-        changed.append(.init(type: "Button", label: "Edit", frame: .init(y: 300)))
+        changed.append(node(type: "Button", label: "Edit", frame: frame(y: 300)))
         harness.state.ownedRoots = try harness.fixture.roots(changed)
         harness.state.describeRoots = harness.state.ownedRoots
         let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
@@ -192,7 +192,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var elsewhere = harness.fixture.controls
-        elsewhere[2].value = "0"
+        elsewhere[2].value = .string("0")
         harness.state.describeRoots = try harness.fixture.roots(elsewhere)
         // Another row changed: the read is of the same control on the current screen, and the
         // cache state still reports the snapshot as stale for input.
@@ -213,8 +213,8 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var changed = harness.fixture.controls
-        changed[0].frame.x += 40
-        changed[0].value = "1"
+        changed[0].frame?.x += 40
+        changed[0].value = .string("1")
         harness.state.ownedRoots = try harness.fixture.roots(changed)
         harness.state.describeRoots = harness.state.ownedRoots
         let response = await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref))
@@ -234,7 +234,7 @@ struct AgentReferenceTapAdmissionTests {
         // Another alert replaced the first: an equal button at the same frame, but another object.
         var replaced = controls
         replaced[0].nativeIdentity = FBSimulatorAXNativeIdentity(pid: 1234, objectID: 2)
-        replaced.append(.init(type: "Button", label: "Overlay", frame: .init(y: 300)))
+        replaced.append(node(type: "Button", label: "Overlay", frame: frame(y: 300)))
         harness.state.ownedRoots = try harness.fixture.roots(replaced)
         harness.state.describeRoots = harness.state.ownedRoots
         let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
@@ -299,7 +299,7 @@ struct AgentReferenceTapAdmissionTests {
     @Test("A focus tap refused before input is retried only by the focus-and-type loop")
     func refusedFocusTapIsNotRetriedTwice() async throws {
         var controls = Fixture.defaultControls
-        controls.append(.init(type: "TextField", label: "Field", value: "", frame: .init(y: 200, width: 200),
+        controls.append(node(type: "TextField", label: "Field", value: "", frame: frame(y: 200, width: 200),
             identifier: "field", role: "AXTextField", focused: false))
         let harness = try Harness(controls: controls)
         var describe = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
@@ -359,7 +359,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, _) = try await harness.describe()
         var changed = harness.fixture.controls
-        changed.append(.init(type: "Button", label: "Edit", frame: .init(y: 300)))
+        changed.append(node(type: "Button", label: "Edit", frame: frame(y: 300)))
         harness.state.describeRoots = try harness.fixture.roots(changed)
         var page = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
@@ -381,7 +381,7 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var changed = harness.fixture.controls
-        changed.append(.init(type: "Button", label: "Overlay", frame: .init(y: 300)))
+        changed.append(node(type: "Button", label: "Overlay", frame: frame(y: 300)))
         let changedRoots = try harness.fixture.roots(changed)
         harness.state.afterTap = {
             // Step one changes the layout; step two's owned read sees it before any input.
@@ -467,7 +467,7 @@ struct AgentReferenceTapAdmissionTests {
         let owner: SelectedHIDOwner
         let controller: AgentModeController
 
-        init(controls: [Fixture.Node] = Fixture.defaultControls) throws {
+        init(controls: [AXNodeFixture] = Fixture.defaultControls) throws {
             let fixture = try Fixture(controls: controls)
             self.fixture = fixture
             let state = State(context: fixture.context)
@@ -593,12 +593,12 @@ struct AgentReferenceTapAdmissionTests {
     private struct Fixture {
         let context: SelectedHIDContext
         let snapshot: AgentModeSnapshot
-        static let defaultControls = [Node(type: "Button", label: "5"),
-            Node(type: "StaticText", label: "0", frame: .init(x: 200)),
-            Node(type: "Switch", label: "Animations", value: "1", frame: .init(y: 100))]
-        let controls: [Node]
+        static let defaultControls = [node(type: "Button", label: "5"),
+            node(type: "StaticText", label: "0", frame: frame(x: 200)),
+            node(type: "Switch", label: "Animations", value: "1", frame: frame(y: 100))]
+        let controls: [AXNodeFixture]
 
-        init(controls: [Node] = Self.defaultControls) throws {
+        init(controls: [AXNodeFixture] = Self.defaultControls) throws {
             let context = try Self.context()
             self.context = context
             self.controls = controls
@@ -610,49 +610,32 @@ struct AgentReferenceTapAdmissionTests {
                 mode: AgentModeRequest(kind: .tap, snapshotID: UUID(), ref: ref))
         }
 
-        func roots(_ controls: [Node], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
+        func roots(_ controls: [AXNodeFixture], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
             try Self.roots(controls, appPID: appPID)
         }
 
-        static func roots(_ controls: [Node], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
-            let root = Node(type: "Application", label: "Example",
-                frame: .init(width: 390, height: 844), children: controls, pid: appPID)
-            return try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
+        static func roots(_ controls: [AXNodeFixture], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
+            let root = node(type: "Application", label: "Example",
+                frame: frame(width: 390, height: 844), children: controls, pid: appPID)
+            return try AXNodeFixture.decode([root])
         }
 
         static func context(boot: String = "boot", screen: Int = 1, rotation: Int = 0,
                             uuid: String = "DF1FB281-4CCC-4A62-88D3-635D18FAD832",
                             pose: String = "open") throws -> SelectedHIDContext {
-            try JSONDecoder().decode(SelectedHIDContext.self, from: Data("""
-            {"bootIdentity":"\(boot)","screenID":\(screen),"screenUUID":"\(uuid)",
-            "logicalWidth":390,"logicalHeight":844,"rotationDegrees":\(rotation),
-            "nativePixelWidth":1170,"nativePixelHeight":2532,"scale":3,"poseRevision":"\(pose)"}
-            """.utf8))
-        }
-
-        struct Node: Encodable {
-            struct Frame: Encodable {
-                var x = 0.0
-                var y = 0.0
-                var width = 80.0
-                var height = 44.0
-            }
-            let type: String
-            var label: String
-            var value: String? = nil
-            var frame = Frame()
-            var children: [Node] = []
-            var pid: Int32 = 1234
-            var enabled = true
-            var hidden = false
-            var nativeIdentity: FBSimulatorAXNativeIdentity? = nil
-            var identifier: String? = nil
-            var role: String? = nil
-            var focused: Bool? = nil
-            private enum CodingKeys: String, CodingKey {
-                case type, label = "AXLabel", value = "AXValue", frame, children, pid, enabled, hidden, nativeIdentity,
-                     identifier = "AXUniqueId", role, focused
-            }
+            try .fixture(boot: boot, screenID: screen, screenUUID: uuid, width: 390, height: 844,
+                rotation: rotation, pixelWidth: 1170, pixelHeight: 2532, pose: pose)
         }
     }
+}
+
+private func frame(x: Double = 0, y: Double = 0, width: Double = 80, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
+
+private func node(type: String, label: String, value: String? = nil, frame: AXNodeFixture.Frame = frame(),
+                  children: [AXNodeFixture] = [], pid: Int32 = 1234, identifier: String? = nil,
+                  role: String? = nil, focused: Bool? = nil) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: identifier, label: label, value: value.map { .string($0) }, role: role,
+        frame: frame, pid: pid, focused: focused, enabled: true, hidden: false, children: children)
 }

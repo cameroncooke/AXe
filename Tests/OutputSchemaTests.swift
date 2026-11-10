@@ -242,38 +242,22 @@ struct OutputSchemaTests {
     /// Seventy buttons push the scroll area past the first page, so the first page carries an
     /// area preview and a cursor. The first button's label is long enough to be clipped in compact views.
     private func makeSnapshot() throws -> (AgentModeSnapshot, SelectedHIDContext) {
-        let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
-            #"{"bootIdentity":"1:2:3","screenID":3,"screenUUID":"DFEBAD86-C7D4-45CA-BB20-2F2D73B355B0","logicalWidth":402,"logicalHeight":874,"rotationDegrees":0,"nativePixelWidth":1206,"nativePixelHeight":2622,"scale":3,"poseRevision":"static"}"#.utf8))
-        let buttons = (1...70).map { Fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
-        let long = Fixture(type: "Button", id: "button.long", label: String(repeating: "long|label ", count: 30))
-        let field = Fixture(type: "TextField", id: "field", label: "Name", value: "Ada")
-        let scroll = Fixture(type: "ScrollView", id: "scroll", label: "List", children:
-            (1...3).map { Fixture(type: "StaticText", id: "", label: "Row \($0)") })
-        let roots = [Fixture(type: "Application", id: "fixture", label: "Fixture",
+        let context = try SelectedHIDContext.fixture(width: 402, height: 874, rotation: 0,
+            pixelWidth: 1206, pixelHeight: 2622, pose: "static")
+        let buttons = (1...70).map { fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
+        let long = fixture(type: "Button", id: "button.long", label: String(repeating: "long|label ", count: 30))
+        let field = fixture(type: "TextField", id: "field", label: "Name", value: "Ada")
+        let scroll = fixture(type: "ScrollView", id: "scroll", label: "List", children:
+            (1...3).map { fixture(type: "StaticText", id: "", label: "Row \($0)") })
+        let roots = [fixture(type: "Application", id: "fixture", label: "Fixture",
             children: [long, field] + buttons + [scroll])]
-        let nodes = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(roots))
-        return (try AgentModeSnapshot(roots: nodes, context: context), context)
+        return (try AgentModeSnapshot(roots: AXNodeFixture.decode(roots), context: context), context)
     }
 
-    private struct Fixture: Encodable {
-        struct Frame: Encodable {
-            let x = 10.0
-            let y = 100.0
-            let width = 300.0
-            let height = 44.0
-        }
-        let type: String
-        let id: String
-        let label: String
-        var value: String? = nil
-        var children: [Fixture] = []
-        let frame = Frame()
-        let pid: Int32 = 1234
-        let enabled = true
-        let hidden = false
-        let focused = false
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", value = "AXValue", children, frame, pid, enabled, hidden, focused
-        }
+    private func fixture(type: String, id: String, label: String, value: String? = nil,
+                         children: [AXNodeFixture] = []) -> AXNodeFixture {
+        AXNodeFixture(type: type, identifier: id, label: label, value: value.map { .string($0) },
+            frame: .init(x: 10, y: 100, width: 300, height: 44), pid: 1234, focused: false, enabled: true,
+            hidden: false, children: children)
     }
 }

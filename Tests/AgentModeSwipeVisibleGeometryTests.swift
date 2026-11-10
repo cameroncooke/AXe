@@ -44,7 +44,7 @@ struct AgentModeSwipeVisibleGeometryTests {
         let bounds = Rect(x: 0, y: 546, width: 402, height: 44)
         let coveredApp = try make(frame: bounds, keyboard: keyboard())
         #expect(throws: (any Error).self) { try plan(coveredApp) }
-        let copy = Node(type: "Group", key: 2, frame: Rect(x: 0, y: 0, width: 40, height: 40))
+        let copy = node(type: "Group", key: 2, frame: Rect(x: 0, y: 0, width: 40, height: 40))
         let duplicate = try make(frame: bounds, keyboard: keyboard(), extra: [copy], targetWithinKeyboard: true)
         #expect(duplicate.snapshot.nativeIdentityMetadata?.complete == true)
         #expect(AgentModeKeyboardDetector.occlusion(in: duplicate.snapshot, expectedPID: 1234, logicalSize: size) != nil)
@@ -70,7 +70,7 @@ struct AgentModeSwipeVisibleGeometryTests {
 
     @Test("Text below the visible region cannot move the start back behind the keyboard")
     func clippedOutTextCannotAnchor() throws {
-        let text = Node(type: "StaticText", label: "Output", key: 3,
+        let text = node(type: "StaticText", label: "Output", key: 3,
             frame: Rect(x: 136, y: 850, width: 20, height: 20))
         let result = try plan(make(keyboard: keyboard(), text: text))
         #expect(result.points.from == result.standard.from && result.points.to == result.standard.to)
@@ -80,11 +80,11 @@ struct AgentModeSwipeVisibleGeometryTests {
     @Test("Incomplete, missing, duplicate, wrong-owner or unavailable group authority cannot supply keyboard bounds")
     func unavailableKeyboardEvidenceIsNotInvented() throws {
         let original = keyboard()
-        var absent = original; absent.key = nil
+        var absent = original; absent.nativeIdentity = nil
         var hidden = original; hidden.hidden = true
         var disabled = original; disabled.enabled = false
-        var foreign = original; foreign.pid = 9999; foreign.keyPID = 9999
-        let copy = Node(type: "Group", key: original.key, frame: Rect(x: 0, y: 0, width: 40, height: 40))
+        var foreign = original; foreign.pid = 9999; foreign.nativeIdentity = .init(pid: 9999, objectID: 40)
+        let copy = node(type: "Group", key: original.nativeIdentity?.objectID, frame: Rect(x: 0, y: 0, width: 40, height: 40))
         let fixtures = [try make(keyboard: original, complete: false), try make(keyboard: absent),
             try make(keyboard: hidden), try make(keyboard: disabled), try make(keyboard: foreign),
             try make(keyboard: original, extra: [copy])]
@@ -100,7 +100,7 @@ struct AgentModeSwipeVisibleGeometryTests {
         let floating = keyboard(frame: Rect(x: 80, y: 546, width: 242, height: 328))
         let floatPlan = try plan(make(keyboard: floating))
         #expect(floatPlan.excludedKeyboardFrame == nil)
-        let directKeys = keyboard().children
+        let directKeys = keyboard().children ?? []
         let noGroup = try plan(make(extra: directKeys))
         #expect(noGroup.excludedKeyboardFrame == nil)
     }
@@ -150,27 +150,27 @@ struct AgentModeSwipeVisibleGeometryTests {
     private func inside(_ points: AgentModeSwipePlanner.Points, _ frame: CGRect) -> Bool {
         [points.from, points.to].allSatisfy { frame.contains(CGPoint(x: $0.x, y: $0.y)) }
     }
-    private func keyboard(frame: Rect = Rect(x: 0, y: 546, width: 402, height: 328)) -> Node {
+    private func keyboard(frame: Rect = Rect(x: 0, y: 546, width: 402, height: 328)) -> AXNodeFixture {
         let keys = ["shift", "delete"].enumerated().map { offset, identifier in
-            Node(type: "Button", id: identifier, key: UInt64(41 + offset),
+            node(type: "Button", id: identifier, key: UInt64(41 + offset),
                 frame: Rect(x: frame.x + 15 + Double(offset) * 70, y: frame.y + 50, width: 40, height: 40))
         }
-        return Node(type: "Group", key: 40, frame: frame, children: keys)
+        return node(type: "Group", key: 40, frame: frame, children: keys)
     }
     private struct Fixture { let snapshot: AgentModeSnapshot; let target: FBSimulatorAXNode }
-    private func make(frame: Rect? = nil, keyboard: Node? = nil, text: Node? = nil,
-                      extra: [Node] = [], complete: Bool = true, targetWithinKeyboard: Bool = false,
+    private func make(frame: Rect? = nil, keyboard: AXNodeFixture? = nil, text: AXNodeFixture? = nil,
+                      extra: [AXNodeFixture] = [], complete: Bool = true, targetWithinKeyboard: Bool = false,
                       targetKey: UInt64? = 2, targetPID: Int32? = 1234) throws -> Fixture {
-        let area = Node(type: "ScrollArea", id: "canvas", key: targetKey, pid: targetPID, frame: frame ?? content,
+        let area = node(type: "ScrollArea", id: "canvas", key: targetKey, pid: targetPID, frame: frame ?? content,
             children: text.map { [$0] } ?? [])
         var children = [area] + (keyboard.map { [$0] } ?? []) + extra
         if targetWithinKeyboard, var keyboard {
-            keyboard.children.insert(area, at: 0)
+            keyboard.children?.insert(area, at: 0)
             children = [keyboard] + extra
         }
-        let root = Node(type: "Application", key: 1, frame: Rect(x: 0, y: 0, width: 402, height: 874),
+        let root = node(type: "Application", key: 1, frame: Rect(x: 0, y: 0, width: 402, height: 874),
             children: children)
-        let native = try JSONDecoder().decode(FBSimulatorAXNode.self, from: JSONEncoder().encode(root))
+        let native = try root.decoded()
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: "00000000-0000-0000-0000-000000000001",
             bootIdentity: "boot", screenID: 1, screenUniqueID: "5D3C4CC2-87E2-4A57-AB7B-565B1B4F14F9", axDisplayID: 1,
             displayContext: FBSimulatorHIDDisplayContext(hidTarget: 1,
@@ -179,31 +179,13 @@ struct AgentModeSwipeVisibleGeometryTests {
             context: SelectedHIDContext(observation)),
             target: targetWithinKeyboard ? native.children[0].children[0] : native.children[0])
     }
-    private struct Rect: Encodable {
-        var x: Double, y: Double, width: Double, height: Double
-        var rect: CGRect { CGRect(x: x, y: y, width: width, height: height) }
-    }
-    private struct Node: Encodable {
-        var type: String
-        var id: String? = nil
-        var label: String? = nil
-        var key: UInt64?
-        var pid: Int32? = 1234
-        var keyPID: Int32 = 1234
-        var enabled = true, hidden = false
-        var frame: Rect
-        var children: [Node] = []
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", nativeIdentity, role, enabled, hidden, pid, frame, children
-        }
-        func encode(to encoder: Encoder) throws {
-            var values = encoder.container(keyedBy: CodingKeys.self)
-            try values.encode(type, forKey: .type); try values.encodeIfPresent(id, forKey: .id)
-            try values.encodeIfPresent(label, forKey: .label); try values.encode("AX" + type, forKey: .role)
-            try values.encode(enabled, forKey: .enabled); try values.encode(hidden, forKey: .hidden)
-            try values.encodeIfPresent(pid, forKey: .pid); try values.encode(frame, forKey: .frame)
-            try values.encode(children, forKey: .children)
-            if let key { try values.encode(FBSimulatorAXNativeIdentity(pid: keyPID, objectID: key), forKey: .nativeIdentity) }
-        }
-    }
+    private typealias Rect = AXNodeFixture.Frame
+}
+
+/// `key` becomes a native identity owned by 1234, independent of the node's `pid`.
+private func node(type: String, id: String? = nil, label: String? = nil, key: UInt64?, pid: Int32? = 1234,
+                  frame: AXNodeFixture.Frame, children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: id, label: label, role: "AX" + type, frame: frame, pid: pid, enabled: true,
+        hidden: false, nativeIdentity: key.map { FBSimulatorAXNativeIdentity(pid: 1234, objectID: $0) },
+        children: children)
 }

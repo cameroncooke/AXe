@@ -7,10 +7,10 @@ import FBSimulatorControl
 struct AgentBrokerOutputTests {
     @Test("One row limit spans targets, scrolling and text without losing later controls")
     func mixedSectionsShareOneForwardPage() throws {
-        let buttons = (1...42).map { Fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
+        let buttons = (1...42).map { fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
         let scrolls = (1...2).map { group in
-            Fixture(type: "ScrollView", id: "scroll.\(group)", label: "List \(group)", children:
-                (1...20).map { Fixture(type: "StaticText", id: "note.\(group).\($0)", label: "Note \(group).\($0)") })
+            fixture(type: "ScrollView", id: "scroll.\(group)", label: "List \(group)", children:
+                (1...20).map { fixture(type: "StaticText", id: "note.\(group).\($0)", label: "Note \(group).\($0)") })
         }
         let (snapshot, context) = try makeSnapshot(buttons + scrolls)
         let id = UUID()
@@ -56,7 +56,7 @@ struct AgentBrokerOutputTests {
     func nativeFieldsReassembleExactly() throws {
         let exact = " \nA|B \"quoted\" \\ 😀e\u{301} 👩🏽‍💻\t "
         let identifier = "native|field"
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "TextField", id: identifier,
+        let (snapshot, _) = try makeSnapshot([fixture(type: "TextField", id: identifier,
             label: exact, value: exact)])
         for field in [AgentModeTextQuery.Field.label, .value, .id] {
             let expected = field == .id ? identifier : exact
@@ -79,7 +79,7 @@ struct AgentBrokerOutputTests {
     @Test("Offsets use Unicode scalars and the exact end returns an empty terminal chunk")
     func scalarOffsetsAndEmptyTerminalChunk() throws {
         let exact = "😀e\u{301}Z"
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "StaticText", id: "text", label: exact)])
+        let (snapshot, _) = try makeSnapshot([fixture(type: "StaticText", id: "text", label: exact)])
         let combining = try snapshot.detail(ref: "e2", query: .init(field: .label, offset: 2, limit: 1))
         #expect(combining.text == "\u{301}" && combining.nextOffset == 3 && combining.totalLength == 4)
         let end = try snapshot.detail(ref: "e2", query: .init(field: .label, offset: 4, limit: 1))
@@ -90,7 +90,7 @@ struct AgentBrokerOutputTests {
 
     @Test("Invalid ranges and unknown references are refused without returning another field")
     func rejectsInvalidRangesAndReferences() throws {
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "StaticText", id: "text", label: "value")])
+        let (snapshot, _) = try makeSnapshot([fixture(type: "StaticText", id: "text", label: "value")])
         for query in [AgentModeTextQuery(field: .label, offset: -1, limit: 1),
                       .init(field: .label, offset: 0, limit: 0),
                       .init(field: .label, offset: 0, limit: 4097),
@@ -108,10 +108,10 @@ struct AgentBrokerOutputTests {
 
     @Test("A generic unaddressable parent cannot hide its child's text")
     func textDedupRequiresAnEmittedParentControl() throws {
-        let section = Fixture(type: "Other", id: "", label: "Section", children: [
-            Fixture(type: "StaticText", id: "", label: "Section")])
-        let button = Fixture(type: "Button", id: "button.primary", label: "Press", children: [
-            Fixture(type: "StaticText", id: "", label: "Press")])
+        let section = fixture(type: "Other", id: "", label: "Section", children: [
+            fixture(type: "StaticText", id: "", label: "Section")])
+        let button = fixture(type: "Button", id: "button.primary", label: "Press", children: [
+            fixture(type: "StaticText", id: "", label: "Press")])
         let (snapshot, context) = try makeSnapshot([section, section, button])
         let capture = snapshot.capture(id: UUID(), sequence: 1, udid: "fixture",
             request: AgentModeRequest(kind: .describe), applicationPID: 1234,
@@ -138,8 +138,8 @@ struct AgentBrokerOutputTests {
 
     @Test("The first page previews at most four cached scroll refs without changing its rows")
     func cachedScrollPreviewKeepsCanonicalPages() throws {
-        let buttons = (1...70).map { Fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
-        let scrolls = (1...6).map { Fixture(type: "ScrollView", id: "scroll.\($0)", label: "List \($0)") }
+        let buttons = (1...70).map { fixture(type: "Button", id: "button.\($0)", label: "Button \($0)") }
+        let scrolls = (1...6).map { fixture(type: "ScrollView", id: "scroll.\($0)", label: "List \($0)") }
         let (snapshot, context) = try makeSnapshot(buttons + scrolls)
         let id = UUID()
         let first = snapshot.capture(id: id, sequence: 1, udid: "fixture",
@@ -166,7 +166,7 @@ struct AgentBrokerOutputTests {
         #expect(unchanged.scrollPreview == nil)
 
         // The wire preview is bounded before transport, not only at final rendering.
-        let longScroll = Fixture(type: "ScrollView", id: "scroll.long", label: String(repeating: "😀", count: 20_000))
+        let longScroll = fixture(type: "ScrollView", id: "scroll.long", label: String(repeating: "😀", count: 20_000))
         let (longSnapshot, longContext) = try makeSnapshot(buttons + [longScroll])
         let longCapture = longSnapshot.capture(id: id, sequence: 1, udid: "fixture",
             request: .init(kind: .describe), applicationPID: 1234,
@@ -177,33 +177,16 @@ struct AgentBrokerOutputTests {
         #expect(bounded.truncatedFields?.first?["displayScalarLength"]?.scalarText == "20000")
     }
 
-    private func makeSnapshot(_ children: [Fixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
-        let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
-            #"{"bootIdentity":"1:2:3","screenID":3,"screenUUID":"DFEBAD86-C7D4-45CA-BB20-2F2D73B355B0","logicalWidth":951,"logicalHeight":669,"rotationDegrees":90,"nativePixelWidth":2007,"nativePixelHeight":2853,"scale":3,"poseRevision":"mechanicalDegrees=90.0"}"#.utf8))
-        let roots = [Fixture(type: "Application", id: "fixture", label: "Fixture", children: children)]
-        let nodes = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode(roots))
-        return (try AgentModeSnapshot(roots: nodes, context: context), context)
+    private func makeSnapshot(_ children: [AXNodeFixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
+        let context = try SelectedHIDContext.fixture()
+        let root = fixture(type: "Application", id: "fixture", label: "Fixture", children: children)
+        return (try AgentModeSnapshot(roots: AXNodeFixture.decode([root]), context: context), context)
     }
 
-    private struct Fixture: Encodable {
-        struct Frame: Encodable {
-            let x = 10.0
-            let y = 100.0
-            let width = 300.0
-            let height = 44.0
-        }
-        let type: String
-        let id: String
-        let label: String
-        var value: String? = nil
-        var children: [Fixture] = []
-        let frame = Frame()
-        let pid: Int32 = 1234
-        let enabled = true
-        let hidden = false
-        let focused = true
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", value = "AXValue", children, frame, pid, enabled, hidden, focused
-        }
+    private func fixture(type: String, id: String, label: String, value: String? = nil,
+                         children: [AXNodeFixture] = []) -> AXNodeFixture {
+        AXNodeFixture(type: type, identifier: id, label: label, value: value.map { .string($0) },
+            frame: .init(x: 10, y: 100, width: 300, height: 44), pid: 1234, focused: true, enabled: true,
+            hidden: false, children: children)
     }
 }

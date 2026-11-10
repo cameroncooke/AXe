@@ -41,7 +41,7 @@ struct TapTests {
 
             let hitCount = try await waitForLandscapeHitCount(expected: "Landscape Hit Count: 1", timeout: 3)
             #expect(hitCount == "Landscape Hit Count: 1")
-            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
+            try await TestHelpers.assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
             try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
         } catch {
             try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
@@ -70,7 +70,7 @@ struct TapTests {
 
             let hitCount = try await waitForLandscapeHitCount(expected: "Landscape Hit Count: 1", timeout: 3)
             #expect(hitCount == "Landscape Hit Count: 1")
-            try await assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
+            try await TestHelpers.assertLastNamedCoordinate(containing: "Last Tap Hit:", expectedX: logicalX, expectedY: logicalY, timeout: 3)
             try await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
         } catch {
             try? await TestHelpers.resetLandscapeCoordinateFixtureToPortrait()
@@ -170,32 +170,6 @@ struct TapTests {
         throw TestError.unexpectedState("Timed out waiting for \(expected). Last value: \(lastValue ?? "none")")
     }
 
-    private func assertLastNamedCoordinate(
-        containing text: String,
-        expectedX: Int,
-        expectedY: Int,
-        timeout: TimeInterval
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        var lastValue: String?
-
-        while Date() < deadline {
-            let uiState = try await TestHelpers.getUIState()
-            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
-                lastValue = label
-                if let point = CoordinateParser.parseNamedCoordinates(from: label),
-                   abs(point.x - expectedX) <= 1,
-                   abs(point.y - expectedY) <= 1 {
-                    return
-                }
-            }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        throw TestError.unexpectedState(
-            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
-        )
-    }
 
     @Test("Selector tap switches SwiftUI TabView tab")
     func selectorTapSwitchesSwiftUITabViewTab() async throws {

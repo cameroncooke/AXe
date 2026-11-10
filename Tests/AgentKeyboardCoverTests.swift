@@ -48,9 +48,11 @@ struct AgentKeyboardCoverTests {
 
     private func make(keyboard: Bool = true, outsideForm: Bool = false) throws -> AgentModeSnapshot {
         var next: UInt64 = 10
-        func node(_ type: String, _ label: String, _ frame: Node.Frame, role: String? = nil, children: [Node] = []) -> Node {
+        func node(_ type: String, _ label: String, _ frame: AXNodeFixture.Frame, role: String? = nil,
+                  children: [AXNodeFixture] = [], key: UInt64? = nil) -> AXNodeFixture {
             next += 1
-            return Node(type: type, label: label, frame: frame, role: role, key: next, children: children)
+            return AXNodeFixture(type: type, label: label, role: role, frame: frame, pid: 1234, enabled: true,
+                hidden: false, nativeIdentity: .init(pid: 1234, objectID: key ?? next), children: children)
         }
         let rows = [node("Button", "add name", .init(x: 16, y: 300, width: 370, height: 51), role: "AXButton"),
                     node("Button", "add phone", .init(x: 16, y: 470, width: 370, height: 51), role: "AXButton")]
@@ -65,42 +67,14 @@ struct AgentKeyboardCoverTests {
             }
             children.append(node("Group", "", .init(x: 0, y: 540, width: 402, height: 334), children: letters))
         }
-        let root = Node(type: "Application", label: "Contacts", frame: .init(x: 0, y: 0, width: 402, height: 874),
-            key: 1, children: children)
-        let native = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
-        return try AgentModeSnapshot(roots: native, nativeIdentityMetadata: .init(complete: true, reason: nil),
-            context: try context())
+        let root = node("Application", "Contacts", .init(x: 0, y: 0, width: 402, height: 874),
+            children: children, key: 1)
+        return try AgentModeSnapshot(roots: AXNodeFixture.decode([root]),
+            nativeIdentityMetadata: .init(complete: true, reason: nil), context: try context())
     }
 
     private func context() throws -> SelectedHIDContext {
-        try JSONDecoder().decode(SelectedHIDContext.self, from: Data("""
-        {"bootIdentity":"1:2:3","screenID":1,"screenUUID":"DF1FB281-4CCC-4A62-88D3-635D18FAD832",
-         "logicalWidth":402,"logicalHeight":874,"rotationDegrees":0,
-         "nativePixelWidth":1206,"nativePixelHeight":2622,"scale":3,"poseRevision":"mechanicalDegrees=180"}
-        """.utf8))
-    }
-
-    private struct Node: Encodable {
-        struct Frame: Encodable { var x = 0.0; var y = 0.0; var width = 0.0; var height = 0.0 }
-        let type: String
-        let label: String
-        let frame: Frame
-        var role: String? = nil
-        var key: UInt64? = nil
-        var children: [Node] = []
-        let pid: Int32 = 1234
-        let enabled = true
-        let hidden = false
-        private enum CodingKeys: String, CodingKey {
-            case type, label = "AXLabel", frame, role, children, pid, enabled, hidden, nativeIdentity
-        }
-        func encode(to encoder: Encoder) throws {
-            var values = encoder.container(keyedBy: CodingKeys.self)
-            try values.encode(type, forKey: .type); try values.encode(label, forKey: .label)
-            try values.encode(frame, forKey: .frame); try values.encodeIfPresent(role, forKey: .role)
-            try values.encode(children, forKey: .children); try values.encode(pid, forKey: .pid)
-            try values.encode(enabled, forKey: .enabled); try values.encode(hidden, forKey: .hidden)
-            if let key { try values.encode(FBSimulatorAXNativeIdentity(pid: pid, objectID: key), forKey: .nativeIdentity) }
-        }
+        try .fixture(screenID: 1, screenUUID: "DF1FB281-4CCC-4A62-88D3-635D18FAD832", width: 402, height: 874,
+            rotation: 0, pixelWidth: 1206, pixelHeight: 2622, pose: "mechanicalDegrees=180")
     }
 }

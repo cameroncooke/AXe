@@ -7,7 +7,7 @@ import FBSimulatorControl
 @Suite("Tap-only consistent native aliases")
 struct AgentNativeAliasBoundaryTests {
     @Test func consistentObjectEnablesOnlyTapAndKeepsBothRows() throws {
-        let button = Node(type: "Button", key: 100, AXLabel: "Repeated")
+        let button = node(type: "Button", key: 100, label: "Repeated")
         let fixture = try make([button, button])
         let index = try FBSimulatorAXNativeObjectIndex(roots: fixture.roots, metadata: .init(complete: true))
         #expect(try index.resolve(identity: button.identity, elementType: "Button", expectedPID: 42).isAlias)
@@ -26,8 +26,8 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func differentAliasPathsStillRefuseGestureAncestry() throws {
-        let button = Node(type: "Button", key: 100, AXLabel: "Repeated")
-        let area = Node(type: "ScrollArea", key: 200, children: [button])
+        let button = node(type: "Button", key: 100, label: "Repeated")
+        let area = node(type: "ScrollArea", key: 200, children: [button])
         let fixture = try make([area, button])
         let index = try FBSimulatorAXNativeObjectIndex(roots: fixture.roots, metadata: .init(complete: true))
         #expect(try index.resolve(identity: button.identity, elementType: "Button", expectedPID: 42).occurrences.count == 2)
@@ -43,7 +43,7 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func equalFieldAliasesCannotAdvertiseTyping() throws {
-        let field = Node(type: "TextField", key: 100, focused: true)
+        let field = node(type: "TextField", key: 100, focused: true)
         let fixture = try make([field, field])
         let index = try FBSimulatorAXNativeObjectIndex(roots: fixture.roots, metadata: .init(complete: true))
         #expect(try index.resolve(identity: field.identity, elementType: "TextField", expectedPID: 42).isAlias)
@@ -54,19 +54,19 @@ struct AgentNativeAliasBoundaryTests {
 
     @Test(arguments: ["label", "hidden", "disabled", "type", "number", "ancestor"])
     func conflictingOrUnprovableAliasesRefuseTap(change: String) throws {
-        let first = Node(type: "Button", key: 100, AXLabel: "Repeated")
+        let first = node(type: "Button", key: 100, label: "Repeated")
         var second = first
         switch change {
-        case "label": second.AXLabel = "Changed"
+        case "label": second.label = "Changed"
         case "hidden": second.hidden = true
         case "disabled": second.enabled = false
-        case "type": second.type = "Group"
+        case "type": second.type = "Group"; second.role = "AXGroup"
         case "number": second.value = .number(1)
         default: break
         }
-        let children: [Node]
+        let children: [AXNodeFixture]
         if change == "ancestor" {
-            children = [first, Node(type: "Group", key: 200, enabled: false, children: [second])]
+            children = [first, node(type: "Group", key: 200, enabled: false, children: [second])]
         } else { children = [first, second] }
         let fixture = try make(children)
         let native = SelectedNativeTarget.nativeObject(identity: first.identity, elementType: "Button")
@@ -74,7 +74,7 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func singletonNumericTapRemainsOnItsExistingRoute() throws {
-        let button = Node(type: "CheckBox", key: 100, value: .number(1))
+        let button = node(type: "CheckBox", key: 100, value: .number(1))
         let fixture = try make([button])
         _ = try fixture.snapshot.node(ref: "e2", requiredAction: .tap)
         #expect(try fixture.snapshot.target(ref: "e2").nativeIdentity == button.identity)
@@ -82,8 +82,8 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func incompleteAliasMetadataDoesNotRemoveSemanticSingleton() throws {
-        let singleton = Node(type: "Button", key: 300, AXLabel: "Unique")
-        let alias = Node(type: "Button", key: 100, AXLabel: "Repeated")
+        let singleton = node(type: "Button", key: 300, label: "Unique")
+        let alias = node(type: "Button", key: 100, label: "Repeated")
         let fixture = try make([singleton, alias, alias], complete: false)
         _ = try fixture.snapshot.node(ref: "e2", requiredAction: .tap)
         #expect(try fixture.snapshot.target(ref: "e2").nativeIdentity == nil)
@@ -91,7 +91,7 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func invalidLaterReferencePreventsWholeBatchPlanning() throws {
-        let alias = Node(type: "Button", key: 100, AXLabel: "Repeated")
+        let alias = node(type: "Button", key: 100, label: "Repeated")
         let fixture = try make([alias, alias])
         let table = UUID()
         let document = try JSONDecoder().decode(AgentBatchDocument.self, from: Data("""
@@ -105,7 +105,7 @@ struct AgentNativeAliasBoundaryTests {
     }
 
     @Test func aliasBatchResolvesCurrentClassButRejectsChangedCopiesOrContext() throws {
-        let alias = Node(type: "Button", key: 100, AXLabel: "Repeated")
+        let alias = node(type: "Button", key: 100, label: "Repeated")
         let fixture = try make([alias, alias])
         let table = UUID()
         let document = try JSONDecoder().decode(AgentBatchDocument.self, from: Data("""
@@ -125,9 +125,9 @@ struct AgentNativeAliasBoundaryTests {
         }
     }
 
-    private func make(_ children: [Node], complete: Bool = true) throws -> (roots: [FBSimulatorAXNode], snapshot: AgentModeSnapshot, context: SelectedHIDContext) {
-        let root = Node(type: "Application", key: 1, children: children)
-        let roots = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
+    private func make(_ children: [AXNodeFixture], complete: Bool = true) throws -> (roots: [FBSimulatorAXNode], snapshot: AgentModeSnapshot, context: SelectedHIDContext) {
+        let root = node(type: "Application", key: 1, children: children)
+        let roots = try AXNodeFixture.decode([root])
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: "00000000-0000-0000-0000-000000000001",
             bootIdentity: "test-boot", screenID: 1, screenUniqueID: "DFEBAD86-C7D4-45CA-BB20-2F2D73B355B0", axDisplayID: 1,
             displayContext: FBSimulatorHIDDisplayContext(hidTarget: 1,
@@ -137,27 +137,19 @@ struct AgentNativeAliasBoundaryTests {
             context: context), context)
     }
 
-    private struct Node: Encodable {
-        var type: String
-        let key: UInt64
-        var AXLabel: String? = nil
-        var focused = false
-        var enabled = true
-        var hidden = false
-        var value: FBSimulatorAXValue? = nil
-        var children: [Node] = []
-        var identity: FBSimulatorAXNativeIdentity { .init(pid: 42, objectID: key) }
-        private enum CodingKeys: String, CodingKey { case type, nativeIdentity, pid, role, AXLabel, focused, enabled, hidden, frame, children
-            case value = "AXValue" }
-        func encode(to encoder: Encoder) throws {
-            var values = encoder.container(keyedBy: CodingKeys.self)
-            try values.encode(type, forKey: .type); try values.encode(identity, forKey: .nativeIdentity)
-            try values.encode(Int32(42), forKey: .pid); try values.encode("AX" + type, forKey: .role)
-            try values.encodeIfPresent(AXLabel, forKey: .AXLabel); try values.encode(focused, forKey: .focused)
-            try values.encode(enabled, forKey: .enabled); try values.encode(hidden, forKey: .hidden)
-            try values.encodeIfPresent(value, forKey: .value)
-            try values.encode(Frame(), forKey: .frame); try values.encode(children, forKey: .children)
-        }
+}
+
+/// Every node is owned by PID 42 and carries the native identity for its `key`.
+private func node(type: String, key: UInt64, label: String? = nil, focused: Bool = false, enabled: Bool = true,
+                  value: FBSimulatorAXValue? = nil, children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, label: label, value: value, role: "AX" + type,
+        frame: .init(x: 10, y: 100, width: 300, height: 50), pid: 42, focused: focused, enabled: enabled,
+        hidden: false, nativeIdentity: .init(pid: 42, objectID: key), children: children)
+}
+
+private extension AXNodeFixture {
+    var identity: FBSimulatorAXNativeIdentity {
+        guard let nativeIdentity else { preconditionFailure("Every node in this file has a native identity.") }
+        return nativeIdentity
     }
-    private struct Frame: Encodable { let x = 10.0, y = 100.0, width = 300.0, height = 50.0 }
 }

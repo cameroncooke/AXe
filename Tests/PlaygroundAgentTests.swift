@@ -165,7 +165,7 @@ struct AgentPlaygroundSession {
     }
 
     func run(_ arguments: [String], allowFailure: Bool = false) async throws -> CommandOutput {
-        let command = ([axePath] + canonicalAgentArguments(arguments) + ["--udid", udid]).map(Self.quote).joined(separator: " ")
+        let command = ([axePath] + canonicalAgentArguments(arguments) + ["--udid", udid]).map(shellQuote).joined(separator: " ")
         let result = try await CommandRunner.run(command, allowFailure: allowFailure, timeout: 30)
         return CommandOutput(output: result.output, exitCode: result.exitCode)
     }
@@ -175,7 +175,7 @@ struct AgentPlaygroundSession {
             "xcrun", "simctl", "launch", "--terminate-running-process", udid,
             "com.cameroncooke.AxePlayground", "--launch-arg", "screen=\(screen)",
         ]
-        let launch = try await CommandRunner.run(arguments.map(Self.quote).joined(separator: " "), timeout: 30)
+        let launch = try await CommandRunner.run(arguments.map(shellQuote).joined(separator: " "), timeout: 30)
         let line = launch.output.split(separator: "\n").first { $0.hasPrefix("com.cameroncooke.AxePlayground:") }
         guard let pidText = line?.split(separator: ":").last,
               let pid = Int32(pidText.trimmingCharacters(in: .whitespaces)), pid > 0 else {
@@ -277,10 +277,6 @@ struct AgentPlaygroundSession {
             }
         }
         throw TestError.invalidJSON("No axe.output.agent-result envelope.\n\(output)")
-    }
-
-    private static func quote(_ argument: String) -> String {
-        "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 

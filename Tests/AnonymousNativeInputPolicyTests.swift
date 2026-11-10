@@ -59,23 +59,23 @@ struct AnonymousNativeInputPolicyTests {
     func ownedAnonymousEdit() throws {
         let selected = SelectedNativeTarget.nativeObject(identity: key, elementType: "TextField")
         let initial = field()
-        let original = try AgentModeTarget(node(initial), nativeTarget: selected)
+        let original = try AgentModeTarget(initial.decoded(), nativeTarget: selected)
         var changed = initial
-        changed.AXValue = "OpaqueIdentityProbe"
-        changed.frame.width -= 10
+        changed.value = .string("OpaqueIdentityProbe")
+        changed.frame?.width -= 10
         #expect(throws: (any Error).self) { try edit(changed, against: original, target: selected, started: false) }
         try edit(changed, against: original, target: selected, started: true)
-        var variants: [Node] = []
+        var variants: [AXNodeFixture] = []
         var invalid = changed; invalid.nativeIdentity = .init(pid: 1234, objectID: key.objectID + 1); variants.append(invalid)
-        invalid = changed; invalid.AXLabel = "Other title"; variants.append(invalid)
-        invalid = changed; invalid.AXUniqueId = "newly.materialized.id"; variants.append(invalid)
-        invalid = changed; invalid.AXUniqueId = ""; variants.append(invalid)
+        invalid = changed; invalid.label = "Other title"; variants.append(invalid)
+        invalid = changed; invalid.identifier = "newly.materialized.id"; variants.append(invalid)
+        invalid = changed; invalid.identifier = ""; variants.append(invalid)
         invalid = changed; invalid.focused = false; variants.append(invalid)
         invalid = changed; invalid.pid = 999; variants.append(invalid)
         invalid = changed; invalid.type = "TextView"; variants.append(invalid)
         invalid = changed; invalid.hidden = true; variants.append(invalid)
         invalid = changed; invalid.enabled = false; variants.append(invalid)
-        invalid = changed; invalid.frame.x = -1; variants.append(invalid)
+        invalid = changed; invalid.frame?.x = -1; variants.append(invalid)
         for value in variants {
             #expect(throws: (any Error).self) { try edit(value, against: original, target: selected, started: true) }
         }
@@ -83,17 +83,17 @@ struct AnonymousNativeInputPolicyTests {
 
     @Test("Existing exact-ID edits do not depend on incidental optional native metadata")
     func semanticFocusDoesNotRequireObjectMetadata() throws {
-        var initial = field(); initial.AXUniqueId = "field"
-        let original = try AgentModeTarget(node(initial))
-        var current = initial; current.nativeIdentity = nil; current.AXValue = "a"
-        try SelectedKeyboardEditingTargetPolicy.validate(node(current), against: original,
+        var initial = field(); initial.identifier = "field"
+        let original = try AgentModeTarget(initial.decoded())
+        var current = initial; current.nativeIdentity = nil; current.value = .string("a")
+        try SelectedKeyboardEditingTargetPolicy.validate(current.decoded(), against: original,
             expectedPID: 1234, focusID: "field", logicalSize: viewport, editingStarted: true)
     }
 
     @Test("Every original batch object is checked before the first tap, with no identity rebinding")
     func batchBindsAllOriginalKeys() throws {
-        let first = Node(type: "Button", nativeIdentity: .init(pid: 1234, objectID: 101))
-        let second = Node(type: "Button", frame: .init(x: 100), nativeIdentity: .init(pid: 1234, objectID: 102))
+        let first = node(type: "Button", nativeIdentity: .init(pid: 1234, objectID: 101))
+        let second = node(type: "Button", frame: frame(x: 100), nativeIdentity: .init(pid: 1234, objectID: 102))
         let original = try snapshot([first, second])
         let plan = try batchPlan(snapshot: original)
         let resolved = try plan.resolve(index: 0, snapshot: original, context: context(), pid: 1234)
@@ -118,7 +118,7 @@ struct AnonymousNativeInputPolicyTests {
     @Test("Point uniqueness counts wrong-type and hidden copies before filtering")
     func pointIdentityNeedsCompleteUniqueTree() throws {
         let hit = field()
-        let native = try node(hit)
+        let native = try hit.decoded()
         let complete = try snapshot([hit])
         #expect(try AgentModePathIdentityPolicy.uniqueIndex(matching: native, in: complete, usingNativeIdentity: true) == 1)
         var duplicate = hit; duplicate.type = "Group"; duplicate.hidden = true; duplicate.focused = false
@@ -132,52 +132,52 @@ struct AnonymousNativeInputPolicyTests {
         #expect(throws: (any Error).self) {
             try AgentModePathIdentityPolicy.uniqueIndex(matching: native, in: snapshot([replacement]), usingNativeIdentity: true)
         }
-        var changedPoint = hit; changedPoint.AXLabel = "changed"
-        #expect(!AgentModePathIdentityPolicy.sameSignature(native, try node(changedPoint), usingNativeIdentity: true))
+        var changedPoint = hit; changedPoint.label = "changed"
+        #expect(!AgentModePathIdentityPolicy.sameSignature(native, try changedPoint.decoded(), usingNativeIdentity: true))
     }
 
     @Test("Equal-signature anonymous scroll areas use the chosen object's actual descendants")
     func swipePlannerKeepsChosenArea() throws {
-        let area = Frame(x: 8, y: 370, width: 386, height: 496)
-        let leftText = Node(type: "StaticText", AXLabel: "Left", frame: .init(x: 60, y: 690, width: 20, height: 20),
+        let area = frame(x: 8, y: 370, width: 386, height: 496)
+        let leftText = node(type: "StaticText", label: "Left", frame: frame(x: 60, y: 690, width: 20, height: 20),
             nativeIdentity: .init(pid: 1234, objectID: 201))
-        let rightText = Node(type: "StaticText", AXLabel: "Right", frame: .init(x: 300, y: 690, width: 20, height: 20),
+        let rightText = node(type: "StaticText", label: "Right", frame: frame(x: 300, y: 690, width: 20, height: 20),
             nativeIdentity: .init(pid: 1234, objectID: 202))
-        let left = Node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 301), children: [leftText])
-        let right = Node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 302), children: [rightText])
+        let left = node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 301), children: [leftText])
+        let right = node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 302), children: [rightText])
         let tree = try snapshot([left, right])
         let points = try AgentModeSwipePlanner.points(standard: (.init(x: 201, y: 705), .init(x: 201, y: 532)),
-            target: node(right), snapshot: tree, logicalSize: viewport,
+            target: right.decoded(), snapshot: tree, logicalSize: viewport,
             nativeTarget: .nativeObject(identity: #require(right.nativeIdentity), elementType: "ScrollArea"))
         #expect(points.from == AgentPoint(x: 310, y: 700))
         #expect(points.to == AgentPoint(x: 310, y: 527))
         #expect(throws: (any Error).self) {
             try AgentModeSwipePlanner.points(standard: (.init(x: 201, y: 705), .init(x: 201, y: 532)),
-                target: node(right), snapshot: snapshot([left, right], complete: false), logicalSize: viewport,
+                target: right.decoded(), snapshot: snapshot([left, right], complete: false), logicalSize: viewport,
                 nativeTarget: .nativeObject(identity: #require(right.nativeIdentity), elementType: "ScrollArea"))
         }
     }
 
     @Test("A current point must belong to the selected area's actual ancestor chain")
     func pointCannotTransferBetweenEqualAreas() throws {
-        let frame = Frame(x: 8, y: 370, width: 386, height: 496)
-        let hit = Node(type: "StaticText", AXLabel: "Text", frame: .init(x: 60, y: 690, width: 20, height: 20),
+        let area = frame(x: 8, y: 370, width: 386, height: 496)
+        let hit = node(type: "StaticText", label: "Text", frame: frame(x: 60, y: 690, width: 20, height: 20),
             nativeIdentity: .init(pid: 1234, objectID: 401))
-        let left = Node(type: "ScrollArea", frame: frame, nativeIdentity: .init(pid: 1234, objectID: 501), children: [hit])
-        let right = Node(type: "ScrollArea", frame: frame, nativeIdentity: .init(pid: 1234, objectID: 502))
+        let left = node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 501), children: [hit])
+        let right = node(type: "ScrollArea", frame: area, nativeIdentity: .init(pid: 1234, objectID: 502))
         let tree = try snapshot([left, right])
-        let chain = try AgentModePathIdentityPolicy.ancestorChain(hit: node(hit), area: node(left),
+        let chain = try AgentModePathIdentityPolicy.ancestorChain(hit: hit.decoded(), area: left.decoded(),
             roots: [tree.nodes[0]], snapshot: tree, usingNativeIdentity: true)
         #expect(chain == [0, 1, 2])
         #expect(throws: (any Error).self) {
-            try AgentModePathIdentityPolicy.ancestorChain(hit: node(hit), area: node(right),
+            try AgentModePathIdentityPolicy.ancestorChain(hit: hit.decoded(), area: right.decoded(),
                 roots: [tree.nodes[0]], snapshot: tree, usingNativeIdentity: true)
         }
         var movedLeft = left; movedLeft.children = []
         var movedRight = right; movedRight.children = [hit]
         let moved = try snapshot([movedLeft, movedRight])
         #expect(throws: (any Error).self) {
-            try AgentModePathIdentityPolicy.ancestorChain(hit: node(hit), area: node(movedLeft),
+            try AgentModePathIdentityPolicy.ancestorChain(hit: hit.decoded(), area: movedLeft.decoded(),
                 roots: [moved.nodes[0]], snapshot: moved, usingNativeIdentity: true)
         }
     }
@@ -205,14 +205,14 @@ struct AnonymousNativeInputPolicyTests {
         }
     }
 
-    private func edit(_ field: Node, against original: AgentModeTarget,
+    private func edit(_ field: AXNodeFixture, against original: AgentModeTarget,
                       target: SelectedNativeTarget, started: Bool) throws {
-        try SelectedKeyboardEditingTargetPolicy.validate(node(field), against: original,
+        try SelectedKeyboardEditingTargetPolicy.validate(field.decoded(), against: original,
             expectedPID: 1234, fieldTarget: target, logicalSize: viewport, editingStarted: started)
     }
 
-    private func field() -> Node {
-        Node(type: "TextField", AXLabel: "Title", AXValue: "", frame: .init(x: 10, y: 100, width: 300, height: 44),
+    private func field() -> AXNodeFixture {
+        node(type: "TextField", label: "Title", value: "", frame: frame(x: 10, y: 100, width: 300, height: 44),
             focused: true, nativeIdentity: key)
     }
 
@@ -224,43 +224,30 @@ struct AnonymousNativeInputPolicyTests {
             snapshotID: table, snapshot: snapshot, context: context(), pid: 1234)
     }
 
-    private func snapshot(_ children: [Node], complete: Bool? = true) throws -> AgentModeSnapshot {
-        let root = Node(type: "Application", AXLabel: "Example", frame: .init(x: 0, y: 0, width: 402, height: 874),
+    private func snapshot(_ children: [AXNodeFixture], complete: Bool? = true) throws -> AgentModeSnapshot {
+        let root = node(type: "Application", label: "Example", frame: frame(x: 0, y: 0, width: 402, height: 874),
             nativeIdentity: .init(pid: 1234, objectID: 1), children: children)
         let metadata: FBSimulatorAXNativeIdentityMetadata?
         if let complete {
             metadata = try JSONDecoder().decode(FBSimulatorAXNativeIdentityMetadata.self,
                 from: Data("{\"complete\":\(complete),\"reason\":null}".utf8))
         } else { metadata = nil }
-        return try AgentModeSnapshot(roots: [node(root)], nativeIdentityMetadata: metadata, context: context())
-    }
-
-    private func node(_ value: Node) throws -> FBSimulatorAXNode {
-        try JSONDecoder().decode(FBSimulatorAXNode.self, from: JSONEncoder().encode(value))
+        return try AgentModeSnapshot(roots: [root.decoded()], nativeIdentityMetadata: metadata, context: context())
     }
 
     private func context() throws -> SelectedHIDContext {
-        try JSONDecoder().decode(SelectedHIDContext.self, from: Data(#"{"bootIdentity":"boot","screenID":1,"screenUUID":"DF1FB281-4CCC-4A62-88D3-635D18FAD832","logicalWidth":402,"logicalHeight":874,"rotationDegrees":0,"nativePixelWidth":1206,"nativePixelHeight":2622,"scale":3,"poseRevision":"open"}"#.utf8))
+        try .fixture(boot: "boot", screenID: 1, screenUUID: "DF1FB281-4CCC-4A62-88D3-635D18FAD832", width: 402,
+            height: 874, rotation: 0, pixelWidth: 1206, pixelHeight: 2622, pose: "open")
     }
+}
 
-    private struct Frame: Encodable {
-        var x = 10.0
-        var y = 10.0
-        var width = 80.0
-        var height = 44.0
-    }
+private func frame(x: Double = 10, y: Double = 10, width: Double = 80, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
 
-    private struct Node: Encodable {
-        var type: String
-        var AXUniqueId: String? = nil
-        var AXLabel: String? = nil
-        var AXValue: String? = nil
-        var frame = Frame()
-        var pid: Int32 = 1234
-        var focused = false
-        var enabled = true
-        var hidden = false
-        var nativeIdentity: FBSimulatorAXNativeIdentity? = nil
-        var children: [Node] = []
-    }
+private func node(type: String, label: String? = nil, value: String? = nil, frame: AXNodeFixture.Frame = frame(),
+                  focused: Bool = false, nativeIdentity: FBSimulatorAXNativeIdentity? = nil,
+                  children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, label: label, value: value.map { .string($0) }, frame: frame, pid: 1234,
+        focused: focused, enabled: true, hidden: false, nativeIdentity: nativeIdentity, children: children)
 }

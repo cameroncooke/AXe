@@ -8,7 +8,7 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let udid = try TestHelpers.requireSimulatorUDID()
         let cli = try TestHelpers.getAxePath()
         let reset = ["xcrun", "simctl", "privacy", udid, "reset", "photos", "com.cameroncooke.AxePlayground"]
-        _ = try await CommandRunner.run(reset.map(Self.quote).joined(separator: " "), timeout: 15)
+        _ = try await CommandRunner.run(reset.map(shellQuote).joined(separator: " "), timeout: 15)
         let session = try await PlaygroundAgentExamplesSession.open()
         let before = try session.document.read()
         try #require(before.photosStatus == 0)
@@ -378,7 +378,6 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         }
         throw TestError.invalidJSON("No Photos proof envelope")
     }
-    private static func quote(_ value: String) -> String { "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }
 
 private struct AgentOwnerDiagnostic: Decodable {

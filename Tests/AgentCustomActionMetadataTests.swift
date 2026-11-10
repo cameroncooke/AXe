@@ -29,7 +29,7 @@ struct AgentCustomActionMetadataTests {
         let legacy = RuntimeSnapshotBuilder.elements(from: [RuntimeSnapshotNode(type: "Other",
             label: "Item", frame: frame, customActions: ["Delete"])])
         #expect(legacy.first?.actions.contains(.tap) == true)
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "GenericElement", customActionNames: names)])
+        let (snapshot, _) = try makeSnapshot([fixture(type: "GenericElement", customActionNames: names)])
         #expect(snapshot.elements[1].customActionNames == names)
         #expect(snapshot.semanticElements[1].customActionNames == names)
         #expect(!snapshot.elements[1].actions.contains(.tap))
@@ -38,8 +38,8 @@ struct AgentCustomActionMetadataTests {
 
     @Test("A name-only change invalidates normalized and exact native freshness checks")
     func changedNamesInvalidateFreshness() throws {
-        let (before, context) = try makeSnapshot([Fixture(customActionNames: ["Delete"])])
-        let (after, _) = try makeSnapshot([Fixture(customActionNames: ["Archive"])])
+        let (before, context) = try makeSnapshot([fixture(customActionNames: ["Delete"])])
+        let (after, _) = try makeSnapshot([fixture(customActionNames: ["Archive"])])
         #expect(before.hash != after.hash && before.nativeFingerprint != after.nativeFingerprint)
         let admission = AgentModeAdmission(context: context, expectedPID: 1234,
             visibleFingerprint: before.visibleFingerprint, target: nil)
@@ -57,8 +57,8 @@ struct AgentCustomActionMetadataTests {
     @Test("Reference batches reject changed names even when values and ordinary text may change")
     func batchNamesStayBound() throws {
         let table = UUID()
-        let (before, context) = try makeSnapshot([Fixture(customActionNames: ["Delete"])])
-        let (after, _) = try makeSnapshot([Fixture(customActionNames: ["Archive"])])
+        let (before, context) = try makeSnapshot([fixture(customActionNames: ["Delete"])])
+        let (after, _) = try makeSnapshot([fixture(customActionNames: ["Archive"])])
         let document = try JSONDecoder().decode(AgentBatchDocument.self, from: Data("""
             {"snapshotID":"\(table.uuidString)","steps":[{"action":"tap","ref":"e2"}]}
             """.utf8))
@@ -75,7 +75,7 @@ struct AgentCustomActionMetadataTests {
     @Test("Both views keep bounded previews and complete JSON names can be read in exact scalar chunks")
     func boundedPreviewAndCompleteRead() throws {
         let names = [String(repeating: "👩🏽‍💻", count: 100), "A|B", "\"quoted\"\n", "Delete", "Delete", " last "]
-        let (snapshot, context) = try makeSnapshot([Fixture(customActionNames: names)])
+        let (snapshot, context) = try makeSnapshot([fixture(customActionNames: names)])
         let capture = snapshot.capture(id: UUID(), sequence: 1, udid: "fixture", request: .init(kind: .describe),
             applicationPID: 1234, context: context, unchanged: false, expiresIn: 60)
         let unchanged = snapshot.capture(id: UUID(), sequence: 1, udid: "fixture", request: .init(kind: .describe),
@@ -122,7 +122,7 @@ struct AgentCustomActionMetadataTests {
     func previewBytesUseExistingPageBudget() throws {
         let names = (1...6).map { String(repeating: "\"", count: 120) + String($0) }
         let (snapshot, context) = try makeSnapshot((1...64).map {
-            Fixture(id: "item.\($0)", label: "Item \($0)", customActionNames: names)
+            fixture(id: "item.\($0)", label: "Item \($0)", customActionNames: names)
         })
         var offset = 0
         var recovered = Set<String>()
@@ -166,29 +166,16 @@ struct AgentCustomActionMetadataTests {
             "didError": .bool(false), "data": .object(["capture": value])])
     }
 
-    private func makeSnapshot(_ children: [Fixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
-        let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
-            #"{"bootIdentity":"1:2:3","screenID":3,"screenUUID":"DFEBAD86-C7D4-45CA-BB20-2F2D73B355B0","logicalWidth":951,"logicalHeight":669,"rotationDegrees":90,"nativePixelWidth":2007,"nativePixelHeight":2853,"scale":3,"poseRevision":"mechanicalDegrees=90.0"}"#.utf8))
-        let root = Fixture(type: "Application", id: "fixture", label: "Fixture", children: children)
-        let nodes = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
-        return (try AgentModeSnapshot(roots: nodes, context: context), context)
+    private func makeSnapshot(_ children: [AXNodeFixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
+        let context = try SelectedHIDContext.fixture()
+        let root = fixture(type: "Application", id: "fixture", label: "Fixture", children: children)
+        return (try AgentModeSnapshot(roots: AXNodeFixture.decode([root]), context: context), context)
     }
 
-    private struct Fixture: Encodable {
-        struct Frame: Encodable {
-            let x = 10.0, y = 100.0, width = 300.0, height = 44.0
-        }
-        var type = "Button"
-        var id = "item"
-        var label = "Item"
-        var customActionNames: [String] = []
-        var children: [Fixture] = []
-        let frame = Frame()
-        let pid: Int32 = 1234
-        let enabled = true, hidden = false, focused = true
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", customActionNames = "custom_actions"
-            case children, frame, pid, enabled, hidden, focused
-        }
+    private func fixture(type: String = "Button", id: String = "item", label: String = "Item",
+                         customActionNames: [String] = [], children: [AXNodeFixture] = []) -> AXNodeFixture {
+        AXNodeFixture(type: type, identifier: id, label: label, frame: .init(x: 10, y: 100, width: 300, height: 44),
+            pid: 1234, focused: true, enabled: true, hidden: false, customActionNames: customActionNames,
+            children: children)
     }
 }

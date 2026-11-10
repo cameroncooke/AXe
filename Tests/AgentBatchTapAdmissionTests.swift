@@ -16,8 +16,8 @@ struct AgentBatchTapAdmissionTests {
         let admission = AgentBatchTapAdmission(plan: try fixture.plan(), index: 1)
         var changed = fixture.controls
         changed[1].label = "8"
-        changed[1].frame.width = 30
-        changed[2].value = "0"
+        changed[1].frame?.width = 30
+        changed[2].value = .string("0")
         let roots = try fixture.roots(changed)
         let target = roots[0].children[2]
         let accepted = try admission.validateOwnedSnapshot(roots: roots, context: fixture.context,
@@ -35,12 +35,12 @@ struct AgentBatchTapAdmissionTests {
     func changedOwnedTreesReject() throws {
         let fixture = try Fixture()
         let admission = AgentBatchTapAdmission(plan: try fixture.plan(), index: 0)
-        var variants: [[Fixture.Node]] = []
-        var nodes = fixture.controls; nodes[0].frame.x += 1; variants.append(nodes)
+        var variants: [[AXNodeFixture]] = []
+        var nodes = fixture.controls; nodes[0].frame?.x += 1; variants.append(nodes)
         nodes = fixture.controls; nodes[0].label = "Different"; variants.append(nodes)
         nodes = fixture.controls; nodes[0].hidden = true; variants.append(nodes)
         nodes = fixture.controls; nodes[0].enabled = false; variants.append(nodes)
-        nodes = fixture.controls; nodes.append(.init(type: "Button", label: "Overlay")); variants.append(nodes)
+        nodes = fixture.controls; nodes.append(node(type: "Button", label: "Overlay")); variants.append(nodes)
         nodes = fixture.controls; nodes[0].pid = 4321; variants.append(nodes)
         for changed in variants {
             let roots = try fixture.roots(changed)
@@ -93,8 +93,8 @@ struct AgentBatchTapAdmissionTests {
         let fixture = try Fixture()
         let admission = AgentBatchTapAdmission(plan: try fixture.plan(), index: 0)
         var nodes = fixture.controls
-        if variant == .changedLayout { nodes[0].frame.x += 1 }
-        if variant == .overlay { nodes.append(.init(type: "Button", label: "Overlay")) }
+        if variant == .changedLayout { nodes[0].frame?.x += 1 }
+        if variant == .overlay { nodes.append(node(type: "Button", label: "Overlay")) }
         let roots = try fixture.roots(nodes, appPID: variant == .wrongApp ? 4321 : 1234)
         let context = variant == .changedContext ? try Fixture.context(boot: "other") : fixture.context
         let target = roots[0].children[variant == .wrongTarget ? 2 : 0]
@@ -156,9 +156,9 @@ struct AgentBatchTapAdmissionTests {
     private struct Fixture {
         let table = UUID()
         let context: SelectedHIDContext
-        let controls = [Node(type: "Button", label: "5"),
-            Node(type: "StaticText", label: "0", frame: .init(x: 200)),
-            Node(type: "Switch", label: "Animations", value: "1", frame: .init(y: 100))]
+        let controls = [node(type: "Button", label: "5"),
+            node(type: "StaticText", label: "0", frame: frame(x: 200)),
+            node(type: "Switch", label: "Animations", value: "1", frame: frame(y: 100))]
 
         init() throws { context = try Self.context() }
 
@@ -173,39 +173,26 @@ struct AgentBatchTapAdmissionTests {
                 snapshot: snapshot, context: context, pid: 1234)
         }
 
-        func roots(_ controls: [Node], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
-            let root = Node(type: "Application", label: "Example",
-                frame: .init(width: 390, height: 844), children: controls, pid: appPID)
-            return try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
+        func roots(_ controls: [AXNodeFixture], appPID: Int32 = 1234) throws -> [FBSimulatorAXNode] {
+            let root = node(type: "Application", label: "Example",
+                frame: frame(width: 390, height: 844), children: controls, pid: appPID)
+            return try AXNodeFixture.decode([root])
         }
 
         static func context(boot: String = "boot", screen: Int = 1, rotation: Int = 0,
                             pose: String = "open") throws -> SelectedHIDContext {
-            try JSONDecoder().decode(SelectedHIDContext.self, from: Data("""
-            {"bootIdentity":"\(boot)","screenID":\(screen),"screenUUID":"DF1FB281-4CCC-4A62-88D3-635D18FAD832",
-            "logicalWidth":390,"logicalHeight":844,"rotationDegrees":\(rotation),
-            "nativePixelWidth":1170,"nativePixelHeight":2532,"scale":3,"poseRevision":"\(pose)"}
-            """.utf8))
-        }
-
-        struct Node: Encodable {
-            struct Frame: Encodable {
-                var x = 0.0
-                var y = 0.0
-                var width = 80.0
-                var height = 44.0
-            }
-            let type: String
-            var label: String
-            var value: String? = nil
-            var frame = Frame()
-            var children: [Node] = []
-            var pid: Int32 = 1234
-            var enabled = true
-            var hidden = false
-            private enum CodingKeys: String, CodingKey {
-                case type, label = "AXLabel", value = "AXValue", frame, children, pid, enabled, hidden
-            }
+            try .fixture(boot: boot, screenID: screen, screenUUID: "DF1FB281-4CCC-4A62-88D3-635D18FAD832",
+                width: 390, height: 844, rotation: rotation, pixelWidth: 1170, pixelHeight: 2532, pose: pose)
         }
     }
+}
+
+private func frame(x: Double = 0, y: Double = 0, width: Double = 80, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
+
+private func node(type: String, label: String, value: String? = nil, frame: AXNodeFixture.Frame = frame(),
+                  children: [AXNodeFixture] = [], pid: Int32 = 1234) -> AXNodeFixture {
+    AXNodeFixture(type: type, label: label, value: value.map { .string($0) }, frame: frame, pid: pid,
+        enabled: true, hidden: false, children: children)
 }

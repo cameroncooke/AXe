@@ -39,10 +39,10 @@ struct AgentVisibleFingerprintTests {
 
     @Test("A ticking leaf StaticText does not change the admission fingerprint")
     func ordinaryTextChangesAreInvisible() throws {
-        let before = try snapshot(buttons: ["A", "B"], text: Node(type: "StaticText", label: "00:01",
-            frame: .init(x: 20, y: 400, width: 60)))
-        let after = try snapshot(buttons: ["A", "B"], text: Node(type: "StaticText", label: "00:02", value: "2",
-            frame: .init(x: 20, y: 400, width: 64)))
+        let before = try snapshot(buttons: ["A", "B"], text: node(type: "StaticText", label: "00:01",
+            frame: frame(x: 20, y: 400, width: 60)))
+        let after = try snapshot(buttons: ["A", "B"], text: node(type: "StaticText", label: "00:02", value: "2",
+            frame: frame(x: 20, y: 400, width: 64)))
         #expect(before.visibleFingerprint == after.visibleFingerprint)
         // The semantic hash still reports the new text, and a new or removed text node still counts.
         #expect(before.hash != after.hash)
@@ -52,9 +52,9 @@ struct AgentVisibleFingerprintTests {
     @Test("Text inside a control, and a control's own label, stay bound")
     func controlTextIsBound() throws {
         func cell(_ text: String) throws -> AgentModeSnapshot {
-            try snapshot(buttons: ["A"], text: Node(type: "Button", label: "Row",
-                frame: .init(x: 20, y: 400, width: 300),
-                children: [Node(type: "StaticText", label: text, frame: .init(x: 24, y: 404, width: 100))]))
+            try snapshot(buttons: ["A"], text: node(type: "Button", label: "Row",
+                frame: frame(x: 20, y: 400, width: 300),
+                children: [node(type: "StaticText", label: text, frame: frame(x: 24, y: 404, width: 100))]))
         }
         #expect(try cell("Delete").visibleFingerprint != cell("Keep").visibleFingerprint)
         #expect(try snapshot(buttons: ["A"]).visibleFingerprint != snapshot(buttons: ["B"]).visibleFingerprint)
@@ -63,52 +63,41 @@ struct AgentVisibleFingerprintTests {
     enum Extra: Sendable { case inertGroup, hidden, offDisplay, groupWithVisibleChild }
 
     private func snapshot(buttons: [String], value: String? = nil, offset: Double = 0,
-                          extra: Extra? = nil, text: Node? = nil) throws -> AgentModeSnapshot {
+                          extra: Extra? = nil, text: AXNodeFixture? = nil) throws -> AgentModeSnapshot {
         var children = buttons.enumerated().map { index, label in
-            Node(type: "Button", label: label, frame: .init(x: 20 + offset, y: 100 + Double(index) * 50))
+            node(type: "Button", label: label, frame: frame(x: 20 + offset, y: 100 + Double(index) * 50))
         }
         if let text { children.append(text) }
-        if let value { children[0].value = value }
+        if let value { children[0].value = .string(value) }
         switch extra {
         case .inertGroup?:
-            children.append(Node(type: "Group", label: nil, frame: .init(x: 8, y: 370, width: 386, height: 496)))
+            children.append(node(type: "Group", label: nil, frame: frame(x: 8, y: 370, width: 386, height: 496)))
         case .hidden?:
-            children.append(Node(type: "Button", label: "Hidden", frame: .init(x: 20, y: 300), hidden: true))
+            children.append(node(type: "Button", label: "Hidden", frame: frame(x: 20, y: 300), hidden: true))
         case .offDisplay?:
-            children.append(Node(type: "Button", label: "Below", frame: .init(x: 20, y: 2000)))
+            children.append(node(type: "Button", label: "Below", frame: frame(x: 20, y: 2000)))
         case .groupWithVisibleChild?:
-            children.append(Node(type: "Group", label: nil, frame: .init(x: 0, y: 2000, width: 402, height: 400),
-                                 children: [Node(type: "Button", label: "Child", frame: .init(x: 20, y: 300))]))
+            children.append(node(type: "Group", label: nil, frame: frame(x: 0, y: 2000, width: 402, height: 400),
+                                 children: [node(type: "Button", label: "Child", frame: frame(x: 20, y: 300))]))
         case nil: break
         }
-        let root = Node(type: "Application", label: "App", frame: .init(x: 0, y: 0, width: 402, height: 874),
+        let root = node(type: "Application", label: "App", frame: frame(x: 0, y: 0, width: 402, height: 874),
                         children: children)
-        let roots = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
-        return try AgentModeSnapshot(roots: roots, context: try context())
+        return try AgentModeSnapshot(roots: AXNodeFixture.decode([root]), context: try context())
     }
 
     private func context() throws -> SelectedHIDContext {
-        try JSONDecoder().decode(SelectedHIDContext.self, from: Data("""
-            {"bootIdentity":"1:2:3","screenID":1,"screenUUID":"DFEBAD86-C7D4-45CA-BB20-2D73B355B0A1",\
-            "logicalWidth":402,"logicalHeight":874,"rotationDegrees":0,"nativePixelWidth":1206,\
-            "nativePixelHeight":2622,"scale":3,"poseRevision":"rigid"}
-            """.utf8))
+        try .fixture(screenID: 1, screenUUID: "DFEBAD86-C7D4-45CA-BB20-2D73B355B0A1", width: 402, height: 874,
+            rotation: 0, pixelWidth: 1206, pixelHeight: 2622, pose: "rigid")
     }
+}
 
-    private struct Node: Encodable {
-        struct Frame: Encodable {
-            var x: Double; var y: Double; var width = 300.0; var height = 44.0
-        }
-        let type: String
-        let label: String?
-        var value: String? = nil
-        let frame: Frame
-        var children: [Node] = []
-        var hidden = false
-        let pid: Int32 = 1234
-        let enabled = true
-        private enum CodingKeys: String, CodingKey {
-            case type, label = "AXLabel", value = "AXValue", frame, children, pid, enabled, hidden
-        }
-    }
+private func frame(x: Double, y: Double, width: Double = 300, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
+
+private func node(type: String, label: String?, value: String? = nil, frame: AXNodeFixture.Frame,
+                  children: [AXNodeFixture] = [], hidden: Bool = false) -> AXNodeFixture {
+    AXNodeFixture(type: type, label: label, value: value.map { .string($0) }, frame: frame, pid: 1234,
+        enabled: true, hidden: hidden, children: children)
 }

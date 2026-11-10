@@ -9,7 +9,7 @@ struct AgentModeSwipePlannerTests {
     private let standard: AgentModeSwipePlanner.Points = (.init(x: 201, y: 705), .init(x: 201, y: 532))
     private let viewport = CGSize(width: 402, height: 874)
     private let area = Frame(x: 8, y: 370.21724709784417, width: 386, height: 495.78275290215583)
-    private let distance = Node(type: "StaticText", AXLabel: "Distance",
+    private let distance = node(type: "StaticText", label: "Distance",
         frame: Frame(x: 42.56716417910448, y: 691.723880597015,
                      width: 57.61194029850746, height: 17.28358208955217))
 
@@ -33,10 +33,10 @@ struct AgentModeSwipePlannerTests {
 
     @Test("Text inside controls, nested scrolling, hidden containers or disabled state cannot anchor input")
     func unsafeDescendantsAreNotUsed() throws {
-        let button = Node(type: "Button", AXLabel: "Press", frame: area, children: [distance])
-        let nested = Node(type: "ScrollArea", AXUniqueId: "nested", frame: area, children: [distance])
-        let hidden = Node(type: "Group", frame: area, hidden: true, children: [distance])
-        let disabled = Node(type: "Group", frame: area, enabled: false, children: [distance])
+        let button = node(type: "Button", label: "Press", frame: area, children: [distance])
+        let nested = node(type: "ScrollArea", id: "nested", frame: area, children: [distance])
+        let hidden = node(type: "Group", frame: area, hidden: true, children: [distance])
+        let disabled = node(type: "Group", frame: area, enabled: false, children: [distance])
         var hiddenLeaf = distance; hiddenLeaf.hidden = true
         var disabledLeaf = distance; disabledLeaf.enabled = false
         var foreignLeaf = distance; foreignLeaf.pid = 999
@@ -64,7 +64,7 @@ struct AgentModeSwipePlannerTests {
     @Test("Up, down, left and right retain the exact requested movement vector")
     func allDirectionsUseTheSameTranslation() throws {
         let wide = Frame(x: 0, y: 0, width: 600, height: 800)
-        let leaf = Node(type: "StaticText", AXLabel: "Output", frame: Frame(x: 290, y: 390, width: 20, height: 20))
+        let leaf = node(type: "StaticText", label: "Output", frame: Frame(x: 290, y: 390, width: 20, height: 20))
         let fixture = try makeFixture(children: [leaf], frame: wide)
         let paths: [AgentModeSwipePlanner.Points] = [
             (.init(x: 300, y: 600), .init(x: 300, y: 400)),
@@ -83,8 +83,8 @@ struct AgentModeSwipePlannerTests {
     @Test("Equal-distance safe text uses native tree order and absent anchors keep the original path")
     func selectionIsDeterministicWithoutFallbackInput() throws {
         let wide = Frame(x: 0, y: 0, width: 600, height: 800)
-        let left = Node(type: "StaticText", AXLabel: "Left", frame: Frame(x: 90, y: 390, width: 20, height: 20))
-        let right = Node(type: "StaticText", AXLabel: "Right", frame: Frame(x: 490, y: 390, width: 20, height: 20))
+        let left = node(type: "StaticText", label: "Left", frame: Frame(x: 90, y: 390, width: 20, height: 20))
+        let right = node(type: "StaticText", label: "Right", frame: Frame(x: 490, y: 390, width: 20, height: 20))
         let original: AgentModeSwipePlanner.Points = (.init(x: 300, y: 600), .init(x: 300, y: 400))
         let planned = try plan(makeFixture(children: [left, right], frame: wide), standard: original,
             viewport: CGSize(width: 600, height: 800))
@@ -97,8 +97,8 @@ struct AgentModeSwipePlannerTests {
     @Test("A stroke that would start on a text field moves to the nearest start clear of it")
     func strokeStartsClearOfTextFields() throws {
         // On a form a drag that starts on a field edits or focuses it and nothing scrolls.
-        let field = Node(type: "TextField", AXLabel: "First name", frame: Frame(x: 36, y: 690, width: 330, height: 30))
-        let other = Node(type: "TextField", AXLabel: "Last name", frame: Frame(x: 36, y: 760, width: 330, height: 30))
+        let field = node(type: "TextField", label: "First name", frame: Frame(x: 36, y: 690, width: 330, height: 30))
+        let other = node(type: "TextField", label: "Last name", frame: Frame(x: 36, y: 760, width: 330, height: 30))
         let planned = try plan(makeFixture(children: [field, other]))
         // The nearest clear start on the same line: 6 pt below the field (720), 21 pt from the
         // planned start, against 22 pt to clear its top edge. The movement is unchanged.
@@ -120,11 +120,11 @@ struct AgentModeSwipePlannerTests {
     }
 
     private struct Fixture { let snapshot: AgentModeSnapshot; let target: FBSimulatorAXNode }
-    private func makeFixture(children: [Node], frame: Frame? = nil) throws -> Fixture {
-        let target = Node(type: "ScrollArea", AXUniqueId: "area", frame: frame ?? area, children: children)
-        let root = Node(type: "Application", AXLabel: "Example", frame: Frame(x: 0, y: 0, width: 1000, height: 1000),
+    private func makeFixture(children: [AXNodeFixture], frame: Frame? = nil) throws -> Fixture {
+        let target = node(type: "ScrollArea", id: "area", frame: frame ?? area, children: children)
+        let root = node(type: "Application", label: "Example", frame: Frame(x: 0, y: 0, width: 1000, height: 1000),
             children: [target])
-        let native = try JSONDecoder().decode(FBSimulatorAXNode.self, from: JSONEncoder().encode(root))
+        let native = try root.decoded()
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: "00000000-0000-0000-0000-000000000001",
             bootIdentity: "test-boot", screenID: 1, screenUniqueID: "5D3C4CC2-87E2-4A57-AB7B-565B1B4F14F9", axDisplayID: 1,
             displayContext: FBSimulatorHIDDisplayContext(hidTarget: 1,
@@ -133,15 +133,11 @@ struct AgentModeSwipePlannerTests {
             target: native.children[0])
     }
 
-    private struct Frame: Encodable { var x: Double; var y: Double; var width: Double; var height: Double }
-    private struct Node: Encodable {
-        var type: String
-        var AXUniqueId: String? = nil
-        var AXLabel: String? = nil
-        var frame: Frame
-        var pid: Int32 = 2934
-        var enabled = true
-        var hidden = false
-        var children: [Node] = []
-    }
+    private typealias Frame = AXNodeFixture.Frame
+}
+
+private func node(type: String, id: String? = nil, label: String? = nil, frame: AXNodeFixture.Frame,
+                  enabled: Bool = true, hidden: Bool = false, children: [AXNodeFixture] = []) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: id, label: label, frame: frame, pid: 2934, enabled: enabled,
+        hidden: hidden, children: children)
 }

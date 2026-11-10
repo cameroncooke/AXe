@@ -117,7 +117,7 @@ struct PlaygroundDuoSelectedKeyInterruptionTests {
                 "--pid", String(check.controls.pid), "--operator", stateOperator,
                 "--out", check.controls.artifacts.appendingPathComponent("held-key-proof").path]
             try JSONEncoder().encode(arguments).write(to: check.controls.artifacts.appendingPathComponent("held-key-driver-argv.json"))
-            let result = try await CommandRunner.run(arguments.map(KeyboardAcceptanceSession.quote).joined(separator: " "),
+            let result = try await CommandRunner.run(arguments.map(shellQuote).joined(separator: " "),
                 allowFailure: true, timeout: 60)
             try Data(result.output.utf8).write(to: check.controls.artifacts.appendingPathComponent("held-key-driver-output.txt"))
             try #require(result.exitCode == 0, "Selected held Space proof failed: \(result.output)")
@@ -255,8 +255,8 @@ private struct KeyboardAcceptanceSession {
         let invocation = [try TestHelpers.getAxePath()] + arguments + ["--udid", controls.app.udid]
         let name = UUID().uuidString
         try JSONEncoder().encode(invocation).write(to: controls.artifacts.appendingPathComponent(name + "-argv.json"))
-        var shell = invocation.map(Self.quote).joined(separator: " ")
-        if let standardInput { shell += " < " + Self.quote(standardInput.path) }
+        var shell = invocation.map(shellQuote).joined(separator: " ")
+        if let standardInput { shell += " < " + shellQuote(standardInput.path) }
         let output = try await CommandRunner.run(shell, allowFailure: true, timeout: 35)
         try Data(output.output.utf8).write(to: controls.artifacts.appendingPathComponent(name + "-output.txt"))
         try controls.preserveState(name + "-app-state")
@@ -284,8 +284,8 @@ private struct KeyboardAcceptanceSession {
         for step in steps { arguments += ["--step", step] }
         let name = UUID().uuidString
         try JSONEncoder().encode(arguments).write(to: controls.artifacts.appendingPathComponent(name + "-argv.json"))
-        var shell = arguments.map(Self.quote).joined(separator: " ")
-        if let standardInput { shell += " < " + Self.quote(standardInput.path) }
+        var shell = arguments.map(shellQuote).joined(separator: " ")
+        if let standardInput { shell += " < " + shellQuote(standardInput.path) }
         let output = try await CommandRunner.run(shell, allowFailure: true, timeout: 40)
         try Data(output.output.utf8).write(to: controls.artifacts.appendingPathComponent(name + "-output.txt"))
         try #require(output.exitCode == (allowFailure ? 1 : 0), "Batch keyboard command failed: \(output.output)")
@@ -306,7 +306,6 @@ private struct KeyboardAcceptanceSession {
         return rows
     }
 
-    static func quote(_ argument: String) -> String { "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'" }
 }
 
 private struct KeyboardAcceptanceReceipt: Decodable {

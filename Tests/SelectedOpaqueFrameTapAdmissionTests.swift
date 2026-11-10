@@ -31,7 +31,7 @@ struct SelectedOpaqueFrameTapAdmissionTests {
         #expect(throws: (any Error).self) { _ = try SelectedOpaqueFrameTapAdmission.make(for: invalid) }
         invalid = tap(); invalid.doubleTapTiming = .init(hold: 0.1, interval: 0.1)
         #expect(throws: (any Error).self) { _ = try SelectedOpaqueFrameTapAdmission.make(for: invalid) }
-        let target = try nodes([Node(key: 101)])[0].children[0]
+        let target = try nodes([node(key: 101)])[0].children[0]
         guard case let .composite(events) = try tap().tapEvent(at: point, target: target) else {
             Issue.record("The physical tap factory did not return its owned touch pair."); return
         }
@@ -59,47 +59,47 @@ struct SelectedOpaqueFrameTapAdmissionTests {
 
     @Test("A complete fresh tree with one actionable control passes the shared host policy")
     func oneControlPasses() throws {
-        let selected = Node(key: 101)
-        try validate([selected, Node(type: "StaticText", label: "Description", key: 102)])
+        let selected = node(key: 101)
+        try validate([selected, node(type: "StaticText", label: "Description", key: 102)])
     }
 
     @Test("Other actionable controls block the point regardless of semantic ID availability")
     func contendersAreNotFilteredByIDs() throws {
         for id in [String?.none, .some("save"), .some("duplicate")] {
-            let selected = Node(id: id, key: 101)
-            let competitor = Node(id: id, key: 102)
+            let selected = node(id: id, key: 101)
+            let competitor = node(id: id, key: 102)
             #expect(throws: (any Error).self) { try validate([selected, competitor]) }
         }
         #expect(throws: (any Error).self) {
-            try validate([Node(key: 101), Node(type: "TextField", focused: true, key: 102)])
+            try validate([node(key: 101), node(type: "TextField", focused: true, key: 102)])
         }
         // IDs are not used to deduplicate or identify the competing native occurrence.
         #expect(throws: (any Error).self) {
-            try validate([Node(id: "same", key: 101), Node(id: "same", key: 102), Node(id: "same", key: 103)])
+            try validate([node(id: "same", key: 101), node(id: "same", key: 102), node(id: "same", key: 103)])
         }
     }
 
     @Test("Selected-key duplicates count before availability, type, owner and viewport filters",
           arguments: ["hidden", "disabled", "foreign-owner", "other-type", "outside"])
     func allSelectedOccurrencesRemainAmbiguous(_ variant: String) throws {
-        var duplicate = Node(key: 101)
+        var duplicate = node(key: 101)
         switch variant {
         case "hidden": duplicate.hidden = true
         case "disabled": duplicate.enabled = false
         case "foreign-owner": duplicate.pid = 9000
         case "other-type": duplicate.type = "StaticText"
-        default: duplicate.frame.y = 1000
+        default: duplicate.frame?.y = 1000
         }
-        #expect(throws: (any Error).self) { try validate([Node(key: 101), duplicate]) }
+        #expect(throws: (any Error).self) { try validate([node(key: 101), duplicate]) }
     }
 
     @Test("Hidden, disabled and foreign competing controls still refuse unmapped frame input")
     func unavailableContendersRemainConservative() throws {
-        var hidden = Node(key: 102); hidden.hidden = true
-        var disabled = Node(key: 103); disabled.enabled = false
-        var foreign = Node(key: 104); foreign.pid = 9000
-        let parent = Node(type: "Group", hidden: true, key: 105, children: [Node(key: 106)])
-        let normal = try AgentModeSnapshot(roots: nodes([Node(key: 101), hidden, disabled, parent]),
+        var hidden = node(key: 102); hidden.hidden = true
+        var disabled = node(key: 103); disabled.enabled = false
+        var foreign = node(key: 104); foreign.pid = 9000
+        let parent = node(type: "Group", hidden: true, key: 105, children: [node(key: 106)])
+        let normal = try AgentModeSnapshot(roots: nodes([node(key: 101), hidden, disabled, parent]),
             nativeIdentityMetadata: .init(complete: true), context: SelectedHIDContext(observation()))
         // The conservative query does not change normal visibility, state or actions.
         #expect(normal.elements[2].actions.isEmpty && !normal.elements[2].state.visible)
@@ -109,16 +109,16 @@ struct SelectedOpaqueFrameTapAdmissionTests {
         #expect(AgentModeSnapshot.hasPotentialTapAction(normal.nodes[3]))
         #expect(AgentModeSnapshot.hasPotentialTapAction(normal.nodes[5]))
         for contender in [hidden, disabled, foreign, parent] {
-            #expect(throws: (any Error).self) { try validate([Node(key: 101), contender]) }
+            #expect(throws: (any Error).self) { try validate([node(key: 101), contender]) }
         }
-        hidden.frame.y = 200
-        disabled.frame.y = 300
-        try validate([Node(key: 101), hidden, disabled])
+        hidden.frame?.y = 200
+        disabled.frame?.y = 300
+        try validate([node(key: 101), hidden, disabled])
     }
 
     @Test("Incomplete capture metadata never authorizes the host frame path")
     func incompleteEvidenceRefuses() throws {
-        let roots = try nodes([Node(key: 101)])
+        let roots = try nodes([node(key: 101)])
         let hook = try #require(try SelectedOpaqueFrameTapAdmission.make(for: tap()))
         for metadata in [FBSimulatorAXNativeIdentityMetadata?.none, .some(.init(complete: false))] {
             #expect(throws: (any Error).self) {
@@ -126,19 +126,19 @@ struct SelectedOpaqueFrameTapAdmissionTests {
                     point: point, observation: observation())
             }
         }
-        #expect(throws: (any Error).self) { try validate([Node(key: 101), Node(key: nil)]) }
+        #expect(throws: (any Error).self) { try validate([node(key: 101), node(key: nil)]) }
     }
 
     @Test("The hook keeps the chosen native key and exact selected signature")
     func changedTargetRefuses() throws {
-        let roots = try nodes([Node(key: 101)])
+        let roots = try nodes([node(key: 101)])
         let hook = try #require(try SelectedOpaqueFrameTapAdmission.make(for: tap()))
-        let replacement = try nodes([Node(key: 102)])[0].children[0]
+        let replacement = try nodes([node(key: 102)])[0].children[0]
         #expect(throws: (any Error).self) {
             try hook.validate(roots: roots, nativeIdentityMetadata: .init(complete: true),
                 target: replacement, point: point, observation: observation())
         }
-        #expect(throws: (any Error).self) { try validate([Node(key: 101)], at: CGPoint(x: 1, y: 1)) }
+        #expect(throws: (any Error).self) { try validate([node(key: 101)], at: CGPoint(x: 1, y: 1)) }
     }
 
     @Test("Existing semantic nested Button taps retain the strict native path")
@@ -150,7 +150,7 @@ struct SelectedOpaqueFrameTapAdmissionTests {
         #expect(try SelectedOpaqueFrameTapAdmission.make(for: request) == nil)
     }
 
-    private func validate(_ children: [Node], at point: CGPoint? = nil) throws {
+    private func validate(_ children: [AXNodeFixture], at point: CGPoint? = nil) throws {
         let roots = try nodes(children)
         let hook = try #require(try SelectedOpaqueFrameTapAdmission.make(for: tap()))
         try hook.validate(roots: roots, nativeIdentityMetadata: .init(complete: true),
@@ -163,10 +163,10 @@ struct SelectedOpaqueFrameTapAdmissionTests {
             nativeTarget: .nativeObject(identity: identity, elementType: "Button"))
     }
 
-    private func nodes(_ children: [Node]) throws -> [FBSimulatorAXNode] {
-        let root = Node(type: "Application", key: 1, children: children,
-            frame: .init(x: 0, y: 0, width: 390, height: 800))
-        return try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
+    private func nodes(_ children: [AXNodeFixture]) throws -> [FBSimulatorAXNode] {
+        let root = node(type: "Application", key: 1, children: children,
+            frame: frame(x: 0, y: 0, width: 390, height: 800))
+        return try AXNodeFixture.decode([root])
     }
 
     private func observation() throws -> FBSimulatorHIDSessionObservation {
@@ -176,29 +176,17 @@ struct SelectedOpaqueFrameTapAdmissionTests {
                 nativePixelSize: CGSize(width: 1170, height: 2400), scale: 3, rotation: .rot0), poseRevision: "rigid")
     }
 
-    private struct Node: Encodable {
-        struct Frame: Encodable { var x = 20.0; var y = 100.0; var width = 100.0; var height = 44.0 }
-        var type = "Button"
-        var id: String? = nil
-        var label: String? = nil
-        var focused = false
-        var pid: Int32 = 1234
-        var enabled = true
-        var hidden = false
-        var key: UInt64?
-        var children: [Node] = []
-        var frame = Frame()
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", focused, pid, enabled, hidden, nativeIdentity, children, frame
-        }
-        func encode(to encoder: Encoder) throws {
-            var values = encoder.container(keyedBy: CodingKeys.self)
-            try values.encode(type, forKey: .type); try values.encodeIfPresent(id, forKey: .id)
-            try values.encodeIfPresent(label, forKey: .label); try values.encode(focused, forKey: .focused)
-            try values.encode(pid, forKey: .pid); try values.encode(enabled, forKey: .enabled)
-            try values.encode(hidden, forKey: .hidden); try values.encode(children, forKey: .children)
-            try values.encode(frame, forKey: .frame)
-            if let key { try values.encode(FBSimulatorAXNativeIdentity(pid: 1234, objectID: key), forKey: .nativeIdentity) }
-        }
-    }
+}
+
+private func frame(x: Double = 20, y: Double = 100, width: Double = 100, height: Double = 44) -> AXNodeFixture.Frame {
+    .init(x: x, y: y, width: width, height: height)
+}
+
+/// The native identity keeps owner 1234 even when a test later changes the node's `pid`.
+private func node(type: String = "Button", id: String? = nil, label: String? = nil, focused: Bool = false,
+                  hidden: Bool = false, key: UInt64? = nil, children: [AXNodeFixture] = [],
+                  frame: AXNodeFixture.Frame = frame()) -> AXNodeFixture {
+    AXNodeFixture(type: type, identifier: id, label: label, frame: frame, pid: 1234, focused: focused,
+        enabled: true, hidden: hidden, nativeIdentity: key.map { FBSimulatorAXNativeIdentity(pid: 1234, objectID: $0) },
+        children: children)
 }

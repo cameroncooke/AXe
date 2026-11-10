@@ -98,6 +98,11 @@ struct CommandRunner {
     }
 }
 
+/// One argument quoted for `/bin/bash -c`, as CommandRunner runs it.
+func shellQuote(_ argument: String) -> String {
+    "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
+}
+
 // MARK: - Test Helpers
 
 struct TestHelpers {
@@ -226,10 +231,6 @@ struct TestHelpers {
         try await setSimulatorOrientation(menuItem: "Landscape Right")
     }
 
-    static func rotateSimulatorLeft() async throws {
-        try await selectSimulatorDeviceMenuItem("Rotate Left")
-    }
-
     private static func setSimulatorOrientation(menuItem: String) async throws {
         let script = """
         tell application "Simulator" to activate
@@ -237,21 +238,6 @@ struct TestHelpers {
         tell application "System Events"
             tell process "Simulator"
                 click menu item "\(menuItem)" of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1
-            end tell
-        end tell
-        """
-        let escapedScript = script.replacingOccurrences(of: "'", with: "'\\''")
-        _ = try await CommandRunner.run("osascript -e '\(escapedScript)'", timeout: 10)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-    }
-
-    private static func selectSimulatorDeviceMenuItem(_ menuItem: String) async throws {
-        let script = """
-        tell application "Simulator" to activate
-        delay 0.5
-        tell application "System Events"
-            tell process "Simulator"
-                click menu item "\(menuItem)" of menu "Device" of menu bar 1
             end tell
         end tell
         """
@@ -317,6 +303,34 @@ struct TestHelpers {
         }
 
         throw TestError.unexpectedState("Unable to reset simulator to portrait fixture layout")
+    }
+
+    /// Waits until the label containing `text` reports `x:…,y:…` within one point of the expected point.
+    static func assertLastNamedCoordinate(
+        containing text: String,
+        expectedX: Int,
+        expectedY: Int,
+        timeout: TimeInterval
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        var lastValue: String?
+
+        while Date() < deadline {
+            let uiState = try await getUIState()
+            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
+                lastValue = label
+                if let point = CoordinateParser.parseNamedCoordinates(from: label),
+                   abs(point.x - expectedX) <= 1,
+                   abs(point.y - expectedY) <= 1 {
+                    return
+                }
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        throw TestError.unexpectedState(
+            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
+        )
     }
 
     static func waitForLabel(

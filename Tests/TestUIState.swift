@@ -124,14 +124,6 @@ struct UIStateParser {
         return [element]
     }
 
-    static func parseDescribeUIOutput(_ jsonString: String) throws -> UIElement {
-        let elements = try parseDescribeUIRoots(jsonString)
-        guard let firstElement = elements.first else {
-            throw TestError.invalidJSON("No UI elements found")
-        }
-        return firstElement
-    }
-
     static func findElement(in root: UIElement, matching predicate: (UIElement) -> Bool) -> UIElement? {
         if predicate(root) {
             return root

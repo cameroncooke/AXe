@@ -299,7 +299,7 @@ struct MediaPlaygroundSession {
 
     @discardableResult
     func requireSameApp(_ pid: Int32) async throws -> UIElement {
-        let result = try await CommandRunner.run(["xcrun", "simctl", "spawn", udid, "launchctl", "list"].map(Self.quote).joined(separator: " "), timeout: 10)
+        let result = try await CommandRunner.run(["xcrun", "simctl", "spawn", udid, "launchctl", "list"].map(shellQuote).joined(separator: " "), timeout: 10)
         let rows = result.output.split(separator: "\n").filter { $0.contains("com.cameroncooke.AxePlayground") }
         try #require(rows.count == 1 && rows[0].split(whereSeparator: \.isWhitespace).first == Substring(String(pid)))
         let state = try await app.state()
@@ -312,12 +312,8 @@ struct MediaPlaygroundSession {
         let panel = before.activePanel.identity
         let args = [change == "open" ? "fold" : change, before.bootIdentity, String(panel.displayID), panel.uniqueID.uuidString, change == "open" ? "180" : "0",
             directory.appendingPathComponent("change-" + UUID().uuidString + ".json").path, udid]
-        let result = try await CommandRunner.run(([tool] + args).map(Self.quote).joined(separator: " "), timeout: 20)
+        let result = try await CommandRunner.run(([tool] + args).map(shellQuote).joined(separator: " "), timeout: 20)
         try #require(result.exitCode == 0)
-    }
-
-    private static func quote(_ argument: String) -> String {
-        "'" + argument.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 }
 

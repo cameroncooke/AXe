@@ -8,10 +8,10 @@ import Testing
 struct AgentFocusedTextFieldTests {
     @Test("A container's inherited ID does not hide a uniquely identified TextField")
     func inheritedContainerIDAdmitsFocusedField() throws {
-        let field = Fixture(type: "TextField", id: "shared", label: "Search")
-        let group = Fixture(type: "Group", id: "shared", label: "Locations", children: [field,
-            Fixture(type: "Button", id: "shared", label: "Close"),
-            Fixture(type: "StaticText", id: "shared", label: "Locations")])
+        let field = fixture(type: "TextField", id: "shared", label: "Search")
+        let group = fixture(type: "Group", id: "shared", label: "Locations", children: [field,
+            fixture(type: "Button", id: "shared", label: "Close"),
+            fixture(type: "StaticText", id: "shared", label: "Locations")])
         let (snapshot, context) = try makeSnapshot([group])
         let ref = try snapshot.reference(id: "shared", action: .typeText)
         let native = try snapshot.node(ref: ref, requiredAction: .typeText)
@@ -32,8 +32,8 @@ struct AgentFocusedTextFieldTests {
 
     @Test(arguments: ["unfocused", "hidden", "disabled", "foreign-process"])
     func duplicateFieldsRemainAmbiguousBeforeStateFiltering(variant: String) throws {
-        let field = Fixture(type: "TextField", id: "shared", label: "Search")
-        var other = Fixture(type: "TextField", id: "shared", label: "Another field")
+        let field = fixture(type: "TextField", id: "shared", label: "Search")
+        var other = fixture(type: "TextField", id: "shared", label: "Another field")
         switch variant {
         case "unfocused": other.focused = false
         case "hidden": other.hidden = true
@@ -52,7 +52,7 @@ struct AgentFocusedTextFieldTests {
 
     @Test(arguments: ["unfocused", "missing-focus", "disabled", "missing-enabled", "hidden", "missing-hidden"])
     func focusedStateMustStillBeExplicit(variant: String) throws {
-        var field = Fixture(type: "TextField", id: "shared", label: "Search")
+        var field = fixture(type: "TextField", id: "shared", label: "Search")
         switch variant {
         case "unfocused": field.focused = false
         case "missing-focus": field.focused = nil
@@ -61,7 +61,7 @@ struct AgentFocusedTextFieldTests {
         case "hidden": field.hidden = true
         default: field.hidden = nil
         }
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "Group", id: "shared", children: [field])])
+        let (snapshot, _) = try makeSnapshot([fixture(type: "Group", id: "shared", children: [field])])
         #expect(snapshot.elements.allSatisfy { !$0.actions.contains(.typeText) })
         #expect(throws: AgentModeFailure.self) {
             _ = try snapshot.reference(id: "shared", action: .typeText)
@@ -70,9 +70,9 @@ struct AgentFocusedTextFieldTests {
 
     @Test(arguments: ["hidden-parent", "outside-viewport"])
     func typedIDDoesNotBypassVisibleReferenceAdmission(variant: String) throws {
-        var field = Fixture(type: "TextField", id: "shared", label: "Search")
-        if variant == "outside-viewport" { field.frame.y = 800 }
-        var parent = Fixture(type: "Group", id: "shared", children: [field])
+        var field = fixture(type: "TextField", id: "shared", label: "Search")
+        if variant == "outside-viewport" { field.frame?.y = 800 }
+        var parent = fixture(type: "Group", id: "shared", children: [field])
         if variant == "hidden-parent" { parent.hidden = true }
         let (snapshot, _) = try makeSnapshot([parent])
         #expect(throws: AgentModeFailure.self) {
@@ -82,42 +82,24 @@ struct AgentFocusedTextFieldTests {
 
     @Test(arguments: ["", " shared", "shared ", String(repeating: "a", count: 4097)])
     func malformedFieldIDsDoNotGainTyping(id: String) throws {
-        let (snapshot, _) = try makeSnapshot([Fixture(type: "TextField", id: id, label: "Search")])
+        let (snapshot, _) = try makeSnapshot([fixture(type: "TextField", id: id, label: "Search")])
         #expect(snapshot.elements.allSatisfy { !$0.actions.contains(.typeText) })
     }
 
     @Test(arguments: ["SearchField", "TextArea", "TextView", "SecureTextField", "AXTextField"])
     func presentationAliasesDoNotExpandTheNativeKeyboardContract(type: String) throws {
-        let (snapshot, _) = try makeSnapshot([Fixture(type: type, id: "field", label: "Search")])
+        let (snapshot, _) = try makeSnapshot([fixture(type: type, id: "field", label: "Search")])
         #expect(snapshot.elements.allSatisfy { !$0.actions.contains(.typeText) })
     }
 
-    private func makeSnapshot(_ children: [Fixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
-        let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
-            #"{"bootIdentity":"1:2:3","screenID":3,"screenUUID":"DFEBAD86-C7D4-45CA-BB20-2F2D73B355B0","logicalWidth":951,"logicalHeight":669,"rotationDegrees":90,"nativePixelWidth":2007,"nativePixelHeight":2853,"scale":3,"poseRevision":"mechanicalDegrees=90.0"}"#.utf8))
-        let root = Fixture(type: "Application", id: "application", label: "Application", children: children)
-        let nodes = try JSONDecoder().decode([FBSimulatorAXNode].self, from: JSONEncoder().encode([root]))
-        return (try AgentModeSnapshot(roots: nodes, context: context), context)
+    private func makeSnapshot(_ children: [AXNodeFixture]) throws -> (AgentModeSnapshot, SelectedHIDContext) {
+        let context = try SelectedHIDContext.fixture()
+        let root = fixture(type: "Application", id: "application", label: "Application", children: children)
+        return (try AgentModeSnapshot(roots: AXNodeFixture.decode([root]), context: context), context)
     }
 
-    private struct Fixture: Encodable {
-        struct Frame: Encodable {
-            var x = 10.0
-            var y = 100.0
-            var width = 300.0
-            var height = 44.0
-        }
-        let type: String
-        var id: String
-        var label = ""
-        var children: [Fixture] = []
-        var frame = Frame()
-        var pid: Int32 = 1234
-        var focused: Bool? = true
-        var enabled: Bool? = true
-        var hidden: Bool? = false
-        private enum CodingKeys: String, CodingKey {
-            case type, id = "AXUniqueId", label = "AXLabel", children, frame, pid, focused, enabled, hidden
-        }
+    private func fixture(type: String, id: String, label: String = "", children: [AXNodeFixture] = []) -> AXNodeFixture {
+        AXNodeFixture(type: type, identifier: id, label: label, frame: .init(x: 10, y: 100, width: 300, height: 44),
+            pid: 1234, focused: true, enabled: true, hidden: false, children: children)
     }
 }
