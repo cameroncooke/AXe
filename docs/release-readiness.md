@@ -56,7 +56,7 @@ The third and fourth are one owner with two admission styles and can be merged.
 
 ## Phase 2: bug fixes
 
-- [~] Device support bugs: fixed and merged into `v2` (7 commits); the final device run is blocked
+- [x] Device support bugs: fixed and merged into `v2` (7 commits); the device suite passes on the iPhone and iPad (Phase 8)
 - [x] Simulator input and broker bugs
 - [x] Agent mode bugs: fixed and merged into `v2` (13 commits)
 - [x] Bugs found by the final verification (6 fixes, `5b2427fd1` to `2faeeedbc`)
@@ -202,7 +202,7 @@ changing anything. Devices do not support status bar overrides.
 - [x] Swipe works on simulators and the Duo without extra flags
 - [x] Pinch in and out works without `--input-mode selected`; `gesture pinch --scale 2` alone pinches at the screen centre
 - [x] Drawing: `axe draw <x,y> <x,y> … [--close] [--duration s]` for arbitrary shapes, also as a batch step
-- [!] Draw and pinch on the physical devices: implemented and unit-tested, checks added to the device suite, not run (devices unreachable)
+- [x] Draw and pinch on the physical devices: draw passed on both; pinch failed on both with `pointOutsideDisplay`, was fixed (`2faeeedbc`) and now passes on both (Phase 8)
 - [x] Playground screens that record pinch scale and drawn paths (Drawing and Zoom)
 - [x] End-to-end checks for each on the iPhone, iPad and Duo simulators
 
