@@ -96,7 +96,7 @@ struct PlaygroundGestureConvenienceTests {
     @Test("swipe-from-top-right-corner opens Control Centre")
     func controlCentre() async throws {
         let app = try CorePlaygroundSession()
-        _ = try await app.open("tap-test", readyID: "tap-test-title")
+        _ = try await app.open("slider-value-test", readyID: "slider-value-button")
         try await app.run(["gesture", "swipe-from-top-right-corner"])
         // Control Centre replaces the app in the tree. Its header has a Power button.
         var tree = ""
@@ -106,7 +106,7 @@ struct PlaygroundGestureConvenienceTests {
             try await Task.sleep(nanoseconds: 300_000_000)
         }
         try await app.run(["button", "home"])
-        #expect(tree.contains("\"Power\"") && !tree.contains("tap-test-title"), "Control Centre did not open")
+        #expect(tree.contains("\"Power\"") && !tree.contains("slider-value-button"), "Control Centre did not open")
     }
 }
 
