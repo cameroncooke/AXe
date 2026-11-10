@@ -45,6 +45,7 @@ struct Swipe: PhysicalDeviceCommand {
 
 
     @OptionGroup var selectedInput: SelectedInputOptions
+    @OptionGroup var until: ScrollUntilOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var agentMode: AgentModeOptions
 
@@ -59,6 +60,9 @@ struct Swipe: PhysicalDeviceCommand {
 
     func validate() throws {
         try agentMode.validate()
+        if until.query != nil, agentMode.enabled || selectedInput.mode == .selected {
+            throw ValidationError("--until-id and --until-label need plain input, without --agent or selected input.")
+        }
         if agentMode.enabled {
             try validateAgent()
             return
@@ -158,7 +162,13 @@ struct Swipe: PhysicalDeviceCommand {
     }
 
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try await PhysicalDeviceGestures.path(selectedPath, on: input)
+        if let query = until.query {
+            try await until.run(query,
+                observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
+                scroll: { try await PhysicalDeviceGestures.path(selectedPath, on: input) })
+        } else {
+            try await PhysicalDeviceGestures.path(selectedPath, on: input)
+        }
     }
 
     func run() async throws {
@@ -194,8 +204,26 @@ struct Swipe: PhysicalDeviceCommand {
         )?.context {
             let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
+            if let query = until.query {
+                // The same swipe, repeated until the element is on screen or the content stops moving.
+                try await until.run(query, observe: {
+                    try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
+                }) {
+                    try await OrdinaryBrokerInput.perform(path: path, context: context,
+                        simulatorUDID: simulatorUDID, postDelay: nil, logger: logger, verbose: false)
+                }
+                if let postDelay, postDelay > 0 { try await Task.sleep(for: .seconds(postDelay)) }
+                return
+            }
             try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
+        } else if let query = until.query {
+            try await until.run(query, observe: {
+                try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
+            }) {
+                try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
+                    swipeDuration: swipeDuration, swipeDelta: swipeDelta, logger: logger)
+            }
         } else {
             try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
                 swipeDuration: swipeDuration, swipeDelta: swipeDelta, logger: logger)

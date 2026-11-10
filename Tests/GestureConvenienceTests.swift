@@ -123,34 +123,78 @@ struct GestureConvenienceTests {
 
     @Test func untilOptionsNeedAScrollPresetAndPlainInput() throws {
         _ = try Gesture.parse(["scroll-down", "--until-id", "row-40", "--max-swipes", "20", "--udid", udid])
+        _ = try Gesture.parse(["scroll-left", "--inside-id", "Drawing-Palette", "--until-label", "Watercolor", "--udid", udid])
         for arguments in [["scroll-down", "--until-id", "a", "--until-label", "b"], ["scroll-down", "--max-swipes", "5"],
                           ["swipe-from-left-edge", "--until-id", "a"], ["scroll-down", "--until-id", "a", "--max-swipes", "0"],
-                          ["scroll-down", "--until-id", "a", "--input-mode", "selected"]] {
+                          ["scroll-down", "--until-id", "a", "--input-mode", "selected"],
+                          ["scroll-down", "--inside-id", "a", "--inside-label", "b"], ["pinch", "--scale", "2", "--inside-id", "a"]] {
             #expect(throws: (any Error).self) { _ = try Gesture.parse(arguments + ["--udid", udid]) }
         }
     }
 
+    @Test func aSwipeCanRepeatUntilAnElementIsOnScreen() throws {
+        let line = ["--start-x", "300", "--start-y", "800", "--end-x", "100", "--end-y", "800"]
+        let swipe = try Swipe.parse(line + ["--until-label", "Watercolor", "--max-swipes", "6", "--udid", udid])
+        #expect(swipe.until.maxSwipes == 6)
+        guard case .label("Watercolor")? = swipe.until.query else { Issue.record("No label query"); return }
+        #expect(throws: (any Error).self) { _ = try Swipe.parse(line + ["--until-id", "a", "--input-mode", "selected", "--udid", udid]) }
+        #expect(throws: (any Error).self) { _ = try Swipe.parse(line + ["--max-swipes", "3", "--udid", udid]) }
+    }
+
+    /// A screen that changes with every scroll, so the loop never takes it for the end of the content.
+    private func moving(_ reads: Int, visible: Bool) -> ScrollUntilOptions.Observation {
+        .init(visible: visible, signature: "screen \(reads)")
+    }
+
     @Test func scrollingStopsAtTheFirstReadThatSeesTheElement() async throws {
-        let command = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid])
+        let until = try Gesture.parse(["scroll-down", "--until-label", "Row 40", "--udid", udid]).until
         var reads = 0, scrolls = 0
-        try await command.scrollUntil(.label("Row 40"), visible: { reads += 1; return reads == 3 }, scroll: { scrolls += 1 })
+        try await until.run(.label("Row 40"), observe: { reads += 1; return moving(reads, visible: reads == 3) }, scroll: { scrolls += 1 })
         #expect(reads == 3 && scrolls == 2)
         // Already on screen: no input at all.
         reads = 0; scrolls = 0
-        try await command.scrollUntil(.label("Row 40"), visible: { reads += 1; return true }, scroll: { scrolls += 1 })
+        try await until.run(.label("Row 40"), observe: { reads += 1; return moving(reads, visible: true) }, scroll: { scrolls += 1 })
         #expect(reads == 1 && scrolls == 0)
     }
 
     @Test func scrollingGivesUpAfterTheLimitWithElementNotFound() async throws {
-        let command = try Gesture.parse(["scroll-down", "--until-id", "missing", "--max-swipes", "2", "--udid", udid])
+        let until = try Gesture.parse(["scroll-down", "--until-id", "missing", "--max-swipes", "2", "--udid", udid]).until
         var reads = 0, scrolls = 0
         do {
-            try await command.scrollUntil(.id("missing"), visible: { reads += 1; return false }, scroll: { scrolls += 1 })
+            try await until.run(.id("missing"), observe: { reads += 1; return moving(reads, visible: false) }, scroll: { scrolls += 1 })
             Issue.record("A missing element was reported as found")
         } catch let error as CLIError {
             #expect(error.code == .elementNotFound && error.errorDescription.contains("2 scrolls"))
         }
         // One read before each scroll and one after the last.
         #expect(scrolls == 2 && reads == 3)
+    }
+
+    @Test func scrollingStopsWhenAScrollMovesNothing() async throws {
+        let until = try Gesture.parse(["scroll-left", "--until-label", "Missing", "--max-swipes", "20", "--udid", udid]).until
+        var reads = 0, scrolls = 0
+        do {
+            // The content moves twice, then is at its end: the third scroll changes nothing.
+            try await until.run(.label("Missing"), observe: {
+                reads += 1
+                return .init(visible: false, signature: "screen \(min(reads, 3))")
+            }, scroll: { scrolls += 1 })
+            Issue.record("A missing element was reported as found")
+        } catch let error as CLIError {
+            #expect(error.code == .elementNotFound && error.errorDescription.contains("stopped moving after 2 scrolls"))
+        }
+        // It does not keep bouncing the content against its end for the other 17 scrolls.
+        #expect(scrolls == 3 && reads == 4)
+    }
+
+    @Test func aScreenSignatureChangesWhenAnElementMoves() throws {
+        func tree(y: Int) throws -> [AccessibilityElement] {
+            try JSONDecoder().decode([AccessibilityElement].self, from: Data("""
+                [{"type":"Application","frame":{"x":0,"y":0,"width":400,"height":800},"children":[
+                  {"type":"Button","AXLabel":"Row","frame":{"x":0,"y":\(y),"width":400,"height":44}}]}]
+                """.utf8))
+        }
+        #expect(ScrollUntilOptions.signature(of: try tree(y: 100)) == ScrollUntilOptions.signature(of: try tree(y: 100)))
+        #expect(ScrollUntilOptions.signature(of: try tree(y: 100)) != ScrollUntilOptions.signature(of: try tree(y: 60)))
     }
 }

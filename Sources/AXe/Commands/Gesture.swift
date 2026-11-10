@@ -161,7 +161,7 @@ struct Gesture: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a preset swipe, a pinch or another multi-touch gesture.",
         discussion: """
-        Presets: scroll-up, scroll-down, scroll-left, scroll-right, swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge, swipe-from-bottom-edge and swipe-from-top-right-corner (Control Centre). A scroll preset moves 200 points, or the fraction of the screen given by --distance. Physical devices do not support swipe-from-right-edge.
+        Presets: scroll-up, scroll-down, scroll-left, scroll-right, swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge, swipe-from-bottom-edge and swipe-from-top-right-corner (Control Centre). A scroll preset moves 200 points, or the fraction of the screen given by --distance. With --until-id or --until-label it repeats until that element is on screen, and stops early when the content reaches its end; --inside-id or --inside-label scrolls inside one element instead of the screen. Physical devices do not support swipe-from-right-edge.
 
         Coordinate gestures take points in the current orientation:
           pinch             --scale, and optionally -x/-y and --radius
@@ -229,79 +229,34 @@ struct Gesture: PhysicalDeviceCommand {
     @Option(name: .long, help: "Scroll presets: length as a fraction of the screen, 0.05 to 0.95 (default 200 points).")
     var distance: Double?
 
-    @Option(name: .customLong("until-id"), help: "Scroll presets: scroll until the element with this accessibility identifier is on screen.")
-    var untilID: String?
+    @OptionGroup var until: ScrollUntilOptions
 
-    @Option(name: .customLong("until-label"), help: "Scroll presets: scroll until an element with this accessibility label is on screen.")
-    var untilLabel: String?
+    @Option(name: .customLong("inside-id"), help: "Scroll presets: scroll inside the element with this accessibility identifier, not the screen.")
+    var insideID: String?
 
-    @Option(name: .customLong("max-swipes"), help: "With --until-id or --until-label: the most scrolls to make, 1 to 50 (default 10).")
-    var maxSwipes: Int?
+    @Option(name: .customLong("inside-label"), help: "Scroll presets: scroll inside the element with this accessibility label, not the screen.")
+    var insideLabel: String?
 
-    static let defaultMaxSwipes = 10
-    /// A scroll keeps moving after the finger lifts; the next read waits this long.
-    static let scrollSettle: TimeInterval = 0.4
-
-    /// The element a scroll preset repeats for, if any.
-    var untilQuery: AccessibilityQuery? {
-        if let untilID { return .id(untilID) }
-        if let untilLabel { return .label(untilLabel) }
+    /// The element a scroll preset moves inside, if any.
+    var insideQuery: AccessibilityQuery? {
+        if let insideID { return .id(insideID) }
+        if let insideLabel { return .label(insideLabel) }
         return nil
     }
 
+    /// A scroll inside an element crosses this fraction of it when --distance is not given.
+    static let insideDistance = 0.6
+
     private func validateUntil() throws {
-        guard untilID == nil || untilLabel == nil else {
-            throw ValidationError("Pass --until-id or --until-label, not both.")
+        guard insideID == nil || insideLabel == nil else {
+            throw ValidationError("Pass --inside-id or --inside-label, not both.")
         }
-        guard untilQuery != nil else {
-            guard maxSwipes == nil else { throw ValidationError("--max-swipes needs --until-id or --until-label.") }
-            return
-        }
+        guard until.query != nil || insideQuery != nil else { return }
         guard case let .preset(preset) = gesture, preset.isScroll else {
-            throw ValidationError("--until-id and --until-label are available only for scroll presets.")
+            throw ValidationError("--until-id, --until-label, --inside-id and --inside-label are available only for scroll presets.")
         }
         guard !agentMode.enabled, selectedInput.mode != .selected else {
-            throw ValidationError("--until-id and --until-label need plain input, without --agent or selected input.")
-        }
-        if let maxSwipes {
-            guard (1...50).contains(maxSwipes) else { throw ValidationError("--max-swipes must be 1 to 50.") }
-        }
-    }
-
-    /// Scrolls with `scroll` until `visible` reports the element, at most `maxSwipes` times.
-    /// It reads before the first scroll, so an element already on screen costs no input.
-    func scrollUntil(_ query: AccessibilityQuery, visible: () async throws -> Bool,
-                     scroll: () async throws -> Void) async throws {
-        let limit = maxSwipes ?? Self.defaultMaxSwipes
-        let name: String
-        switch query {
-        case .id(let value), .label(let value), .value(let value): name = value
-        }
-        for scrolls in 0...limit {
-            if try await visible() {
-                CLIOutput.message("✓ \(name) is on screen after \(scrolls) scroll\(scrolls == 1 ? "" : "s")")
-                return
-            }
-            guard scrolls < limit else { break }
-            try await scroll()
-            try await Task.sleep(for: .seconds(Self.scrollSettle))
-        }
-        throw CLIError(errorDescription: "\(name) was not on screen after \(limit) scrolls. Check the direction, or raise --max-swipes.",
-            code: .elementNotFound)
-    }
-
-    /// Whether the element is in the tree with its centre inside the application's frame.
-    @MainActor
-    private func isOnScreen(_ query: AccessibilityQuery, logger: AxeLogger) async throws -> Bool {
-        do {
-            let match = try await AccessibilityPoller.resolveElementWithPolling(query: query,
-                simulatorUDID: simulatorUDID, waitTimeout: 0, pollInterval: 0.25, logger: logger)
-            guard let frame = match.element.frame, let screen = match.applicationFrame,
-                  frame.width > 0, frame.height > 0 else { return false }
-            let x = frame.x + frame.width / 2, y = frame.y + frame.height / 2
-            return x >= screen.x && x <= screen.x + screen.width && y >= screen.y && y <= screen.y + screen.height
-        } catch let error as ElementResolutionError where error.isNotFound {
-            return false
+            throw ValidationError("--until-id, --until-label, --inside-id and --inside-label need plain input, without --agent or selected input.")
         }
     }
 
@@ -586,6 +541,9 @@ struct Gesture: PhysicalDeviceCommand {
             throw AutomationTarget.unsupportedOnDevice("Physical batch gesture steps require a preset.")
         }
         try selectedInput.refuseOnDevice(agent: agentMode.enabled)
+        guard insideQuery == nil else {
+            throw AutomationTarget.unsupportedOnDevice("--inside-id and --inside-label are not supported on a physical device. Use swipe with coordinates and --until-label.")
+        }
         if case .preset(.swipeFromRightEdge) = gesture {
             throw AutomationTarget.unsupportedOnDevice("Right edge swipe is not supported on a physical device.")
         }
@@ -601,9 +559,9 @@ struct Gesture: PhysicalDeviceCommand {
             case .swipeFromTopRightCorner: edge = .top
             default: edge = .none
             }
-            if let untilQuery {
-                try await scrollUntil(untilQuery,
-                    visible: { try await PhysicalAccessibilityCommands.isVisible(untilQuery, on: input) },
+            if let query = until.query {
+                try await until.run(query,
+                    observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
                     scroll: { try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input) })
             } else {
                 try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input)
@@ -653,15 +611,30 @@ struct Gesture: PhysicalDeviceCommand {
 
         // Explicit overrides win; omitted dimensions use the display the route already measured.
         // A route without a measured context (older rigid input) keeps 390×844.
-        let swipe = try legacySwipe(preset, measured: context.map { ($0.logicalWidth, $0.logicalHeight) })
+        var swipe = try legacySwipe(preset, measured: context.map { ($0.logicalWidth, $0.logicalHeight) })
+        if let insideQuery {
+            // The same preset, laid out inside the element's frame instead of the screen.
+            let match = try await AccessibilityPoller.resolveElementWithPolling(query: insideQuery,
+                simulatorUDID: simulatorUDID, waitTimeout: 0, pollInterval: 0.25, logger: logger)
+            guard let frame = match.element.frame, frame.width > 0, frame.height > 0 else {
+                throw CLIError(errorDescription: "The element to scroll inside has no frame.", code: .elementNotFound)
+            }
+            let inside = preset.coordinates(screenWidth: frame.width, screenHeight: frame.height,
+                distance: distance ?? Self.insideDistance)
+            swipe = LegacySwipe(width: swipe.width, height: swipe.height, startX: frame.x + inside.startX,
+                startY: frame.y + inside.startY, endX: frame.x + inside.endX, endY: frame.y + inside.endY,
+                duration: swipe.duration, delta: min(swipe.delta, max(5, hypot(inside.endX - inside.startX, inside.endY - inside.startY) / 4)))
+        }
         logger.info().log("Performing \(preset.description)")
         logger.info().log("Screen size: \(swipe.width)x\(swipe.height)")
         logger.info().log("Coordinates: (\(swipe.startX), \(swipe.startY)) to (\(swipe.endX), \(swipe.endY))")
         logger.info().log("Duration: \(swipe.duration)s, Delta: \(swipe.delta)px")
 
-        if let untilQuery {
+        if let query = until.query {
             // The route capture above already waited the pre-delay; each scroll then goes out alone.
-            try await scrollUntil(untilQuery, visible: { try await isOnScreen(untilQuery, logger: logger) }) {
+            try await until.run(query, observe: {
+                try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
+            }) {
                 if let context {
                     let path = SelectedHIDPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
                         endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta, generator: .ordinary)

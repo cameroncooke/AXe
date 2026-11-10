@@ -98,18 +98,23 @@ enum PhysicalAccessibilityCommands {
         ], on: fresh.display, admissionDeadline: deadline)
     }
 
-    /// Whether one visible element on the device's screen matches the selector, for scrolling until it does.
-    /// A read taken while the content is still moving can fail; it is tried up to three times.
-    static func isVisible(_ query: AccessibilityQuery, on input: PhysicalDeviceInput) async throws -> Bool {
+    /// One read of the device's screen for scrolling until an element is visible: whether one visible
+    /// element that owns its tap point matches the selector, and what the screen holds. A read taken
+    /// while the content is still moving can fail; it is tried up to three times.
+    static func observe(_ query: AccessibilityQuery, on input: PhysicalDeviceInput) async throws -> ScrollUntilOptions.Observation {
         var lastError: Error = CLIOutputFailure(code: "readFailed", message: "The device's screen could not be read.")
         for _ in 0..<3 {
             do {
                 let snapshot = try await input.readAccessibility(timeout: readBudget)
                 try snapshot.display.requireResolvedOrientation()
-                return try VisibleTree(snapshot).target(matching: query, elementType: nil) != nil
-            } catch let failure as CLIOutputFailure where failure.code == "elementNotHittable" {
-                // In the tree but not yet fully on screen: keep scrolling.
-                return false
+                let signature = ScrollUntilOptions.signature(of: snapshot.roots)
+                do {
+                    let visible = try VisibleTree(snapshot).target(matching: query, elementType: nil) != nil
+                    return .init(visible: visible, signature: signature)
+                } catch let failure as CLIOutputFailure where failure.code == "elementNotHittable" {
+                    // In the tree but not yet fully on screen, or under another control: keep scrolling.
+                    return .init(visible: false, signature: signature)
+                }
             } catch let failure as CLIOutputFailure where failure.code == "ambiguousElement" {
                 throw failure
             } catch is CancellationError {
