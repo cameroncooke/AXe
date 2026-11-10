@@ -105,8 +105,11 @@ struct ScrollUntilOptions: ParsableArguments {
         guard x >= screen.x, x <= screen.x + screen.width, y >= screen.y, y <= screen.y + screen.height else {
             return Observation(visible: false, signature: signature)
         }
-        let data = try await AccessibilityFetcher.fetchAccessibilityInfoJSONData(for: simulatorUDID,
-            point: AccessibilityPoint(x: x, y: y), logger: logger)
+        // A lookup that finds nothing at the point fails; either way the element is not there to tap.
+        guard let data = try? await AccessibilityFetcher.fetchAccessibilityInfoJSONData(for: simulatorUDID,
+            point: AccessibilityPoint(x: x, y: y), logger: logger) else {
+            return Observation(visible: false, signature: signature)
+        }
         let hit = (try? JSONDecoder().decode([AccessibilityElement].self, from: data))
             ?? (try? JSONDecoder().decode(AccessibilityElement.self, from: data)).map { [$0] } ?? []
         return Observation(visible: contains(match.element, in: hit), signature: signature)
