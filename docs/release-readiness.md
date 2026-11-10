@@ -93,7 +93,8 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 ## Phase 3: remove dead and stale code
 
 - [x] Unused Swift symbols in the input stack (`CoordinateHelpers.swift`, dead wrappers; commit `8d1c5a0f8`)
-- [ ] Stale or duplicate tests
+- [x] Stale or duplicate tests (commit `49a587d4`: one shared AX-node fixture replaces 20 private copies; dead suites removed)
+- [~] The 17 older end-to-end suites that `make e2e` never runs: run them, then wire in or delete
 - [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
 - [ ] Unused IDBKit command families
 - [ ] Stale documentation
@@ -109,7 +110,7 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 - [x] Default output holds only what a person or agent needs; internals only with `--verbose`
 - [x] JSON results match the published schemas
 - [x] Schemas for per-command results (`schemas/axe.output.command-payloads.v1.schema.json`, 35 entries)
-- [~] Same error codes and result shapes on physical-device paths (branch `audit/integration`)
+- [x] Same error codes and result shapes on physical-device paths (commits `a7c65702d`, `4b859379d`; not verified on hardware)
 
 Verification (commits `8f8f4a061` to `342581d55`):
 
@@ -161,11 +162,29 @@ changing anything. Devices do not support status bar overrides.
 
 ## Phase 7: gestures
 
-- [x] Swipe works on simulators, the Duo and devices without extra flags (already the case; end-to-end check pending)
-- [~] Pinch in and out works without `--input-mode selected`
-- [~] Drawing: `axe draw <x,y> <x,y> …` for arbitrary shapes
+- [x] Swipe works on simulators and the Duo without extra flags
+- [x] Pinch in and out works without `--input-mode selected`; `gesture pinch --scale 2` alone pinches at the screen centre
+- [x] Drawing: `axe draw <x,y> <x,y> … [--close] [--duration s]` for arbitrary shapes, also as a batch step
+- [!] Draw and pinch on the physical devices: implemented and unit-tested, checks added to the device suite, not run (devices unreachable)
 - [x] Playground screens that record pinch scale and drawn paths (Drawing and Zoom)
-- [ ] End-to-end checks for each
+- [x] End-to-end checks for each on the iPhone, iPad and Duo simulators
+
+Verification (commits `abedff34f`, `f53c105bf`, `f75a93767`, `3d3edfeeb`):
+
+- Unit tests: 938 at the end of this wave, including new `DrawTests` and `GestureDefaultRouteTests`. A unit test pins the events `drag` sends, which are unchanged: `drag` is now the two-point case of the same stroke builder.
+- New Playground suites, all passing: Drawing 5 of 5 and Zoom 2 of 2 on each of the iPhone, iPad and Duo.
+- Existing groups rerun: iPhone core 9 of 9, agent drag 7 of 7, agent pinch 8 of 8; iPad core 9 of 9, ordinary regression 8 of 8; Duo gesture coverage 28 of 28, pair coverage 28 of 28, motion options 6 of 6, agent drag 7 of 7, agent pinch 8 of 8. iPhone ordinary regression 7 of 8: the one failure is the typing race fixed separately in `be2335b1e`.
+
+| Simulator | Triangle sent with `--close`, 1.5 s | What the app recorded | Pinch with defaults: scale 2, then 0.5 |
+| --- | --- | --- | --- |
+| iPhone | 201,335 314,714 88,714 | start and end 201,335; bounds 88,335,314,714; one contact; 1.99 s | 1.75, then 0.92 |
+| iPad | 410,376 649,964 171,964 | start and end 410,376; bounds 171,376,649,964; 1.97 s | 1.86, then 1.00 |
+| Duo | 191,269 298,550 84,550 | start and end 191,269; bounds 84,269,298,550; 1.93 s | 1.60, then 0.91 |
+
+- The recorded 16-point paths were within 4 pt of the expected path in every case.
+- Timing on the iPhone, median of 7, old and new builds alternated: swipe 0.685 s old and 0.687 s new; drag 0.849 s old and 0.840 s new.
+- A drawn stroke takes about a third longer than `--duration` (1 s requested records about 1.35 s), the same per-move cost `drag` already has.
+- Not verified: physical devices; a simulator without the DTUHID touch service (it should refuse with `inputUnavailable`); strokes longer than 1.5 s.
 
 Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulator with the pre-audit CLI:
 
@@ -178,7 +197,7 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 
 - [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
 - [x] Second run on `v2` after the input-stack wave: iPhone 24 of 27 suites, iPad 5 of 5, Duo did not run
-- [~] Triage of the three failing iPhone cases (typing and Return, agent slider, agent focus-and-type)
+- [x] Triage of the three failing iPhone cases: none is a regression (see below)
 - [ ] Unit tests
 - [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
 - [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad
@@ -200,6 +219,14 @@ in progress. Opening and closing the hinge once cleared it. Three later reboots 
 (closed, shut down while open, and the test matrix's own sequence) all settled within 20 seconds, so the
 trigger is not yet known. The same state appeared on a second Duo simulator used by an agent.
 
+Triage of the three iPhone failures from the second run:
+
+- Typing and Return (selected): a race in the test. It typed 0.01 s after the tap, before UIKit scrolled the field 17 pt above the keyboard, and AXe correctly refused a target that moved. The test now waits for the settled keyboard (`be2335b1e`); 3 of 3 passes afterwards.
+- Agent slider interior value: load-dependent. The pre-audit binary fails the same cases under the same load. Each pickup read launches a child `axe` process, and under load about 11 s of the fixed 15 s budget goes there. No change tonight; listed under Open items.
+- Agent focus-and-type: the one accessibility read after typing hit its 8 s limit under load. 3 of 3 passes on rerun; no change.
+
+The machine load during these runs was 8 to 261 on 18 cores, so a clean end-to-end verdict needs a run with no agents working.
+
 Follow-ups: document that turning VoiceOver on shows this alert; keep agents off the E2E simulators
 (already the rule; the settings agent ran before the rule existed).
 
@@ -209,6 +236,12 @@ Follow-ups: document that turning VoiceOver on shows this alert; keep agents off
 - [ ] Skill (`Skills/CLI/axe`) and its bundled copy
 - [ ] CHANGELOG
 - [ ] Command help text
+
+## Open items for the owner
+
+- Restart `CoreDeviceService` (or replug the devices), then run `make e2e-devices`: nothing changed tonight on device paths has been run on hardware.
+- Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
+- Folding the "ordinary" input route into the selected route (audit item SEL-17) is not done: it changes the path of every ordinary tap and needs a quiet machine to benchmark against v1.8.0.
 
 ## Decisions
 
