@@ -174,12 +174,23 @@ class SketchPlayer:
             return
         if colour not in self.swatches:
             raise PictureFailed(f'the Sketch screen has no {colour} swatch')
+        after_tool = self.colour is None
         try:
             self.tap(self.swatches[colour])
         except Exception:
             # A device can fail to answer in time. Tapping a swatch twice changes nothing, so try once more.
             time.sleep(1)
             self.tap(self.swatches[colour])
+        if after_tool:
+            # The first tap after a tool change can land while the tool's options are still closing, and
+            # the app then ignores it. Read the tool once and tap again until it has the colour.
+            wanted = f' #{COLOURS[colour]} '
+            for _ in range(4):
+                if wanted in self.value(self.tree(), 'sketch.tool') + ' ':
+                    break
+                self.tap(self.swatches[colour])
+            else:
+                raise PictureFailed(f'the {colour} swatch did not change the tool\'s colour')
         self.colour = colour
 
     # Strokes
