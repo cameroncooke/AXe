@@ -319,8 +319,13 @@ class Device:
         state = dict(strokes=0)
 
         def draw(points, seconds=None):
-            seconds = seconds or max(0.3, min(10, 0.022 * len(points)))
-            self.runner.axe_ok(self.udid, 'draw', *[f'{x:.1f},{y:.1f}' for x, y in points], '--duration', f'{seconds:.2f}')
+            # draw refuses a point that repeats the one before it, which a fill makes where its edges meet.
+            arguments = []
+            for point in (f'{x:.1f},{y:.1f}' for x, y in points):
+                if not arguments or arguments[-1] != point:
+                    arguments.append(point)
+            seconds = seconds or max(0.3, min(10, 0.022 * len(arguments)))
+            self.runner.axe_ok(self.udid, 'draw', *arguments, '--duration', f'{seconds:.2f}')
             state['strokes'] += 1
 
         def use(tool, weight):

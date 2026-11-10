@@ -213,8 +213,11 @@ struct SketchCanvas {
 
     /// One stroke through screen points, without waiting for the app to report it.
     func stroke(_ points: [CGPoint], seconds: Double? = nil) async throws {
-        let duration = seconds ?? max(0.3, min(10, 0.022 * Double(points.count)))
-        try await app.run(["draw"] + points.map { String(format: "%.1f,%.1f", $0.x, $0.y) } + ["--duration", String(format: "%.2f", duration)])
+        // draw refuses a point that repeats the one before it, which a fill makes where its edges meet.
+        var arguments: [String] = []
+        for point in points.map({ String(format: "%.1f,%.1f", $0.x, $0.y) }) where point != arguments.last { arguments.append(point) }
+        let duration = seconds ?? max(0.3, min(10, 0.022 * Double(arguments.count)))
+        try await app.run(["draw"] + arguments + ["--duration", String(format: "%.2f", duration)])
     }
 
     @discardableResult
