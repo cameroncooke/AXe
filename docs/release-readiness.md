@@ -54,6 +54,7 @@ The third and fourth are one owner with two admission styles and can be merged.
 - [~] Device support bugs: fixed and merged into `v2` (7 commits); the final device run is blocked
 - [x] Simulator input and broker bugs
 - [x] Agent mode bugs: fixed and merged into `v2` (13 commits)
+- [x] Bugs found by the final verification (4 fixes, `5b2427fd1` to `cc39c8d49`)
 
 Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
 
@@ -86,6 +87,15 @@ Agent-mode wave evidence:
 - Timing before and after, two alternating runs under load 11 to 21: describe 332 and 513 ms before, 360 and 423 ms after; tap 810 and 1,264 ms before, 939 and 1,009 ms after. The runs disagree in direction, so no difference is shown either way. A traced ref tap makes the same three reads in both builds.
 - Playground agent groups on the new build: iPhone 19 of 21 suites first time (slider and type passed on rerun; both failed on timeouts under load), iPad all passed.
 - `AgentModeController.swift` and `AgentModeSnapshot.swift` are split into smaller files (pure moves).
+
+Bugs found by the final verification, each fixed and committed:
+
+| Bug | Cause | Fix and evidence |
+| --- | --- | --- |
+| A command straight after `button home` failed with `DTUHID guest barrier timed out` and its input was lost | The guest serves a new connection late after another connection's Home press: 0.7 to 1 s on a healthy simulator, 3.1 to 3.3 s on one that had taken input for hours. AXe sent the input, waited 2 s, closed the connection and the guest never saw it. Not from the audit: the pre-audit build fails the same way. | `cc39c8d49`: a plain connection first sends one request with no input and waits up to 10 s for the answer. Presses 0.5 s apart on the long-running simulator: before 2 of 4 failed, after 12 of 12 succeeded (3.2 to 4.7 s each). Healthy simulator: 0.73 s before and after. A reconnect was tried first and made it worse (every press failed), because abandoned connections add to the guest's backlog. |
+| `axe displays` and agent reads failed on a locked iPhone or iPad simulator ("inconsistent screen layout") | A device with one screen was accepted only while lit; a locked Duo already read fine | `a35e1270d`: the one built-in screen is read in any reported state. Locked iPhone 18 Pro now prints `portrait, locked`, JSON `"state":"locked"`, and `describe-ui --agent` returns the lock screen. 10 IDBKit display tests pass. |
+| `batch --agent --file` with malformed JSON reported `readFailed` ("AXe could not read a response it expected") | The decoding error fell through to the generic mapping (a regression from the error-code unification) | `5b2427fd1`: `invalidArguments`, "Agent batch JSON is malformed or lacks a steps array." New unit test; the failing e2e case passes. |
+| Ordinary `stream-video --format mjpeg` declared `boundary=--mjpegstream` while parts start with `--mjpegstream` | Present since v1.8.0; a strict multipart parser finds no parts | `46c18a694`: declares `boundary=mjpegstream` like the selected stream; part bytes unchanged. |
 
 Not done, with reasons: the audit's claim that the second DTUHID readiness wait is a no-op was wrong
 (the first wait is skipped when `dtuhidd` is not yet a child process), so it is kept.
@@ -217,7 +227,9 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 
 - [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
 - [x] Second run on `v2` after the input-stack wave: iPhone 24 of 27 suites, iPad 5 of 5, Duo did not run
-- [~] Final run on `v2` at `e45b0d3db`, started 03:28 with one agent still working
+- [x] Third run on `v2` at `e45b0d3db` (03:28, 70 minutes, one agent still testing on other simulators): 96 of 101 suites passed
+- [x] Targeted rerun of the 5 failed suites and the new ordinary suites on a quiet machine at `a35e1270d`
+- [~] Final full run on `v2` at `cc39c8d49`, quiet machine, simulators rebooted first (started 05:45)
 - [x] Triage of the three failing iPhone cases: none is a regression (see below)
 - [ ] Unit tests
 - [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
@@ -265,6 +277,20 @@ Duo "screens still changing" refusal, investigated and fixed (merged into `v2`):
 - Tap timing on the Duo in the normal state, median of 7: 0.423 s before, 0.390 s after.
 - Not conclusive: Duo matrix groups run under load averages of 100 to 240 failed on both the old and the new build (app launch failures and the known early-boot accessibility wedge), so they need the quiet final run.
 
+Third run (`e2e-results/20261110T032721Z`, 70 minutes, `v2` at `e45b0d3db`): 96 of 101 suites passed; all 10 iPad suites passed. The ordinary-suite agent was still running its own simulators until about 04:00 (load average up to 370), so the run was not quiet. The five failures:
+
+| Suite | Failure | Verdict |
+| --- | --- | --- |
+| iPhone `PlaygroundAgentBatchTests` | Malformed batch file reported `readFailed` | Real regression, fixed (`5b2427fd1`); passes on rerun |
+| iPhone `PlaygroundAgentSliderTests` | Two interior-value cases ran out of time (13 to 14 s) | Load; passes on the quiet rerun |
+| iPhone `PlaygroundAgentKeyComboTests` | Two taps refused after an observation timed out | Load; passes on the quiet rerun |
+| Duo `PlaygroundDuoCoreTests` | `simctl launch` returned no process for the first test | Simulator launch failure under load; rerun in the final run |
+| Duo `PlaygroundDuoScrollCoverageTests` | A swipe stopped because the display feed was 0.57 s old (limit 0.5 s); cleanup uncertain, input quarantined | Load; rerun in the final run. The quarantine then correctly blocked every later Duo input until I rebooted that simulator and removed the record. |
+
+Targeted rerun on a quiet machine (`e2e-results/final-targeted-1`, 23 minutes, `v2` at `a35e1270d`, 19 suites): the three iPhone agent suites passed, all five iPad ordinary suites passed, and four of the six new ordinary iPhone suites passed. `PlaygroundOrdinaryBatchTests` and `PlaygroundOrdinaryButtonTests` failed with `DTUHID guest barrier timed out`, which led to the fix in `cc39c8d49` (Phase 2). The Duo suites did not run because of the quarantine record above.
+
+Ordinary-simulator coverage (merged as `b623e4f21` to `963cae85f`): 17 legacy end-to-end files that `make e2e` never ran were run once through their old path (all passed), then replaced by five matrix suites, 54 cases on the iPhone and 50 on the iPad, plus unit tests for option refusals and `list-simulators`. `make e2e` now plans iPhone 34 suites and 232 cases, iPad 11 and 80, Duo 64 and 521. The unit count fell from 958 to 845 because those files are gone; nothing that ran before was dropped. Not covered: ordinary BGRA streaming (output has padded rows and no frame boundaries) and ordinary landscape (`rotate` is Duo-only by design).
+
 Follow-ups: document that turning VoiceOver on shows this alert; keep agents off the E2E simulators
 (already the rule; the settings agent ran before the rule existed).
 
@@ -288,6 +314,9 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 
 - Restart `CoreDeviceService` (or replug the devices), then run `make e2e-devices`: nothing changed tonight on device paths has been run on hardware.
 - Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
+- A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, but back-to-back `button` presses are slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
+- Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
+- The selected input path stops a gesture and quarantines input when its display feed is more than 0.5 s old. Under a load average of 100 or more that tripped once on the Duo. The limit is deliberate; it may deserve a second look for busy CI machines.
 - Folding the "ordinary" input route into the selected route (audit item SEL-17) is not done: it changes the path of every ordinary tap and needs a quiet machine to benchmark against v1.8.0.
 
 ## Decisions
