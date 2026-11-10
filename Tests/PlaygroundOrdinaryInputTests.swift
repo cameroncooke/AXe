@@ -65,7 +65,17 @@ struct PlaygroundOrdinaryInputTests {
             let tab = try #require(UIStateParser.findElementByLabel(in: state, label: label), "No \(label) tab.")
             try #require(tab.type == "RadioButton" && tab.frame != nil)
         }
-        try await app.run(["tap", "--label", "Settings", "--element-type", "RadioButton"])
+        let settings = app.core.elements(in: state).filter { $0.label == "Settings" && $0.type == "RadioButton" }
+        if settings.count == 1 {
+            try await app.run(["tap", "--label", "Settings", "--element-type", "RadioButton"])
+        } else {
+            // An iPad shows the tabs twice; a label tap refuses the ambiguous match before input.
+            let refused = try await app.attempt(["tap", "--label", "Settings", "--element-type", "RadioButton"])
+            try #require(refused.exitCode != 0 && refused.output.contains("Multiple (\(settings.count)) accessibility elements matched"),
+                "An ambiguous label tap was not refused: \(refused.output)")
+            let center = app.core.point(in: try app.core.frame(of: settings[0]), x: 0.5, y: 0.5)
+            try await app.run(["tap", "-x", String(center.x), "-y", String(center.y)])
+        }
         try await app.waitForLabel("Current Tab: Settings")
     }
 
@@ -198,7 +208,8 @@ struct PlaygroundOrdinaryInputTests {
         let elapsed = try await app.timed(["touch", "-x", String(point.x), "-y", String(point.y), "--down", "--up", "--delay", "1"])
         try #require(elapsed >= 1, "The 1-second hold took \(elapsed) seconds.")
         try await app.core.waitForValue("long-press-count", equals: "1")
-        try await app.waitForCoordinate("last-long-press-coordinates", near: point)
+        // The app records a long press before its first drag change at the view's centre, so
+        // the touch coordinates, not the long-press coordinates, show where the hold was.
         try await app.waitForCoordinate("last-touch-down-coordinates", near: point)
         try await app.waitForCoordinate("last-touch-up-coordinates", near: point)
     }
@@ -411,14 +422,25 @@ struct OrdinaryPlaygroundSession {
         // The Tap Test screen's identifier covers its text elements, so read its labels.
         _ = try await core.waitFor("tap \(count) at \(point)") { state in
             guard UIStateParser.findElementByLabel(in: state, label: "Tap Count: \(count)") != nil,
-                  let location = UIStateParser.findElementContainingLabel(in: state, containing: "Tap Location: ")?.label,
-                  let tapped = CoordinateParser.parseCoordinates(from: location) else { return false }
+                  let location = UIStateParser.findElementContainingLabel(in: state, containing: "Tap Location: ")?.value,
+                  let tapped = Self.point(location) else { return false }
             return core.isNear(tapped, point)
         }
     }
 
     func waitForCoordinate(_ identifier: String, near point: (x: Int, y: Int)) async throws {
-        _ = try await core.waitFor("\(identifier) near \(point)") { core.coordinate(identifier, in: $0, isNear: point) }
+        _ = try await core.waitFor("\(identifier) near \(point)") { state in
+            UIStateParser.findElement(in: state, withIdentifier: identifier)?.value.flatMap(Self.point)
+                .map { core.isNear($0, point) } ?? false
+        }
+    }
+
+    /// Reads `x:N,y:N`. The app formats numbers with grouping, so an iPad point can read `y:1,105`.
+    static func point(_ value: String) -> (x: Int, y: Int)? {
+        guard let range = value.range(of: ",y:"), value.hasPrefix("x:"),
+              let x = Int(value[value.index(value.startIndex, offsetBy: 2)..<range.lowerBound].replacingOccurrences(of: ",", with: "")),
+              let y = Int(value[range.upperBound...].replacingOccurrences(of: ",", with: "")) else { return nil }
+        return (x, y)
     }
 
     /// A presented alert, sheet or menu is in the tree at its final frame while it still animates

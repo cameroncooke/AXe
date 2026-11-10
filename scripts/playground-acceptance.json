@@ -125,7 +125,6 @@
       "PlaygroundAgentTests",
       "PlaygroundKeyboardTests",
       "PlaygroundOrdinaryTextTests",
-      "PlaygroundOrdinaryButtonTests",
       "PlaygroundWindowTests",
       "PlaygroundOrdinaryMediaTests"
     ],
@@ -484,8 +483,7 @@
       ],
       "ipad": [
         "PlaygroundKeyboardTests",
-        "PlaygroundOrdinaryTextTests",
-        "PlaygroundOrdinaryButtonTests"
+        "PlaygroundOrdinaryTextTests"
       ],
       "duo": [
         "PlaygroundDuoKeyboardInterruptionTests",

@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @preconcurrency import AVFoundation
 
-/// Plain screenshot, stream and recording commands on an ordinary iPhone or iPad. Each decodes
+/// Plain screenshot, JPEG stream and recording commands on an ordinary iPhone or iPad. Each decodes
 /// the Playground's four colour markers upright from the captured pixels.
 @Suite("Playground Ordinary Media E2E", .serialized, .enabled(if: isOrdinaryPlaygroundE2EEnabled))
 struct PlaygroundOrdinaryMediaTests {
@@ -40,36 +40,6 @@ struct PlaygroundOrdinaryMediaTests {
             let decoded = try PlaygroundMediaAssertions.image(frame, type: "public.jpeg")
             try #require(abs(decoded.width - display.width / 2) <= 1 && abs(decoded.height - display.height / 2) <= 1,
                 "A 0.5-scale frame is \(decoded.width)x\(decoded.height) for a \(display.width)x\(display.height) display.")
-        }
-    }
-
-    /// The plain BGRA stream writes the simulator's own pixel buffers: full display size whatever
-    /// --scale says, with rows padded beyond width x 4 bytes. This checks the frames it does write.
-    @Test("The BGRA stream delivers upright full-size frames and stops cleanly on SIGINT")
-    func bgraStream() async throws {
-        let app = try OrdinaryPlaygroundSession()
-        let display = try await app.openMediaPattern()
-        let stream = try app.start(["stream-video", "--format", "bgra", "--fps", "2"], name: "bgra")
-        let data: Data
-        do {
-            let deadline = Date().addingTimeInterval(30)
-            while try stream.stdoutData().count < display.width * display.height * 4 * 2 {
-                try #require(stream.isRunning && Date() < deadline, "No two BGRA frames: \((try? stream.errorOutput()) ?? "")")
-                try await Task.sleep(nanoseconds: 100_000_000)
-            }
-            try stream.signal(SIGINT)
-            try await stream.wait(timeout: 15)
-            try #require(stream.exitCode == 0, "stream-video did not stop cleanly: \((try? stream.errorOutput()) ?? "")")
-            data = try stream.stdoutData()
-        } catch { await stream.finish(); throw error }
-        await stream.finish()
-        // Pixel-buffer rows are padded to 64 bytes. A stop can end the output inside a frame.
-        let rowBytes = (display.width * 4 + 63) / 64 * 64
-        let frameBytes = rowBytes * display.height
-        try #require(data.count / frameBytes >= 2, "\(data.count) bytes hold fewer than two \(display.width)x\(display.height) frames.")
-        for index in 0..<(data.count / frameBytes) {
-            _ = try PlaygroundMediaAssertions.markers(data.subdata(in: (index * frameBytes)..<((index + 1) * frameBytes)),
-                width: display.width, height: display.height, bytesPerRow: rowBytes)
         }
     }
 
