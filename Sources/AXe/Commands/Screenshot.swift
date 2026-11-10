@@ -68,7 +68,7 @@ struct Screenshot: AsyncParsableCommand {
     private func captureSimulator(_ targetSimulator: FBSimulator) async throws {
         let trimmedUDID = targetSimulator.udid
         guard targetSimulator.state == .booted else {
-            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
+            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state).rawValue
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription). Boot it first, for example with xcrun simctl boot \(trimmedUDID).", code: .notBooted)
         }
 

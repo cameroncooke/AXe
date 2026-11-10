@@ -142,7 +142,7 @@ actor PhysicalDeviceInputOwner {
 
         try await directory.prepareHID()
         if let admissionDeadline, ContinuousClock().now >= admissionDeadline {
-            throw CLIOutputFailure(code: "waitTimedOut",
+            throw CLIOutputFailure(code: "timeout",
                 message: "The element selection expired before AXe could send input.")
         }
         do {
@@ -288,7 +288,7 @@ actor PhysicalDeviceInputOwner {
 
     func finishClient() async throws {
         guard !busy else {
-            throw CLIOutputFailure(code: "deviceBusy", message: "The current device operation has not stopped.")
+            throw CLIOutputFailure(code: "busy", message: "The current device operation has not stopped.")
         }
         do {
             try await releaseHeldInput()
@@ -305,14 +305,14 @@ actor PhysicalDeviceInputOwner {
             throw CLIOutputFailure(code: "inputUnavailable", message: "The physical device input session cannot accept more input.")
         }
         guard !busy else {
-            throw CLIOutputFailure(code: "deviceBusy", message: "Another action owns this physical device input session.")
+            throw CLIOutputFailure(code: "busy", message: "Another action owns this physical device input session.")
         }
         busy = true
     }
 
     private func requireNoContact() throws {
         if contact != nil {
-            throw CLIOutputFailure(code: "deviceBusy", message: "Finish the held device touch before sending other input.")
+            throw CLIOutputFailure(code: "busy", message: "Finish the held device touch before sending other input.")
         }
     }
 
@@ -348,7 +348,7 @@ actor PhysicalDeviceInputOwner {
             } catch { failures = true }
         }
         if failures {
-            throw CLIOutputFailure(code: "cleanupUnconfirmed",
+            throw CLIOutputFailure(code: "cleanupUncertain",
                 message: "AXe could not send all release events. Check the device before sending more input.")
         }
     }
@@ -415,7 +415,7 @@ private final class PhysicalDeviceInputLease: Sendable {
         do {
             descriptor = try HIDBroker.acquireLifetimeLock(endpoint: endpoint)
         } catch let error as NSError where error.domain == NSPOSIXErrorDomain && error.code == Int(EWOULDBLOCK) {
-            throw CLIOutputFailure(code: "deviceBusy", message: "Another AXe process owns input on this physical device.")
+            throw CLIOutputFailure(code: "busy", message: "Another AXe process owns input on this physical device.")
         }
     }
 

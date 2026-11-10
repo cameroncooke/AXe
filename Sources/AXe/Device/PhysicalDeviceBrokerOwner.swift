@@ -100,7 +100,7 @@ actor PhysicalDeviceBrokerOwner {
             if let deadlineUptime {
                 let now = DispatchTime.now().uptimeNanoseconds
                 guard deadlineUptime > now, deadlineUptime - now <= 30_000_000_000 else {
-                    throw CLIOutputFailure(code: "waitTimedOut", message: "The element selection expired before the broker received it.")
+                    throw CLIOutputFailure(code: "timeout", message: "The element selection expired before the broker received it.")
                 }
                 deadline = .now + .nanoseconds(Int64(deadlineUptime - now))
             } else {

@@ -54,10 +54,7 @@ final class AgentScreenObserver {
         if let simulator {
             return simulator
         }
-        let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        guard let simulator = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
-        }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         self.simulator = simulator
         return simulator
     }

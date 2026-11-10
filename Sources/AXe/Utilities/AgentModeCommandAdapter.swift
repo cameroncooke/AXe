@@ -35,7 +35,8 @@ enum AgentModeCommandAdapter {
         }
         let response = try sendTimed(request, simulatorUDID: simulatorUDID)
         guard let result = response.agent else {
-            throw CLIError(errorDescription: "Agent mode returned no agent result. Inspect the broker state before retrying.")
+            throw CLIError(errorDescription: "Agent mode returned no result, so input may have been sent. "
+                + "Run describe-ui --agent to read the screen before retrying.")
         }
         guard view == .reading, let continuation = response.readingContinuation else {
             try CLIOutput.writeJSON(result)

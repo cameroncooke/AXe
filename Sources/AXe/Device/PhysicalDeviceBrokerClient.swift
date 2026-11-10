@@ -85,9 +85,9 @@ actor PhysicalDeviceBrokerClient {
                 return try socket.read(Wire.Response.self, timeoutMilliseconds: Wire.closeTimeoutMilliseconds)
             }
         } catch {
-            throw Self.cleanupUnconfirmed
+            throw Self.cleanupUncertain
         }
-        guard case let .closed(failure) = response else { throw Self.cleanupUnconfirmed }
+        guard case let .closed(failure) = response else { throw Self.cleanupUncertain }
         if let failure { throw failure.error }
     }
 
@@ -98,8 +98,8 @@ actor PhysicalDeviceBrokerClient {
         return Task.isCancelled ? CancellationError() : Wire.unavailable
     }
 
-    private static var cleanupUnconfirmed: CLIOutputFailure {
-        CLIOutputFailure(code: "cleanupUnconfirmed",
+    private static var cleanupUncertain: CLIOutputFailure {
+        CLIOutputFailure(code: "cleanupUncertain",
             message: "AXe could not confirm release of the physical device input lease.")
     }
 

@@ -143,21 +143,17 @@ struct PlaygroundAgentSystemOwnerTests: Sendable {
         let after: PlaygroundAgentExamplesDocument
     }
 
-    private struct DenyFailureEnvelope: Decodable {
-        struct Failure: Decodable { let code: String; let message: String }
-        let error: Failure?
-    }
-
+    /// A screen-change refusal before input: typed code, no events and clean release. When AXe could
+    /// read the screen, the reply carries it as a new table; otherwise it asks for a refresh.
     private func isZeroInputScreenChange(_ attempt: DenyAttempt, appPID: Int32, generation: UUID) -> Bool {
         guard attempt.before.pid == appPID, attempt.before.generation == generation,
               attempt.before.photosStatus == 0, attempt.before == attempt.after,
               let envelope = try? decode(AgentPlaygroundResult.self, attempt.output.output),
-              let failure = try? decode(DenyFailureEnvelope.self, attempt.output.output),
               attempt.output.exitCode != 0, envelope.schema == "axe.output.agent-result", envelope.schemaVersion == "1",
-              envelope.didError, envelope.error?.code == "nativeActionFailed",
-              failure.error?.code == "nativeActionFailed",
-              failure.error?.message == "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.",
-              envelope.data.capture == nil, envelope.data.cache.status == "invalidated", envelope.data.cache.requiresRefresh,
+              envelope.didError, ["screenChanged", "targetChanged"].contains(envelope.error?.code ?? ""),
+              envelope.data.capture == nil
+                ? envelope.data.cache.requiresRefresh
+                : envelope.data.cache.status == "refreshed" && !envelope.data.cache.requiresRefresh,
               let action = envelope.data.action, action.kind == "tap", action.outcome == "failedBeforeInput",
               action.enqueuedEventCount == 0, action.cleanup == "notNeeded", !action.replayed else { return false }
         return true

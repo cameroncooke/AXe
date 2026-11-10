@@ -55,7 +55,7 @@ struct HIDInteractor {
         logger.info().log("Simulator name: \(simulator.name)")
 
         guard simulator.state == .booted else {
-            let stateDescription = FBiOSTargetStateStringFromState(simulator.state)
+            let stateDescription = FBiOSTargetStateStringFromState(simulator.state).rawValue
             throw CLIError(
                 errorDescription: "Simulator \(simulatorUDID) is not booted. Current state: \(stateDescription).", code: .notBooted
             )

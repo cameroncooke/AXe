@@ -28,7 +28,7 @@ enum PhysicalDeviceH264Stream {
                 try await stream.stop()
             } catch {
                 if case let .failure(captureError) = result {
-                    throw CLIOutputFailure(code: "cleanupUnconfirmed",
+                    throw CLIOutputFailure(code: "cleanupUncertain",
                         message: "\(error.localizedDescription) Capture failed: \(captureError.localizedDescription)")
                 }
                 throw error

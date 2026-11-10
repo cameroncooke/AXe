@@ -101,7 +101,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             guard operation == .complete, token == nil, agentAdmission.expectedPID > 0,
                   agentAdmission.context.screenID == screenID,
                   UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID,
-                  agentAdmission.screenHash.utf8.count <= 64, hinge == nil, rotation == nil,
+                  hinge == nil, rotation == nil,
                   home == nil, button == nil, gesture == nil else {
                 throw AgentModeFailure("invalidAdmission", "Agent native admission does not match this complete request.")
             }

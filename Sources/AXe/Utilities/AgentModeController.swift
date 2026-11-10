@@ -637,11 +637,12 @@ final class AgentModeController {
     private static func liveDiscovery(simulatorUDID: String, logger: AxeLogger) -> DisplayDiscovery {
         { _ in
             let simulator = try await PhaseTimer.measure("simulatorSet") { () async throws -> FBSimulator in
-                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-                return simulator
+                do {
+                    return try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
+                } catch let failure as CLIOutputFailure {
+                    // Keep notBooted or targetNotFound in the agent reply instead of observationFailed.
+                    throw AgentModeFailure(failure.code, failure.message)
+                }
             }
             // Display catalogue, boot identity and the devicectl active-panel read.
             let discovery = try await PhaseTimer.measure("activePanel.discover") {

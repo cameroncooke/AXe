@@ -63,7 +63,7 @@ extension AgentModeController {
             let selector = try snapshot.uniqueSelector(for: node)
             chosenTarget = .semantic(kind: selector.kind, value: selector.value, elementType: node.type)
         }
-        var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: snapshot.hash,
+        var admission = AgentModeAdmission(context: context, expectedPID: pid,
             visibleFingerprint: snapshot.visibleFingerprint,
             target: try node.map { try AgentModeTarget($0, nativeTarget: chosenTarget) }, nativeTarget: chosenTarget)
         if case let .semantic(kind, value, _)? = chosenTarget {

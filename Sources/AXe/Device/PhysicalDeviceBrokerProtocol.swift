@@ -85,7 +85,7 @@ enum PhysicalDeviceBrokerProtocol {
     }
 
     static var busy: CLIOutputFailure {
-        CLIOutputFailure(code: "deviceBusy", message: "Another AXe command owns this physical device.")
+        CLIOutputFailure(code: "busy", message: "Another AXe command owns this physical device.")
     }
 
     static var unavailable: CLIOutputFailure {

@@ -13,11 +13,13 @@ enum PhysicalDeviceMedia {
         }
     }
 
-    static func record(device: CoreDevice, output: String?, fps: Int, quality: Int, scale: Double) async throws {
+    static func record(device: CoreDevice, output: String?, fps: Int, quality: Int, scale: Double,
+                       verbose: Bool) async throws {
         try await SelectedMediaCapture.run { owner in
             let capture = try await PhysicalDeviceMediaCapture.open(device: device, fps: fps)
             defer { capture.close() }
-            try await record(capture: capture, owner: owner, output: output, fps: fps, quality: quality, scale: scale)
+            try await record(capture: capture, owner: owner, output: output, fps: fps, quality: quality, scale: scale,
+                verbose: verbose)
         }
     }
 
@@ -81,7 +83,7 @@ enum PhysicalDeviceMedia {
     }
 
     private static func record(capture: PhysicalDeviceMediaCapture, owner: SelectedMediaCapture, output: String?,
-                               fps: Int, quality: Int, scale: Double) async throws {
+                               fps: Int, quality: Int, scale: Double, verbose: Bool) async throws {
         let destination = try SelectedVideoRecording.outputURL(output)
         let temporary = destination.deletingLastPathComponent()
             .appendingPathComponent(".axe-device-video-" + UUID().uuidString + ".mp4")
@@ -99,28 +101,21 @@ enum PhysicalDeviceMedia {
         var lastCaptured = first.hostCaptureTime
         var lastPresentation = CMTime.zero
         try await recorder.appendSelected(image: image, presentationTime: .zero)
-        let diagnostics = try SelectedStreamOutput(descriptor: STDERR_FILENO)
-        do {
-            _ = try await diagnostics.write(Data("Device recording accepted frames: \(count)\n".utf8))
-            while let next = try await capture.next(untilStop: owner) {
-                let nextImage = try recordingImage(next.png)
-                guard nextImage.width == image.width, nextImage.height == image.height else {
-                    throw PhysicalDeviceMediaCapture.changedDisplay
-                }
-                var presentation = CMTime(seconds: next.hostCaptureTime - first.hostCaptureTime, preferredTimescale: 600)
-                if presentation <= lastPresentation {
-                    presentation = CMTimeAdd(lastPresentation, CMTime(value: 1, timescale: 600))
-                }
-                try await recorder.appendSelected(image: nextImage, presentationTime: presentation)
-                lastPresentation = presentation
-                lastCaptured = next.hostCaptureTime
-                count += 1
-                _ = try await diagnostics.write(Data("Device recording accepted frames: \(count)\n".utf8))
+        RecordVideo.progress("Device recording accepted frames: \(count)")
+        while let next = try await capture.next(untilStop: owner) {
+            let nextImage = try recordingImage(next.png)
+            guard nextImage.width == image.width, nextImage.height == image.height else {
+                throw PhysicalDeviceMediaCapture.changedDisplay
             }
-            try diagnostics.restore()
-        } catch {
-            try diagnostics.restore()
-            throw error
+            var presentation = CMTime(seconds: next.hostCaptureTime - first.hostCaptureTime, preferredTimescale: 600)
+            if presentation <= lastPresentation {
+                presentation = CMTimeAdd(lastPresentation, CMTime(value: 1, timescale: 600))
+            }
+            try await recorder.appendSelected(image: nextImage, presentationTime: presentation)
+            lastPresentation = presentation
+            lastCaptured = next.hostCaptureTime
+            count += 1
+            RecordVideo.progress("Device recording accepted frames: \(count)")
         }
 
         try await recorder.finishSelected()
@@ -128,12 +123,13 @@ enum PhysicalDeviceMedia {
         let receipt = RecordingReceipt(output: destination.path, width: size.width, height: size.height,
             requestedFPS: fps, acceptedFrames: count, hostCaptureSpanSeconds: span,
             achievedFPS: rate(count: count, span: span))
-        let receiptBytes = CLIOutput.isFormatted ? try JSONEncoder().encode(receipt) : nil
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let receiptBytes = try encoder.encode(receipt)
         try SelectedVideoRecording.publish(temporary: temporary, destination: destination)
-        if let receiptBytes {
-            try CLIOutput.writeJSONData(receiptBytes)
-        } else {
-            CLIOutput.message(destination.path)
+        if verbose { try CLIOutput.writeJSONData(receiptBytes) }
+        else {
+            try MediaOutput(path: destination.path, pixelWidth: size.width, pixelHeight: size.height,
+                frames: Int64(count)).emit()
         }
     }
 
@@ -183,6 +179,7 @@ enum PhysicalDeviceMedia {
         let achievedFPS: Double?
     }
 
+    /// The `--verbose` receipt. Sizes are pixels.
     private struct RecordingReceipt: Encodable {
         let source = "coreDeviceScreenshotToH264"
         let stopReason = "signal"

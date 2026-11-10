@@ -113,7 +113,7 @@ struct StreamVideo: AsyncParsableCommand {
         }
 
         guard targetSimulator.state == .booted else {
-            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
+            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state).rawValue
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)", code: .notBooted)
         }
 

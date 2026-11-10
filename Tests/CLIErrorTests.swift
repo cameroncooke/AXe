@@ -72,6 +72,7 @@ struct CLIErrorTests {
             (CancellationError(), "interrupted"),
             (CLIError(errorDescription: "Not booted.", code: .notBooted), "notBooted"),
             (ValidationError("Bad value."), "invalidArguments"),
+            (TextToHIDEvents.TextConversionError.unsupportedCharacter("£"), "invalidArguments"),
             (SelectedHIDFailure.busy, "busy"),
             (SelectedHIDFailure.invalid("Measured context changed before input"), "rejectedBeforeInput"),
             (FBSimulatorContextError.unavailable("Unsupported guest rotation"), "displayUnavailable"),

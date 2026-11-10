@@ -452,7 +452,6 @@ struct AgentModeResult: Codable, Sendable {
 struct AgentModeAdmission: Codable, Sendable {
     let context: SelectedHIDContext
     let expectedPID: Int32
-    let screenHash: String
     /// The admission comparison.
     let visibleFingerprint: String
     let target: AgentModeTarget?

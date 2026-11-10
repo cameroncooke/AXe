@@ -127,7 +127,7 @@ actor PhysicalDeviceDisplayStream {
         guard stopTask == nil else { throw CancellationError() }
         if let tunnelRefreshFailure { throw tunnelRefreshFailure }
         guard !receiving else {
-            throw CLIOutputFailure(code: "deviceBusy", message: "Another operation is reading the physical display stream.")
+            throw CLIOutputFailure(code: "busy", message: "Another operation is reading the physical display stream.")
         }
         receiving = true
         defer { receiving = false }
@@ -274,7 +274,7 @@ actor PhysicalDeviceDisplayStream {
     }
 
     private static func cleanupFailure(_ reason: String) -> CLIOutputFailure {
-        CLIOutputFailure(code: "cleanupUnconfirmed",
+        CLIOutputFailure(code: "cleanupUncertain",
             message: "AXe closed its display stream connection but could not verify that its session ended. \(reason)")
     }
 

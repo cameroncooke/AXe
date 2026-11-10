@@ -28,11 +28,11 @@ struct ListDevices: AsyncParsableCommand {
         }
     }
 
-    private struct Inventory: Encodable {
+    struct Inventory: Encodable {
         let devices: [DeviceSummary]
     }
 
-    private struct DeviceSummary: Encodable {
+    struct DeviceSummary: Encodable {
         let udid: String
         let name: String?
         let model: String?
@@ -62,7 +62,7 @@ struct Doctor: AsyncParsableCommand {
         let report: TargetReadiness
         switch try await AutomationTarget.resolve(udid: udid) {
         case let .simulator(simulator):
-            let state = FBiOSTargetStateStringFromState(simulator.state)
+            let state = FBiOSTargetStateStringFromState(simulator.state).rawValue
             report = TargetReadiness(target: "simulator", udid: simulator.udid, name: simulator.name,
                 checks: [ReadinessCheck("simulatorNotBooted", observed: simulator.state == .booted,
                     fix: "Simulator state: \(state). Boot the simulator and run doctor again.")])
@@ -74,14 +74,18 @@ struct Doctor: AsyncParsableCommand {
 
         if CLIOutput.isFormatted {
             try CLIOutput.writeJSON(report)
-        } else {
-            CLIOutput.message("\(report.name ?? report.target) (\(report.udid)): \(report.ready ? "ready" : "not ready")")
-            for check in report.checks {
-                let message = check.message.map { " — " + $0 } ?? ""
-                CLIOutput.message("  \(Self.labels[check.id] ?? check.id): \(check.status.rawValue)\(message)")
-            }
+            guard report.ready else { throw report.failure }
+            return
         }
-        guard report.ready else { throw report.failure }
+        CLIOutput.message("\(report.name ?? report.target) (\(report.udid)): \(report.ready ? "ready" : "not ready")")
+        for check in report.checks {
+            let message = check.message.map { " — " + $0 } ?? ""
+            CLIOutput.message("  \(Self.labels[check.id] ?? check.id): \(check.status.rawValue)\(message)")
+        }
+        // The report above already names each failed check and its fix.
+        guard report.ready else {
+            throw CLIOutputFailure(code: report.failure.code, message: "\(report.name ?? report.target) is not ready.")
+        }
     }
 
     /// Text labels for the check IDs, which name the failure and double as JSON error codes.

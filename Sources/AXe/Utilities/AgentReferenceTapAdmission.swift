@@ -90,7 +90,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
         }
         let target = try AgentModeTarget(current, nativeTarget: execution)
         try target.validate(nativeTarget)
-        var admission = AgentModeAdmission(context: context, expectedPID: pid, screenHash: fresh.hash,
+        var admission = AgentModeAdmission(context: context, expectedPID: pid,
             visibleFingerprint: fresh.visibleFingerprint,
             target: target, nativeTarget: execution)
         if case let .semantic(kind, value, _) = execution {

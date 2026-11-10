@@ -100,7 +100,7 @@ enum PhysicalAccessibilityCommands {
     }
 
     private static var waitExpired: CLIOutputFailure {
-        CLIOutputFailure(code: "waitTimedOut", message: "The physical device polling deadline expired before a target was verified.")
+        CLIOutputFailure(code: "timeout", message: "The physical device polling deadline expired before a target was verified.")
     }
 
     private struct VisibleTree {

@@ -117,7 +117,7 @@ struct PlaygroundFocusTypeCheck {
         let rejected = try await command("invalid-text", ["type", "£", "--agent", "--focus",
             "--snapshot-id", first.body.snapshotID.uuidString, "--ref", try reference(first)], allowFailure: true)
         let refusal = try PlaygroundFocusEnvelope.decode(rejected.output)
-        try #require(rejected.exitCode != 0 && refusal.didError && refusal.error?.code == "commandFailed")
+        try #require(rejected.exitCode != 0 && refusal.didError && refusal.error?.code == "invalidArguments")
         try #require(refusal.error?.message.contains("No keycode found for character: '£'") == true)
         try #require(refusal.data.action == nil && refusal.data.batch == nil)
         let unchanged = try await native("after-invalid-text", context: context)

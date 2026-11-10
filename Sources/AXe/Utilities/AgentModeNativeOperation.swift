@@ -21,11 +21,12 @@ enum AgentModeNativeOperation {
                 throw AgentModeFailure("missingAdmission", "The agent input admission is missing.")
             }
             let simulator = try await PhaseTimer.measure("native.simulatorSet") { () async throws -> FBSimulator in
-                try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-                let set = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-                guard let simulator = set.allSimulators.first(where: { UUID(uuidString: $0.udid) == UUID(uuidString: simulatorUDID) }),
-                      simulator.state == .booted else { throw CLIError.simulatorNotFound(udid: simulatorUDID) }
-                return simulator
+                do {
+                    return try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
+                } catch let failure as CLIOutputFailure {
+                    // A policy failure before input keeps its code (notBooted or targetNotFound) in the reply.
+                    throw AgentModeFailure(failure.code, failure.message)
+                }
             }
             let display = try request.selectedDisplay()
             let live = try await PhaseTimer.measure("native.liveContextStart") {

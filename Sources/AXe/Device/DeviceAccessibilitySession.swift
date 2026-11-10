@@ -316,7 +316,7 @@ final class DeviceAccessibilitySession: @unchecked Sendable {
     }
 
     private static var busy: CLIOutputFailure {
-        CLIOutputFailure(code: "deviceBusy", message: "Another operation owns the device accessibility connection.")
+        CLIOutputFailure(code: "busy", message: "Another operation owns the device accessibility connection.")
     }
 
     private static var treeUnavailable: CLIOutputFailure {

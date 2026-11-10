@@ -73,6 +73,8 @@ enum CLIErrorMapping {
             return CLIOutputFailure(code: "invalidArguments", message: known.message)
         case is CancellationError:
             return interrupted
+        case let known as TextToHIDEvents.TextConversionError:
+            return CLIOutputFailure(code: "invalidArguments", message: known.userFacingDescription)
         case let known as ElementResolutionError:
             let code: String
             switch known {

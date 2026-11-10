@@ -18,19 +18,9 @@ enum PhysicalDeviceBatch {
                 } catch is CancellationError {
                     throw CancellationError()
                 } catch {
-                    let code: String
-                    let message: String
-                    if let failure = error as? CLIOutputFailure {
-                        code = failure.code
-                        message = failure.message
-                    } else if let invalid = error as? ValidationError {
-                        code = "invalidArguments"
-                        message = invalid.description
-                    } else {
-                        code = "deviceBatchStepFailed"
-                        message = (error as? UserFacingError)?.userFacingDescription ?? error.localizedDescription
-                    }
-                    throw CLIOutputFailure(code: code, message: "Step \(index + 1) (\(stepName)) failed. \(message)")
+                    let failure = CLIErrorMapping.failure(for: error)
+                    throw CLIOutputFailure(code: failure.code,
+                        message: "Step \(index + 1) (\(stepName)) failed. \(failure.message)")
                 }
             }
         }

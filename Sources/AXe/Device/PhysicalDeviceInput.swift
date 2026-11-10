@@ -79,7 +79,7 @@ struct PhysicalDeviceInput: Sendable {
         if let admissionDeadline {
             let remaining = ContinuousClock.now.duration(to: admissionDeadline)
             guard remaining > .zero, remaining <= .seconds(30) else {
-                throw CLIOutputFailure(code: "waitTimedOut", message: "The element selection expired before input.")
+                throw CLIOutputFailure(code: "timeout", message: "The element selection expired before input.")
             }
             let parts = remaining.components
             let nanos = UInt64(parts.seconds) * 1_000_000_000 + UInt64(parts.attoseconds / 1_000_000_000)

@@ -38,7 +38,7 @@ struct RecordVideo: AsyncParsableCommand {
         help: ArgumentHelp("Selected or follow-active recording only: reject a different simulator boot identity.", visibility: .hidden))
     var expectedBoot: String?
 
-    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid or --follow-active-display: print the full recording receipt as JSON, including the first and last context reads.")
+    @Flag(name: .customLong("verbose"), help: "With --screen-id and --screen-uuid, --follow-active-display or a physical device: print the full recording receipt as JSON. Simulator receipts include the first and last context reads.")
     var verbose = false
 
     func validate() throws {
@@ -78,7 +78,8 @@ struct RecordVideo: AsyncParsableCommand {
             guard let device = try await AutomationTarget.physicalDeviceRecord(udid: simulatorUDID) else {
                 throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
             }
-            try await PhysicalDeviceMedia.record(device: device, output: output, fps: fps, quality: quality, scale: scale)
+            try await PhysicalDeviceMedia.record(device: device, output: output, fps: fps, quality: quality, scale: scale,
+                verbose: verbose)
             return
         }
 
@@ -109,7 +110,7 @@ struct RecordVideo: AsyncParsableCommand {
         }
 
         guard targetSimulator.state == .booted else {
-            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state)
+            let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state).rawValue
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)", code: .notBooted)
         }
 

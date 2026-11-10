@@ -45,11 +45,11 @@ enum CoreDeviceInventory {
         ])
         let details = response.result.device(coreDeviceVersion: response.coreDeviceVersion)
         guard details.identifier.caseInsensitiveCompare(device.identifier) == .orderedSame else {
-            throw CLIError(errorDescription: "CoreDevice returned details for a different device.")
+            throw CLIError(errorDescription: "CoreDevice returned details for a different device.", code: .readFailed)
         }
         if let expectedUDID = device.udid, let actualUDID = details.udid,
            expectedUDID.caseInsensitiveCompare(actualUDID) != .orderedSame {
-            throw CLIError(errorDescription: "CoreDevice returned details with a different hardware UDID.")
+            throw CLIError(errorDescription: "CoreDevice returned details with a different hardware UDID.", code: .readFailed)
         }
         return details
     }
@@ -60,7 +60,7 @@ enum CoreDeviceInventory {
         ])
         let state = response.result
         guard state.deviceIdentifier.caseInsensitiveCompare(device.identifier) == .orderedSame else {
-            throw CLIError(errorDescription: "CoreDevice returned lock state for a different device.")
+            throw CLIError(errorDescription: "CoreDevice returned lock state for a different device.", code: .readFailed)
         }
         // These fields describe passcode access and the first unlock after boot.
         if state.unlockedSinceBoot == false { return true }
@@ -70,7 +70,8 @@ enum CoreDeviceInventory {
     private static func query<Result: Decodable>(_ arguments: [String]) async throws -> Response<Result> {
         let operation = arguments.prefix(3).joined(separator: " ")
         guard let data = try await run(arguments).json else {
-            throw CLIError(errorDescription: "devicectl \(operation) returned no JSON. Check the selected Xcode installation.")
+            throw CLIError(errorDescription: "devicectl \(operation) returned no JSON. Check the selected Xcode installation.",
+                           code: .xcodeUnavailable)
         }
         return try decode(data.contents, operation: operation, succeeded: data.succeeded)
     }
@@ -103,7 +104,7 @@ enum CoreDeviceInventory {
         do {
             try process.run()
         } catch {
-            throw CLIError(errorDescription: "Could not start xcrun devicectl. Select Xcode with xcode-select.")
+            throw CLIError(errorDescription: "Could not start xcrun devicectl. Select Xcode with xcode-select.", code: .xcodeUnavailable)
         }
         let exited = await withTaskGroup(of: Bool.self) { group in
             group.addTask {
@@ -131,9 +132,9 @@ enum CoreDeviceInventory {
         try Task.checkCancellation()
         guard exited else {
             if process.isRunning {
-                throw CLIError(errorDescription: "CoreDevice timed out during \(operation). devicectl did not exit.")
+                throw CLIError(errorDescription: "CoreDevice timed out during \(operation). devicectl did not exit.", code: .timeout)
             }
-            throw CLIError(errorDescription: "CoreDevice timed out during \(operation).")
+            throw CLIError(errorDescription: "CoreDevice timed out during \(operation).", code: .timeout)
         }
 
         let succeeded = process.terminationReason == .exit && process.terminationStatus == 0
@@ -147,11 +148,11 @@ enum CoreDeviceInventory {
         do {
             envelope = try JSONDecoder().decode(Envelope<Result>.self, from: data)
         } catch {
-            throw CLIError(errorDescription: "devicectl \(operation) returned an unrecognized JSON response.")
+            throw CLIError(errorDescription: "devicectl \(operation) returned an unrecognized JSON response.", code: .readFailed)
         }
         guard succeeded, let result = envelope.result else {
             let detail = envelope.error?.userInfo?.localizedDescription?.string ?? "The operation failed."
-            throw CLIError(errorDescription: "devicectl \(operation): \(detail)")
+            throw CLIError(errorDescription: "devicectl \(operation): \(detail)", code: .commandFailed)
         }
         return Response(result: result, coreDeviceVersion: envelope.info?.version)
     }
@@ -163,7 +164,7 @@ enum CoreDeviceInventory {
         do {
             envelope = try JSONDecoder().decode(Envelope<Result>.self, from: data)
         } catch {
-            throw CLIError(errorDescription: "devicectl \(operation) returned an unrecognized JSON response.")
+            throw CLIError(errorDescription: "devicectl \(operation) returned an unrecognized JSON response.", code: .readFailed)
         }
         if succeeded, let result = envelope.result { return result }
         throw CoreDeviceFailure(codes: envelope.error?.codes ?? [],

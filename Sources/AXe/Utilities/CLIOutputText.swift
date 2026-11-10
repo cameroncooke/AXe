@@ -83,10 +83,10 @@ enum CLIOutputText {
         let data = result["data"]
         if let capture = data?["capture"] {
             let unchanged = capture["unchanged"]?.boolValue == true ? " unchanged" : ""
-            lines.append("RS/1 v2 snapshotID=\(capture["snapshotID"]?.scalarText ?? "") seq=\(capture["seq"]?.scalarText ?? "") expires=\(capture["expiresInSeconds"]?.scalarText ?? "")\(unchanged)")
+            lines.append("RS/1 v2 snapshotID=\(capture["snapshotID"]?.scalarText ?? "") expires=\(capture["expiresInSeconds"]?.scalarText ?? "")\(unchanged)")
             if let hash = capture["screenHash"]?.scalarText { lines.append("hash=" + hash) }
             lines += (capture["rows"]?.arrayValue ?? []).compactMap(\.stringValue)
-            let remaining = unhandled(capture, excluding: ["snapshotID", "seq", "expiresInSeconds", "unchanged", "screenHash", "rows"])
+            let remaining = unhandled(capture, excluding: ["snapshotID", "expiresInSeconds", "unchanged", "screenHash", "rows"])
             lines += fields(.object(remaining), indent: "")
         }
         if let data {

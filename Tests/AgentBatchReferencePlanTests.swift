@@ -108,7 +108,7 @@ struct AgentBatchReferencePlanTests {
         #expect(original.nativeFingerprint != fresh.nativeFingerprint)
 
         let admission = AgentModeAdmission(context: try context(), expectedPID: 1234,
-            screenHash: fresh.hash, visibleFingerprint: fresh.visibleFingerprint,
+            visibleFingerprint: fresh.visibleFingerprint,
             target: try AgentModeTarget(target.node))
         try admission.validateScreen([fresh.nodes[0]])
         // Single-action admission uses the same rule: the result text is ordinary text.

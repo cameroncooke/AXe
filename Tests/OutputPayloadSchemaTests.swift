@@ -44,11 +44,11 @@ struct OutputPayloadSchemaTests {
         let readiness = TargetReadiness(target: "device", udid: "00008140-001A2B3C4D5E", name: "iPhone",
             checks: [ReadinessCheck("notPaired", observed: true, fix: "Pair the device."),
                      ReadinessCheck("deviceLocked", observed: false, fix: "Unlock the device.")])
-        // ListDevices' inventory type is private to its command; this mirrors its encoding.
-        let devices = try value(Data(#"""
-            {"devices":[{"udid":"00008140-001A2B3C4D5E","name":"iPhone","model":"iPhone 17 Pro","osVersion":"26.1",
-             "transport":"wired","checks":[{"id":"notPaired","status":"ready"},{"id":"deviceLocked","status":"blocked","message":"Unlock the device."}]}]}
-            """#.utf8))
+        let device = CoreDevice(identifier: "6A0E7F31-1B54-4C4E-9E25-0D8B2F1C9A77", udid: "00008140-001A2B3C4D5E",
+            name: "iPhone", model: "iPhone 17 Pro", osVersion: "26.1", tunnelAddress: "fd00::1", tunnelConnected: true,
+            transport: "wired", paired: true, developerModeEnabled: true, developerDiskImageMounted: false,
+            coreDeviceVersion: "689.2")
+        let devices = try encode(ListDevices.Inventory(devices: [ListDevices.DeviceSummary(device)]))
 
         return [
             ("describe-ui", [try value(Data(#"[{"type":"Application","AXLabel":"Fixture","children":[]}]"#.utf8))]),
