@@ -15,10 +15,15 @@ struct PlaygroundDuoSelectedHomeBatchTests {
             "button unknown",
             "tap --id feature.tap --element-type Button --tap-style physical --expected-pid \(controls.pid)",
         ]
-        let output = try await hardware.command(batchArguments(steps) + controls.selection(), allowFailure: true)
-        let lines = output.output.split(separator: "\n").filter { $0.hasPrefix("{") }
-        try #require(lines.count == 2, "The failed batch must emit exactly two step receipts.")
-        let rows = try lines.map { try JSONDecoder().decode(HomeBatchStep.self, from: Data($0.utf8)) }
+        // The envelope carries the step receipts and the error code; the message wording is not the contract.
+        let output = try await hardware.command(["--output", "json"] + batchArguments(steps) + controls.selection(),
+            allowFailure: true)
+        let line = try #require(output.output.split(separator: "\n").first { $0.hasPrefix("{") })
+        let envelope = try JSONDecoder().decode(HomeBatchEnvelope.self, from: Data(line.utf8))
+        try #require(envelope.command == "batch" && envelope.didError && envelope.error?.code == "rejectedBeforeInput",
+            "The batch must fail with rejectedBeforeInput: \(output.output)")
+        let rows = envelope.data.results
+        try #require(rows.count == 2, "The failed batch must emit exactly two step receipts.")
         let completed = rows[0]
         try #require(completed.schemaVersion == 1 && completed.index == 1 && completed.totalSteps == 3)
         try #require(completed.command == "button" && completed.status == "completed" && completed.error == nil)
@@ -29,7 +34,6 @@ struct PlaygroundDuoSelectedHomeBatchTests {
         try #require(rejected.schemaVersion == 1 && rejected.index == 2 && rejected.totalSteps == 3)
         try #require(rejected.command == "button" && rejected.status == "rejectedBeforeSend")
         try #require(rejected.requestID == nil && rejected.response == nil && rejected.error != nil)
-        try #require(output.output.contains("Selected batch step 2 failed before send. Earlier steps are not undone."))
         let after = try controls.documents.read()
         try after.requireClear()
         try #require(after.counts == before.counts && after.text == before.text)
@@ -89,6 +93,15 @@ struct PlaygroundDuoSelectedHomeBatchTests {
         try #require(final.count("tap") == before.count("tap") + 1)
         try controls.preserveState("home-batch-after-fresh-physical-tap")
     }
+}
+
+private struct HomeBatchEnvelope: Decodable {
+    let command: String
+    let didError: Bool
+    let data: Payload
+    let error: Failure?
+    struct Payload: Decodable { let results: [HomeBatchStep] }
+    struct Failure: Decodable { let code: String }
 }
 
 private struct HomeBatchStep: Decodable {

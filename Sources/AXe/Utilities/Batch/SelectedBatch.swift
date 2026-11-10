@@ -250,8 +250,11 @@ enum SelectedBatchRunner {
                 // A synchronous EOF read cannot observe cancellation until it returns.
                 try Task.checkCancellation()
             } catch {
+                // A parse error describes itself as a Swift value dump; keep the user-facing sentence.
+                let detail = CLIErrorMapping.isArgumentParserError(error)
+                    ? Axe.message(for: error) : CLIErrorMapping.failure(for: error).message
                 try emit(.init(index: offset + 1, totalSteps: lines.count, command: name, requestID: nil,
-                    status: .rejectedBeforeSend, response: nil, error: String(describing: error)))
+                    status: .rejectedBeforeSend, response: nil, error: detail))
                 throw CLIError(errorDescription: "Selected batch step \(offset + 1) failed before send. Earlier steps are not undone.", code: .rejectedBeforeInput)
             }
             let request: SelectedHIDRequest

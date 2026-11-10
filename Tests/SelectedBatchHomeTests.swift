@@ -135,6 +135,12 @@ struct SelectedBatchHomeTests {
         }
         #expect(sends == 1 && receipts.map(\.status) == [.completed, .rejectedBeforeSend])
         #expect(receipts[1].requestID == nil && receipts[1].response == nil)
+        // The step's error is the parser's sentence, never a Swift value dump, and keeps its code.
+        let failure = CLIErrorMapping.failure(for: SelectedBatchRunner.failure(receipts[1],
+            stopError: CLIError(errorDescription: "stopped", code: .rejectedBeforeInput)))
+        #expect(failure.code == "rejectedBeforeInput")
+        #expect(failure.message.contains("'unknown'") && !failure.message.contains("CommandError")
+            && !failure.message.contains("ArgumentParser."), "\(failure.message)")
     }
 
     private enum ExchangeFailure: Error { case disconnected }
