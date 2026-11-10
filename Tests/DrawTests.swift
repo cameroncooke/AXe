@@ -100,7 +100,8 @@ struct DrawTests {
             #expect(failure.code == "invalidArguments")
             #expect(failure.message == "Point 3 (101,50) is outside the 100x200 screen. No input was sent.")
         }
-        let legacy = LegacyDuoPath(drawing: try draw(["10,10", "100,250"]).strokePoints, duration: 1)
+        var legacy = try draw(["10,10", "100,250"]).selectedPath
+        legacy.generator = .ordinary
         #expect(throws: (any Error).self) { _ = try legacy.event(logicalSize: CGSize(width: 100, height: 200)) }
     }
 
@@ -134,8 +135,9 @@ struct DrawTests {
 
     @Test @MainActor func ordinaryAndDirectRoutesBuildTheSameStroke() throws {
         let command = try draw(["10,10", "50,10", "30,40"])
-        let legacy = try LegacyDuoPath(drawing: command.strokePoints, duration: command.duration)
-            .event(logicalSize: CGSize(width: 100, height: 200))
+        var ordinary = command.selectedPath
+        ordinary.generator = .ordinary
+        let legacy = try ordinary.event(logicalSize: CGSize(width: 100, height: 200))
         let direct = command.directEvent(through: command.strokePoints)
         let selected = try command.selectedPath.primitives(logicalSize: CGSize(width: 100, height: 200)).map(\.event)
         #expect(legacy.subEvents == selected && direct.subEvents == selected)
@@ -167,12 +169,21 @@ struct DrawTests {
 
         let context = try JSONDecoder().decode(SelectedHIDContext.self, from: Data(
             #"{"bootIdentity":"1:2:3","screenID":3,"screenUUID":"00000000-0000-0000-0000-000000000003","logicalWidth":100,"logicalHeight":200,"rotationDegrees":0,"nativePixelWidth":300,"nativePixelHeight":600,"scale":3,"poseRevision":"static"}"#.utf8))
+        var ordinaryPath = command.selectedPath
+        ordinaryPath.generator = .ordinary
         let ordinary = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [], expectedContext: context,
-            legacyPath: LegacyDuoPath(drawing: command.strokePoints, duration: 1))
+            screenUUID: screen, operation: .complete, token: nil, primitives: [], path: ordinaryPath,
+            expectedContext: context)
         let back = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(ordinary))
         try back.validate()
-        #expect(back.legacyPath?.points?.map(\.cgPoint) == command.strokePoints)
+        #expect(back.path?.generator == .ordinary && back.path?.points?.map(\.cgPoint) == command.strokePoints)
+        // An ordinary path needs the measured context, and a selected path refuses it.
+        var unbound = ordinary
+        unbound.expectedContext = nil
+        #expect(throws: (any Error).self) { try unbound.validate() }
+        var selectedBound = ordinary
+        selectedBound.path?.generator = .selected
+        #expect(throws: (any Error).self) { try selectedBound.validate() }
 
         // A draw needs its point list, and only a draw carries one.
         var missing = command.selectedPath

@@ -138,8 +138,8 @@ struct Drag: PhysicalDeviceCommand {
         if let context = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
-            let path = LegacyDuoPath(kind: .drag, startX: startX, startY: startY,
-                endX: endX, endY: endY, duration: duration, steps: steps)
+            let path = SelectedHIDPath(kind: .drag, startX: startX, startY: startY,
+                endX: endX, endY: endY, duration: duration, steps: steps, generator: .ordinary)
             try await LegacyDuoInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Low-level drag completed successfully")

@@ -139,7 +139,9 @@ struct Draw: PhysicalDeviceCommand {
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
             try TouchStroke.requireInside(stroke, width: context.logicalWidth, height: context.logicalHeight)
-            try await LegacyDuoInput.perform(path: LegacyDuoPath(drawing: stroke, duration: duration), context: context,
+            let path = SelectedHIDPath(kind: .draw, duration: duration,
+                points: stroke.map { SelectedHIDCompleteGesture.Point(x: $0.x, y: $0.y) }, generator: .ordinary)
+            try await LegacyDuoInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             return
         }

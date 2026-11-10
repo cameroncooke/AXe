@@ -130,12 +130,7 @@ final class SelectedHIDOwner {
                     try await session.validateLegacyBatchBoundary()
                     break
                 }
-                let event: FBSimulatorHIDEvent
-                if let path = request.legacyPath {
-                    event = try path.event(logicalSize: observation.displayContext.logicalSize)
-                } else {
-                    event = try request.completeEvent(observation: observation)
-                }
+                let event = try request.completeEvent(observation: observation)
                 _ = try FBSimulatorHIDSession.preflight(event, observation: observation)
                 receipt = try await session.execute(event)
             case .begin:
@@ -349,7 +344,7 @@ final class SelectedHIDOwner {
         // DTUHID rigid devices; the shared-owner check refuses any other profile before input.
         try await open(displayID: display.id, displayUUID: display.uuid,
             expectedContext: request.expectedContext, requiresDuo: false,
-            requiresSharedOwner: request.legacyPath != nil || request.legacyTouch != nil
+            requiresSharedOwner: request.path?.generator == .ordinary || request.legacyTouch != nil
                 || request.legacyKeyboard != nil) { observation in
                 try request.home?.validate(observation: observation)
                 try request.button?.validate(observation: observation)

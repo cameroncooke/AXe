@@ -19,7 +19,7 @@ enum SelectedHIDBroker {
             try readyDescriptor(simulatorUDID: simulatorUDID)
         }
         defer { Darwin.close(descriptor) }
-        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.legacyPath?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
+        try HIDBroker.configureSocketTimeouts(descriptor, readMilliseconds: request.agentBatch?.responseTimeoutMilliseconds ?? request.path?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)
         return try PhaseTimer.measureSync("client.exchange") {
             try exchange(data, requestID: request.requestID, descriptor: descriptor,
                 maximumResponseBytes: request.ax == nil && request.keyboard == nil && request.agent == nil && request.agentBatch == nil ? HIDBroker.maximumMessageBytes : SelectedAXBounds.responseBytes)

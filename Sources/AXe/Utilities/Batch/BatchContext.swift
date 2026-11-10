@@ -94,8 +94,8 @@ final class BatchContext {
     func validateSwipeAllocation(from start: (x: Double, y: Double), to end: (x: Double, y: Double),
                                  duration: Double, delta: Double) throws {
         guard duoOwner != nil else { return }
-        try LegacyDuoPath(kind: .swipe, startX: start.x, startY: start.y,
-            endX: end.x, endY: end.y, duration: duration, delta: delta).validate()
+        try SelectedHIDPath(kind: .swipe, startX: start.x, startY: start.y,
+            endX: end.x, endY: end.y, duration: duration, delta: delta, generator: .ordinary).validate()
     }
 }
 

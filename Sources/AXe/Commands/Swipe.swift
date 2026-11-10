@@ -185,8 +185,8 @@ struct Swipe: PhysicalDeviceCommand {
         if let context = try await LegacyDuoInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
-            let path = LegacyDuoPath(kind: .swipe, startX: startX, startY: startY,
-                endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta)
+            let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
+                endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
             try await LegacyDuoInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
         } else {

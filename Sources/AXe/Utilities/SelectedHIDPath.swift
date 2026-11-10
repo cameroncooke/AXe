@@ -1,8 +1,12 @@
 import Foundation
+import FBSimulatorControl
 
 /// A value-only path request. The owner resolves presets after it owns fresh display geometry.
 struct SelectedHIDPath: Codable, Sendable {
     enum Kind: String, Codable, Sendable { case swipe, drag, preset, draw }
+    /// `ordinary` keeps the ordinary commands' events and limits on the broker route: a swipe is one
+    /// native swipe event, a drag may last longer than a selected path, and the client keeps the delays.
+    enum Generator: String, Codable, Sendable { case selected, ordinary }
     let kind: Kind
     var preset: GesturePreset? = nil
     var startX: Double? = nil
@@ -23,6 +27,11 @@ struct SelectedHIDPath: Codable, Sendable {
     var endsAtRest: Bool? = nil
     /// Draw only: every point of the stroke, in order. A drag is the two-point stroke of its endpoints.
     var points: [SelectedHIDCompleteGesture.Point]? = nil
+    /// Nil is `selected`.
+    var generator: Generator? = nil
+
+    /// Bounds allocation before an ordinary swipe expands into native events.
+    private static let maximumOrdinaryMoves = 100_000
 
     var strokePoints: [CGPoint] {
         if let points { return points.map(\.cgPoint) }
@@ -30,6 +39,7 @@ struct SelectedHIDPath: Codable, Sendable {
     }
 
     func validate() throws {
+        if generator == .ordinary { return try validateOrdinary() }
         guard endsAtRest != true || kind == .swipe else {
             throw SelectedHIDFailure.invalid("Only a swipe can end at rest")
         }
@@ -85,7 +95,76 @@ struct SelectedHIDPath: Codable, Sendable {
         }
     }
 
+    private func validateOrdinary() throws {
+        guard (points != nil) == (kind == .draw) else {
+            throw SelectedHIDFailure.invalid("Only a draw carries a point list")
+        }
+        guard kind != .preset, preset == nil, edgeInset == nil, expectedWidth == nil, expectedHeight == nil,
+              endsAtRest == nil, preDelay == 0, postDelay == 0 else {
+            throw SelectedHIDFailure.invalid("An ordinary path takes endpoints or points, a duration and delta or steps only")
+        }
+        if kind == .draw {
+            try TouchStroke.validate(strokePoints)
+            guard startX == nil, startY == nil, endX == nil, endY == nil, delta == nil, steps == nil,
+                  duration.isFinite, duration > 0, duration <= TouchStroke.maximumDuration else {
+                throw SelectedHIDFailure.invalid("Draw requires its points and a duration in (0,30]")
+            }
+            return
+        }
+        guard let startX, let startY, let endX, let endY,
+              [startX, startY, endX, endY].allSatisfy({ $0.isFinite && $0 >= 0 }),
+              startX != endX || startY != endY,
+              duration.isFinite, duration > 0,
+              duration < Double(UInt64.max) / 1_000_000_000 else {
+            throw SelectedHIDFailure.invalid("Path requires finite distinct points and a representable positive duration")
+        }
+        if kind == .swipe {
+            guard steps == nil, let delta, delta.isFinite, delta > 0 else {
+                throw SelectedHIDFailure.invalid("Swipe requires a finite positive delta and no steps")
+            }
+            let moves = sqrt(pow(endY - startY, 2) + pow(endX - startX, 2)) / delta
+            guard moves.isFinite, moves < Double(Self.maximumOrdinaryMoves + 1) else {
+                throw SelectedHIDFailure.invalid("Swipe exceeds 100000 movement steps")
+            }
+        } else {
+            guard delta == nil, let steps, (1...1000).contains(steps) else {
+                throw SelectedHIDFailure.invalid("Drag requires 1...1000 steps and no delta")
+            }
+        }
+    }
+
+    /// The ordinary route's socket read bound: the motion plus two minutes. Selected paths use the default.
+    var responseTimeoutMilliseconds: Int? {
+        guard generator == .ordinary else { return nil }
+        return Int(ceil((duration + (kind == .swipe ? 0 : 0.1) + 120) * 1000))
+    }
+
+    /// The one event the owner sends for this path on the current display.
+    func event(logicalSize: CGSize) throws -> FBSimulatorHIDEvent {
+        guard generator == .ordinary else { return .composite(try primitives(logicalSize: logicalSize).map(\.event)) }
+        try validate()
+        guard logicalSize.width.isFinite, logicalSize.height.isFinite,
+              logicalSize.width > 0, logicalSize.height > 0 else {
+            throw SelectedHIDFailure.invalid("Missing measured logical display bounds")
+        }
+        let stroke = strokePoints
+        if kind == .draw {
+            try TouchStroke.requireInside(stroke, width: logicalSize.width, height: logicalSize.height)
+        }
+        guard stroke.allSatisfy({ $0.x <= logicalSize.width && $0.y <= logicalSize.height }) else {
+            throw SelectedHIDFailure.invalid("Path endpoints exceed the measured logical display")
+        }
+        if kind == .swipe, let delta {
+            return .swipe(stroke[0].x, yStart: stroke[0].y, xEnd: stroke[1].x, yEnd: stroke[1].y,
+                          delta: delta, duration: duration)
+        }
+        let moves = steps ?? TouchStroke.moveCount(duration: duration)
+        return .composite(TouchStroke.primitives(through: stroke, duration: duration, moves: moves,
+            initialHold: Drag.initialHold, finalHold: Drag.finalHold).map(\.event))
+    }
+
     func primitives(logicalSize: CGSize) throws -> [SelectedHIDPrimitive] {
+        guard generator != .ordinary else { throw SelectedHIDFailure.invalid("An ordinary path is one event") }
         try validate()
         guard logicalSize.width.isFinite, logicalSize.height.isFinite,
               logicalSize.width > 0, logicalSize.height > 0 else {

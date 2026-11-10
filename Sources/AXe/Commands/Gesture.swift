@@ -538,8 +538,8 @@ struct Gesture: PhysicalDeviceCommand {
         logger.info().log("Duration: \(swipe.duration)s, Delta: \(swipe.delta)px")
 
         if let context {
-            let path = LegacyDuoPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
-                endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta)
+            let path = SelectedHIDPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
+                endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta, generator: .ordinary)
             try await LegacyDuoInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Gesture completed successfully")

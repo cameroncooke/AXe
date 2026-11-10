@@ -171,7 +171,7 @@ enum LegacyDuoInput {
     }
 
     static func perform(
-        path: LegacyDuoPath,
+        path: SelectedHIDPath,
         context: SelectedHIDContext,
         simulatorUDID: String,
         postDelay: Double?,
@@ -184,7 +184,7 @@ enum LegacyDuoInput {
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, legacyPath: path
+            primitives: [], path: path, expectedContext: context
         )
         logger.info().log("\(path.kind.rawValue.capitalized) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)

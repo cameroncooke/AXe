@@ -28,7 +28,6 @@ struct SelectedHIDRequest: Codable, Sendable {
     var includeReadingContinuation: Bool? = nil
     var agentAdmission: AgentModeAdmission? = nil
     var expectedContext: SelectedHIDContext? = nil
-    var legacyPath: LegacyDuoPath? = nil
     var legacyTouch: LegacyDuoTouch? = nil
     var legacyKeyboard: LegacyDuoKeyboard? = nil
     /// Diagnostic only. Asks the broker to return its phase timings with the response.
@@ -39,7 +38,7 @@ struct SelectedHIDRequest: Codable, Sendable {
         if activeDisplay != nil {
             guard activeDisplay == true, screenID == nil, screenUUID == nil, expectedContext == nil,
                   agentAdmission == nil, agent == nil, agentBatch == nil, hinge == nil,
-                  legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else {
+                  legacyTouch == nil, legacyKeyboard == nil else {
                 throw SelectedHIDFailure.invalid("Active-display binding applies only to selected input without a screen pair")
             }
         }
@@ -52,23 +51,24 @@ struct SelectedHIDRequest: Codable, Sendable {
                   primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
                   hinge == nil, keyboard == nil, home == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil, expectedContext == nil,
-                  legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else {
+                  legacyTouch == nil, legacyKeyboard == nil else {
                 throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
             }
             return
         }
-        if legacyPath != nil || legacyTouch != nil || legacyKeyboard != nil, expectedContext == nil {
+        let ordinaryPath = path?.generator == .ordinary
+        if ordinaryPath || legacyTouch != nil || legacyKeyboard != nil, expectedContext == nil {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }
         if let expectedContext {
             guard operation == .complete, token == nil,
-                  [!primitives.isEmpty, legacyPath != nil, legacyTouch != nil, legacyKeyboard != nil].filter({ $0 }).count == 1,
-                  path == nil, pinch == nil, gesture == nil, ax == nil, hinge == nil,
+                  [!primitives.isEmpty, ordinaryPath, legacyTouch != nil, legacyKeyboard != nil].filter({ $0 }).count == 1,
+                  path == nil || ordinaryPath, pinch == nil, gesture == nil, ax == nil, hinge == nil,
                   keyboard == nil, home == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil,
                   expectedContext.screenID == screenID,
                   UUID(uuidString: expectedContext.screenUUID) == screenUUID else {
-                throw SelectedHIDFailure.invalid("Expected context requires one primitive, legacy path, legacy touch or legacy keyboard request on its measured display")
+                throw SelectedHIDFailure.invalid("Expected context requires one primitive, ordinary path, legacy touch or legacy keyboard request on its measured display")
             }
             try expectedContext.validate()
         }
@@ -113,7 +113,7 @@ struct SelectedHIDRequest: Codable, Sendable {
                 throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
             }
         }
-        guard [path != nil, legacyPath != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
+        guard [path != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
             throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
         }
         if let hinge {
@@ -126,10 +126,6 @@ struct SelectedHIDRequest: Codable, Sendable {
         }
         guard (screenID != nil && screenUUID != nil) || activeDisplay == true else {
             throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID, or the active screen")
-        }
-        if let legacyPath {
-            try legacyPath.validate()
-            return
         }
         if let legacyTouch {
             try legacyTouch.validate()
@@ -230,7 +226,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var event: FBSimulatorHIDEvent { .composite(primitives.map(\.event)) }
     func completeEvent(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
         try validate()
-        guard keyboard == nil, rotation == nil, legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
+        guard keyboard == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
         if let home { return try home.event(observation: observation) }
         if let button { return try button.event(observation: observation) }
         if let pinch { return try pinch.event(observation: observation) }
@@ -239,9 +235,9 @@ struct SelectedHIDRequest: Codable, Sendable {
     }
 
     func completeEvent(logicalSize: CGSize) throws -> FBSimulatorHIDEvent {
-        guard pinch == nil, gesture == nil, keyboard == nil, home == nil, button == nil, rotation == nil, legacyPath == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
+        guard pinch == nil, gesture == nil, keyboard == nil, home == nil, button == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
         guard let path else { return event }
-        return .composite(try path.primitives(logicalSize: logicalSize).map(\.event))
+        return try path.event(logicalSize: logicalSize)
     }
 }
 
