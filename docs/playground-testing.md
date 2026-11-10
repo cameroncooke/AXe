@@ -65,7 +65,7 @@ The result directory must be new. Earlier failed output is never replaced. The d
 | Core controls | 63 | 59 | 255 | Find, tap, type, scroll, swipe, drag, draw, pinch, switches, sliders, retained contacts and batches |
 | Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
 | Keyboard and hardware | 16 | 10 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
-| Capture and recording | 6 | 6 | 28 | Selected PNG, video, streams, follow-active recording and cleanup |
+| Capture and recording | 6 | 6 | 28 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
 | **Total** | **232** | **80** | **521** | **833 case executions** |
