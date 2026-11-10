@@ -170,7 +170,7 @@ extension AgentModeController {
                 preDelay: mode.preDelay, postDelay: mode.postDelay)
         case .complete:
             guard mode.snapshotID != nil, outer.hinge == nil, outer.rotation == nil,
-                  outer.keyboard == nil, outer.ax == nil, outer.home == nil, outer.button == nil,
+                  outer.keyboard == nil, outer.ax == nil, outer.button == nil,
                   outer.pinch == nil, outer.gesture == nil, outer.path != nil || !outer.primitives.isEmpty else {
                 throw AgentModeFailure("unsupportedCompleteAction", "This agent slice supports complete coordinate paths and taps only.")
             }

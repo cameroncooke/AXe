@@ -156,7 +156,7 @@ final class SelectedHIDOwner {
                 cleanup = try await session.close().cleanup.rawValue
                 guard cleanup != "uncertain" else { throw SelectedHIDFailure.invalid("Cleanup outcome is uncertain") }
             }
-            if request.home != nil || request.button != nil, let execution = await session.executionEvidence() {
+            if request.button != nil, let execution = await session.executionEvidence() {
                 buttonExecution = SelectedButtonExecutionEvidence(execution: execution, cleanup: await session.cleanupEvidence())
             }
             let result = response(request, outcome: receipt.outcome.rawValue, count: count, cleanup: cleanup, includeToken: !finishes, buttonExecution: buttonExecution)
@@ -169,7 +169,7 @@ final class SelectedHIDOwner {
                 let status = await session.status(); count = max(0, status.enqueuedEventCount - beforeCount)
                 if let closed = try? await session.close() { cleanup = closed.cleanup.rawValue }
                 else { cleanup = "uncertain" }
-                if request.home != nil || request.button != nil, let execution = await session.executionEvidence() {
+                if request.button != nil, let execution = await session.executionEvidence() {
                     buttonExecution = SelectedButtonExecutionEvidence(execution: execution, cleanup: await session.cleanupEvidence())
                 }
             }
@@ -346,7 +346,6 @@ final class SelectedHIDOwner {
             expectedContext: request.expectedContext, requiresDuo: false,
             requiresSharedOwner: request.path?.generator == .ordinary || request.legacyTouch != nil
                 || request.legacyKeyboard != nil) { observation in
-                try request.home?.validate(observation: observation)
                 try request.button?.validate(observation: observation)
             }
     }
@@ -554,7 +553,6 @@ final class SelectedHIDOwner {
             outcome: outcome, token: includeToken ? admission.token : nil, enqueuedEventCount: count, cleanup: cleanup,
             error: error.map { String(describing: $0) }, context: observation.map(SelectedHIDContext.init), ax: ax,
             quarantine: quarantineReceipt, hinge: hinge,
-            home: request.home == nil ? nil : buttonExecution,
             button: request.button.flatMap { payload in
                 buttonExecution.map { SelectedButtonResult(kind: payload.kind, execution: $0) }
             })

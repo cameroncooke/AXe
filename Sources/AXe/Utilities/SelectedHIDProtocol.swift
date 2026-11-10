@@ -20,7 +20,6 @@ struct SelectedHIDRequest: Codable, Sendable {
     var ax: SelectedAXRequest? = nil
     var hinge: SelectedHingeRequest? = nil
     var keyboard: SelectedKeyboardRequest? = nil
-    var home: SelectedHomeRequest? = nil
     var button: SelectedButtonRequest? = nil
     var rotation: SelectedRotationRequest? = nil
     var agent: AgentModeRequest? = nil
@@ -49,7 +48,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             try agentBatch.validate()
             guard operation == .complete, token == nil, screenID == nil, screenUUID == nil,
                   primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
-                  hinge == nil, keyboard == nil, home == nil, button == nil, rotation == nil,
+                  hinge == nil, keyboard == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil, expectedContext == nil,
                   legacyTouch == nil, legacyKeyboard == nil else {
                 throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
@@ -64,7 +63,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             guard operation == .complete, token == nil,
                   [!primitives.isEmpty, ordinaryPath, legacyTouch != nil, legacyKeyboard != nil].filter({ $0 }).count == 1,
                   path == nil || ordinaryPath, pinch == nil, gesture == nil, ax == nil, hinge == nil,
-                  keyboard == nil, home == nil, button == nil, rotation == nil,
+                  keyboard == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil,
                   expectedContext.screenID == screenID,
                   UUID(uuidString: expectedContext.screenUUID) == screenUUID else {
@@ -76,7 +75,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             try agent.validate()
             guard agentAdmission == nil, operation == .complete, token == nil,
                   (screenID == nil) == (screenUUID == nil), ax == nil, keyboard == nil,
-                  hinge == nil, rotation == nil, home == nil, button == nil, pinch == nil, gesture == nil else {
+                  hinge == nil, rotation == nil, button == nil, pinch == nil, gesture == nil else {
                 throw AgentModeFailure("mixedPayload", "Agent input requires one complete request without native action payloads.")
             }
             if agent.kind == .complete {
@@ -102,7 +101,7 @@ struct SelectedHIDRequest: Codable, Sendable {
                   agentAdmission.context.screenID == screenID,
                   UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID,
                   hinge == nil, rotation == nil,
-                  home == nil, button == nil, gesture == nil else {
+                  button == nil, gesture == nil else {
                 throw AgentModeFailure("invalidAdmission", "Agent native admission does not match this complete request.")
             }
         }
@@ -113,7 +112,7 @@ struct SelectedHIDRequest: Codable, Sendable {
                 throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
             }
         }
-        guard [path != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, home != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
+        guard [path != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
             throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
         }
         if let hinge {
@@ -140,13 +139,6 @@ struct SelectedHIDRequest: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Rotation requires one complete operation without contact fields")
             }
             try rotation.validate()
-            return
-        }
-        if let home {
-            guard operation == .complete, token == nil, primitives.isEmpty else {
-                throw SelectedHIDFailure.invalid("Home requires one complete operation without a token or primitive payload")
-            }
-            try home.validate()
             return
         }
         if let button {
@@ -227,7 +219,6 @@ struct SelectedHIDRequest: Codable, Sendable {
     func completeEvent(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
         try validate()
         guard keyboard == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
-        if let home { return try home.event(observation: observation) }
         if let button { return try button.event(observation: observation) }
         if let pinch { return try pinch.event(observation: observation) }
         if let gesture { return try gesture.event(observation: observation) }
@@ -235,7 +226,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     }
 
     func completeEvent(logicalSize: CGSize) throws -> FBSimulatorHIDEvent {
-        guard pinch == nil, gesture == nil, keyboard == nil, home == nil, button == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
+        guard pinch == nil, gesture == nil, keyboard == nil, button == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
         guard let path else { return event }
         return try path.event(logicalSize: logicalSize)
     }
@@ -293,7 +284,6 @@ struct SelectedHIDResponse: Codable, Sendable {
     var quarantine: SelectedHIDQuarantine? = nil
     var hinge: SelectedHingeResult? = nil
     var keyboard: SelectedKeyboardResult? = nil
-    var home: SelectedHomeResult? = nil
     var button: SelectedButtonResult? = nil
     var rotation: SelectedRotationResult? = nil
     var agent: AgentModeResult? = nil

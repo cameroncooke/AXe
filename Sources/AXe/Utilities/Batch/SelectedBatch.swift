@@ -293,8 +293,8 @@ enum SelectedBatchRunner {
 
     static func completed(_ response: SelectedHIDResponse, for request: SelectedHIDRequest,
                           simulatorUDID: String? = nil) -> Bool {
-        if request.home != nil || request.button != nil { return completedButton(response, for: request, simulatorUDID: simulatorUDID) }
-        guard response.home == nil, response.button == nil else { return false }
+        if request.button != nil { return completedButton(response, for: request, simulatorUDID: simulatorUDID) }
+        guard response.button == nil else { return false }
         if request.ax?.kind == .sliderEndpoint { return completedSlider(response, for: request) }
         return response.version == request.version && response.requestID == request.requestID &&
         response.error == nil && response.outcome == "enqueuedAndDrained" &&
@@ -314,20 +314,10 @@ enum SelectedBatchRunner {
     private static func completedButton(_ response: SelectedHIDResponse, for request: SelectedHIDRequest,
                                       simulatorUDID: String?) -> Bool {
         do { try request.validate() } catch { return false }
-        let execution: SelectedButtonExecutionEvidence
-        let expectedBoot: String?
-        let expectedPrimitiveCount: Int
-        if let expected = request.home {
-            guard let home = response.home, response.button == nil else { return false }
-            execution = home
-            expectedBoot = expected.expectedBoot
-            expectedPrimitiveCount = 2
-        } else if let expected = request.button {
-            guard let button = response.button, button.kind == expected.kind, response.home == nil else { return false }
-            execution = button.execution
-            expectedBoot = expected.expectedBoot
-            expectedPrimitiveCount = expected.expectedPrimitiveCount
-        } else { return false }
+        guard let expected = request.button, let button = response.button, button.kind == expected.kind else { return false }
+        let execution = button.execution
+        let expectedBoot = expected.expectedBoot
+        let expectedPrimitiveCount = expected.expectedPrimitiveCount
         guard let context = response.context,
               let cleanup = execution.cleanupEvidence, let simulatorUDID,
               let deviceID = UUID(uuidString: simulatorUDID),

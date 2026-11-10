@@ -101,7 +101,7 @@ struct SelectedTapValueTests {
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [], ax: current.ax)
         var withHome = current
-        withHome.home = SelectedHomeRequest(duration: nil, expectedBoot: nil)
+        withHome.button = SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil)
         let withPrimitive = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
             token: nil, primitives: [.touch(.down, x: 1, y: 2)], ax: current.ax)

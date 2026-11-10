@@ -111,7 +111,12 @@ private struct HomeBatchResponse: Decodable {
     let quarantine: DuoCLIResponse.Quarantine?
     let error: String?
     let context: DuoContext?
-    let home: Execution?
+    let button: Button?
+
+    struct Button: Decodable {
+        let kind: String
+        let execution: Execution
+    }
 
     struct Execution: Decodable {
         let schemaVersion: Int
@@ -148,7 +153,8 @@ private struct HomeBatchResponse: Decodable {
         try #require(cleanup == "notNeeded" && token == nil && quarantine == nil && error == nil)
         let context = try #require(context)
         try context.requireMatch(controls.catalogue)
-        let execution = try #require(home)
+        try #require(button?.kind == "home")
+        let execution = try #require(button?.execution)
         try #require(execution.schemaVersion == 1 && UUID(uuidString: execution.simulatorUDID) == UUID(uuidString: controls.app.udid))
         try #require(execution.axDisplayID == context.screenID && execution.boundContext == context)
         try #require(execution.phase == "completed" && execution.plannedPrimitiveCount == 2 && execution.sentPrimitiveCount == 2)

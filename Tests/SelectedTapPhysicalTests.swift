@@ -25,7 +25,7 @@ struct SelectedTapPhysicalTests {
             #expect(request.screenID == 3 && request.screenUUID == UUID(uuidString: screen))
             #expect(request.operation == .complete && request.token == nil)
             #expect(request.path == nil && request.pinch == nil && request.gesture == nil)
-            #expect(request.home == nil && request.keyboard == nil && request.hinge == nil)
+            #expect(request.button == nil && request.keyboard == nil && request.hinge == nil)
         }
         #expect(try encoder.encode(left.primitives) == encoder.encode(right.primitives))
         #expect(try encoder.encode(left.ax) == encoder.encode(right.ax))

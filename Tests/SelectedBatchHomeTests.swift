@@ -30,7 +30,8 @@ struct SelectedBatchHomeTests {
         let standalone = try Button.parse(["home", "--udid", udid] + selection + ShellTokenizer.tokenize(extra))
         let direct = try standalone.selectedRequest()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
-        #expect(try encoder.encode(batch.home) == encoder.encode(direct.home))
+        #expect(batch.button?.kind == .home)
+        #expect(try encoder.encode(batch.button) == encoder.encode(direct.button))
         #expect(batch.operation == .complete && batch.primitives.isEmpty && batch.token == nil)
         #expect(batch.screenID == direct.screenID && batch.screenUUID == direct.screenUUID)
         #expect(batch.requestID != direct.requestID)
@@ -63,7 +64,7 @@ struct SelectedBatchHomeTests {
         var sentPrimitiveCount = 2
         var allInputsReleasedBeforeCleanup = true
         var drainCompleted = true
-        var interruption: SelectedHomeResult.Interruption?
+        var interruption: SelectedButtonExecutionEvidence.Interruption?
         var executionCleanup = "notNeeded"
         let startedUptime = 1.0
         var finishedUptime = 2.0
@@ -91,12 +92,12 @@ struct SelectedBatchHomeTests {
         if fault == .undrained { wire.drainCompleted = false }
         if fault == .unreleased { wire.allInputsReleasedBeforeCleanup = false }
         if fault == .interrupted { wire.interruption = .init(.cancelled) }
-        let home = try JSONDecoder().decode(SelectedHomeResult.self, from: JSONEncoder().encode(wire))
+        let home = try JSONDecoder().decode(SelectedButtonExecutionEvidence.self, from: JSONEncoder().encode(wire))
         var actual = SelectedHIDResponse(version: fault == .wrongVersion ? 12 : SelectedHIDRequest.version,
             requestID: fault == .wrongRequest ? UUID() : item.requestID, brokerID: UUID(),
             outcome: fault == .failed ? "failedNoReplay" : "enqueuedAndDrained", token: nil,
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,
-            context: try context(), home: fault == .missingHome ? nil : home)
+            context: try context(), button: fault == .missingHome ? nil : SelectedButtonResult(kind: .home, execution: home))
         if fault == .mixed { actual.ax = .init(kind: .describe, expectedPID: 123) }
         return actual
     }

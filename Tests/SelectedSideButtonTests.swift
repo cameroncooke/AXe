@@ -37,7 +37,7 @@ struct SelectedSideButtonTests {
         let payload = try #require(decoded.button)
         #expect(decoded.version == SelectedHIDRequest.version)
         #expect(payload.kind == .sideButton && payload.duration == duration && payload.expectedBoot == "boot-one")
-        #expect(decoded.screenID == 3 && decoded.screenUUID == screen && decoded.home == nil)
+        #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         #expect(try encoder.encode(payload) == encoder.encode(batched.button))
@@ -95,8 +95,7 @@ struct SelectedSideButtonTests {
         invalid += [SelectedHIDRequest.Operation.begin, .move, .end, .close].map { make(operation: $0) }
         invalid.append(SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
             screenUUID: nil, operation: .complete, token: nil, primitives: [], button: clean.button))
-        var mixed = clean; mixed.home = .init(duration: nil, expectedBoot: nil); invalid.append(mixed)
-        mixed = clean; mixed.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(mixed)
+        var mixed = clean; mixed.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(mixed)
         mixed = clean; mixed.ax = .init(kind: .describe, expectedPID: 123,
             endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0); invalid.append(mixed)
         mixed = clean; mixed.hinge = .init(kind: .read, expectedBootIdentity: nil, degrees: nil,
@@ -129,7 +128,7 @@ struct SelectedSideButtonTests {
         }
     }
 
-    @Test(arguments: ["home", "LOCK", "SIRI", "SIDE-BUTTON"])
+    @Test(arguments: ["HOME", "LOCK", "SIRI", "SIDE-BUTTON"])
     func unknownButtonKindsCannotDecode(kind: String) throws {
         let data = Data("{\"kind\":\"\(kind)\"}".utf8)
         #expect(throws: (any Error).self) { _ = try JSONDecoder().decode(SelectedButtonRequest.self, from: data) }
@@ -158,11 +157,11 @@ struct SelectedSideButtonTests {
             #expect(error.description == "Selected input is not supported in batch steps. Run the selected command separately.")
         }
         let home = try Button.parse(["home", "--udid", udid] + selection + extra).selectedRequest()
-        #expect(home.home != nil && home.button == nil)
+        #expect(home.button?.kind == .home)
         #expect(try home.completeEvent(observation: observation()) != event)
         for name in ["lock", "siri", "apple-pay"] {
             let selected = try Button.parse([name, "--udid", udid] + selection + extra).selectedRequest()
-            #expect(selected.button?.kind.rawValue == name && selected.home == nil)
+            #expect(selected.button?.kind.rawValue == name)
             #expect(try Button.parse([name, "--udid", udid] + extra).selectedInput.mode == .legacy)
         }
     }
@@ -217,9 +216,8 @@ struct SelectedSideButtonTests {
             outcome: fault == .failed ? "failedNoReplay" : "enqueuedAndDrained", token: nil,
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,
             context: SelectedHIDContext(try observation()))
-        if request.home != nil { result.home = execution }
-        else if fault != .missingButton { result.button = .init(kind: .sideButton, execution: execution) }
-        if fault == .mixedHome { result.home = execution }
+        if fault != .missingButton { result.button = .init(kind: request.button?.kind ?? .sideButton, execution: execution) }
+        if fault == .mixedHome { result.button = .init(kind: .home, execution: execution) }
         if fault == .mixedAX { result.ax = .init(kind: .describe, expectedPID: 123) }
         return result
     }
@@ -235,11 +233,11 @@ struct SelectedSideButtonTests {
                 let actual = try #require(receipt.response)
                 let decoded = try JSONDecoder().decode(SelectedHIDResponse.self, from: JSONEncoder().encode(actual))
                 if receipt.index == 1 {
-                    #expect(decoded.button?.kind == .sideButton && decoded.home == nil)
-                    #expect(decoded.button?.execution.schemaVersion == 1)
+                    #expect(decoded.button?.kind == .sideButton)
                 } else {
-                    #expect(decoded.home?.schemaVersion == 1 && decoded.button == nil)
+                    #expect(decoded.button?.kind == .home)
                 }
+                #expect(decoded.button?.execution.schemaVersion == 1)
                 order.append("receipt")
             })
         #expect(order == ["send", "receipt", "send", "receipt"] && Set(ids).count == 2)
@@ -270,14 +268,13 @@ struct SelectedSideButtonTests {
         #expect(receipts[1].requestID == nil && receipts[1].response == nil)
     }
 
-    @Test(arguments: ["wrongSchema", "mixedButton", "sideOnly"])
+    @Test(arguments: ["wrongSchema", "sideOnly"])
     func homeCannotAcceptSideOrNewSchemaEvidence(fault: String) throws {
         let request = try batch("button home")
         var actual = try response(request, fault: fault == "wrongSchema" ? .wrongSchema : nil)
-        if fault != "wrongSchema" {
-            let execution = try #require(actual.home)
+        if fault == "sideOnly" {
+            let execution = try #require(actual.button?.execution)
             actual.button = .init(kind: .sideButton, execution: execution)
-            if fault == "sideOnly" { actual.home = nil }
         }
         #expect(!SelectedBatchRunner.completed(actual, for: request, simulatorUDID: udid))
     }

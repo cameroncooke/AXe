@@ -28,7 +28,7 @@ struct SelectedHomeTests {
                          primitives: [SelectedHIDPrimitive] = []) -> SelectedHIDRequest {
         SelectedHIDRequest(version: version, requestID: UUID(), screenID: screenID,
             screenUUID: screenUUID, operation: operation, token: token, primitives: primitives,
-            home: SelectedHomeRequest(duration: nil, expectedBoot: nil))
+            button: SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil))
     }
 
     @Test func defaultHomeRoundTripKeepsDeviceButtonAndSelectedContext() throws {
@@ -38,8 +38,8 @@ struct SelectedHomeTests {
         #expect(decoded.requestID == original.requestID && decoded.version == SelectedHIDRequest.version)
         #expect(decoded.screenID == 3 && decoded.screenUUID == screen)
         #expect(decoded.operation == .complete && decoded.token == nil && decoded.primitives.isEmpty)
-        let home = try #require(decoded.home)
-        #expect(home.duration == nil && home.expectedBoot == nil)
+        let home = try #require(decoded.button)
+        #expect(home.kind == .home && home.duration == nil && home.expectedBoot == nil)
         let event = try decoded.completeEvent(observation: observation())
         #expect(event == .composite([.button(direction: .down, button: .homeButton),
                                     .button(direction: .up, button: .homeButton)]))
@@ -55,8 +55,8 @@ struct SelectedHomeTests {
     func explicitDurationPreservesFractionAndBalancedRelease(duration: Double) throws {
         let command = try parse(["--duration", String(duration), "--expected-boot", "boot-one"])
         let request = try command.selectedRequest()
-        let home = try #require(request.home)
-        #expect(home.duration == duration && home.expectedBoot == "boot-one")
+        let home = try #require(request.button)
+        #expect(home.kind == .home && home.duration == duration && home.expectedBoot == "boot-one")
         let event = try request.completeEvent(observation: observation())
         #expect(event == .composite([.button(direction: .down, button: .homeButton),
                                     .delay(duration), .button(direction: .up, button: .homeButton)]))
@@ -66,7 +66,7 @@ struct SelectedHomeTests {
 
     @Test(arguments: [0.0, -0.1, 10.001, Double.infinity, -Double.infinity, Double.nan])
     func invalidDurationCannotCreateAHomeEvent(duration: Double) throws {
-        let payload = SelectedHomeRequest(duration: duration, expectedBoot: nil)
+        let payload = SelectedButtonRequest(kind: .home, duration: duration, expectedBoot: nil)
         #expect(throws: (any Error).self) { try payload.validate() }
         #expect(throws: (any Error).self) { _ = try payload.event(observation: observation()) }
         #expect(throws: (any Error).self) { _ = try parse(["--duration", String(duration)]) }
@@ -76,7 +76,7 @@ struct SelectedHomeTests {
     func selectedDeviceButtonsKeepLegacyEventsAndDistinctPayloads(name: String) throws {
         let selected = try Button.parse([name, "--udid", udid] + selection + ["--duration", "0.2"]).selectedRequest()
         let payload = try #require(selected.button)
-        #expect(selected.home == nil && payload.kind.rawValue == name && payload.duration == 0.2)
+        #expect(payload.kind.rawValue == name && payload.duration == 0.2)
         let button = try #require(ButtonType(rawValue: name)).hidButton
         let event = try selected.completeEvent(observation: observation())
         #expect(event == .composite([.button(direction: .down, button: button),
@@ -92,7 +92,7 @@ struct SelectedHomeTests {
 
     @Test func homeWithoutScreenPairBindsActiveScreen() throws {
         let request = try Button.parse(["home", "--udid", udid, "--input-mode", "selected"]).selectedRequest()
-        #expect(request.activeDisplay == true && request.screenID == nil && request.home != nil)
+        #expect(request.activeDisplay == true && request.screenID == nil && request.button?.kind == .home)
     }
 
     @Test(arguments: [
@@ -112,7 +112,7 @@ struct SelectedHomeTests {
             #expect(throws: (any Error).self) { _ = try parse(["--expected-boot", empty]) }
         }
         let request = try parse(["--expected-boot", "boot-one"]).selectedRequest()
-        let home = try #require(request.home)
+        let home = try #require(request.button)
         try home.validate(observation: observation())
         #expect(throws: (any Error).self) { try home.validate(observation: observation(boot: "boot-two")) }
         #expect(throws: (any Error).self) { _ = try request.completeEvent(observation: observation(boot: "boot-two")) }
@@ -196,8 +196,8 @@ struct SelectedHomeTests {
         case "invalidRetainedInput": source = .invalidRetainedInput("invalid input")
         default: source = .inputAdmissionRejected("context rejected")
         }
-        let result = SelectedHomeResult.Interruption(source)
-        let decoded = try JSONDecoder().decode(SelectedHomeResult.Interruption.self,
+        let result = SelectedButtonExecutionEvidence.Interruption(source)
+        let decoded = try JSONDecoder().decode(SelectedButtonExecutionEvidence.Interruption.self,
             from: JSONEncoder().encode(result))
         #expect(decoded.kind.rawValue == kind)
         switch kind {
@@ -222,7 +222,7 @@ struct SelectedHomeTests {
         let sentPrimitiveCount = 1
         let allInputsReleasedBeforeCleanup = false
         let drainCompleted = false
-        let interruption = SelectedHomeResult.Interruption(FBSimulatorHIDInterruption.transportFailure("up failed"))
+        let interruption = SelectedButtonExecutionEvidence.Interruption(FBSimulatorHIDInterruption.transportFailure("up failed"))
         let executionCleanup = "uncertain"
         let startedUptime = 1.0
         let finishedUptime = 2.0
@@ -242,13 +242,14 @@ struct SelectedHomeTests {
         let cleanup = try JSONDecoder().decode(FBSimulatorHIDCleanupEvidence.self, from: Data(cleanupJSON.utf8))
         let fixture = HomeWireFixture(simulatorUDID: udid,
             boundContext: SelectedHIDContext(try observation()), cleanupEvidence: cleanup)
-        let home = try JSONDecoder().decode(SelectedHomeResult.self, from: JSONEncoder().encode(fixture))
+        let home = try JSONDecoder().decode(SelectedButtonExecutionEvidence.self, from: JSONEncoder().encode(fixture))
         var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: UUID(),
             brokerID: UUID(), outcome: "failedNoReplay", token: nil, enqueuedEventCount: 1,
             cleanup: "uncertain", error: "up failed", context: nil)
-        response.home = home
+        response.button = SelectedButtonResult(kind: .home, execution: home)
         let roundTrip = try JSONDecoder().decode(SelectedHIDResponse.self, from: JSONEncoder().encode(response))
-        let result = try #require(roundTrip.home)
+        #expect(roundTrip.button?.kind == .home)
+        let result = try #require(roundTrip.button?.execution)
         #expect(roundTrip.outcome == "failedNoReplay" && roundTrip.enqueuedEventCount == 1)
         #expect(roundTrip.cleanup == "uncertain" && roundTrip.error == "up failed")
         #expect(result.schemaVersion == 1 && result.operationID == fixture.operationID)
@@ -258,8 +259,8 @@ struct SelectedHomeTests {
         #expect(result.cleanupEvidence == cleanup)
         #expect(result.cleanupEvidence?.releases.first?.returnedSuccessfully == false)
         #expect(result.cleanupEvidence?.timedOut == true)
-        response.home = nil
+        response.button = nil
         let noExecution = try JSONDecoder().decode(SelectedHIDResponse.self, from: JSONEncoder().encode(response))
-        #expect(noExecution.home == nil)
+        #expect(noExecution.button == nil)
     }
 }

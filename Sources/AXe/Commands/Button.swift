@@ -81,11 +81,7 @@ struct Button: PhysicalDeviceCommand {
             throw ValidationError("--allow-lock requires the lock button and a physical device UDID.")
         }
         if selectedInput.mode == .selected {
-            if let payload = selectedButtonPayload {
-                try payload.validate()
-            } else {
-                try SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot).validate()
-            }
+            try selectedButtonPayload.validate()
         } else if expectedBoot != nil {
             throw ValidationError("--expected-boot requires a selected hardware button.")
         }
@@ -103,19 +99,15 @@ struct Button: PhysicalDeviceCommand {
     func selectedRequest() throws -> SelectedHIDRequest {
         try validate()
         var request = try selectedInput.baseRequest(operation: .complete, token: nil, primitives: [])
-        if let payload = selectedButtonPayload {
-            request.button = payload
-        } else {
-            request.home = SelectedHomeRequest(duration: duration, expectedBoot: expectedBoot)
-        }
+        request.button = selectedButtonPayload
         try request.validate()
         return request
     }
 
-    private var selectedButtonPayload: SelectedButtonRequest? {
+    private var selectedButtonPayload: SelectedButtonRequest {
         let kind: SelectedButtonRequest.Kind
         switch buttonType {
-        case .home: return nil
+        case .home: kind = .home
         case .sideButton: kind = .sideButton
         case .siri: kind = .siri
         case .lock: kind = .lock

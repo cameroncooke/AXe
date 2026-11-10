@@ -31,26 +31,9 @@ private enum SelectedButtonPolicy {
     }
 }
 
-struct SelectedHomeRequest: Codable, Sendable {
-    let duration: Double?
-    let expectedBoot: String?
-
-    func validate() throws {
-        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: "Home")
-    }
-
-    func validate(observation: FBSimulatorHIDSessionObservation) throws {
-        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: "Home", observation: observation)
-    }
-
-    func event(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
-        try validate(observation: observation)
-        return SelectedButtonPolicy.event(.homeButton, duration: duration)
-    }
-}
-
 struct SelectedButtonRequest: Codable, Sendable {
     enum Kind: String, Codable, Sendable {
+        case home
         case sideButton = "side-button"
         case siri, lock
         case applePay = "apple-pay"
@@ -59,12 +42,15 @@ struct SelectedButtonRequest: Codable, Sendable {
     let duration: Double?
     let expectedBoot: String?
 
+    /// The name in refusals.
+    private var name: String { kind == .home ? "Home" : kind.rawValue }
+
     func validate() throws {
-        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: kind.rawValue)
+        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: name)
     }
 
     func validate(observation: FBSimulatorHIDSessionObservation) throws {
-        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: kind.rawValue, observation: observation)
+        try SelectedButtonPolicy.validate(duration: duration, expectedBoot: expectedBoot, name: name, observation: observation)
     }
 
     /// DTUHID adapts Apple Pay to two side-button presses; delays are not primitives.
@@ -74,6 +60,7 @@ struct SelectedButtonRequest: Codable, Sendable {
         try validate(observation: observation)
         let button: FBSimulatorHIDButton
         switch kind {
+        case .home: button = .homeButton
         case .sideButton: button = .sideButton
         case .siri: button = .siri
         case .lock: button = .lock
@@ -87,9 +74,6 @@ struct SelectedButtonResult: Codable, Sendable {
     let kind: SelectedButtonRequest.Kind
     let execution: SelectedButtonExecutionEvidence
 }
-
-// Keep the existing Home source name and encoded fields.
-typealias SelectedHomeResult = SelectedButtonExecutionEvidence
 
 /// Available session evidence only. This is not an OS held-button inventory or a UI effect.
 struct SelectedButtonExecutionEvidence: Codable, Sendable {
