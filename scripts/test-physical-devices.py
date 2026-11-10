@@ -225,7 +225,8 @@ class Device:
     def checks(self):
         """Every check after the doctor, by the name it reports under, in run order."""
         return {'coordinate taps': self.taps, 'typing and keys': self.typing,
-                'draw a closed triangle': self.drawing, 'pinch in and out': self.pinch,
+                'draw a closed triangle': self.drawing, 'PencilKit ink and tool picker': self.sketch,
+                'pinch in and out': self.pinch,
                 'element tap and point lookup': self.markers, 'screenshot': self.screenshot,
                 'raw stream': self.raw_stream, 'MP4 recording': self.recording,
                 'native H.264 over 20 seconds': self.native, ROTATION: self.rotation}
@@ -291,6 +292,39 @@ class Device:
         require(value(tree, 'drawing.last.maxTouches') == '1' and value(tree, 'drawing.last.cancelled') == 'false',
                 f'stroke had {value(tree, "drawing.last.maxTouches")} contacts, cancelled {value(tree, "drawing.last.cancelled")}')
         return f'triangle {corners}: bounds {bounds}, duration {value(tree, "drawing.last.duration")} s'
+
+    def sketch(self):
+        """Ink on a PencilKit canvas: one stroke with the selected tool, one with a tool tapped in the picker."""
+        tree = self.runner.launch(self.udid, 'sketch', 'sketch.canvas')
+        value = lambda tree, name: str((element(tree, name) or {}).get('AXValue'))
+        centre = lambda frame: (round(frame['x'] + frame['width'] / 2), round(frame['y'] + frame['height'] / 2))
+        palette = element(tree, 'Drawing-Palette')
+        require(palette and palette.get('frame'), 'the tool picker is missing from the tree')
+        if palette['frame']['width'] < 200:
+            # A narrow screen shows the picker as one round button until it is tapped.
+            x, y = centre(palette['frame'])
+            self.runner.axe_ok(self.udid, 'tap', '-x', str(x), '-y', str(y))
+            tree = self.wait_for('the tool picker to expand',
+                                 lambda tree: (element(tree, 'Drawing-Palette') or {}).get('frame', {}).get('width', 0) >= 200)
+        canvas, top = element(tree, 'sketch.canvas')['frame'], element(tree, 'Drawing-Palette')['frame']['y']
+        height = min(canvas['height'], top - 8 - canvas['y'])
+        at = lambda x, y: f"{round(canvas['x'] + canvas['width'] * x)},{round(canvas['y'] + height * y)}"
+        first = value(tree, 'sketch.tool').split(' width')[0]
+        self.runner.axe_ok(self.udid, 'draw', at(0.5, 0.15), at(0.8, 0.55), at(0.2, 0.55), '--close')
+        tree = self.wait_for('one ink stroke', lambda tree: value(tree, 'sketch.strokeCount') == '1')
+        require(value(tree, 'sketch.last.ink') == first, f"stroke ink {value(tree, 'sketch.last.ink')}, tool {first}")
+        # A tap on the selected tool opens its options, so pick one that is not selected.
+        label = next(name for name in ('Marker', 'Monoline', 'Pen') if not first.startswith(name.lower() + ' '))
+        button = next((node for node in walk(tree) if node.get('AXLabel') == label and node.get('type') == 'Button'), None)
+        require(button and button.get('frame'), f'the {label} tool is missing from the tree')
+        x, y = centre(button['frame'])
+        self.runner.axe_ok(self.udid, 'tap', '-x', str(x), '-y', str(y))
+        self.wait_for(f'{label} to be selected', lambda tree: value(tree, 'sketch.tool').startswith(label.lower() + ' '))
+        self.runner.axe_ok(self.udid, 'draw', at(0.2, 0.75), at(0.8, 0.75))
+        tree = self.wait_for('two ink strokes', lambda tree: value(tree, 'sketch.strokeCount') == '2')
+        second = value(tree, 'sketch.last.ink')
+        require(second.startswith(label.lower() + ' '), f'{label} drew {second}')
+        return f'{first}, then {second}'
 
     def pinch(self):
         self.runner.launch(self.udid, 'zoom', 'zoom.surface')
