@@ -75,5 +75,10 @@
   "PlaygroundDuoRawLongTextTests": 1,
   "PlaygroundAutomaticPIDTests": 6,
   "PlaygroundAgentFocusAndTypeTests": 2,
-  "PlaygroundDuoAgentFocusAndTypeTests": 4
+  "PlaygroundDuoAgentFocusAndTypeTests": 4,
+  "PlaygroundOrdinaryInputTests": 24,
+  "PlaygroundOrdinaryBatchTests": 11,
+  "PlaygroundOrdinaryTextTests": 9,
+  "PlaygroundOrdinaryButtonTests": 4,
+  "PlaygroundOrdinaryMediaTests": 7
 }

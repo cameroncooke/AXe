@@ -163,8 +163,13 @@ final class PlaygroundTestProcess {
     }
 
     func diagnostics() throws -> String {
-        try output() + "\n" + String(contentsOf: stderrURL, encoding: .utf8)
+        try output() + "\n" + errorOutput()
     }
+
+    /// Raw standard output, such as stream frames.
+    func stdoutData() throws -> Data { try Data(contentsOf: stdoutURL) }
+
+    func errorOutput() throws -> String { try String(contentsOf: stderrURL, encoding: .utf8) }
 
     func receipt<Value: Decodable>(_ type: Value.Type) throws -> Value {
         let line = try output().split(separator: "\n", omittingEmptySubsequences: false).first ?? ""
