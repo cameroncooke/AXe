@@ -378,8 +378,14 @@ final class SelectedHIDOwner {
             throw SelectedHIDFailure.invalid("Measured Duo input context changed before input")
         }
         try validate(feed.initialObservation)
-        session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation,
-            liveFreshnessProvider: feed, transportOwner: transportOwner)
+        do {
+            session = try await FBSimulatorHIDSession.open(for: simulator, observation: feed.initialObservation,
+                liveFreshnessProvider: feed, transportOwner: transportOwner)
+        } catch FBSimulatorHIDError.dtuhidDigitizerServiceUnavailable, FBSimulatorHIDError.dtuhidXPCSymbolsUnavailable {
+            // Coordinate gestures have no other simulator route; say what they need instead of falling back.
+            throw SelectedHIDFailure.coded(code: CLIError.Code.inputUnavailable.rawValue,
+                message: "This simulator has no DTUHID touch service, which owned input such as pinch, rotate and two-finger gestures needs. Use a simulator whose runtime provides it")
+        }
     }
 
     /// One in-process owner for the complete ordinary batch. It never rebinds after failure.

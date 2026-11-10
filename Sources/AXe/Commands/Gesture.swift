@@ -129,37 +129,26 @@ enum GestureAction: ExpressibleByArgument {
 
 struct Gesture: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Perform a preset or a complete coordinate gesture.",
+        abstract: "Perform a preset swipe, a pinch or another multi-touch gesture.",
         discussion: """
-        Execute a preset, or one complete gesture with selected input (the active screen unless --screen-id/--screen-uuid guard it) or on a physical device.
-        Complete gesture names: pinch, double-tap, rotate, two-finger-tap, two-finger-hold, two-finger-swipe.
-        Double-tap requires -x/-y; rotate also requires --radius/--degrees.
-        With --agent, double-tap instead requires a current --snapshot-id/--ref; --expected-pid is optional.
-        It uses the fresh target point; the app can change between the two taps.
-        Agent pinch uses a current area reference plus --radius/--scale, without -x/-y.
-        Both starts are checked before input; folding/rotation checks and owned release continue during motion.
-        Two-finger actions require -x/-y/--x2/--y2; hold also requires --hold.
-        Two-finger-swipe also requires --end-x/--end-y/--end-x2/--end-y2.
-        Both straight paths share duration and delta; either finger may stay still.
-        Contacts must remain distinct at the same time; crossing at different times is allowed.
-        Two-finger-swipe is standalone only; batch rejects it.
-        Edge presets accept --edge-inset for the start only (default 20 logical points).
-        The opposite endpoint remains 20 points from its edge. No Back action is inferred.
-        With --edge-inset, legacy input requires the path span to be at least --delta.
-        No retained token or app-recognizer completion is implied.
-        Coordinate pinch requires -x, -y, --radius and --scale. Simulators also require selected input.
-        Scale below 1 moves fingers inward; above 1 moves them outward. Scale 1 fails.
-        Pinch defaults: duration 0.6 seconds, delta 5 logical points; no retained token.
-        
-        Available presets:
-          scroll-up, scroll-down, scroll-left, scroll-right
-          swipe-from-left-edge, swipe-from-right-edge
-          swipe-from-top-edge, swipe-from-bottom-edge
-        
+        Presets swipe across the screen: scroll-up, scroll-down, scroll-left, scroll-right,
+        swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge, swipe-from-bottom-edge.
+
+        Coordinate gestures use logical points on the active screen:
+          pinch             --scale above 1 zooms in, below 1 zooms out. Without -x/-y it pinches
+                            at the centre of the screen; without --radius it starts a quarter of
+                            the screen's shorter side from the centre.
+          double-tap        -x/-y
+          rotate            -x/-y, --radius and --degrees (clockwise)
+          two-finger-tap    -x/-y and --x2/--y2; two-finger-hold also needs --hold
+          two-finger-swipe  both starts and --end-x/--end-y/--end-x2/--end-y2
+
         Examples:
-          axe gesture scroll-up --udid SIMULATOR_UDID
-          axe gesture scroll-down --duration 1.5 --udid SIMULATOR_UDID
-          axe gesture swipe-from-left-edge --screen-width 430 --screen-height 932 --udid SIMULATOR_UDID
+          axe gesture scroll-up --udid UDID
+          axe gesture pinch --scale 2 --udid UDID
+          axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid UDID
+          axe gesture rotate -x 200 -y 400 --radius 80 --degrees 90 --udid UDID
+          axe gesture two-finger-swipe -x 150 -y 500 --x2 250 -y2 500 --end-x 150 --end-y 300 --end-x2 250 --end-y2 300 --udid UDID
         """
     )
     
@@ -268,8 +257,8 @@ struct Gesture: AsyncParsableCommand {
             guard degrees == nil, secondX == nil, secondY == nil, hold == nil, interval == nil else {
                 throw ValidationError("Pinch does not accept rotation or contact-hold options.")
             }
-            guard physical || selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
-                throw ValidationError("Simulator pinch requires selected input. Pinch does not accept screen dimension overrides.")
+            guard screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Pinch does not accept screen dimension overrides.")
             }
             try selectedPinch().validate()
         case .preset:
@@ -279,8 +268,8 @@ struct Gesture: AsyncParsableCommand {
             }
             if selectedInput.mode == .selected { try selectedPath().validate() }
         case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
-            guard physical || selectedInput.mode == .selected, screenWidth == nil, screenHeight == nil else {
-                throw ValidationError("Complete simulator gestures require selected input. Complete gestures do not accept screen dimension overrides.")
+            guard screenWidth == nil, screenHeight == nil else {
+                throw ValidationError("Coordinate gestures do not accept screen dimension overrides.")
             }
             try selectedCompleteGesture().validate()
         }
@@ -355,6 +344,11 @@ struct Gesture: AsyncParsableCommand {
             endX: points.endX, endY: points.endY, duration: duration ?? preset.defaultDuration, delta: swipeDelta)
     }
 
+    private var isPreset: Bool {
+        if case .preset = gesture { return true }
+        return false
+    }
+
     func selectedPath() throws -> SelectedHIDPath {
         guard case let .preset(preset) = gesture else {
             throw ValidationError("Pinch is not a preset path.")
@@ -365,8 +359,11 @@ struct Gesture: AsyncParsableCommand {
     }
 
     func selectedPinch() throws -> SelectedHIDPinch {
-        guard case .pinch = gesture, let centerX, let centerY, let radius, let scale else {
-            throw ValidationError("Pinch requires explicit -x, -y, --radius and --scale.")
+        guard case .pinch = gesture, let scale else {
+            throw ValidationError("Pinch requires --scale: above 1 zooms in, below 1 zooms out.")
+        }
+        guard (centerX == nil) == (centerY == nil) else {
+            throw ValidationError("Pass both -x and -y, or neither to pinch at the centre of the screen.")
         }
         return SelectedHIDPinch(centerX: centerX, centerY: centerY, scale: scale, radius: radius,
             duration: duration ?? 0.6, spacing: delta ?? 5, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0)
@@ -507,20 +504,24 @@ struct Gesture: AsyncParsableCommand {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return
         }
-        if selectedInput.mode == .selected {
+        // Coordinate gestures always use the owned input session, bound to the active screen unless
+        // --screen-id/--screen-uuid guard it. A preset keeps its ordinary route without selected input.
+        if selectedInput.mode == .selected || !isPreset {
+            var owned = selectedInput
+            owned.mode = .selected
             let request: SelectedHIDRequest
             switch gesture {
-            case .preset: request = try selectedInput.pathRequest(selectedPath())
-            case .pinch: request = try selectedInput.pinchRequest(selectedPinch())
+            case .preset: request = try owned.pathRequest(selectedPath())
+            case .pinch: request = try owned.pinchRequest(selectedPinch())
             case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
-                request = try selectedInput.gestureRequest(selectedCompleteGesture())
+                request = try owned.gestureRequest(selectedCompleteGesture())
             }
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID),
                 verbose: selectedOutput.verbose)
             return
         }
         guard case let .preset(preset) = gesture else {
-            throw ValidationError("Complete gestures are supported only with selected input.")
+            throw ValidationError("Only a preset uses the ordinary swipe route.")
         }
         let logger = AxeLogger()
         try await setup(logger: logger)

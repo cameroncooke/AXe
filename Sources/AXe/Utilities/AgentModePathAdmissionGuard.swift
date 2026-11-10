@@ -41,17 +41,19 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         guard admission.target != nil else {
             throw AgentModeFailure("unsupportedPinchReference", "A reference pinch requires an exact native area.")
         }
+        // An agent pinch always carries the centre of its area and its radius.
+        guard let centerX = pinch.centerX, let centerY = pinch.centerY, let radius = pinch.radius else {
+            throw AgentModeFailure("unsupportedPinchReference", "A reference pinch requires its area centre and radius.")
+        }
         self.simulator = simulator
         self.feed = feed
         self.admission = admission
         nativeTarget = try Self.target(from: admission)
         kind = .pinch
-        centre = CGPoint(x: pinch.centerX, y: pinch.centerY)
-        starts = [CGPoint(x: pinch.centerX - pinch.radius, y: pinch.centerY),
-                  CGPoint(x: pinch.centerX + pinch.radius, y: pinch.centerY)]
-        let endRadius = pinch.radius * pinch.scale
-        ends = [CGPoint(x: pinch.centerX - endRadius, y: pinch.centerY),
-                CGPoint(x: pinch.centerX + endRadius, y: pinch.centerY)]
+        centre = CGPoint(x: centerX, y: centerY)
+        starts = [CGPoint(x: centerX - radius, y: centerY), CGPoint(x: centerX + radius, y: centerY)]
+        let endRadius = radius * pinch.scale
+        ends = [CGPoint(x: centerX - endRadius, y: centerY), CGPoint(x: centerX + endRadius, y: centerY)]
         deadline = DispatchTime.now() + 8
     }
 

@@ -2,23 +2,25 @@ import Foundation
 import FBSimulatorControl
 
 /// One complete two-contact gesture. The owner supplies the fresh selected observation.
+/// Without a centre the pinch is at the centre of the screen; without a radius it starts a quarter of
+/// the screen's shorter side from the centre. The owner fills both from the display it binds.
 struct SelectedHIDPinch: Codable, Sendable {
     static let maximumSegments = 500
     static let maximumEventCount = 1024
-    let centerX: Double
-    let centerY: Double
+    var centerX: Double?
+    var centerY: Double?
     let scale: Double
-    let radius: Double
+    var radius: Double?
     var duration: Double = 0.6
     var spacing: Double = 5
     var preDelay: Double = 0
     var postDelay: Double = 0
 
     func validate() throws {
-        let endRadius = radius * scale
-        guard centerX.isFinite, centerY.isFinite, centerX >= 0, centerY >= 0,
+        guard (centerX == nil) == (centerY == nil),
+              [centerX, centerY].compactMap({ $0 }).allSatisfy({ $0.isFinite && $0 >= 0 }),
               scale.isFinite, scale > 0, scale != 1,
-              radius.isFinite, radius > 0, endRadius.isFinite, endRadius > 0 else {
+              radius.map({ $0.isFinite && $0 > 0 && ($0 * scale).isFinite && $0 * scale > 0 }) ?? true else {
             throw SelectedHIDFailure.invalid("Pinch requires finite non-negative center coordinates, positive radius and scale other than 1")
         }
         guard duration.isFinite, duration > 0, duration <= 10,
@@ -30,14 +32,29 @@ struct SelectedHIDPinch: Codable, Sendable {
         }
         // Bound the donor's work before it allocates its event array. This is a count
         // check only; all interpolation and both contacts come from the library builder.
-        let segments = ceil(abs(endRadius - radius) / spacing)
-        guard segments.isFinite, segments <= Double(Self.maximumSegments) else {
-            throw SelectedHIDFailure.invalid("Pinch exceeds 500 movement segments")
+        if let radius {
+            let segments = ceil(abs(radius * scale - radius) / spacing)
+            guard segments.isFinite, segments <= Double(Self.maximumSegments) else {
+                throw SelectedHIDFailure.invalid("Pinch exceeds 500 movement segments")
+            }
         }
     }
 
+    /// The pinch with its omitted centre and radius taken from a `logicalSize` screen.
+    func resolved(logicalSize: CGSize) throws -> SelectedHIDPinch {
+        var value = self
+        value.centerX = centerX ?? logicalSize.width / 2
+        value.centerY = centerY ?? logicalSize.height / 2
+        value.radius = radius ?? min(logicalSize.width, logicalSize.height) / 4
+        try value.validate()
+        return value
+    }
+
     func event(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
-        try validate()
+        let pinch = try resolved(logicalSize: observation.displayContext.logicalSize)
+        guard let centerX = pinch.centerX, let centerY = pinch.centerY, let radius = pinch.radius else {
+            throw SelectedHIDFailure.invalid("Pinch geometry is incomplete")
+        }
         let motion = try FBSimulatorHIDGesture(observation: observation).pinch(
             at: CGPoint(x: centerX, y: centerY), scale: scale, radius: radius,
             duration: duration, spacing: spacing)

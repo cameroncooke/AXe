@@ -53,13 +53,22 @@ enum PhysicalDeviceGestures {
 
     static func pinch(_ request: SelectedHIDPinch, on input: PhysicalDeviceInput) async throws {
         try request.validate()
-        let center = CGPoint(x: request.centerX, y: request.centerY)
-        let distance = request.radius * request.scale - request.radius
-        let segments = max(1, Int(ceil(abs(distance) / request.spacing)))
-        let steps = pairMotion(duration: request.duration, segments: segments) { fraction in
-            radialPoints(at: center, radius: request.radius + distance * fraction, radians: 0)
+        var pinch = request
+        if request.centerX == nil || request.radius == nil {
+            // Only an omitted centre or radius reads the display.
+            let display = try await input.display()
+            pinch = try request.resolved(logicalSize: CGSize(width: display.width, height: display.height))
         }
-        try await perform(steps, preDelay: request.preDelay, postDelay: request.postDelay, on: input)
+        guard let centerX = pinch.centerX, let centerY = pinch.centerY, let radius = pinch.radius else {
+            throw SelectedHIDFailure.invalid("Pinch geometry is incomplete")
+        }
+        let center = CGPoint(x: centerX, y: centerY)
+        let distance = radius * pinch.scale - radius
+        let segments = max(1, Int(ceil(abs(distance) / pinch.spacing)))
+        let steps = pairMotion(duration: pinch.duration, segments: segments) { fraction in
+            radialPoints(at: center, radius: radius + distance * fraction, radians: 0)
+        }
+        try await perform(steps, preDelay: pinch.preDelay, postDelay: pinch.postDelay, on: input)
     }
 
     static func complete(_ request: SelectedHIDCompleteGesture, on input: PhysicalDeviceInput) async throws {
