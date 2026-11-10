@@ -317,6 +317,8 @@ class Device:
         require(width > 100 and height > 100, f'no room to draw: {width}x{height}')
         P = lambda u, v: (left + width * u, top + height * v)
         state = dict(strokes=0)
+        # A tap on this label closes a tool's options. The options hide it from the tree while they are open.
+        outside = element(tree, 'sketch.strokeCount')['frame']
 
         def draw(points, seconds=None):
             # draw refuses a point that repeats the one before it, which a fill makes where its edges meet.
@@ -339,7 +341,7 @@ class Device:
             choice = next((node for node in buttons(tree, 'Weight') if node.get('AXValue') == weight), None)
             require(choice, f'{tool} has no {weight} weight')
             tap(choice['frame'])
-            tap(element(tree, 'sketch.strokeCount')['frame'])      # outside the options: closes them
+            tap(outside)
             self.wait_for(f'{tool} options to close', lambda tree: not buttons(tree, 'Weight'))
 
         colour = lambda name: self.runner.axe_ok(self.udid, 'tap', '--id', 'sketch.colour.' + name)
