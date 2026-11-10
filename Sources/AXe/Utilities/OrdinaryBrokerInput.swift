@@ -6,10 +6,9 @@ import FBSimulatorControl
 enum OrdinaryBrokerInput {
     static let duoDeviceTypeIdentifier = "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
 
-    /// The measured context for the shared input owner, and whether it belongs to the Duo.
+    /// The measured context for the shared input owner.
     struct Route {
         let context: SelectedHIDContext
-        let isDuo: Bool
     }
 
     @MainActor
@@ -65,7 +64,7 @@ enum OrdinaryBrokerInput {
         guard observation.bootIdentity == discovery.bootIdentity else {
             throw SelectedHIDFailure.invalid("Simulator boot changed during input preparation")
         }
-        return Route(context: SelectedHIDContext(observation), isDuo: isDuo(simulator))
+        return Route(context: SelectedHIDContext(observation))
     }
 
     /// One policy shared by caller capture and broker admission. Rigid Indigo and unknown

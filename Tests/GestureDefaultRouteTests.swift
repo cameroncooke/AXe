@@ -55,3 +55,62 @@ struct GestureDefaultRouteTests {
         #expect(result.output.contains("axe gesture pinch --scale 2"))
     }
 }
+
+@Suite("Preset geometry on the measured screen")
+struct GesturePresetMeasuredScreenTests {
+    private let udid = "00000000-0000-0000-0000-000000000001"
+
+    /// The size the ordinary route passes on: the captured context's logical size.
+    private func measured(pixels: CGSize, scale: Double, rotation: FBSimulatorHIDDisplayRotation) throws -> (width: Double, height: Double) {
+        let display = try FBSimulatorHIDDisplayContext(hidTarget: 1, nativePixelSize: pixels, scale: scale, rotation: rotation)
+        let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: udid, bootIdentity: "local-check",
+            screenID: 1, screenUniqueID: "00000000-0000-0000-0000-000000000003", axDisplayID: 1,
+            displayContext: display, poseRevision: "local-check")
+        let context = SelectedHIDContext(observation)
+        return (context.logicalWidth, context.logicalHeight)
+    }
+
+    private func swipe(_ preset: GesturePreset, _ extra: [String] = [],
+                       measured size: (width: Double, height: Double)?) throws -> Gesture.LegacySwipe {
+        try Gesture.parse([preset.rawValue, "--udid", udid] + extra).legacySwipe(preset, measured: size)
+    }
+
+    @Test func iPadPortraitUsesTheWholeScreen() throws {
+        let size = try measured(pixels: CGSize(width: 1640, height: 2360), scale: 2, rotation: .rot0)
+        #expect(size == (820, 1180))
+        let edge = try swipe(.swipeFromRightEdge, measured: size)
+        #expect(edge.startX == 800 && edge.startY == 590 && edge.endX == 20 && edge.endY == 590)
+        let scroll = try swipe(.scrollDown, measured: size)
+        #expect(scroll.startX == 410 && scroll.startY == 490 && scroll.endX == 410 && scroll.endY == 690)
+    }
+
+    @Test(arguments: [FBSimulatorHIDDisplayRotation.rot90, .rot270])
+    func iPadLandscapeSwapsTheAxes(rotation: FBSimulatorHIDDisplayRotation) throws {
+        let size = try measured(pixels: CGSize(width: 1640, height: 2360), scale: 2, rotation: rotation)
+        #expect(size == (1180, 820))
+        let edge = try swipe(.swipeFromRightEdge, measured: size)
+        #expect(edge.startX == 1160 && edge.startY == 410 && edge.endX == 20)
+        let scroll = try swipe(.scrollDown, measured: size)
+        #expect(scroll.startX == 590 && scroll.startY == 310 && scroll.endY == 510)
+    }
+
+    @Test func largeIPhoneUsesItsOwnSize() throws {
+        let size = try measured(pixels: CGSize(width: 1320, height: 2868), scale: 3, rotation: .rot0)
+        #expect(size == (440, 956))
+        let edge = try swipe(.swipeFromBottomEdge, measured: size)
+        #expect(edge.startX == 220 && edge.startY == 936 && edge.endY == 20)
+    }
+
+    @Test func explicitDimensionsOverrideTheMeasuredScreen() throws {
+        let size = try measured(pixels: CGSize(width: 1640, height: 2360), scale: 2, rotation: .rot0)
+        let both = try swipe(.swipeFromRightEdge, ["--screen-width", "390", "--screen-height", "844"], measured: size)
+        #expect(both.width == 390 && both.height == 844 && both.startX == 370 && both.startY == 422)
+        let widthOnly = try swipe(.scrollDown, ["--screen-width", "600"], measured: size)
+        #expect(widthOnly.width == 600 && widthOnly.height == 1180 && widthOnly.startX == 300)
+    }
+
+    @Test func unmeasuredRouteKeeps390x844() throws {
+        let edge = try swipe(.swipeFromRightEdge, measured: nil)
+        #expect(edge.width == 390 && edge.height == 844 && edge.startX == 370 && edge.startY == 422)
+    }
+}

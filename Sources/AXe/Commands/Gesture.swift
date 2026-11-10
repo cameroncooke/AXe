@@ -196,10 +196,10 @@ struct Gesture: PhysicalDeviceCommand {
     @Option(name: .long, help: "Edge presets: start distance from the edge in points (default 20).")
     var edgeInset: Double?
 
-    @Option(name: .customLong("screen-width"), help: "Presets: screen width in points, up to 2000. Defaults to 390; the iPhone Duo, selected input and physical devices measure it.")
+    @Option(name: .customLong("screen-width"), help: "Presets: screen width in points, up to 2000. Defaults to the measured screen in the current orientation, or 390 where it is not measured (see README).")
     var screenWidth: Double?
     
-    @Option(name: .customLong("screen-height"), help: "Presets: screen height in points, up to 3000. Defaults to 844; the iPhone Duo, selected input and physical devices measure it.")
+    @Option(name: .customLong("screen-height"), help: "Presets: screen height in points, up to 3000. Defaults to the measured screen in the current orientation, or 844 where it is not measured (see README).")
     var screenHeight: Double?
     
     @Option(name: .customLong("duration"), help: "Seconds the motion takes, above 0 to 10 (default 0.5 scroll, 0.3 edge, 0.6 pinch, rotate, two-finger-swipe).")
@@ -241,7 +241,7 @@ struct Gesture: PhysicalDeviceCommand {
             }
             try preset.validateEdgeInset(edgeInset)
             // The ordinary route checks the span on the size it uses: here when both dimensions are
-            // explicit, otherwise once it has measured the Duo display or chosen 390×844.
+            // explicit, otherwise once it has measured the display or chosen 390×844.
             if selectedInput.mode != .selected, !physical, screenWidth != nil, screenHeight != nil {
                 _ = try legacySwipe(preset, measured: nil)
             }
@@ -313,7 +313,7 @@ struct Gesture: PhysicalDeviceCommand {
         }
     }
 
-    /// The ordinary preset swipe on explicit dimensions, else the measured Duo display, else 390×844.
+    /// The ordinary preset swipe on explicit dimensions, else the measured display, else 390×844.
     struct LegacySwipe {
         let width, height, startX, startY, endX, endY, duration, delta: Double
 
@@ -527,10 +527,10 @@ struct Gesture: PhysicalDeviceCommand {
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )
         let context = route?.context
-        let measured = route?.isDuo == true ? context : nil
 
-        // Keep explicit overrides and rigid-device defaults; measure omitted Duo dimensions.
-        let swipe = try legacySwipe(preset, measured: measured.map { ($0.logicalWidth, $0.logicalHeight) })
+        // Explicit overrides win; omitted dimensions use the display the route already measured.
+        // A route without a measured context (older rigid input) keeps 390×844.
+        let swipe = try legacySwipe(preset, measured: context.map { ($0.logicalWidth, $0.logicalHeight) })
         logger.info().log("Performing \(preset.description)")
         logger.info().log("Screen size: \(swipe.width)x\(swipe.height)")
         logger.info().log("Coordinates: (\(swipe.startX), \(swipe.startY)) to (\(swipe.endX), \(swipe.endY))")

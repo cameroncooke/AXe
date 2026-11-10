@@ -165,7 +165,8 @@ extension Gesture: BatchConvertible {
         guard case let .preset(preset) = gesture else {
             throw ValidationError("Pinch is not supported in batch steps.")
         }
-        // As the standalone command: explicit overrides, then the measured Duo display, then 390x844.
+        // Explicit overrides, then the measured Duo display. An ordinary rigid batch measures no
+        // display (its route keeps raw HID), so it keeps 390x844 as before.
         let swipe = try legacySwipe(preset, measured: context.duoLogicalSize)
         try context.validateSwipeAllocation(from: (x: swipe.startX, y: swipe.startY),
             to: (x: swipe.endX, y: swipe.endY), duration: swipe.duration, delta: swipe.delta)
