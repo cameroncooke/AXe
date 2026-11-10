@@ -463,6 +463,19 @@ struct Tap: PhysicalDeviceCommand {
             return
         }
 
+        // A tap at a point needs nothing read first, so a broker that is already running binds the
+        // screen itself. A pre-delay is waited before the screen is measured, so it keeps that route.
+        if let pointX, let pointY, (preDelay ?? 0) == 0 {
+            let style = resolvedTapStyle(for: TapResolution(point: (x: pointX, y: pointY), isSwitchLikeControl: false))
+            if try await OrdinaryBrokerInput.performBound(
+                .contact(try OrdinaryBrokerInput.tapPrimitives(style, at: (x: pointX, y: pointY))),
+                simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: selectedOutput.verbose) {
+                logger.info().log("Tap completed successfully")
+                CLIOutput.message("✓ Tap at (\(pointX), \(pointY)) completed successfully")
+                return
+            }
+        }
+
         // Verified DTUHID devices use the broker's retained connection, as the Duo does, so
         // a plain tap neither opens a new guest connection nor waits to drain before exit.
         let duoContext = try await OrdinaryBrokerInput.captureRoute(

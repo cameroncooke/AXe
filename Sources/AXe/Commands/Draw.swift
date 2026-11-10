@@ -132,6 +132,15 @@ struct Draw: PhysicalDeviceCommand {
         let stroke = strokePoints
         logger.info().log("Drawing through \(stroke.count) points in \(duration)s")
 
+        // A broker that is already running binds the screen itself and bounds the points to it; a point
+        // outside the screen is refused there before input, and the measured route below then reports it.
+        if (preDelay ?? 0) == 0, try await OrdinaryBrokerInput.performBound(
+            .path(SelectedHIDPath(kind: .draw, duration: duration,
+                points: stroke.map { SelectedHIDCompleteGesture.Point(x: $0.x, y: $0.y) }, generator: .ordinary)),
+            simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: selectedOutput.verbose) {
+            return
+        }
+
         // Duo and verified DTUHID devices use the broker's retained input connection.
         if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true

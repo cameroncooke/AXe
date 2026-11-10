@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 89
+    static let version = 90
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
 
     /// What a request asks the owner to do. A request carries exactly one, so a mixed request
@@ -41,6 +41,11 @@ struct SelectedHIDRequest: Codable, Sendable {
     var expectedContext: SelectedHIDContext? = nil
     /// Diagnostic only. Asks the broker to return its phase timings with the response.
     var timing: Bool? = nil
+    /// A plain command whose screen the broker binds, as it does for selected input, instead of the
+    /// client measuring it first: that measurement loads the simulator set in every command, about
+    /// 80 ms. The broker serves it only on a simulator whose plain input uses the shared owner, and
+    /// the payload keeps the plain route's events.
+    var plainRoute: Bool? = nil
 
     // Read-only views of the payload, for code that handles one kind.
     var primitives: [SelectedHIDPrimitive] {
@@ -116,7 +121,19 @@ struct SelectedHIDRequest: Codable, Sendable {
         case .ordinaryTouch, .ordinaryKeyboard: ordinary = true
         default: ordinary = false
         }
-        if ordinary, expectedContext == nil {
+        if let plainRoute {
+            let plainPayload: Bool
+            switch payload {
+            case .contact(let primitives): plainPayload = !primitives.isEmpty
+            case .path(let path): plainPayload = path.generator == .ordinary
+            default: plainPayload = false
+            }
+            guard plainRoute, isComplete, plainPayload, expectedContext == nil, agentAdmission == nil,
+                  activeDisplay == true || (screenID != nil && screenUUID != nil) else {
+                throw SelectedHIDFailure.invalid("A broker-bound plain request is one complete tap, touch or ordinary path")
+            }
+        }
+        if ordinary, expectedContext == nil, plainRoute != true {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }
         if let expectedContext {

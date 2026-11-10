@@ -110,6 +110,18 @@ struct SelectedHIDPath: Codable, Sendable {
     }
 
     private func validateOrdinary() throws {
+        if kind == .preset {
+            // A preset the owner lays out on the screen it binds, sent as the plain route's swipe event.
+            guard preset != nil, points == nil, startX == nil, startY == nil, endX == nil, endY == nil, steps == nil,
+                  expectedWidth == nil, expectedHeight == nil, endsAtRest == nil, preDelay == 0, postDelay == 0,
+                  let delta, delta.isFinite, delta > 0, duration.isFinite, duration > 0,
+                  duration < Double(UInt64.max) / 1_000_000_000,
+                  edgeInset.map({ $0.isFinite && $0 >= 0 }) ?? true,
+                  distance.map({ $0.isFinite && $0 > 0 && $0 < 1 }) ?? true else {
+                throw SelectedHIDFailure.invalid("An ordinary preset takes its name, a duration, a delta and an optional inset or distance")
+            }
+            return
+        }
         guard (points != nil) == (kind == .draw) else {
             throw SelectedHIDFailure.invalid("Only a draw carries a point list")
         }
@@ -160,6 +172,17 @@ struct SelectedHIDPath: Codable, Sendable {
         guard logicalSize.width.isFinite, logicalSize.height.isFinite,
               logicalSize.width > 0, logicalSize.height > 0 else {
             throw SelectedHIDFailure.invalid("Missing measured logical display bounds")
+        }
+        if kind == .preset, let preset, let delta {
+            // The same layout and checks the plain command makes when it measures the screen itself.
+            try preset.validateEdgeInset(edgeInset, screenWidth: logicalSize.width, screenHeight: logicalSize.height)
+            let points = preset.coordinates(screenWidth: logicalSize.width, screenHeight: logicalSize.height,
+                edgeInset: edgeInset, distance: distance)
+            guard edgeInset == nil || hypot(points.endX - points.startX, points.endY - points.startY) >= delta else {
+                throw SelectedHIDFailure.invalid("Explicit legacy edge inset requires a path span at least as large as delta.")
+            }
+            return .swipe(points.startX, yStart: points.startY, xEnd: points.endX, yEnd: points.endY,
+                          delta: delta, duration: duration)
         }
         let stroke = strokePoints
         if kind == .draw {

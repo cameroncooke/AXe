@@ -325,6 +325,13 @@ final class SelectedHIDOwner {
     /// keeps its original pair, so a fold or rotation since it began fails admission instead.
     private func bindActiveDisplay(_ request: SelectedHIDRequest) async throws -> SelectedHIDRequest {
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
+        if request.plainRoute == true {
+            // The same rule the client applies before it measures a screen itself: other simulators
+            // keep their direct input route, and the client falls back to it on this refusal.
+            guard try await OrdinaryBrokerInput.usesSharedKeyboardOwner(for: simulator) else {
+                throw SelectedHIDFailure.invalid("This simulator's plain input does not use the shared input owner")
+            }
+        }
         let active = try await PhaseTimer.measure("owner.activeDisplay") {
             try await DisplayTransition.settledDiscovery(for: simulator).readback.snapshot.activePanel.identity
         }

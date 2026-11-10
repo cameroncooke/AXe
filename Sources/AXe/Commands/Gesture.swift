@@ -615,6 +615,18 @@ struct Gesture: PhysicalDeviceCommand {
         
         try await performGlobalSetup(logger: logger)
 
+        // A broker that is already running binds the screen and lays the preset out on it. A preset with
+        // an explicit screen size, one inside an element and one repeated until an element shows read or
+        // override the screen first, so they keep the measured route.
+        if until.query == nil, insideQuery == nil, screenWidth == nil, screenHeight == nil, (preDelay ?? 0) == 0,
+           try await OrdinaryBrokerInput.performBound(
+               .path(SelectedHIDPath(kind: .preset, preset: preset, duration: duration ?? preset.defaultDuration,
+                   delta: delta ?? preset.defaultDelta, edgeInset: edgeInset, distance: distance, generator: .ordinary)),
+               simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: selectedOutput.verbose) {
+            logger.info().log("Gesture completed successfully")
+            return
+        }
+
         // Duo and verified DTUHID devices use the broker's retained input connection.
         let route = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true

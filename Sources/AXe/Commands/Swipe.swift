@@ -211,12 +211,20 @@ struct Swipe: PhysicalDeviceCommand {
         logger.info().log("Performing swipe from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
+        let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
+            endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
+        // A broker that is already running binds the screen itself; see `OrdinaryBrokerInput.performBound`.
+        // A scroll repeated until an element shows reads the screen first, so it keeps the measured route.
+        if until.query == nil, (preDelay ?? 0) == 0, try await OrdinaryBrokerInput.performBound(.path(path),
+            simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: selectedOutput.verbose) {
+            logger.info().log("Swipe gesture completed successfully")
+            return
+        }
+
         // Duo and verified DTUHID devices use the broker's retained input connection.
         if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
-            let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
-                endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
             if let query = until.query {
                 // The same swipe, ending at rest, repeated until the element is on screen or the content stops moving.
                 var path = path

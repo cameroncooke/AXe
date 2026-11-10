@@ -132,6 +132,54 @@ enum OrdinaryBrokerInput {
         }
     }
 
+    /// Sends a plain command for the broker to bind to the active screen, when a broker is already
+    /// running. A plain command otherwise measures the screen itself before it sends anything, and
+    /// loading the simulator set for that takes about 65 ms of an 150 ms tap; the broker already holds it.
+    /// False means nothing was sent: there is no broker yet, or it refused before input. The caller then
+    /// takes the measured route, which starts a broker and reports any refusal in its own words.
+    static func performBound(
+        _ payload: SelectedHIDRequest.Payload,
+        simulatorUDID: String,
+        postDelay: Double?,
+        verbose: Bool = false
+    ) async throws -> Bool {
+        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: payload)
+        request.activeDisplay = true
+        request.plainRoute = true
+        guard let response = try SelectedHIDBroker.sendToRunningBroker(request, simulatorUDID: simulatorUDID) else {
+            return false
+        }
+        if refusedBeforeInput(response) { return false }
+        if verbose { try SelectedHIDBroker.writeReceipt(response) }
+        guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
+            throw SelectedInputOutput.failure(response)
+        }
+        try await wait(postDelay)
+        return true
+    }
+
+    /// A refusal that sent nothing and left nothing to clean up, so another route may take the command.
+    static func refusedBeforeInput(_ response: SelectedHIDResponse) -> Bool {
+        response.error != nil && response.outcome == "rejectedBeforeInput" && response.enqueuedEventCount == 0
+            && response.quarantine == nil && response.cleanup != "uncertain"
+    }
+
+    /// The contact of a plain tap in a resolved style.
+    static func tapPrimitives(_ style: TapStyle, at point: (x: Double, y: Double)) throws -> [SelectedHIDPrimitive] {
+        switch style {
+        case .physical: return try SelectedTapStyle.physical.primitives(x: point.x, y: point.y)
+        case .simulator: return try SelectedTapStyle.simulator.primitives(x: point.x, y: point.y)
+        case .automatic: throw SelectedHIDFailure.invalid("Ordinary tap requires a resolved style")
+        }
+    }
+
+    /// The contact of a complete plain touch: down, the hold, up.
+    static func touchPrimitives(x: Double, y: Double, hold: Double?) -> [SelectedHIDPrimitive] {
+        let seconds = hold ?? TapTiming.defaultHoldDuration
+        return [.touch(.down, x: x, y: y)] + (seconds > 0 ? [.delay(seconds)] : []) + [.touch(.up, x: x, y: y)]
+    }
+
     static func perform(
         at point: (x: Double, y: Double),
         style: TapStyle,
@@ -141,22 +189,27 @@ enum OrdinaryBrokerInput {
         logger: AxeLogger,
         verbose: Bool = false
     ) async throws {
-        let selectedStyle: SelectedTapStyle
-        switch style {
-        case .physical: selectedStyle = .physical
-        case .simulator: selectedStyle = .simulator
-        case .automatic: throw SelectedHIDFailure.invalid("Ordinary tap requires a resolved style")
-        }
+        logger.info().log("Tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
+        try await perform(contact: try tapPrimitives(style, at: point), context: context,
+            simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)
+    }
+
+    /// One complete contact on the measured screen: a tap, or a press with its hold.
+    static func perform(
+        contact primitives: [SelectedHIDPrimitive],
+        context: SelectedHIDContext,
+        simulatorUDID: String,
+        postDelay: Double?,
+        verbose: Bool = false
+    ) async throws {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
             throw SelectedHIDFailure.invalid("Invalid measured display identity")
         }
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            payload: .contact(try selectedStyle.primitives(x: point.x, y: point.y)),
-            expectedContext: context
+            payload: .contact(primitives), expectedContext: context
         )
-        logger.info().log("Tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)
     }
 

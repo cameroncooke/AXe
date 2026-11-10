@@ -154,12 +154,19 @@ struct Drag: PhysicalDeviceCommand {
         logger.info().log("Performing low-level drag from (\(startX), \(startY)) to (\(endX), \(endY))")
         logger.info().log("Duration: \(duration)s, steps: \(steps)")
 
+        let path = SelectedHIDPath(kind: .drag, startX: startX, startY: startY,
+            endX: endX, endY: endY, duration: duration, steps: steps, hold: hold, generator: .ordinary)
+        // A broker that is already running binds the screen itself; see `OrdinaryBrokerInput.performBound`.
+        if (preDelay ?? 0) == 0, try await OrdinaryBrokerInput.performBound(.path(path),
+            simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: selectedOutput.verbose) {
+            logger.info().log("Low-level drag completed successfully")
+            return
+        }
+
         // Duo and verified DTUHID devices use the broker's retained input connection.
         if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
-            let path = SelectedHIDPath(kind: .drag, startX: startX, startY: startY,
-                endX: endX, endY: endY, duration: duration, steps: steps, hold: hold, generator: .ordinary)
             try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Low-level drag completed successfully")

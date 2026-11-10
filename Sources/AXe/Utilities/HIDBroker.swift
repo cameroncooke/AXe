@@ -407,6 +407,18 @@ enum HIDBroker {
         }
     }
 
+    /// A connection to a broker that is already running, or nil when there is none. It never starts one.
+    static func connectToRunningBroker(endpoint: String, connector: (String) throws -> Int32 = connect(to:),
+                                       expectedVersion: Int? = nil) throws -> Int32? {
+        do {
+            return try connectAndAwaitHandshake(endpoint: endpoint, connector: connector,
+                timeoutMilliseconds: serverIOTimeoutMilliseconds, expectedVersion: expectedVersion)
+        } catch {
+            guard isBrokerUnavailable(error) else { throw error }
+            return nil
+        }
+    }
+
     static func connectToReadyBroker(
         simulatorUDID: String,
         endpoint: String,

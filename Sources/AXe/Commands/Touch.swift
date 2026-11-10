@@ -169,12 +169,32 @@ struct Touch: PhysicalDeviceCommand {
 
         logger.info().log("Performing touch events at (\(pointX), \(pointY))")
 
+        // A complete press is one contact, so a broker that is already running binds the screen itself.
+        if touchDown, touchUp, try await OrdinaryBrokerInput.performBound(
+            .contact(OrdinaryBrokerInput.touchPrimitives(x: pointX, y: pointY, hold: delay)),
+            simulatorUDID: simulatorUDID, postDelay: nil, verbose: selectedOutput.verbose) {
+            logger.info().log("Touch events completed successfully")
+            return
+        }
+
         // A complete press uses the broker's retained connection on verified DTUHID devices too.
         // A partial down or up keeps its route there, so a held contact keeps one owner.
         if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger,
             includeVerifiedRigid: touchDown && touchUp
         )?.context {
+            if touchDown, touchUp {
+                // One complete contact, as a tap is. The retained-touch payload is for a down that a later
+                // command lifts: it closes the input session when it ends, and the next command then
+                // spent 0.6 to 0.9 s opening another.
+                logger.info().log("Touch down")
+                logger.info().log("Touch up")
+                try await OrdinaryBrokerInput.perform(
+                    contact: OrdinaryBrokerInput.touchPrimitives(x: pointX, y: pointY, hold: delay), context: context,
+                    simulatorUDID: simulatorUDID, postDelay: nil, verbose: selectedOutput.verbose)
+                logger.info().log("Touch events completed successfully")
+                return
+            }
             let touch = OrdinaryBrokerTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
             try await OrdinaryBrokerInput.perform(touch: touch, context: context,
                 simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose)

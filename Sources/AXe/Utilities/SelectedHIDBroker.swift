@@ -26,6 +26,21 @@ enum SelectedHIDBroker {
         }
     }
 
+    /// Sends to a broker that is already running, without starting one. Nil means nothing was sent:
+    /// there is no broker to reach, or the request is not one it accepts. A failure after the request
+    /// has gone out is thrown, because the input may have been sent.
+    static func sendToRunningBroker(_ request: SelectedHIDRequest, simulatorUDID: String) throws -> SelectedHIDResponse? {
+        guard let data = try? encoded(request), let path = try? endpoint(simulatorUDID: simulatorUDID),
+              let descriptor = (try? HIDBroker.connectToRunningBroker(endpoint: path,
+                  expectedVersion: SelectedHIDRequest.version)) ?? nil else { return nil }
+        defer { Darwin.close(descriptor) }
+        guard (try? HIDBroker.configureSocketTimeouts(descriptor,
+            readMilliseconds: request.path?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)) != nil else {
+            return nil
+        }
+        return try exchange(data, requestID: request.requestID, descriptor: descriptor)
+    }
+
     /// Raw keyboard has no whole-command deadline. Cancellation closes this owned exchange, never replays it.
     static func sendOrdinaryKeyboard(_ request: SelectedHIDRequest, simulatorUDID: String) async throws -> SelectedHIDResponse {
         guard request.ordinaryKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
