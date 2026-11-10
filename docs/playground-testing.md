@@ -105,7 +105,7 @@ and `AXE_E2E_ALLOW_PROVISIONING_UPDATES=1` to let Xcode register a new device wh
 | Typing and keys | The text field holds `axe e2e`, then `axe e2` after backspace |
 | Drawing | `draw` with `--close` through a triangle: Drawing records one stroke from and back to the first corner, within 2 points of the corners' bounds, one contact, not cancelled |
 | PencilKit ink and tool picker | Sketch (a PencilKit canvas with the system tool picker): a `draw` triangle becomes one stroke with the selected tool's ink; after a tap on another tool in the picker, the next stroke has that tool's ink |
-| Long press, double tap, two fingers, drag hold | On Drawing: `tap --id --hold 1` records one contact of about a second, `--count 2` two short ones, `--touches 2` two fingers; `drag --hold 0.7` takes about 0.65 s longer than the same drag without it |
+| Long press and other touch gestures | On Drawing: `tap --id --hold 1` records one contact of about a second, `--count 2` two short ones, `--touches 2` two fingers; `drag --hold 0.7` takes about 0.65 s longer than the same drag without it |
 | Scroll distance and scroll until | `gesture scroll-down --distance 0.4` moves 0.4 of the screen height; `scroll-up --until-id` brings a row 12 below the last visible one on screen, sends nothing when run again, and fails with `elementNotFound` for a missing element |
 | Pinch | `gesture pinch --scale 2`, then `0.5`, at the default centre and radius: Zoom records one zoom in above 1.3, then one zoom out at least 0.3 lower |
 | Element tap and point lookup | `describe-ui --point` finds `media-pattern-next`; `tap --id` advances the marker phase |

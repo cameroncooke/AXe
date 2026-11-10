@@ -226,7 +226,7 @@ class Device:
         """Every check after the doctor, by the name it reports under, in run order."""
         return {'coordinate taps': self.taps, 'typing and keys': self.typing,
                 'draw a closed triangle': self.drawing, 'PencilKit ink and tool picker': self.sketch,
-                'long press, double tap, two fingers, drag hold': self.touch_gestures,
+                'long press and other touch gestures': self.touch_gestures,   # no comma: AXE_E2E_CHECKS splits on it
                 'scroll distance and scroll until': self.scrolling,
                 'pinch in and out': self.pinch,
                 'element tap and point lookup': self.markers, 'screenshot': self.screenshot,
