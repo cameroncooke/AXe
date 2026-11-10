@@ -7,8 +7,8 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the three simulators at `4ac61b349`. The agent benchmark at `829069eeb` matches the last run on Weather and Contacts; Reminders is worse today with this build and with the 8 November binary alike, which is open below. The device checks last passed at `c96e375c9`. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Open: the slider on percentage sliders (B1) and the two benchmark findings in Phase 12. Last update 10 November, about 19:30.
-- Simulators: unit tests 876 of 876; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
+- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the three simulators at `4ac61b349`. The agent benchmark found one regression, `type --focus` on a slow-focus field, fixed at `1c5c3eeba` with the agent typing suites passing on the iPhone and Duo simulators. The device checks last passed at `c96e375c9`. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build. Last update 10 November, about 21:15.
+- Simulators: unit tests 877 of 877; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
 - Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
 - Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
@@ -603,7 +603,9 @@ The owner asked for the benchmark against the last run and the baseline, without
   - Ruled out as the switch, each tried on a healthy simulator: the delay between the two taps (1.3 to 6.6 s), reading the screen or taking screenshots in between, Show Completed, deleting a list, taps in the form the benchmark's preparation uses, relaunching Reminders straight into a read, and the device settings (identical on both simulators).
   - Not done: finding which step of a benchmark run switches it on. The next step would be to reboot the benchmark simulator, confirm it is healthy, then run the preparation and the task one part at a time with the two-tap test after each.
   - A mistake of mine during this: after I relaunched Reminders a test script kept adding reminders on the overview screen and created 115 in the default list of the benchmark simulator. I deleted them and the three scratch lists; the simulator's Reminders is back to its recorded inventory.
-- [ ] Weather: `type --focus` on the search field failed with `nativeActionFailed` in 3 runs of 3 today and in none on 8 November; the agent typed again without `--focus` each time. Not checked with the 8 November binary, so it may be the build or today's simulator.
+- [x] Weather: `type --focus` on the search field failed with `nativeActionFailed` in 3 runs of 3 and in none on 8 November. It was a regression in this branch, fixed in `1c5c3eeba`. After the focus tap the keyboard takes about two seconds to report that field as focused, so the typing phase is refused before any key. The 8 November build retried that refusal and typed on the second attempt; the audit's narrower retry policy (`c7050c0e5`) stopped retrying it, and the command failed after 2.6 s. The focus-and-type flow now sends the typing phase again, up to three more times, for that one refusal; the general policy is unchanged. On the Weather app by hand: the 8 November build types in 5.6 s, the build before the fix fails 5 times of 5, the fixed build types 6 times of 6. Unit tests 877 of 877. Isolated runs at `1c5c3eeba` (`e2e-results/focus-type-1`): agent batch, agent type and focus-and-type suites pass on the iPhone and Duo simulators. Two more Weather benchmark runs: the typing step succeeded in both; one passed with 17 calls and no errors.
+  - I tried to add a Playground screen that reproduces the delay (a search field in a sheet with two sizes, as in Weather). It did not: every build typed there in 2 s, so I removed it. The regression test is a unit test of which refusals are sent again; nothing end to end covers a slow-focus field.
+  - Seen twice and not investigated: the first Weather launch after the benchmark simulator boots cannot be read for about 25 seconds (`observationFailed` three times), even 2.5 minutes after boot. The agent retries and continues.
 - A first run, straight after I booted the benchmark simulator, is in history but not in the table: Weather's first three reads failed with `observationFailed` for 25 seconds after launch, which is the freshly booted simulator.
 - `./benchmarks/run doctor` fails with `'setupAxe'` when `build_products/axe` does not exist. A run builds it; doctor should say so. Not fixed.
 
@@ -645,7 +647,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 143 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 145 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -792,3 +794,5 @@ All 143 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `829069eeb` | docs(release): Record the plain-input change, its timings and its isolated runs |
 | `96f6ebe53` | fix(bench): Read the current screen from a compact refusal reply |
 | `d0f87e0e0` | docs(release): Record the agent benchmark against the last run and the baseline |
+| `0a9b7f215` | docs(release): Record what the Reminders benchmark failure is and what is still unknown |
+| `1c5c3eeba` | fix(agent): Send the typing phase again while the keyboard catches up with a focus tap |
