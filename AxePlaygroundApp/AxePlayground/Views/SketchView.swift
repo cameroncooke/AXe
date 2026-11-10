@@ -131,6 +131,11 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // The picker restores the tool the last launch left selected. Every visit starts with the pen,
+        // so a check does not inherit the tool of the one before it.
+        if let pen = picker.toolItems.first(where: { ($0 as? PKToolPickerInkingItem)?.inkingTool.inkType == .pen }) {
+            picker.selectedToolItem = pen
+        }
         picker.setVisible(true, forFirstResponder: canvas)
         canvas.becomeFirstResponder()
         publish()

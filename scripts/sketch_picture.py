@@ -62,6 +62,17 @@ class SketchPlayer:
             current = self.wait('the tool picker to expand', lambda tree: len(self.tool_frames(tree)) >= 3)
         screen = next(node for node in walk(current) if node.get('type') == 'Application')['frame']
         self.screen_width = screen['width']
+        # The strip scrolls only under its tools. The colour and options buttons at the palette's end do not
+        # scroll it, and a drag that starts on them moves or minimises the palette; tools the strip has
+        # scrolled under them still have frames on screen. A screen that has just opened shows the first
+        # tools at the strip's start, so the swipes run between the first tool and the third.
+        frames = self.tool_frames(current)
+        shown = sorted((frame for frame in frames.values() if centre(frame)[0] > 0), key=lambda frame: frame['x'])
+        if 'Marker' in frames and frames.get('Pen', {'x': -1})['x'] > 0:
+            first, third = frames['Pen'], frames['Marker']
+        else:
+            first, third = shown[0], shown[min(2, len(shown) - 1)]
+        self.lane = (centre(first)[0] + 10, centre(third)[0], centre(first)[1])
         left, top, width, height = (float(v) for v in self.value(current, 'sketch.drawable').split(','))
         strip_top = min(frame['y'] for frame in self.tool_frames(current).values())
         height = min(height, strip_top - 16 - top)
@@ -108,14 +119,10 @@ class SketchPlayer:
     # The tool picker
     def reveal(self, name):
         """Scrolls the picker's strip until the tool can be tapped, and returns its frame."""
-        tree = self.tree()
-        frames = self.tool_frames(tree)
-        on_screen = sorted((frame for frame in frames.values() if 0 < centre(frame)[0] < self.screen_width), key=lambda f: f['x'])
-        y = centre(on_screen[0])[1]
-        near, far = centre(on_screen[0])[0] + 10, centre(on_screen[min(3, len(on_screen) - 1)])[0]
+        near, far, y = self.lane
+        frame = self.tool_frames(self.tree()).get(name)
         # Later tools are to the right: dragging the strip left brings them in.
-        shown = [TOOLS.index(tool) for tool, frame in frames.items() if frame in on_screen[:4]]
-        forwards = TOOLS.index(name) > (sum(shown) / len(shown) if shown else 0)
+        forwards = frame is None or centre(frame)[0] > far
         for start, end in ((far, near), (near, far)) if forwards else ((near, far), (far, near)):
             try:
                 # axe repeats the swipe until the tool is on screen, and stops when the strip reaches its end.
