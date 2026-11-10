@@ -340,6 +340,25 @@ struct AgentFocusAndTypeTests {
     private func request() -> AgentModeRequest {
         .init(kind: .focusAndType, snapshotID: table, ref: "e2", text: "Hello")
     }
+    @Test("Only a type phase the keyboard refused before any key is sent again")
+    func keyboardFocusNotReady() {
+        // The keyboard could not yet read the field as focused: no code of its own, nothing sent.
+        let notReady = response(kind: .typeText, count: 0, error: AgentModeFailure("nativeActionFailed", "Not focused yet."))
+        #expect(AgentModeController.keyboardFocusNotReady(notReady))
+        // A completed phase, a typed refusal, sent keys and an unclean release all end the attempts.
+        #expect(!AgentModeController.keyboardFocusNotReady(response(kind: .typeText, count: 6)))
+        for code in ["targetCovered", "keyboardCovered", "busy", "screenChanged", "unsupportedReference"] {
+            #expect(!AgentModeController.keyboardFocusNotReady(
+                response(kind: .typeText, count: 0, error: AgentModeFailure(code, "Refused."))), "\(code)")
+        }
+        #expect(!AgentModeController.keyboardFocusNotReady(
+            response(kind: .typeText, count: 3, error: AgentModeFailure("nativeActionFailed", "Stopped."))))
+        #expect(!AgentModeController.keyboardFocusNotReady(
+            response(kind: .typeText, count: 0, cleanup: "uncertain", error: AgentModeFailure("nativeActionFailed", "Stopped."))))
+        // One first attempt and three more: a field that never focuses fails after about three seconds.
+        #expect(AgentModeController.maximumFocusedTypeAttempts == 4)
+    }
+
     private func response(kind: AgentModeRequest.Kind, count: Int, cleanup: String = "notNeeded", error: AgentModeFailure? = nil) -> SelectedHIDResponse {
         let outcome = error == nil ? "enqueuedAndDrained" : "failedBeforeInput"
         var response = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: UUID(), brokerID: UUID(),

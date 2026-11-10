@@ -26,6 +26,15 @@ extension AgentModeController {
         return await performFocusAndTypeRetrying(retry, retryDepth: retryDepth + 1)
     }
 
+    nonisolated static let maximumFocusedTypeAttempts = 4
+
+    /// A type phase that failed before any key was sent, with clean release, on the native failure
+    /// that has no code of its own: the keyboard could not yet read the field as focused.
+    nonisolated static func keyboardFocusNotReady(_ response: SelectedHIDResponse) -> Bool {
+        response.agent?.error?.code == "nativeActionFailed" && response.enqueuedEventCount == 0
+            && response.quarantine == nil && response.cleanup != "uncertain"
+    }
+
     /// Explicit focus changes the field layout once. Each phase reuses ordinary native guards.
     /// The controller reservation spans both phases; common input leases remain per phase.
     private func performFocusAndTypeReserved(_ request: SelectedHIDRequest, retryDepth: Int = 0) async -> SelectedHIDResponse {
@@ -63,8 +72,8 @@ extension AgentModeController {
                 baselineResult = Result { try plan.focusedBaseline(snapshot: focused.snapshot,
                     context: focused.context, pid: focused.expectedPID) }
             }
-            let baseline = try baselineResult.get()
-            let focusedRef = try baseline.focusedReference(snapshot: focused.snapshot,
+            var baseline = try baselineResult.get()
+            var focusedRef = try baseline.focusedReference(snapshot: focused.snapshot,
                 context: focused.context, pid: focused.expectedPID)
             func typing(_ snapshotID: UUID, _ fieldRef: String) -> SelectedHIDRequest {
                 return SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
@@ -73,9 +82,30 @@ extension AgentModeController {
                     payload: .agent(AgentModeRequest(kind: .typeText, expectedPID: initial.expectedPID,
                         snapshotID: snapshotID, ref: fieldRef, text: mode.text)))
             }
-            let typeResult = await PhaseTimer.measure("agent.typeText") {
+            var typeResult = await PhaseTimer.measure("agent.typeText") {
                 await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth,
                     preread: focused)
+            }
+            // The focus tap has landed and the table shows the field focused, but the keyboard's own
+            // read of the focused field can lag behind: a SwiftUI search field in a sheet took about
+            // two seconds. A type phase that stopped there has sent no key, so it is read and sent
+            // again, at most three times. Typed refusals (a covered field, a busy owner) are not.
+            var typeAttempts = 1
+            while typeAttempts < Self.maximumFocusedTypeAttempts, Self.keyboardFocusNotReady(typeResult) {
+                typeAttempts += 1
+                try await PhaseTimer.measure("agent.focusWait") { try await Task.sleep(for: .milliseconds(300)) }
+                guard let next = await refreshTable(context: focused.context, pid: focused.expectedPID) else { break }
+                focused = next
+                guard let settled = try? plan.focusedBaseline(snapshot: focused.snapshot,
+                          context: focused.context, pid: focused.expectedPID),
+                      let ref = try? settled.focusedReference(snapshot: focused.snapshot,
+                          context: focused.context, pid: focused.expectedPID) else { continue }
+                baseline = settled
+                focusedRef = ref
+                typeResult = await PhaseTimer.measure("agent.typeText") {
+                    await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth,
+                        preread: focused)
+                }
             }
             last = typeResult
             try progress.append(typeResult, action: .type)
