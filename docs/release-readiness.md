@@ -390,7 +390,7 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 - [x] A PencilKit screen in the Playground (`Sketch`, `c1995e53f`): a `PKCanvasView` with the system tool picker. A finger draws, so `axe draw` leaves real ink. The screen reports the stroke count, the selected tool and the last stroke's ink.
 - [x] A painting made with axe alone (`scripts/demos/paint-sunset.py`): a sunset with a sun, mountains, a tree, a boat, stars and birds. 78 strokes from 235 axe commands in 4.5 minutes on the iPhone 18 Pro simulator. Tools and line weights are chosen in the tool picker by accessibility label, opacity by dragging the picker's slider, colours by tapping the system colour picker's grid. Picture and recording: `e2e-results/sketch-demo/sunset-iphone-sim.png` and `.mp4` (keep).
 - [~] End-to-end checks for it (`ea1115840`): `PlaygroundSketchTests` (4 cases, on the iPhone, iPad and Duo profiles) and a device check, "PencilKit ink and tool picker". Written and compiled; not run, at the owner's instruction.
-- [ ] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks (table below)
+- [ ] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks: tracked item by item in Phase 11
 
 What the painting found:
 
@@ -420,6 +420,34 @@ Gesture and drawing commands compared (FlowDeck 1.34.0 `flowdeck ui simulator`, 
 | Physical iPhone and iPad | yes | no | no |
 
 AXe has every gesture type the other two have and is the only one that can draw. Its gaps are conveniences: a long press or double tap on an element without agent mode, an adjustable hold before a drag, scrolling until an element is visible, a distance for direction swipes, and a Control Centre swipe.
+
+## Phase 11: gesture gaps, bugs from the painting and the remaining refactors
+
+Gaps against FlowDeck and RocketSim (from the table in Phase 10):
+
+- [ ] G1. Long press on an element chosen by `--id` or `--label`, without agent mode (FlowDeck `tap --duration`, RocketSim `long-press`)
+- [ ] G2. Double tap on an element chosen by `--id` or `--label`, without agent mode (FlowDeck `double-tap`)
+- [ ] G3. Two-finger tap on an element (RocketSim `tap --touches 2`)
+- [ ] G4. An adjustable hold before a drag starts to move, for drag-to-reorder (FlowDeck `swipe --hold`)
+- [ ] G5. Scroll until an element is visible (FlowDeck `scroll --until`)
+- [ ] G6. A distance for direction swipes (FlowDeck `swipe --distance`)
+- [ ] G7. A Control Centre swipe (RocketSim `swipe --direction control-center`)
+
+Bugs and limits found while painting:
+
+- [ ] B1. `axe slider` fails with `unsupportedValueDomain` on a slider that reports a percentage ("80%") and no numeric range, such as the tool picker's opacity slider
+- [ ] B2. A tap sent about 0.6 s after the tool picker expanded did nothing, once. Not yet known whether AXe sent it to a view that was still animating or lost it
+- [ ] B3. The system colour picker exposes no accessibility elements (it draws in another process), so its grid can only be tapped by position. A system limit; to be documented, not fixed
+- [ ] B4. The painting script's colour grid positions are measured for one screen size only
+
+Verification still owed for Phase 10:
+
+- [ ] `PlaygroundSketchTests` alone on the iPhone, iPad and Duo simulators, and the "PencilKit ink and tool picker" check alone on both devices
+
+Input-stack refactors carried over from Phase 4:
+
+- [ ] SEL-16. `SelectedHIDRequest` as header fields plus an enum payload
+- [ ] SEL-17. Fold the ordinary input route into the selected route, with a timing comparison
 
 ## Open items for the owner
 
