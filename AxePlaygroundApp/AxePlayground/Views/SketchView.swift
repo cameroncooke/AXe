@@ -19,8 +19,24 @@ private struct SketchControllerView: UIViewControllerRepresentable {
     func updateUIViewController(_ controller: SketchController, context: Context) {}
 }
 
+/// A canvas whose strokes are not accessibility elements. PencilKit lists every stroke as one, and a
+/// physical device takes about 44 ms an element to send its tree: a picture of 160 strokes made each read
+/// of the screen take 10 s. The canvas stays a container, so it does not cover the tool picker that
+/// floats over it; as one element it made every point of the picker ambiguous on a device.
+final class QuietCanvasView: PKCanvasView {
+    override var accessibilityElements: [Any]? {
+        get { [] }
+        set {}
+    }
+
+    override func didAddSubview(_ subview: UIView) {
+        super.didAddSubview(subview)
+        subview.accessibilityElementsHidden = true
+    }
+}
+
 final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPickerObserver {
-    private let canvas = PKCanvasView()
+    private let canvas = QuietCanvasView()
     private let picker = PKToolPicker()
     private let strokeCount = UILabel()
     private let lastInk = UILabel()
