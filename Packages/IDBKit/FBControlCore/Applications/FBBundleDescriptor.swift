@@ -62,50 +62,6 @@ public final class FBBundleDescriptor: NSObject, NSCopying, Sendable {
     "Name: \(name) | ID: \(identifier)"
   }
 
-  // MARK: Public Methods
-
-  /// Async wrapper for `updatePathsForRelocation(withCodesign:logger:queue:)`.
-  public func updatePathsForRelocationAsync(withCodesign codesign: FBCodesignProvider, logger: FBControlCoreLogger, queue: DispatchQueue) async throws {
-    _ = try await bridgeFBFuture(updatePathsForRelocation(withCodesign: codesign, logger: logger, queue: queue))
-  }
-
-  @objc(updatePathsForRelocationWithCodesign:logger:queue:)
-  public func updatePathsForRelocation(withCodesign codesign: FBCodesignProvider, logger: FBControlCoreLogger, queue: DispatchQueue) -> FBFuture<AnyObject> {
-    return replacementsForBinary()
-      .onQueue(
-        queue,
-        fmap: { (result: AnyObject) -> FBFuture<AnyObject> in
-          let replacements = result as! NSDictionary as! [String: String]
-          if replacements.isEmpty {
-            return FBFuture(result: replacements as NSDictionary)
-          }
-          var arguments: [String] = []
-          for (key, value) in replacements {
-            arguments.append("-rpath")
-            arguments.append(key)
-            arguments.append(value)
-          }
-          if let binaryPath = self.binary?.path {
-            arguments.append(binaryPath)
-          }
-          logger.log("Updating rpaths for binary \(FBCollectionInformation.oneLineDescription(from: replacements as [String: Any]))")
-          return
-            FBProcessBuilder<AnyObject, AnyObject, AnyObject>
-            .withLaunchPath("/usr/bin/install_name_tool", arguments: arguments)
-            .withStdErr(to: logger)
-            .runUntilCompletion(withAcceptableExitCodes: Set([0 as NSNumber]))
-            .mapReplace(replacements as NSDictionary)
-        }
-      )
-      .onQueue(
-        queue,
-        fmap: { (result: AnyObject) -> FBFuture<AnyObject> in
-          let replacements = result as! NSDictionary
-          logger.log("Re-Codesigning after rpath update \(self.path)")
-          return codesign.signBundle(atPath: self.path).mapReplace(replacements)
-        })
-  }
-
   // MARK: Private
 
   private class func binaryForBundle(_ bundle: Bundle) throws -> FBBinaryDescriptor {
@@ -119,34 +75,6 @@ public final class FBBundleDescriptor: NSObject, NSCopying, Sendable {
     return (bundle.infoDictionary?["CFBundleName"] as? String)
       ?? (bundle.infoDictionary?["CFBundleExecutable"] as? String)
       ?? ((bundle.bundlePath as NSString).deletingPathExtension as NSString).lastPathComponent
-  }
-
-  private func replacementsForBinary() -> FBFuture<AnyObject> {
-    do {
-      let rpaths = try binary?.rpaths()
-      guard let rpaths else {
-        return FBFuture(result: NSDictionary())
-      }
-      return FBFuture(result: FBBundleDescriptor.interpolateRpathReplacements(forRPaths: rpaths) as NSDictionary)
-    } catch {
-      return FBFuture(error: error)
-    }
-  }
-
-  private class func interpolateRpathReplacements(forRPaths rpaths: [String]) -> [String: String] {
-    guard let regex = try? NSRegularExpression(pattern: "(/Applications/(?:xcode|Xcode).*\\.app/Contents/Developer)(.*)", options: []) else {
-      return [:]
-    }
-    var replacements: [String: String] = [:]
-    for rpath in rpaths {
-      let result = regex.firstMatch(in: rpath, options: [], range: NSRange(location: 0, length: (rpath as NSString).length))
-      guard let result else {
-        continue
-      }
-      let oldXcodePath = (rpath as NSString).substring(with: result.range(at: 1))
-      replacements[rpath] = rpath.replacingOccurrences(of: oldXcodePath, with: FBXcodeConfiguration.developerDirectory)
-    }
-    return replacements
   }
 
   private class func bundleFromPath(_ path: String, fallbackIdentifier: Bool) throws -> FBBundleDescriptor {

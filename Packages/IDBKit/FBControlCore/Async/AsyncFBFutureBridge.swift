@@ -138,31 +138,6 @@ public func bridgeFBFutures<T: AnyObject>(_ futures: [FBFuture<T>]) async throws
   }
 }
 
-/// Force-casts an `FBMutableFuture<T>` to its `FBFuture<T>` parent type.
-///
-/// Swift's bridge does not preserve the Objective-C generic argument when
-/// passing `FBMutableFuture<T>` where `FBFuture<T>` is expected. Using
-/// `as! FBFuture<T>` is correct at runtime because the underlying class
-/// hierarchy holds the same type parameter.
-public func convertFBMutableFuture<T: AnyObject>(_ mutableFuture: FBMutableFuture<T>) -> FBFuture<T> {
-  let future: FBFuture<AnyObject> = mutableFuture
-  // swiftlint:disable:next force_cast
-  return future as! FBFuture<T>
-}
-
-/// Awaits an `FBMutableFuture<T>` and returns its resolved value.
-///
-/// Convenience wrapper around `bridgeFBFuture(convertFBMutableFuture(_:))` that
-/// hides the cast through `FBFuture<T>` from callers.
-public func awaitMutableFuture<T: AnyObject>(_ mutableFuture: FBMutableFuture<T>) async throws -> T {
-  try await bridgeFBFuture(convertFBMutableFuture(mutableFuture))
-}
-
-/// Awaits an `FBMutableFuture<NSNull>`, discarding the resolved `NSNull`.
-public func awaitMutableFutureVoid(_ mutableFuture: FBMutableFuture<NSNull>) async throws {
-  try await bridgeFBFutureVoid(convertFBMutableFuture(mutableFuture))
-}
-
 // MARK: - FBFutureContext → async bridge
 
 /// Wraps a non-`Sendable` `FBFutureContext` so it can survive crossing the
