@@ -123,7 +123,7 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 - [x] Test-oracle checks moved out of the product path: the owner decides success, the client checks error, outcome and bound screen (`5d18508a7`)
 - [x] `LegacyDuo*` renamed to `OrdinaryBroker*`, since it serves every DTUHID simulator and is not legacy (`48ca3215e`)
 - [x] Split oversized files (`AgentModeController.swift`, `AgentModeSnapshot.swift`, in the agent-mode wave)
-- [ ] Not done: `SelectedHIDRequest` as header fields plus an enum payload (SEL-16), and folding the ordinary route into the selected route (SEL-17); see Open items
+- [x] `SelectedHIDRequest` as header fields plus an enum payload (SEL-16): done later, in Phase 11 (`986ecf927`). Folding the ordinary route into the selected route (SEL-17) is not done; it is tracked as the open item in Phase 11, not here
 
 Verification of the architecture wave (7 commits, Sources net 269 lines fewer):
 
@@ -389,7 +389,7 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 - [x] Drawing shown on a simulator and both devices: nine strokes (star, house, "AXe", wave, 120-point spiral) with `axe draw` on the iPhone 18 Pro simulator, the iPhone 16 Pro Max and the iPad Pro. The app counted 9 strokes on each. Screenshots in `e2e-results/drawing-demo/`.
 - [x] A PencilKit screen in the Playground (`Sketch`, `c1995e53f`): a `PKCanvasView` with the system tool picker. A finger draws, so `axe draw` leaves real ink. The screen reports the stroke count, the selected tool and the last stroke's ink.
 - [x] A painting made with axe alone (`scripts/demos/paint-sunset.py`): a sunset with a sun, mountains, a tree, a boat, stars and birds. 78 strokes from 235 axe commands in 4.5 minutes on the iPhone 18 Pro simulator. Tools and line weights are chosen in the tool picker by accessibility label, opacity by dragging the picker's slider, colours by tapping the system colour picker's grid. Picture and recording: `e2e-results/sketch-demo/sunset-iphone-sim.png` and `.mp4` (keep).
-- [~] End-to-end checks for it (`ea1115840`): `PlaygroundSketchTests` (4 cases, on the iPhone, iPad and Duo profiles) and a device check, "PencilKit ink and tool picker". Written and compiled; not run, at the owner's instruction.
+- [x] End-to-end checks for it (`ea1115840`): `PlaygroundSketchTests` (4 cases, on the iPhone, iPad and Duo profiles) and a device check, "PencilKit ink and tool picker". Run since in isolation: the suite, now 5 cases, passes on the three simulators and the device check on both devices, at `c96e375c9` (Phase 12).
 - [x] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks: closed, item by item, in Phase 11
 
 What the painting found:
@@ -451,7 +451,7 @@ PencilKit checks:
 
 - [x] `PlaygroundSketchTests` alone on the iPhone, iPad and Duo simulators: 4 of 4 cases on each (`e2e-results/sketch-isolated-1`), and "PencilKit ink and tool picker" on both devices after the check was changed to use only elements a device lists (`cea002db1`)
 - [x] A picture in the checks, first version (`4c6501a46`): sky, grass, a sun, a house, a tree and two birds. It passed on both devices and all three simulators, and the owner found it crude
-- [~] A shaded 3D car instead (`ad67ba737`). `scripts/demos/car_picture.py` holds a small 3D model of a coupe, lights it, projects it and emits flat faces far to near, each in one of five tones of red, over watercolour washes, a crayon road and a soft cast shadow, with fountain-pen lines, pencil hatching and highlights. `scripts/sketch_picture.py` plays that list through the axe CLI on a simulator or a device, and both the simulator case and the device check run it. Painted once on the iPhone 18 Pro simulator: 161 strokes, 23 inks, 296 axe commands, 183 s (`e2e-results/sketch-demo/car-iphone-sim.png`). The isolated run on the three simulators and both devices is in progress
+- [x] A shaded 3D car instead (`ad67ba737`). `scripts/demos/car_picture.py` holds a small 3D model of a coupe, lights it, projects it and emits flat faces far to near, each in one of five tones of red, over watercolour washes, a crayon road and a soft cast shadow, with fountain-pen lines, pencil hatching and highlights. `scripts/sketch_picture.py` plays that list through the axe CLI on a simulator or a device, and both the simulator case and the device check run it. Painted once on the iPhone 18 Pro simulator: 161 strokes, 23 inks, 296 axe commands, 183 s (`e2e-results/sketch-demo/car-iphone-sim.png`). It now passes in the checks on the iPhone, iPad and Duo simulators (`e2e-results/sketch-car-5`) and on the iPhone 16 Pro Max and iPad Pro (`devices-20261110T141600Z`: 163 and 164 strokes, 23 inks), at `c96e375c9`; what it took is in Phase 12
 - [x] Scrolling inside one strip and stopping at its end (`95335a390`, `6a5eaab54`, `4b6b93964`), after the owner watched a probe script bounce the tool picker against its end: `swipe` takes `--until-id`/`--until-label`, scroll presets take `--inside-id`/`--inside-label`, an element counts as on screen only when a lookup at its centre finds it, and the loop stops with `elementNotFound` as soon as a scroll moves nothing. On the simulator, `gesture scroll-left --inside-id Drawing-Palette --until-label Watercolor` took 2 scrolls and 3.2 s, and a tool that does not exist failed after 2 scrolls in 3.8 s instead of 10. Unit tests: 17 in `GestureConvenienceTests`; whole suite 861
 
 Input-stack refactors carried over from Phase 4:
@@ -557,7 +557,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 131 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
+All 132 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -692,3 +692,4 @@ All 131 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. Th
 | `588a1e9d0` | docs(release): Record the device timings, the Device MCP comparison and the scroll-until fix |
 | `eaf1d3a51` | fix(device): Read large accessibility trees and scroll short strips on a device |
 | `c96e375c9` | test(playground): Keep the Sketch canvas's strokes out of the accessibility tree |
+| `16f331be5` | docs(release): Record the device rerun, the tree read limit and the passing checks |
