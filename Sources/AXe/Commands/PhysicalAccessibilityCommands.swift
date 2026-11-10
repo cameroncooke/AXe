@@ -68,26 +68,32 @@ enum PhysicalAccessibilityCommands {
             return min(readBudget, remaining.timeInterval)
         }
 
-        let initial: Target
+        // A target in the first read is tapped from that read, as on a simulator: a second read costs
+        // one to three seconds on a device. A target that appeared while polling may still be moving
+        // into place, so it is read once more and must not have changed. The tree read compared the
+        // display before and after it, and the broker compares it again just before the touch.
+        var fresh: Target
+        var polled = false
         while true {
             try Task.checkCancellation()
             let snapshot = try await input.readAccessibility(timeout: budget())
             try snapshot.display.requireResolvedOrientation()
             if let target = try VisibleTree(snapshot).target(matching: query, elementType: elementType) {
-                initial = target
+                fresh = target
                 break
             }
             guard deadline != nil else { throw missingTarget }
+            polled = true
             try await Task.sleep(for: .seconds(min(pollInterval, try budget())))
         }
-
-        // An absent target is the only condition that can retry. Verify the first match again. The tree read
-        // compared the display before and after it, and the broker compares it again just before the touch.
-        let snapshot = try await input.readAccessibility(timeout: budget())
-        guard let fresh = try VisibleTree(snapshot).target(matching: query, elementType: elementType),
-              fresh == initial else {
-            throw CLIOutputFailure(code: "targetChanged",
-                message: "The accessibility target or display changed before the tap. Read the screen again.")
+        if polled {
+            let snapshot = try await input.readAccessibility(timeout: budget())
+            guard let settled = try VisibleTree(snapshot).target(matching: query, elementType: elementType),
+                  settled == fresh else {
+                throw CLIOutputFailure(code: "targetChanged",
+                    message: "The accessibility target or display changed before the tap. Read the screen again.")
+            }
+            fresh = settled
         }
         try Task.checkCancellation()
         _ = try budget()

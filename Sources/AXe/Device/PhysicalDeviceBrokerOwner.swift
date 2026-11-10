@@ -1,14 +1,26 @@
 import Foundation
 import FBSimulatorControl
 
-/// Owns the device transports across client leases. Every lease still checks CoreDevice readiness.
-/// When input in a lease needs a fresh lock check. The readiness check at lease start covers normal
-/// commands, and input resets the device's auto-lock timer, so only input after a quiet gap (such as a
-/// long batch sleep) reads the lock state again. Input after the lock button in the same lease is refused.
+/// When the broker reads CoreDevice readiness again. Reading it costs two `devicectl` runs of about
+/// 0.25 s each, so a lease reads it only when nothing newer vouches for the device.
+///
+/// Input the broker sent is that evidence: it went through a working connection to an unlocked device
+/// and restarted the device's auto-lock timer. For the quiet gap after it, a new lease starts without
+/// the reads and input inside a lease needs no lock check. The reads at a lease start count the same
+/// way inside that lease. A failed operation or the lock button ends it: the next lease reads again,
+/// and input after the lock button in the same lease is refused.
 struct PhysicalLockRecheck: Sendable {
     static let quietGap: Duration = .seconds(25)
     private var lastInput: ContinuousClock.Instant?
+    /// The last input this broker sent. Unlike `lastInput`, a readiness read does not set it.
+    private var lastSent: ContinuousClock.Instant?
     private(set) var lockedByButton = false
+
+    /// Whether a new lease can start without reading readiness.
+    func coversNewLease(at now: ContinuousClock.Instant) -> Bool {
+        guard !lockedByButton, let lastSent else { return false }
+        return lastSent.duration(to: now) < Self.quietGap
+    }
 
     mutating func leaseStarted(at now: ContinuousClock.Instant) {
         lastInput = now
@@ -22,7 +34,12 @@ struct PhysicalLockRecheck: Sendable {
 
     mutating func inputSent(at now: ContinuousClock.Instant, lockButton: Bool) {
         lastInput = now
+        lastSent = now
         if lockButton { lockedByButton = true }
+    }
+
+    mutating func operationFailed() {
+        lastSent = nil
     }
 }
 
@@ -40,6 +57,7 @@ actor PhysicalDeviceBrokerOwner {
     }
 
     func begin() async throws {
+        if let input, lockRecheck.coversNewLease(at: .now), await input.acceptsInput { return }
         let listed: CoreDevice
         if let device {
             listed = device
@@ -79,10 +97,15 @@ actor PhysicalDeviceBrokerOwner {
         guard let input, let device else {
             throw CLIOutputFailure(code: "deviceBrokerUnavailable", message: "The broker has no ready device session.")
         }
-        try await admitInput(operation, on: device)
-        let value = try await perform(operation, on: input)
-        recordInput(operation)
-        return value
+        do {
+            try await admitInput(operation, on: device)
+            let value = try await perform(operation, on: input)
+            recordInput(operation)
+            return value
+        } catch {
+            lockRecheck.operationFailed()
+            throw error
+        }
     }
 
     private func perform(_ operation: PhysicalDeviceBrokerOperation,

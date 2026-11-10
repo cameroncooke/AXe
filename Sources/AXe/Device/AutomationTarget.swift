@@ -25,8 +25,9 @@ enum AutomationTarget {
     }
 
     /// The device for a broker-backed command: only its UDID. The broker resolves the CoreDevice record
-    /// itself, reports `targetNotFound` through the lease, and re-checks readiness on every lease, so the CLI
-    /// spawns no inventory read (0.65-1.1 s). Commands that need the full record use `physicalDeviceRecord`.
+    /// itself, reports `targetNotFound` through the lease, and reads readiness when a lease needs it
+    /// (`PhysicalLockRecheck`), so the CLI spawns no inventory read (0.65-1.1 s). Commands that need the full
+    /// record use `physicalDeviceRecord`.
     static func physicalInputDevice(udid: String) async throws -> CoreDevice? {
         guard isPhysicalInputUDID(udid) else { return nil }
         return CoreDevice(identifier: udid, udid: udid, name: nil, model: nil, osVersion: nil,

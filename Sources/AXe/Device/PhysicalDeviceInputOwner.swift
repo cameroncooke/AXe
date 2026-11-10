@@ -82,6 +82,8 @@ actor PhysicalDeviceInputOwner {
                                    coreDeviceVersion: version, lease: lease)
     }
 
+    var acceptsInput: Bool { !closed && !uncertain }
+
     func matchesReadyDevice(_ device: CoreDevice) -> Bool {
         !closed && !uncertain && device.tunnelAddress == tunnelAddress
             && device.identifier == deviceIdentifier && device.coreDeviceVersion == coreDeviceVersion

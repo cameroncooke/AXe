@@ -507,4 +507,37 @@ struct PhysicalLockRecheckTests {
         policy.leaseStarted(at: start.advanced(by: .seconds(5)))
         #expect(!policy.lockedByButton)
     }
+
+    @Test("A new lease skips the readiness reads only for the quiet gap after input the broker sent")
+    func newLease() {
+        let start = ContinuousClock.now
+        var policy = PhysicalLockRecheck()
+        // Nothing sent yet, and a readiness read alone is not input.
+        #expect(!policy.coversNewLease(at: start))
+        policy.leaseStarted(at: start)
+        #expect(!policy.coversNewLease(at: start.advanced(by: .seconds(1))))
+
+        policy.inputSent(at: start.advanced(by: .seconds(2)), lockButton: false)
+        #expect(policy.coversNewLease(at: start.advanced(by: .seconds(3))))
+        #expect(policy.coversNewLease(at: start.advanced(by: .seconds(26))))
+        #expect(!policy.coversNewLease(at: start.advanced(by: .seconds(27))))
+        // A covered lease still asks for a lock check before input that follows the quiet gap.
+        #expect(policy.needsCheck(at: start.advanced(by: .seconds(27))))
+    }
+
+    @Test("A failed operation or the lock button makes the next lease read readiness")
+    func newLeaseAfterFailureOrLock() {
+        let start = ContinuousClock.now
+        var policy = PhysicalLockRecheck()
+        policy.leaseStarted(at: start)
+        policy.inputSent(at: start, lockButton: false)
+        policy.operationFailed()
+        #expect(!policy.coversNewLease(at: start.advanced(by: .seconds(1))))
+
+        policy.inputSent(at: start.advanced(by: .seconds(2)), lockButton: true)
+        #expect(!policy.coversNewLease(at: start.advanced(by: .seconds(3))))
+        policy.leaseStarted(at: start.advanced(by: .seconds(4)))
+        policy.inputSent(at: start.advanced(by: .seconds(5)), lockButton: false)
+        #expect(policy.coversNewLease(at: start.advanced(by: .seconds(6))))
+    }
 }
