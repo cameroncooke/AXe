@@ -526,6 +526,11 @@ What the first two runs found:
 - [x] The Sketch canvas no longer lists its strokes as elements (`c96e375c9`), so the check's reads stay near 2 s on the iPhone however much is drawn. A first attempt made the canvas one element; it then covered the tool picker floating over it and a device refused every point of the picker with `ambiguousPoint`, because a device tree has no z-order.
 - One read on the iPad took 11.2 s in the passing run, against 2 to 4 s for the rest; not investigated.
 
+Release check and CHANGELOG (10 November, late afternoon):
+
+- [x] `make release-check` (`bad29dfa8`) runs the quick checks in one go and reports each: released CHANGELOG sections unchanged, script tests, the two skill copies identical, skill lint, no open items in this log, packaging dry run, unit tests. First run: 6 pass, and "readiness log" fails on the two open items in Phase 11, as it should.
+- [x] CHANGELOG reviewed against v1.8.0 by comparing every command and option in the source: 10 new commands, all described; 77 new options, none removed. Three corrections: the `screensDidNotSettle` entry left Fixed (the Duo is new in this release), the scroll-until entry says each scroll stops with the finger, and the device entry names `draw`, taps by selector and the time a screen read takes.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -563,7 +568,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 132 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 136 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -699,3 +704,7 @@ All 132 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `eaf1d3a51` | fix(device): Read large accessibility trees and scroll short strips on a device |
 | `c96e375c9` | test(playground): Keep the Sketch canvas's strokes out of the accessibility tree |
 | `16f331be5` | docs(release): Record the device rerun, the tree read limit and the passing checks |
+| `81601c0fc` | docs(release): Close the items in the log that later work finished |
+| `a1ee6c835` | docs(release): Note batching the car picture's strokes as a future improvement |
+| `bad29dfa8` | build: Add make release-check, the quick release checks in one run |
+| `37bf37ae3` | docs(changelog): Bring the unreleased section up to date |
