@@ -31,7 +31,7 @@ struct SelectedCompleteGestureTests {
     }
     private func request(_ value: SelectedHIDCompleteGesture) -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [], gesture: value)
+            screenUUID: screen, operation: .complete, token: nil, payload: .gesture(value))
     }
     private func leaves(_ event: FBSimulatorHIDEvent) -> [FBSimulatorHIDEvent] {
         guard let children = event.subEvents else { return [event] }
@@ -80,23 +80,13 @@ struct SelectedCompleteGestureTests {
         #expect(throws: (any Error).self) { _ = try pair.event(observation: observation()) }
     }
 
-    @Test func mixedPayloadsRejectBeforeCommonAdmission() throws {
+    @Test func retainedAndOldWireGesturesRejectBeforeCommonAdmission() throws {
         let value = try command("double-tap").selectedCompleteGesture()
-        var pinch = request(value)
-        pinch.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10)
-        var path = request(value)
-        path.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25)
-        var ax = request(value)
-        ax.ax = .init(kind: .describe, expectedPID: 1,
-            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
-        var hinge = try SelectedHingeRequest(kind: .read, expectedBootIdentity: nil,
-            degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil).brokerRequest()
-        hinge.gesture = value
         let retained = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3, screenUUID: screen,
-            operation: .begin, token: nil, primitives: [], gesture: value)
+            operation: .begin, token: nil, payload: .gesture(value))
         let old = SelectedHIDRequest(version: 8, requestID: UUID(), screenID: 3, screenUUID: screen,
-            operation: .complete, token: nil, primitives: [], gesture: value)
-        for candidate in [pinch, path, ax, hinge, retained, old] {
+            operation: .complete, token: nil, payload: .gesture(value))
+        for candidate in [retained, old] {
             var admission = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try admission.enter(candidate) }
             #expect(!admission.inFlight && admission.token == nil)

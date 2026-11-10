@@ -2,8 +2,30 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 88
+    static let version = 89
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
+
+    /// What a request asks the owner to do. A request carries exactly one, so a mixed request
+    /// cannot be built or decoded.
+    enum Payload: Codable, Sendable {
+        /// Touch primitives for a complete, begin, move or end operation; none for close.
+        case contact([SelectedHIDPrimitive])
+        case path(SelectedHIDPath)
+        case pinch(SelectedHIDPinch)
+        case gesture(SelectedHIDCompleteGesture)
+        case ax(SelectedAXRequest)
+        case hinge(SelectedHingeRequest)
+        case keyboard(SelectedKeyboardRequest)
+        case button(SelectedButtonRequest)
+        case rotation(SelectedRotationRequest)
+        /// An agent action. A complete coordinate action also carries its path or its primitives.
+        case agent(AgentModeRequest, path: SelectedHIDPath? = nil, primitives: [SelectedHIDPrimitive] = [])
+        case agentBatch(AgentBatchRequest)
+        case ordinaryTouch(OrdinaryBrokerTouch)
+        case ordinaryKeyboard(OrdinaryBrokerKeyboard)
+    }
+
+    // Header: which protocol, which request, which screen and which contact.
     let version: Int
     let requestID: UUID
     var screenID: UInt32?
@@ -13,69 +35,103 @@ struct SelectedHIDRequest: Codable, Sendable {
     var activeDisplay: Bool? = nil
     let operation: Operation
     let token: UUID?
-    let primitives: [SelectedHIDPrimitive]
-    var path: SelectedHIDPath? = nil
-    var pinch: SelectedHIDPinch? = nil
-    var gesture: SelectedHIDCompleteGesture? = nil
-    var ax: SelectedAXRequest? = nil
-    var hinge: SelectedHingeRequest? = nil
-    var keyboard: SelectedKeyboardRequest? = nil
-    var button: SelectedButtonRequest? = nil
-    var rotation: SelectedRotationRequest? = nil
-    var agent: AgentModeRequest? = nil
-    var agentBatch: AgentBatchRequest? = nil
+    var payload: Payload
     var includeReadingContinuation: Bool? = nil
     var agentAdmission: AgentModeAdmission? = nil
     var expectedContext: SelectedHIDContext? = nil
-    var ordinaryTouch: OrdinaryBrokerTouch? = nil
-    var ordinaryKeyboard: OrdinaryBrokerKeyboard? = nil
     /// Diagnostic only. Asks the broker to return its phase timings with the response.
     var timing: Bool? = nil
+
+    // Read-only views of the payload, for code that handles one kind.
+    var primitives: [SelectedHIDPrimitive] {
+        switch payload {
+        case .contact(let primitives), .agent(_, _, let primitives): return primitives
+        default: return []
+        }
+    }
+    var path: SelectedHIDPath? {
+        switch payload {
+        case .path(let path): return path
+        case .agent(_, let path, _): return path
+        default: return nil
+        }
+    }
+    var pinch: SelectedHIDPinch? { if case .pinch(let value) = payload { return value }; return nil }
+    var gesture: SelectedHIDCompleteGesture? { if case .gesture(let value) = payload { return value }; return nil }
+    var ax: SelectedAXRequest? { if case .ax(let value) = payload { return value }; return nil }
+    var hinge: SelectedHingeRequest? { if case .hinge(let value) = payload { return value }; return nil }
+    var keyboard: SelectedKeyboardRequest? { if case .keyboard(let value) = payload { return value }; return nil }
+    var button: SelectedButtonRequest? { if case .button(let value) = payload { return value }; return nil }
+    var rotation: SelectedRotationRequest? { if case .rotation(let value) = payload { return value }; return nil }
+    var agent: AgentModeRequest? { if case .agent(let value, _, _) = payload { return value }; return nil }
+    var agentBatch: AgentBatchRequest? { if case .agentBatch(let value) = payload { return value }; return nil }
+    var ordinaryTouch: OrdinaryBrokerTouch? { if case .ordinaryTouch(let value) = payload { return value }; return nil }
+    var ordinaryKeyboard: OrdinaryBrokerKeyboard? { if case .ordinaryKeyboard(let value) = payload { return value }; return nil }
+
+    /// The same agent action on a new snapshot and reference, for a retry after the screen moved on.
+    /// Any other request is returned unchanged.
+    func retargeted(snapshotID: UUID, ref: String) -> SelectedHIDRequest {
+        var request = self
+        request.updateAgent { $0.snapshotID = snapshotID; $0.ref = ref }
+        return request
+    }
+
+    /// Changes the agent action in place, keeping its coordinates. Any other request is left alone.
+    mutating func updateAgent(_ change: (inout AgentModeRequest) -> Void) {
+        guard case .agent(var agent, let path, let primitives) = payload else { return }
+        change(&agent)
+        payload = .agent(agent, path: path, primitives: primitives)
+    }
+
+    private var isComplete: Bool { operation == .complete && token == nil }
+    private var hasScreenPair: Bool { screenID != nil && screenUUID != nil }
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
         if activeDisplay != nil {
+            let bindsAScreen: Bool
+            switch payload {
+            case .agent, .agentBatch, .hinge, .ordinaryTouch, .ordinaryKeyboard: bindsAScreen = false
+            default: bindsAScreen = true
+            }
             guard activeDisplay == true, screenID == nil, screenUUID == nil, expectedContext == nil,
-                  agentAdmission == nil, agent == nil, agentBatch == nil, hinge == nil,
-                  ordinaryTouch == nil, ordinaryKeyboard == nil else {
+                  agentAdmission == nil, bindsAScreen else {
                 throw SelectedHIDFailure.invalid("Active-display binding applies only to selected input without a screen pair")
             }
         }
         if includeReadingContinuation == true, agentBatch == nil, agent?.rowLimit != 64 {
             throw AgentModeFailure("invalidReadingContinuation", "A reading continuation requires a default-size agent capture.")
         }
-        if let agentBatch {
-            try agentBatch.validate()
-            guard operation == .complete, token == nil, screenID == nil, screenUUID == nil,
-                  primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
-                  hinge == nil, keyboard == nil, button == nil, rotation == nil,
-                  agent == nil, agentAdmission == nil, expectedContext == nil,
-                  ordinaryTouch == nil, ordinaryKeyboard == nil else {
+        if case .agentBatch(let batch) = payload {
+            try batch.validate()
+            guard isComplete, screenID == nil, screenUUID == nil, agentAdmission == nil, expectedContext == nil else {
                 throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
             }
             return
         }
-        let ordinaryPath = path?.generator == .ordinary
-        if ordinaryPath || ordinaryTouch != nil || ordinaryKeyboard != nil, expectedContext == nil {
+        // Ordinary input is measured by the client; the owner checks it against that measurement.
+        let ordinary: Bool
+        switch payload {
+        case .path(let path): ordinary = path.generator == .ordinary
+        case .ordinaryTouch, .ordinaryKeyboard: ordinary = true
+        default: ordinary = false
+        }
+        if ordinary, expectedContext == nil {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }
         if let expectedContext {
-            guard operation == .complete, token == nil,
-                  [!primitives.isEmpty, ordinaryPath, ordinaryTouch != nil, ordinaryKeyboard != nil].filter({ $0 }).count == 1,
-                  path == nil || ordinaryPath, pinch == nil, gesture == nil, ax == nil, hinge == nil,
-                  keyboard == nil, button == nil, rotation == nil,
-                  agent == nil, agentAdmission == nil,
+            let measured: Bool
+            if case .contact(let primitives) = payload { measured = !primitives.isEmpty } else { measured = ordinary }
+            guard isComplete, measured, agentAdmission == nil,
                   expectedContext.screenID == screenID,
                   UUID(uuidString: expectedContext.screenUUID) == screenUUID else {
                 throw SelectedHIDFailure.invalid("Expected context requires one primitive, ordinary path, legacy touch or legacy keyboard request on its measured display")
             }
             try expectedContext.validate()
         }
-        if let agent {
+        if case .agent(let agent, let path, let primitives) = payload {
             try agent.validate()
-            guard agentAdmission == nil, operation == .complete, token == nil,
-                  (screenID == nil) == (screenUUID == nil), ax == nil, keyboard == nil,
-                  hinge == nil, rotation == nil, button == nil, pinch == nil, gesture == nil else {
+            guard agentAdmission == nil, isComplete, (screenID == nil) == (screenUUID == nil) else {
                 throw AgentModeFailure("mixedPayload", "Agent input requires one complete request without native action payloads.")
             }
             if agent.kind == .complete {
@@ -97,92 +153,68 @@ struct SelectedHIDRequest: Codable, Sendable {
             throw AgentModeFailure("missingDoubleTapAdmission", "A reference double-tap requires fresh agent target admission.")
         }
         if let agentAdmission {
-            guard operation == .complete, token == nil, agentAdmission.expectedPID > 0,
+            let admitsNativeInput: Bool
+            switch payload {
+            case .hinge, .rotation, .button, .gesture: admitsNativeInput = false
+            default: admitsNativeInput = true
+            }
+            guard isComplete, agentAdmission.expectedPID > 0,
                   agentAdmission.context.screenID == screenID,
-                  UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID,
-                  hinge == nil, rotation == nil,
-                  button == nil, gesture == nil else {
+                  UUID(uuidString: agentAdmission.context.screenUUID) == screenUUID, admitsNativeInput else {
                 throw AgentModeFailure("invalidAdmission", "Agent native admission does not match this complete request.")
             }
-        }
-        if pinch != nil, let agentAdmission {
-            guard agentAdmission.target != nil,
-                  agentAdmission.selectorKind == .id || agentAdmission.selectorKind == .label,
-                  agentAdmission.selectorValue != nil else {
-                throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
+            if pinch != nil {
+                guard agentAdmission.target != nil,
+                      agentAdmission.selectorKind == .id || agentAdmission.selectorKind == .label,
+                      agentAdmission.selectorValue != nil else {
+                    throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
+                }
             }
         }
-        guard [path != nil, ordinaryTouch != nil, ordinaryKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
-            throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
-        }
-        if let hinge {
-            guard operation == .complete, token == nil, primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
-                  screenID == nil, screenUUID == nil else {
+        if case .hinge(let hinge) = payload {
+            guard isComplete, screenID == nil, screenUUID == nil else {
                 throw SelectedHIDFailure.invalid("Hinge requires one device operation without screen, AX, path, pinch or contact fields")
             }
             try hinge.validate()
             return
         }
-        guard (screenID != nil && screenUUID != nil) || activeDisplay == true else {
+        guard hasScreenPair || activeDisplay == true else {
             throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID, or the active screen")
         }
-        if let ordinaryTouch {
-            try ordinaryTouch.validate()
-            return
-        }
-        if let ordinaryKeyboard {
-            try ordinaryKeyboard.validate()
-            return
-        }
-        if let rotation {
-            guard operation == .complete, token == nil, primitives.isEmpty else {
-                throw SelectedHIDFailure.invalid("Rotation requires one complete operation without contact fields")
-            }
-            try rotation.validate()
-            return
-        }
-        if let button {
-            guard operation == .complete, token == nil, primitives.isEmpty else {
-                throw SelectedHIDFailure.invalid("Button requires one complete operation without a token or primitive payload")
-            }
-            try button.validate()
-            return
-        }
-        if let keyboard {
-            guard operation == .complete, token == nil, primitives.isEmpty else {
-                throw SelectedHIDFailure.invalid("Keyboard requires one complete operation without a contact token or touch primitives")
-            }
+        switch payload {
+        case .agent, .agentBatch, .hinge:
+            return      // handled above
+        case .ordinaryTouch(let touch):
+            try touch.validate()
+        case .ordinaryKeyboard(let keyboard):
             try keyboard.validate()
-            return
-        }
-        if let ax {
-            guard operation == .complete, token == nil, primitives.isEmpty, path == nil, pinch == nil, gesture == nil else {
-                throw SelectedHIDFailure.invalid("AX requires one complete operation without a token, primitives, path or pinch")
-            }
+        case .rotation(let rotation):
+            guard isComplete else { throw SelectedHIDFailure.invalid("Rotation requires one complete operation without contact fields") }
+            try rotation.validate()
+        case .button(let button):
+            guard isComplete else { throw SelectedHIDFailure.invalid("Button requires one complete operation without a token or primitive payload") }
+            try button.validate()
+        case .keyboard(let keyboard):
+            guard isComplete else { throw SelectedHIDFailure.invalid("Keyboard requires one complete operation without a contact token or touch primitives") }
+            try keyboard.validate()
+        case .ax(let ax):
+            guard isComplete else { throw SelectedHIDFailure.invalid("AX requires one complete operation without a token, primitives, path or pinch") }
             try ax.validate()
-            return
-        }
-        if let path {
-            guard operation == .complete, token == nil, primitives.isEmpty, pinch == nil, gesture == nil else {
-                throw SelectedHIDFailure.invalid("A path requires one complete event and no primitive payload, pinch or token")
-            }
+        case .path(let path):
+            guard isComplete else { throw SelectedHIDFailure.invalid("A path requires one complete event and no primitive payload, pinch or token") }
             try path.validate()
-            return
-        }
-        if let pinch {
-            guard operation == .complete, token == nil, primitives.isEmpty, gesture == nil else {
-                throw SelectedHIDFailure.invalid("Pinch requires one complete event without primitives or a retained token")
-            }
+        case .pinch(let pinch):
+            guard isComplete else { throw SelectedHIDFailure.invalid("Pinch requires one complete event without primitives or a retained token") }
             try pinch.validate()
-            return
-        }
-        if let gesture {
-            guard operation == .complete, token == nil, primitives.isEmpty else {
-                throw SelectedHIDFailure.invalid("A complete gesture cannot contain primitives or a retained token")
-            }
+        case .gesture(let gesture):
+            guard isComplete else { throw SelectedHIDFailure.invalid("A complete gesture cannot contain primitives or a retained token") }
             try gesture.validate()
-            return
+        case .contact(let primitives):
+            try Self.validate(contact: primitives, operation: operation, token: token)
         }
+    }
+
+    private static func validate(contact primitives: [SelectedHIDPrimitive], operation: Operation, token: UUID?) throws {
         guard !primitives.isEmpty || operation == .close, primitives.count <= 1024 else {
             throw SelectedHIDFailure.invalid("Invalid primitive count")
         }

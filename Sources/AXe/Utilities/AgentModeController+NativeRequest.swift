@@ -177,10 +177,16 @@ extension AgentModeController {
             plannedPath = outer.path
             plannedPrimitives = outer.primitives
         }
+        // Each agent action plans exactly one native payload.
+        let payload: SelectedHIDRequest.Payload
+        if let plannedAX { payload = .ax(plannedAX) }
+        else if let plannedKeyboard { payload = .keyboard(plannedKeyboard) }
+        else if let plannedPinch { payload = .pinch(plannedPinch) }
+        else if let plannedPath { payload = .path(plannedPath) }
+        else { payload = .contact(plannedPrimitives) }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: outer.requestID,
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: plannedPrimitives, path: plannedPath, pinch: plannedPinch, ax: plannedAX,
-            keyboard: plannedKeyboard, agentAdmission: admission)
+            payload: payload, agentAdmission: admission)
         try request.validate()
         return request
     }

@@ -24,11 +24,10 @@ struct SelectedHomeTests {
     private func request(version: Int = SelectedHIDRequest.version,
                          operation: SelectedHIDRequest.Operation = .complete,
                          token: UUID? = nil, screenID: UInt32? = 3,
-                         screenUUID: UUID? = UUID(uuidString: "00000000-0000-0000-0000-000000000003"),
-                         primitives: [SelectedHIDPrimitive] = []) -> SelectedHIDRequest {
+                         screenUUID: UUID? = UUID(uuidString: "00000000-0000-0000-0000-000000000003")) -> SelectedHIDRequest {
         SelectedHIDRequest(version: version, requestID: UUID(), screenID: screenID,
-            screenUUID: screenUUID, operation: operation, token: token, primitives: primitives,
-            button: SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil))
+            screenUUID: screenUUID, operation: operation, token: token,
+            payload: .button(SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil)))
     }
 
     @Test func defaultHomeRoundTripKeepsDeviceButtonAndSelectedContext() throws {
@@ -119,18 +118,9 @@ struct SelectedHomeTests {
         #expect(throws: (any Error).self) { _ = try request.completeEvent(observation: observation(boot: " boot-one")) }
     }
 
-    @Test func malformedAndMixedPayloadsNeverEnterOwner() throws {
-        var invalid = [request(token: UUID()), request(screenID: nil), request(screenUUID: nil),
-                       request(primitives: [.touch(.down, x: 1, y: 2)])]
+    @Test func malformedRequestsNeverEnterOwner() throws {
+        var invalid = [request(token: UUID()), request(screenID: nil), request(screenUUID: nil)]
         invalid += [SelectedHIDRequest.Operation.begin, .move, .end, .close].map { request(operation: $0) }
-        var item = request(); item.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25); invalid.append(item)
-        item = request(); item.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10); invalid.append(item)
-        item = request(); item.gesture = .doubleTap(.init(point: .init(x: 50, y: 100))); invalid.append(item)
-        item = request(); item.ax = .init(kind: .describe, expectedPID: 123,
-            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0); invalid.append(item)
-        item = request(); item.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(item)
-        item = request(); item.hinge = .init(kind: .read, expectedBootIdentity: nil,
-            degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil); invalid.append(item)
         for value in invalid {
             var admission = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try admission.enter(value) }
@@ -146,7 +136,7 @@ struct SelectedHomeTests {
         admission.finish()
         let begin = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: 3, screenUUID: screen, operation: .begin, token: nil,
-            primitives: [.touch(.down, x: 10, y: 20)])
+            payload: .contact([.touch(.down, x: 10, y: 20)]))
         let token = UUID()
         try admission.enter(begin)
         admission.retain(begin, token: token)

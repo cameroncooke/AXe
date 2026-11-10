@@ -89,7 +89,7 @@ struct SelectedTapElementTypeTests {
         try ax.validate()
         ax.elementType = "Button"
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: UUID(uuidString: screen), operation: .complete, token: nil, primitives: [], ax: ax)
+            screenUUID: UUID(uuidString: screen), operation: .complete, token: nil, payload: .ax(ax))
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(request) }
         #expect(!owner.inFlight)
@@ -99,7 +99,7 @@ struct SelectedTapElementTypeTests {
         let request = try parse(["--id", "target", "--element-type", "Button", "--expected-pid", "42"]).selectedRequest()
         let old = SelectedHIDRequest(version: 13, requestID: request.requestID,
             screenID: request.screenID, screenUUID: request.screenUUID, operation: .complete,
-            token: nil, primitives: [], ax: request.ax)
+            token: nil, payload: .ax(request.ax!))
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }
         #expect(!owner.inFlight)

@@ -31,9 +31,8 @@ enum AgentBatchCommandAdapter {
         }
         let batch = AgentBatchRequest(expectedPID: expectedPID, snapshotID: document.snapshotID, steps: document.steps)
         try batch.validate()
-        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-        request.agentBatch = batch
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .agentBatch(batch))
         try request.validate()
         return request
     }

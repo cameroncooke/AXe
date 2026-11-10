@@ -30,9 +30,8 @@ struct SelectedKeyboardOptions: ParsableArguments {
         guard input.mode == .selected, let focusID else {
             throw ValidationError("Missing selected keyboard field identity.")
         }
-        var request = try input.baseRequest(operation: .complete, token: nil, primitives: [])
-        request.keyboard = SelectedKeyboardRequest(expectedPID: expectedPID, focusID: focusID,
-            events: try KeyboardPrimitives.from(event))
+        let request = try input.baseRequest(payload: .keyboard(SelectedKeyboardRequest(expectedPID: expectedPID,
+            focusID: focusID, events: try KeyboardPrimitives.from(event))))
         try request.validate()
         return request
     }

@@ -11,7 +11,7 @@ struct SelectedHIDContractTests {
 
     private func request(_ ax: SelectedAXRequest) throws -> SelectedHIDRequest {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [], ax: ax)
+            screenUUID: screen, operation: .complete, token: nil, payload: .ax(ax))
         try request.validate()
         return request
     }
@@ -50,7 +50,7 @@ struct SelectedHIDContractTests {
     @Test func otherResultsAndExistingFailuresAreUnchanged() throws {
         let tap = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
             screenUUID: screen, operation: .complete, token: nil,
-            primitives: [.touch(.down, x: 1, y: 1), .touch(.up, x: 1, y: 1)])
+            payload: .contact([.touch(.down, x: 1, y: 1), .touch(.up, x: 1, y: 1)]))
         let clean = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: tap.requestID,
             brokerID: UUID(), outcome: "enqueuedAndDrained", token: nil, enqueuedEventCount: 2, cleanup: "notNeeded",
             error: nil, context: nil)
@@ -58,8 +58,8 @@ struct SelectedHIDContractTests {
         var failed = clean
         failed.error = "Fresh hit rejected"
         let button = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [],
-            button: SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil))
+            screenUUID: screen, operation: .complete, token: nil,
+            payload: .button(SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil)))
         let unchanged = SelectedHIDContract.checked(failed, for: button)
         #expect(unchanged.error == "Fresh hit rejected" && unchanged.errorCode == nil)
         #expect(SelectedHIDContract.checked(clean, for: button).errorCode == "inputFailed")

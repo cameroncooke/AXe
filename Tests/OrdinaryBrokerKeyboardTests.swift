@@ -16,8 +16,8 @@ struct OrdinaryBrokerKeyboardTests {
     private func request(_ value: OrdinaryBrokerKeyboard) throws -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: 3, screenUUID: UUID(uuidString: "00000000-0000-0000-0000-000000000003"),
-            operation: .complete, token: nil, primitives: [],
-            expectedContext: SelectedHIDContext(try observation()), ordinaryKeyboard: value)
+            operation: .complete, token: nil, payload: .ordinaryKeyboard(value),
+            expectedContext: SelectedHIDContext(try observation()))
     }
 
     /// Writes `data` and a newline into one end of a socket pair and reads it as the broker does.
@@ -54,7 +54,7 @@ struct OrdinaryBrokerKeyboardTests {
     func largeOtherRequestIsRefused() throws {
         var tap = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
             screenUUID: UUID(), operation: .complete, token: nil,
-            primitives: [.touch(.down, x: 1, y: 1), .touch(.up, x: 1, y: 1)])
+            payload: .contact([.touch(.down, x: 1, y: 1), .touch(.up, x: 1, y: 1)]))
         tap.timing = true
         let small = try JSONEncoder().encode(tap)
         #expect(try brokerRead(small).requestID == tap.requestID)
@@ -108,15 +108,10 @@ struct OrdinaryBrokerKeyboardTests {
         let clean = try request(value)
         try clean.validate()
         var invalid: [SelectedHIDRequest] = []
-        var mixed = clean; mixed.expectedContext = nil; invalid.append(mixed)
-        mixed = clean; mixed.keyboard = .init(expectedPID: 42, focusID: "field", events: [.down(4), .up(4)]); invalid.append(mixed)
-        invalid.append(SelectedHIDRequest(version: clean.version, requestID: clean.requestID,
-            screenID: clean.screenID, screenUUID: clean.screenUUID, operation: clean.operation,
-            token: clean.token, primitives: [.touch(.down, x: 1, y: 2)],
-            expectedContext: clean.expectedContext, ordinaryKeyboard: value))
+        var unmeasured = clean; unmeasured.expectedContext = nil; invalid.append(unmeasured)
         invalid.append(SelectedHIDRequest(version: 35, requestID: clean.requestID, screenID: clean.screenID,
-            screenUUID: clean.screenUUID, operation: .complete, token: nil, primitives: [],
-            expectedContext: clean.expectedContext, ordinaryKeyboard: value))
+            screenUUID: clean.screenUUID, operation: .complete, token: nil, payload: .ordinaryKeyboard(value),
+            expectedContext: clean.expectedContext))
         for input in invalid {
             var admission = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try admission.enter(input) }

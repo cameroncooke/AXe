@@ -83,7 +83,7 @@ struct SelectedAXWaitTests {
         let current = try command(["--id", "target", "--expected-pid", "42", "--wait-timeout", "1"]).selectedRequest()
         let old = SelectedHIDRequest(version: 27, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
-            token: nil, primitives: [], ax: current.ax)
+            token: nil, payload: .ax(current.ax!))
         var admission = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try admission.enter(old) }
         #expect(!admission.inFlight)

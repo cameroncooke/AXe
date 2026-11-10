@@ -283,7 +283,7 @@ struct Slider: AsyncParsableCommand {
             percentage: endpoint == nil ? targetNormalized * 100 : nil)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
-            primitives: [], ax: ax)
+            payload: .ax(ax))
         if let endpoint {
             logger.info().log("Slider uses the native \(endpoint.rawValue) endpoint route on its measured active display")
         } else {

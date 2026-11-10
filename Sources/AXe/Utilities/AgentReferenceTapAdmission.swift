@@ -60,7 +60,7 @@ struct AgentReferenceTapAdmission: AgentOwnedTapAdmission {
             selectorKind: nil, selectorValue: nil, preDelay: preDelay, postDelay: postDelay,
             elementType: original.type, tapStyle: tapStyle, nativeTarget: execution)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
-            screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil, primitives: [], ax: ax)
+            screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil, payload: .ax(ax))
         try request.validate()
         return request
     }

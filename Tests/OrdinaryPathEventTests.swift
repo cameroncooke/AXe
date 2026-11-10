@@ -18,7 +18,7 @@ struct OrdinaryPathEventTests {
             .responseTimeoutMilliseconds == nil)
         // The owner sends the request's complete event, which is the same single swipe.
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: UUID(), operation: .complete, token: nil, primitives: [], path: path)
+            screenUUID: UUID(), operation: .complete, token: nil, payload: .path(path))
         #expect(try request.completeEvent(logicalSize: size) == .swipe(10, yStart: 20, xEnd: 200, yEnd: 400,
             delta: 50, duration: 1))
     }

@@ -172,7 +172,7 @@ struct DrawTests {
         var ordinaryPath = command.selectedPath
         ordinaryPath.generator = .ordinary
         let ordinary = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [], path: ordinaryPath,
+            screenUUID: screen, operation: .complete, token: nil, payload: .path(ordinaryPath),
             expectedContext: context)
         let back = try JSONDecoder().decode(SelectedHIDRequest.self, from: JSONEncoder().encode(ordinary))
         try back.validate()
@@ -182,7 +182,9 @@ struct DrawTests {
         unbound.expectedContext = nil
         #expect(throws: (any Error).self) { try unbound.validate() }
         var selectedBound = ordinary
-        selectedBound.path?.generator = .selected
+        var selectedPath = try #require(ordinary.path)
+        selectedPath.generator = .selected
+        selectedBound.payload = .path(selectedPath)
         #expect(throws: (any Error).self) { try selectedBound.validate() }
 
         // A draw needs its point list, and only a draw carries one.

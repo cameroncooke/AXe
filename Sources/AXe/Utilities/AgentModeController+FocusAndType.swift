@@ -22,9 +22,7 @@ extension AgentModeController {
                 nextSteps: ["Input was not sent. The capture is the current screen; choose the next action from its snapshot ID."],
                 capture: capture)
         }
-        var retry = request
-        retry.agent?.snapshotID = stored.id
-        retry.agent?.ref = newRef
+        let retry = request.retargeted(snapshotID: stored.id, ref: newRef)
         return await performFocusAndTypeRetrying(retry, retryDepth: retryDepth + 1)
     }
 
@@ -44,8 +42,8 @@ extension AgentModeController {
             let plan = try AgentFocusAndTypePlan(snapshot: initial.snapshot, ref: fieldRef,
                 context: initial.context, pid: initial.expectedPID)
             var tap = request
-            tap.agent = AgentModeRequest(kind: .tap, expectedPID: initial.expectedPID,
-                snapshotID: initial.id, ref: fieldRef, tapStyle: .physical)
+            tap.payload = .agent(AgentModeRequest(kind: .tap, expectedPID: initial.expectedPID,
+                snapshotID: initial.id, ref: fieldRef, tapStyle: .physical))
             let tapResult = await PhaseTimer.measure("agent.focusTap") {
                 await performReserved(tap, focusPlan: plan, retryDepth: retryDepth)
             }
@@ -69,12 +67,11 @@ extension AgentModeController {
             let focusedRef = try baseline.focusedReference(snapshot: focused.snapshot,
                 context: focused.context, pid: focused.expectedPID)
             func typing(_ snapshotID: UUID, _ fieldRef: String) -> SelectedHIDRequest {
-                var type = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                return SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                     screenID: request.screenID, screenUUID: request.screenUUID,
-                    operation: .complete, token: nil, primitives: [])
-                type.agent = AgentModeRequest(kind: .typeText, expectedPID: initial.expectedPID,
-                    snapshotID: snapshotID, ref: fieldRef, text: mode.text)
-                return type
+                    operation: .complete, token: nil,
+                    payload: .agent(AgentModeRequest(kind: .typeText, expectedPID: initial.expectedPID,
+                        snapshotID: snapshotID, ref: fieldRef, text: mode.text)))
             }
             let typeResult = await PhaseTimer.measure("agent.typeText") {
                 await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth,

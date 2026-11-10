@@ -97,7 +97,7 @@ struct AgentReferenceTapAdmissionTests {
         let (snapshot, ref) = try await harness.describe()
         var request = harness.tap(snapshot: snapshot, ref: ref)
         request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: request.requestID,
-            screenID: 2, screenUUID: UUID(), operation: .complete, token: nil, primitives: [], agent: request.agent)
+            screenID: 2, screenUUID: UUID(), operation: .complete, token: nil, payload: .agent(request.agent!))
         let response = await harness.controller.perform(request)
         #expect(response.agent?.error?.code == "inactiveDisplay")
         #expect(harness.state.kinds == [.describe] && harness.state.discoveries == 1)
@@ -303,14 +303,14 @@ struct AgentReferenceTapAdmissionTests {
             identifier: "field", role: "AXTextField", focused: false))
         let harness = try Harness(controls: controls)
         var describe = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-        describe.agent = AgentModeRequest(kind: .describe)
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+        describe.payload = .agent(AgentModeRequest(kind: .describe))
         let capture = try #require(await harness.controller.perform(describe).agent?.data.capture)
         let row = try #require(capture.targets.first { $0.contains("|text-field|Field|") })
         harness.state.tapFailure = .targetRejected
         var request = describe
-        request.agent = AgentModeRequest(kind: .focusAndType, snapshotID: capture.snapshotID,
-            ref: String(row.prefix { $0 != "|" }), text: "Hi")
+        request.payload = .agent(AgentModeRequest(kind: .focusAndType, snapshotID: capture.snapshotID,
+            ref: String(row.prefix { $0 != "|" }), text: "Hi"))
         let result = try #require(await harness.controller.perform(request).agent)
         #expect(result.didError && result.error?.code == "targetCovered")
         #expect(result.data.capture != nil)
@@ -323,14 +323,14 @@ struct AgentReferenceTapAdmissionTests {
         let harness = try Harness()
         let (snapshot, ref) = try await harness.describe()
         var malformed = harness.tap(snapshot: snapshot, ref: ref)
-        malformed.agent?.duration = 0
+        malformed.updateAgent { $0.duration = 0 }
         #expect(await harness.controller.perform(malformed).agent?.error?.code == "invalidBounds")
         var wrongPID = harness.tap(snapshot: snapshot, ref: ref)
-        wrongPID.agent?.expectedPID = 999
+        wrongPID.updateAgent { $0.expectedPID = 999 }
         #expect(await harness.controller.perform(wrongPID).agent?.error?.code == "contextChanged")
         let base = harness.tap(snapshot: snapshot, ref: ref)
         let wrongDisplay = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: 2, screenUUID: UUID(), operation: .complete, token: nil, primitives: [], agent: base.agent)
+            screenID: 2, screenUUID: UUID(), operation: .complete, token: nil, payload: .agent(base.agent!))
         #expect(await harness.controller.perform(wrongDisplay).agent?.error?.code == "inactiveDisplay")
         #expect(harness.state.ownedTaps == 0)
         let result = try #require(await harness.controller.perform(harness.tap(snapshot: snapshot, ref: ref)).agent)
@@ -341,14 +341,13 @@ struct AgentReferenceTapAdmissionTests {
     func missingIDCodes() async throws {
         let harness = try Harness()
         var type = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-        type.agent = AgentModeRequest(kind: .typeText, selectorKind: .id, selectorValue: "missing", text: "x")
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+        type.payload = .agent(AgentModeRequest(kind: .typeText, selectorKind: .id, selectorValue: "missing", text: "x"))
         let typed = try #require(await harness.controller.perform(type).agent)
         #expect(typed.didError && typed.error?.code == "targetMissing")
         var batch = type
-        batch.agent = nil
-        batch.agentBatch = try JSONDecoder().decode(AgentBatchRequest.self,
-            from: Data(#"{"steps":[{"action":"tap","id":"missing"}]}"#.utf8))
+        batch.payload = .agentBatch(try JSONDecoder().decode(AgentBatchRequest.self,
+            from: Data(#"{"steps":[{"action":"tap","id":"missing"}]}"#.utf8)))
         let stopped = try #require(await harness.controller.performBatch(batch).agent)
         #expect(stopped.didError && stopped.error?.code == "batchTargetMissing")
         #expect(harness.state.ownedTaps == 0)
@@ -362,8 +361,8 @@ struct AgentReferenceTapAdmissionTests {
         changed.append(node(type: "Button", label: "Edit", frame: frame(y: 300)))
         harness.state.describeRoots = try harness.fixture.roots(changed)
         var page = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-        page.agent = AgentModeRequest(kind: .describe, snapshotID: snapshot, rowOffset: 2)
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+        page.payload = .agent(AgentModeRequest(kind: .describe, snapshotID: snapshot, rowOffset: 2))
         let result = try #require(await harness.controller.perform(page).agent)
         #expect(result.didError && result.error?.code == "screenChanged")
         let capture = try #require(result.data.capture)
@@ -371,7 +370,7 @@ struct AgentReferenceTapAdmissionTests {
         #expect(capture.targets.contains { $0.contains("|tap|button|Edit|") })
         #expect(result.data.cache.status == "refreshed" && !result.data.cache.requiresRefresh)
         // The replacement is the current table: it pages and admits input.
-        page.agent = AgentModeRequest(kind: .describe, snapshotID: capture.snapshotID, rowOffset: 1)
+        page.payload = .agent(AgentModeRequest(kind: .describe, snapshotID: capture.snapshotID, rowOffset: 1))
         let next = try #require(await harness.controller.perform(page).agent)
         #expect(!next.didError && next.data.capture?.snapshotID == capture.snapshotID)
     }
@@ -539,8 +538,8 @@ struct AgentReferenceTapAdmissionTests {
 
         func describe() async throws -> (UUID, String) {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-            request.agent = AgentModeRequest(kind: .describe)
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+            request.payload = .agent(AgentModeRequest(kind: .describe))
             let response = await controller.perform(request)
             let capture = try #require(response.agent?.data.capture)
             let row = try #require(capture.targets.first { $0.contains("|tap|button|5|") })
@@ -549,32 +548,32 @@ struct AgentReferenceTapAdmissionTests {
 
         func batch(snapshot: UUID, refs: [String]) throws -> SelectedHIDRequest {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
             let steps = refs.map { #"{"action":"tap","ref":"\#($0)"}"# }.joined(separator: ",")
-            request.agentBatch = try JSONDecoder().decode(AgentBatchRequest.self, from: Data(
-                #"{"snapshotID":"\#(snapshot.uuidString)","steps":[\#(steps)]}"#.utf8))
+            request.payload = .agentBatch(try JSONDecoder().decode(AgentBatchRequest.self, from: Data(
+                #"{"snapshotID":"\#(snapshot.uuidString)","steps":[\#(steps)]}"#.utf8)))
             return request
         }
 
         func read(snapshot: UUID, ref: String) -> SelectedHIDRequest {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-            request.agent = AgentModeRequest(kind: .read, snapshotID: snapshot, readReference: ref,
-                textQuery: AgentModeTextQuery(field: .label, offset: 0, limit: 64))
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+            request.payload = .agent(AgentModeRequest(kind: .read, snapshotID: snapshot, readReference: ref,
+                textQuery: AgentModeTextQuery(field: .label, offset: 0, limit: 64)))
             return request
         }
 
         func tap(label: String) -> SelectedHIDRequest {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-            request.agent = AgentModeRequest(kind: .tap, selectorKind: .label, selectorValue: label)
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+            request.payload = .agent(AgentModeRequest(kind: .tap, selectorKind: .label, selectorValue: label))
             return request
         }
 
         func tap(snapshot: UUID, ref: String) -> SelectedHIDRequest {
             var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-            request.agent = AgentModeRequest(kind: .tap, snapshotID: snapshot, ref: ref)
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .contact([]))
+            request.payload = .agent(AgentModeRequest(kind: .tap, snapshotID: snapshot, ref: ref))
             return request
         }
 

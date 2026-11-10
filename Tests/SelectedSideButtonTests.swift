@@ -84,25 +84,14 @@ struct SelectedSideButtonTests {
     @Test func oldWireMixedAndRetainedRequestsCannotEnterOwner() throws {
         let clean = try parse().selectedRequest()
         func make(version: Int = SelectedHIDRequest.version, operation: SelectedHIDRequest.Operation = .complete,
-                  token: UUID? = nil, screenID: UInt32? = 3,
-                  primitives: [SelectedHIDPrimitive] = []) -> SelectedHIDRequest {
+                  token: UUID? = nil, screenID: UInt32? = 3) -> SelectedHIDRequest {
             SelectedHIDRequest(version: version, requestID: UUID(), screenID: screenID,
-                screenUUID: screen, operation: operation, token: token,
-                primitives: primitives, button: clean.button)
+                screenUUID: screen, operation: operation, token: token, payload: clean.payload)
         }
-        var invalid = [make(version: 33), make(token: UUID()), make(screenID: nil),
-                       make(primitives: [.touch(.down, x: 1, y: 2)])]
+        var invalid = [make(version: 33), make(token: UUID()), make(screenID: nil)]
         invalid += [SelectedHIDRequest.Operation.begin, .move, .end, .close].map { make(operation: $0) }
         invalid.append(SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: nil, operation: .complete, token: nil, primitives: [], button: clean.button))
-        var mixed = clean; mixed.keyboard = .init(expectedPID: 123, focusID: "field", events: [.down(4), .up(4)]); invalid.append(mixed)
-        mixed = clean; mixed.ax = .init(kind: .describe, expectedPID: 123,
-            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0); invalid.append(mixed)
-        mixed = clean; mixed.hinge = .init(kind: .read, expectedBootIdentity: nil, degrees: nil,
-            toleranceDegrees: nil, timeoutSeconds: nil); invalid.append(mixed)
-        mixed = clean; mixed.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25); invalid.append(mixed)
-        mixed = clean; mixed.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10); invalid.append(mixed)
-        mixed = clean; mixed.gesture = .doubleTap(.init(point: .init(x: 50, y: 100))); invalid.append(mixed)
+            screenUUID: nil, operation: .complete, token: nil, payload: .button(clean.button!)))
         for request in invalid {
             var owner = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try owner.enter(request) }
@@ -113,7 +102,7 @@ struct SelectedSideButtonTests {
         #expect(throws: (any Error).self) { try owner.enter(clean) }
         owner.finish()
         let contact = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .begin, token: nil, primitives: [.touch(.down, x: 1, y: 2)])
+            screenUUID: screen, operation: .begin, token: nil, payload: .contact([.touch(.down, x: 1, y: 2)]))
         let token = UUID()
         try owner.enter(contact); owner.retain(contact, token: token); owner.finish()
         #expect(throws: (any Error).self) { try owner.enter(clean) }

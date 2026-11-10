@@ -45,7 +45,7 @@ struct SelectedInputBoundaryTests {
                      screenID: UInt32 = 3, screenUUID: UUID? = nil) -> SelectedHIDRequest {
             SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                 screenID: screenID, screenUUID: screenUUID ?? screen,
-                operation: operation, token: token, primitives: [.touch(.down, x: 40, y: 80)])
+                operation: operation, token: token, payload: .contact([.touch(.down, x: 40, y: 80)]))
         }
         var admission = SelectedHIDAdmission()
         let begin = request(.begin)

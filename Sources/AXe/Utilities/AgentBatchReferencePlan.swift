@@ -183,7 +183,7 @@ struct AgentBatchReferencePlan: Sendable {
         }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
             screenID: context.screenID, screenUUID: uuid, operation: .complete,
-            token: nil, primitives: [], ax: ax)
+            token: nil, payload: .ax(ax))
         try request.validate()
         return request
     }

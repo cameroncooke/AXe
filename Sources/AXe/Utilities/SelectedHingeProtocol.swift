@@ -49,7 +49,7 @@ struct SelectedHingeRequest: Codable, Sendable {
 
     func brokerRequest() throws -> SelectedHIDRequest {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [], hinge: self)
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .hinge(self))
         try request.validate()
         return request
     }

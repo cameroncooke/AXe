@@ -89,26 +89,21 @@ struct SelectedTapValueTests {
             point: kind == .describePoint ? .init(x: 1, y: 2) : nil)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: 3, screenUUID: UUID(uuidString: screen), operation: .complete,
-            token: nil, primitives: [], ax: ax)
+            token: nil, payload: .ax(ax))
         var admission = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try admission.enter(request) }
         #expect(!admission.inFlight && admission.token == nil)
     }
 
-    @Test func oldWireAndMixedPayloadsRejectBeforeOwnership() throws {
+    @Test func oldWireAndRetainedTokensRejectBeforeOwnership() throws {
         let current = try valueRequest()
         let old = SelectedHIDRequest(version: 27, requestID: current.requestID,
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
-            token: nil, primitives: [], ax: current.ax)
-        var withHome = current
-        withHome.button = SelectedButtonRequest(kind: .home, duration: nil, expectedBoot: nil)
-        let withPrimitive = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
-            token: nil, primitives: [.touch(.down, x: 1, y: 2)], ax: current.ax)
+            token: nil, payload: .ax(current.ax!))
         let withToken = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: current.screenID, screenUUID: current.screenUUID, operation: .complete,
-            token: UUID(), primitives: [], ax: current.ax)
-        for request in [old, withHome, withPrimitive, withToken] {
+            token: UUID(), payload: .ax(current.ax!))
+        for request in [old, withToken] {
             var admission = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try admission.enter(request) }
             #expect(!admission.inFlight && admission.token == nil)

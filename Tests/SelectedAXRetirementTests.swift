@@ -73,7 +73,7 @@ struct SelectedAXRetirementTests {
         let fixture = try RetirementFixture(exclusion: nil, diagnostic: "unused")
         var admission = SelectedHIDAdmission()
         let begin = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: fixture.screen, operation: .begin, token: nil, primitives: [.touch(.down, x: 1, y: 2)])
+            screenUUID: fixture.screen, operation: .begin, token: nil, payload: .contact([.touch(.down, x: 1, y: 2)]))
         try admission.enter(begin)
         let token = UUID()
         admission.retain(begin, token: token)
@@ -120,7 +120,7 @@ private struct RetirementFixture {
             selectorKind: kind == .tap ? .id : nil, selectorValue: kind == .tap ? "button" : nil,
             preDelay: 0, postDelay: 0, point: kind == .describePoint ? .init(x: 1, y: 2) : nil)
         return SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [], ax: ax)
+            screenUUID: screen, operation: .complete, token: nil, payload: .ax(ax))
     }
     func owner() -> SelectedHIDOwner {
         let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
@@ -212,7 +212,7 @@ struct SelectedAXRetirementReadinessTests {
         let ax = SelectedAXRequest(kind: .describe, expectedPID: 42, endpoint: nil, selectorKind: nil,
             selectorValue: nil, preDelay: 0, postDelay: 0)
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: requestID,
-            screenID: 3, screenUUID: UUID(), operation: .complete, token: nil, primitives: [], ax: ax)
+            screenID: 3, screenUUID: UUID(), operation: .complete, token: nil, payload: .ax(ax))
         try request.validate()
         var requestBytes = try JSONEncoder().encode(request)
         requestBytes.append(10)

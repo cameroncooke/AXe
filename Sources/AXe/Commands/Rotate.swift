@@ -48,8 +48,8 @@ struct Rotate: PhysicalDeviceCommand {
             throw ValidationError("Direction must be left or right")
         }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil, primitives: [],
-            rotation: SelectedRotationRequest(direction: direction, expectedBootIdentity: bootIdentity, timeoutSeconds: timeout))
+            screenID: screenID, screenUUID: screenUUID, operation: .complete, token: nil,
+            payload: .rotation(SelectedRotationRequest(direction: direction, expectedBootIdentity: bootIdentity, timeoutSeconds: timeout)))
         try request.validate()
         return request
     }

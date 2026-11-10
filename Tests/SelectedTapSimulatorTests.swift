@@ -119,7 +119,7 @@ struct SelectedTapSimulatorTests {
             ax.tapStyle = style
             let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                 screenID: 3, screenUUID: UUID(uuidString: screen), operation: .complete,
-                token: nil, primitives: [], ax: ax)
+                token: nil, payload: .ax(ax))
             var owner = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try owner.enter(request) }
             #expect(!owner.inFlight && owner.token == nil)
@@ -139,7 +139,7 @@ struct SelectedTapSimulatorTests {
         let current = try parse(["--id", "target", "--expected-pid", "42", "--tap-style", "simulator"]).selectedRequest()
         #expect(current.version == SelectedHIDRequest.version)
         let old = SelectedHIDRequest(version: 34, requestID: current.requestID, screenID: current.screenID,
-            screenUUID: current.screenUUID, operation: .complete, token: nil, primitives: [], ax: current.ax)
+            screenUUID: current.screenUUID, operation: .complete, token: nil, payload: .ax(current.ax!))
         var owner = SelectedHIDAdmission()
         #expect(throws: (any Error).self) { try owner.enter(old) }
         #expect(!owner.inFlight && owner.token == nil)

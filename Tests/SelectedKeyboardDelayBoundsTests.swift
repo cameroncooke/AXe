@@ -8,8 +8,8 @@ struct SelectedKeyboardDelayBoundsTests {
     private func request(_ events: [SelectedKeyboardPrimitive]) -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
             screenUUID: UUID(uuidString: "00000000-0000-0000-0000-000000000003")!,
-            operation: .complete, token: nil, primitives: [],
-            keyboard: SelectedKeyboardRequest(expectedPID: 123, focusID: "field", events: events))
+            operation: .complete, token: nil,
+            payload: .keyboard(SelectedKeyboardRequest(expectedPID: 123, focusID: "field", events: events)))
     }
 
     @Test("The maximum twenty seconds of requested delay passes balanced input admission")

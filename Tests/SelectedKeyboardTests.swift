@@ -21,8 +21,8 @@ struct SelectedKeyboardTests {
     }
     private func request(_ events: [SelectedKeyboardPrimitive]) -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [],
-            keyboard: SelectedKeyboardRequest(expectedPID: 123, focusID: "field", events: events))
+            screenUUID: screen, operation: .complete, token: nil,
+            payload: .keyboard(SelectedKeyboardRequest(expectedPID: 123, focusID: "field", events: events)))
     }
 
     @Test(arguments: ["type", "key", "key-sequence", "key-combo"])
@@ -80,28 +80,6 @@ struct SelectedKeyboardTests {
         }
     }
 
-    @Test func mixedInputPayloadsCannotReachKeyboardOwner() throws {
-        let clean = request([.down(4), .up(4)])
-        var ax = clean
-        ax.ax = .init(kind: .describe, expectedPID: 123,
-            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0)
-        var pinch = clean
-        pinch.pinch = .init(centerX: 50, centerY: 100, scale: 2, radius: 10)
-        var path = clean
-        path.path = .init(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 25)
-        var gesture = clean
-        gesture.gesture = .doubleTap(.init(point: .init(x: 50, y: 100)))
-        var hinge = try SelectedHingeRequest(kind: .read, expectedBootIdentity: nil,
-            degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil).brokerRequest()
-        hinge.keyboard = clean.keyboard
-        let touch = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
-            screenUUID: screen, operation: .complete, token: nil, primitives: [.touch(.down, x: 1, y: 2)], keyboard: clean.keyboard)
-        for item in [ax, pinch, path, gesture, hinge, touch] {
-            var owner = SelectedHIDAdmission()
-            #expect(throws: (any Error).self) { try owner.enter(item) }
-            #expect(!owner.inFlight)
-        }
-    }
 
     private struct Field: Encodable {
         var type = "TextField"

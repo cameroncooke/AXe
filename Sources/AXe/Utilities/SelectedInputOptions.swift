@@ -30,41 +30,39 @@ struct SelectedInputOptions: ParsableArguments {
 
     /// The unvalidated request: the caller attaches its payload and validates the result.
     /// Without an explicit pair the broker binds the screen that is active when it admits the request.
-    func baseRequest(operation: SelectedHIDRequest.Operation, token: UUID?,
-                     primitives: [SelectedHIDPrimitive]) throws -> SelectedHIDRequest {
+    func baseRequest(operation: SelectedHIDRequest.Operation = .complete, token: UUID? = nil,
+                     payload: SelectedHIDRequest.Payload) throws -> SelectedHIDRequest {
         try validate()
         guard mode == .selected else { throw ValidationError("Selected input requires --input-mode selected.") }
         var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: screenID, screenUUID: screenUUID.flatMap(UUID.init(uuidString:)),
-            operation: operation, token: token, primitives: primitives)
+            operation: operation, token: token, payload: payload)
         if screenID == nil { request.activeDisplay = true }
         return request
     }
 
     func request(operation: SelectedHIDRequest.Operation, token: UUID?, primitives: [SelectedHIDPrimitive]) throws -> SelectedHIDRequest {
-        let request = try baseRequest(operation: operation, token: token, primitives: primitives)
+        let request = try baseRequest(operation: operation, token: token, payload: .contact(primitives))
+        try request.validate()
+        return request
+    }
+
+    /// One complete, validated request for a payload.
+    func request(_ payload: SelectedHIDRequest.Payload) throws -> SelectedHIDRequest {
+        let request = try baseRequest(payload: payload)
         try request.validate()
         return request
     }
 
     func pathRequest(_ path: SelectedHIDPath) throws -> SelectedHIDRequest {
-        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
-        request.path = path
-        try request.validate()
-        return request
+        try request(.path(path))
     }
 
     func pinchRequest(_ pinch: SelectedHIDPinch) throws -> SelectedHIDRequest {
-        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
-        request.pinch = pinch
-        try request.validate()
-        return request
+        try request(.pinch(pinch))
     }
 
     func gestureRequest(_ gesture: SelectedHIDCompleteGesture) throws -> SelectedHIDRequest {
-        var request = try baseRequest(operation: .complete, token: nil, primitives: [])
-        request.gesture = gesture
-        try request.validate()
-        return request
+        try request(.gesture(gesture))
     }
 }

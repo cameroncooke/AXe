@@ -15,10 +15,9 @@ enum AgentModeCommandAdapter {
     static func request(_ agent: AgentModeRequest, input: SelectedInputOptions,
                         path: SelectedHIDPath? = nil) throws -> SelectedHIDRequest {
         try validateContext(input: input, expectedPID: agent.expectedPID)
-        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: input.screenID, screenUUID: input.screenUUID.flatMap { UUID(uuidString: $0) },
-            operation: .complete, token: nil, primitives: [], path: path)
-        request.agent = agent
+            operation: .complete, token: nil, payload: .agent(agent, path: path))
         try request.validate()
         return request
     }

@@ -156,7 +156,7 @@ struct PhaseTimingTests {
     @Test("Requests and responses without timing still decode")
     func wireCompatibility() throws {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: 1, screenUUID: UUID(), operation: .close, token: UUID(), primitives: [])
+            screenID: 1, screenUUID: UUID(), operation: .close, token: UUID(), payload: .contact([]))
         let encoded = try JSONEncoder().encode(request)
         #expect(!String(decoding: encoded, as: UTF8.self).contains("timing"))
         #expect(try JSONDecoder().decode(SelectedHIDRequest.self, from: encoded).timing == nil)

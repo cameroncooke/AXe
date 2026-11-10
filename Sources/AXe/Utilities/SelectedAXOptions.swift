@@ -33,8 +33,7 @@ struct SelectedAXOptions: ParsableArguments {
             endpoint: endpoint,
             selectorKind: selectorKind, selectorValue: selectorValue, preDelay: preDelay, postDelay: postDelay, point: point,
             elementType: elementType, tapStyle: tapStyle, waitPolicy: waitPolicy, percentage: percentage)
-        var request = try input.baseRequest(operation: .complete, token: nil, primitives: [])
-        request.ax = ax
+        let request = try input.baseRequest(payload: .ax(ax))
         try request.validate()
         return request
     }

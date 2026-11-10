@@ -370,9 +370,7 @@ final class AgentModeController {
            Self.screenChangeRefusals.contains(error.code) || screenMovedOn {
             if let original, let ref = mode.ref,
                let newRef = await reboundReference(ref, original: original, stored: &stored) {
-                var retry = request
-                retry.agent?.snapshotID = stored.id
-                retry.agent?.ref = newRef
+                let retry = request.retargeted(snapshotID: stored.id, ref: newRef)
                 return await performReserved(retry, retryDepth: retryDepth + 1)
             }
             // A selector action (an ID, label or value) names no snapshot position: it resolves its
@@ -653,10 +651,10 @@ final class AgentModeController {
     }
 
     func observe(display: ActivePanelIdentity, pid: Int32?) async throws -> SelectedHIDResponse {
-        var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil, primitives: [])
-        request.ax = SelectedAXRequest(kind: .describe, expectedPID: pid,
-            endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0, includeNativeIdentity: true)
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
+            payload: .ax(SelectedAXRequest(kind: .describe, expectedPID: pid,
+                endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0, includeNativeIdentity: true)))
         let result = await PhaseTimer.measure("agent.observe") { await owner.perform(request) }
         guard result.error == nil, result.cleanup != "uncertain" else {
             throw AgentModeNativeFailure(response: result)

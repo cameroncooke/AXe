@@ -96,8 +96,7 @@ struct Button: PhysicalDeviceCommand {
 
     func selectedRequest() throws -> SelectedHIDRequest {
         try validate()
-        var request = try selectedInput.baseRequest(operation: .complete, token: nil, primitives: [])
-        request.button = selectedButtonPayload
+        let request = try selectedInput.baseRequest(payload: .button(selectedButtonPayload))
         try request.validate()
         return request
     }

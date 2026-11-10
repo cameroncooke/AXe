@@ -7,8 +7,8 @@ import Testing
 struct SelectedRotationTests {
     private func request() -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: 3, screenUUID: UUID(), operation: .complete, token: nil, primitives: [],
-            rotation: SelectedRotationRequest(direction: .right, expectedBootIdentity: "123:456:789", timeoutSeconds: 8))
+            screenID: 3, screenUUID: UUID(), operation: .complete, token: nil,
+            payload: .rotation(SelectedRotationRequest(direction: .right, expectedBootIdentity: "123:456:789", timeoutSeconds: 8)))
     }
 
     @Test func rotationCannotBecomeAnEmptyTouchEvent() throws {
@@ -17,17 +17,13 @@ struct SelectedRotationTests {
         #expect(throws: (any Error).self) {
             try request.completeEvent(logicalSize: CGSize(width: 600, height: 900))
         }
-        var mixed = request
-        mixed.hinge = SelectedHingeRequest(kind: .read, expectedBootIdentity: nil,
-            degrees: nil, toleranceDegrees: nil, timeoutSeconds: nil)
-        #expect(throws: (any Error).self) { try mixed.validate() }
     }
 
     @Test func heldTouchAndInFlightActionRejectRotation() throws {
         let rotation = request()
         let begin = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: rotation.screenID, screenUUID: rotation.screenUUID, operation: .begin,
-            token: nil, primitives: [.touch(.down, x: 40, y: 80)])
+            token: nil, payload: .contact([.touch(.down, x: 40, y: 80)]))
         var owner = SelectedHIDAdmission()
         try owner.enter(begin)
         #expect(throws: (any Error).self) { try owner.enter(rotation) }

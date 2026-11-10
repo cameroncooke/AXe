@@ -231,15 +231,15 @@ private struct RotationLifetimeFixture {
 
     func rotationRequest() -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: 3, screenUUID: screen, operation: .complete, token: nil, primitives: [],
-            rotation: SelectedRotationRequest(direction: .right, expectedBootIdentity: "1:2:3", timeoutSeconds: 8))
+            screenID: 3, screenUUID: screen, operation: .complete, token: nil,
+            payload: .rotation(SelectedRotationRequest(direction: .right, expectedBootIdentity: "1:2:3", timeoutSeconds: 8)))
     }
 
     func readRequest() -> SelectedHIDRequest {
         let ax = SelectedAXRequest(kind: .describe, expectedPID: 42, endpoint: nil, selectorKind: nil,
             selectorValue: nil, preDelay: 0, postDelay: 0)
         return SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-            screenID: 3, screenUUID: screen, operation: .complete, token: nil, primitives: [], ax: ax)
+            screenID: 3, screenUUID: screen, operation: .complete, token: nil, payload: .ax(ax))
     }
 
     func owner() -> SelectedHIDOwner {

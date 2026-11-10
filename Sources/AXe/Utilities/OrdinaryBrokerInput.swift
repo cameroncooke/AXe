@@ -126,7 +126,7 @@ enum OrdinaryBrokerInput {
         }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, ordinaryKeyboard: try OrdinaryBrokerKeyboard(event))
+            payload: .ordinaryKeyboard(try OrdinaryBrokerKeyboard(event)), expectedContext: context)
         try await SignalScope.cancellingOnSignal {
             try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
         }
@@ -153,7 +153,7 @@ enum OrdinaryBrokerInput {
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: try selectedStyle.primitives(x: point.x, y: point.y),
+            payload: .contact(try selectedStyle.primitives(x: point.x, y: point.y)),
             expectedContext: context
         )
         logger.info().log("Tap uses screen \(context.screenID), rotation \(context.rotationDegrees), logical point (\(point.x), \(point.y))")
@@ -174,7 +174,7 @@ enum OrdinaryBrokerInput {
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], path: path, expectedContext: context
+            payload: .path(path), expectedContext: context
         )
         logger.info().log("\(path.kind.rawValue.capitalized) uses screen \(context.screenID), rotation \(context.rotationDegrees), logical endpoints")
         try await send(request, simulatorUDID: simulatorUDID, postDelay: postDelay, verbose: verbose)
@@ -194,7 +194,7 @@ enum OrdinaryBrokerInput {
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, ordinaryTouch: touch
+            payload: .ordinaryTouch(touch), expectedContext: context
         )
         if touch.down { logger.info().log("Touch down") }
         if touch.down && touch.up {

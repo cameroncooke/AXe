@@ -20,7 +20,7 @@ extension AgentModeController {
             let steps = await reboundSteps(batch.steps, original: original.snapshot, stored: &stored) ?? []
             if !steps.isEmpty {
                 var retry = request
-                retry.agentBatch = AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps)
+                retry.payload = .agentBatch(AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps))
                 return await performBatchRetrying(retry, retryDepth: retryDepth + 1)
             }
         }
@@ -139,9 +139,9 @@ extension AgentModeController {
                 referencePlan = try AgentBatchReferencePlan(request: batch, snapshotID: initialRecord.id,
                     snapshot: initialRecord.snapshot, context: initialRecord.context, pid: initialRecord.expectedPID)
             } else {
-                var initial = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
-                    screenID: nil, screenUUID: nil, operation: .complete, token: nil, primitives: [])
-                initial.agent = AgentModeRequest(kind: .describe, expectedPID: batch.expectedPID)
+                let initial = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                    screenID: nil, screenUUID: nil, operation: .complete, token: nil,
+                    payload: .agent(AgentModeRequest(kind: .describe, expectedPID: batch.expectedPID)))
                 last = await PhaseTimer.measure("batch.initialDescribe") { await performReserved(initial) }
                 guard let initialResult = last?.agent, !initialResult.didError, let current = record else {
                     throw last?.agent?.error ?? AgentModeFailure("batchObservationFailed", "The initial batch observation failed.")
@@ -157,7 +157,7 @@ extension AgentModeController {
                 try Task.checkCancellation()
                 var action = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: currentRequestID,
                     screenID: baseline.screenID, screenUUID: UUID(uuidString: baseline.screenUUID),
-                    operation: .complete, token: nil, primitives: [])
+                    operation: .complete, token: nil, payload: .contact([]))
                 let response = try await PhaseTimer.measure("batch.step \(offset + 1) \(step.action)") {
                     () async throws -> SelectedHIDResponse in
                     if let referencePlan {
@@ -176,15 +176,15 @@ extension AgentModeController {
                     }
                     if step.action == .type && step.focuses {
                         let ref = try Self.batchReference(current.snapshot, id: id, action: .tap)
-                        action.agent = AgentModeRequest(kind: .focusAndType, expectedPID: batchPID,
-                            snapshotID: current.id, ref: ref, text: step.text)
+                        action.payload = .agent(AgentModeRequest(kind: .focusAndType, expectedPID: batchPID,
+                            snapshotID: current.id, ref: ref, text: step.text))
                         return Self.focusStep(await performFocusAndTypeRetrying(action, retryDepth: retryDepth),
                             retried: retryDepth > 0)
                     }
                     let ref = try Self.batchReference(current.snapshot, id: id,
                         action: step.action == .tap ? .tap : .typeText)
-                    action.agent = AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
-                        expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text)
+                    action.payload = .agent(AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
+                        expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text))
                     return await performReserved(action, retryDepth: retryDepth)
                 }
                 last = response
@@ -227,10 +227,10 @@ extension AgentModeController {
             if referencePlan != nil {
                 // Reference batches validate each step against fresh native input evidence,
                 // then publish one replacement table after all completed input.
-                var final = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                let final = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
                     screenID: baseline.screenID, screenUUID: UUID(uuidString: baseline.screenUUID),
-                    operation: .complete, token: nil, primitives: [])
-                final.agent = AgentModeRequest(kind: .describe, expectedPID: batchPID)
+                    operation: .complete, token: nil,
+                    payload: .agent(AgentModeRequest(kind: .describe, expectedPID: batchPID)))
                 last = await PhaseTimer.measure("batch.finalDescribe") { await performReserved(final) }
                 guard let finalResult = last?.agent, !finalResult.didError, record != nil else {
                     throw last?.agent?.error ?? AgentModeFailure("batchRefreshFailed", "The batch input was sent, but AXe could not read the screen afterwards. Do not resend the batch: run describe-ui --agent to see what happened, then plan from that capture.")
@@ -358,8 +358,8 @@ extension AgentModeController {
             let ref = try snapshot.reference(target: target.nativeTarget)
             let table = store(snapshot, context: context, pid: pid)
             var focus = request
-            focus.agent = AgentModeRequest(kind: .focusAndType, expectedPID: pid, snapshotID: table.id,
-                ref: ref, text: step.text)
+            focus.payload = .agent(AgentModeRequest(kind: .focusAndType, expectedPID: pid, snapshotID: table.id,
+                ref: ref, text: step.text))
             return Self.focusStep(await performFocusAndTypeRetrying(focus, retryDepth: retryDepth),
                 retried: retryDepth > 0)
         } catch {

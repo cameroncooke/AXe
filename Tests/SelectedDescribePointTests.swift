@@ -73,12 +73,9 @@ struct SelectedDescribePointTests {
         let valid = try DescribeUI.parse(selected + ["--point", "150,250"]).selectedRequest()
         for request in [
             SelectedHIDRequest(version: 10, requestID: UUID(), screenID: valid.screenID,
-                screenUUID: valid.screenUUID, operation: .complete, token: nil, primitives: [], ax: valid.ax),
+                screenUUID: valid.screenUUID, operation: .complete, token: nil, payload: .ax(valid.ax!)),
             SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: valid.screenID,
-                screenUUID: valid.screenUUID, operation: .complete, token: nil,
-                primitives: [.touch(.down, x: 150, y: 250)], ax: valid.ax),
-            SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: valid.screenID,
-                screenUUID: valid.screenUUID, operation: .complete, token: UUID(), primitives: [], ax: valid.ax)
+                screenUUID: valid.screenUUID, operation: .complete, token: UUID(), payload: .ax(valid.ax!))
         ] {
             #expect(throws: (any Error).self) { try request.validate() }
         }
