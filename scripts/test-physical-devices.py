@@ -295,29 +295,30 @@ class Device:
 
     def sketch(self):
         """Ink on a PencilKit canvas: one stroke with the selected tool, one with a tool tapped in the picker."""
-        tree = self.runner.launch(self.udid, 'sketch', 'sketch.canvas')
+        # A device lists real elements only: the status labels and the picker's buttons, not the canvas view.
+        tree = self.runner.launch(self.udid, 'sketch', 'sketch.strokeCount')
         value = lambda tree, name: str((element(tree, name) or {}).get('AXValue'))
         centre = lambda frame: (round(frame['x'] + frame['width'] / 2), round(frame['y'] + frame['height'] / 2))
-        palette = element(tree, 'Drawing-Palette')
-        require(palette and palette.get('frame'), 'the tool picker is missing from the tree')
-        if palette['frame']['width'] < 200:
-            # A narrow screen shows the picker as one round button until it is tapped.
-            x, y = centre(palette['frame'])
+        tools = lambda tree: {node['AXLabel']: node['frame'] for node in walk(tree) if node.get('type') == 'Button'
+                              and node.get('AXLabel') in ('Pen', 'Monoline', 'Marker') and node.get('frame')}
+        if len(tools(tree)) < 3:
+            # A narrow screen shows the picker as one round button, the selected tool, until it is tapped.
+            shown = tools(tree)
+            require(shown, 'the tool picker is missing from the tree')
+            x, y = centre(next(iter(shown.values())))
             self.runner.axe_ok(self.udid, 'tap', '-x', str(x), '-y', str(y))
-            tree = self.wait_for('the tool picker to expand',
-                                 lambda tree: (element(tree, 'Drawing-Palette') or {}).get('frame', {}).get('width', 0) >= 200)
-        canvas, top = element(tree, 'sketch.canvas')['frame'], element(tree, 'Drawing-Palette')['frame']['y']
-        height = min(canvas['height'], top - 8 - canvas['y'])
-        at = lambda x, y: f"{round(canvas['x'] + canvas['width'] * x)},{round(canvas['y'] + height * y)}"
+            tree = self.wait_for('the tool picker to expand', lambda tree: len(tools(tree)) == 3)
+        left, top, width, height = (float(v) for v in value(tree, 'sketch.drawable').split(','))
+        height = min(height, min(frame['y'] for frame in tools(tree).values()) - 16 - top)
+        require(width > 100 and height > 100, f'no room to draw: {width}x{height}')
+        at = lambda x, y: f'{round(left + width * x)},{round(top + height * y)}'
         first = value(tree, 'sketch.tool').split(' width')[0]
         self.runner.axe_ok(self.udid, 'draw', at(0.5, 0.15), at(0.8, 0.55), at(0.2, 0.55), '--close')
         tree = self.wait_for('one ink stroke', lambda tree: value(tree, 'sketch.strokeCount') == '1')
         require(value(tree, 'sketch.last.ink') == first, f"stroke ink {value(tree, 'sketch.last.ink')}, tool {first}")
         # A tap on the selected tool opens its options, so pick one that is not selected.
         label = next(name for name in ('Marker', 'Monoline', 'Pen') if not first.startswith(name.lower() + ' '))
-        button = next((node for node in walk(tree) if node.get('AXLabel') == label and node.get('type') == 'Button'), None)
-        require(button and button.get('frame'), f'the {label} tool is missing from the tree')
-        x, y = centre(button['frame'])
+        x, y = centre(tools(tree)[label])
         self.runner.axe_ok(self.udid, 'tap', '-x', str(x), '-y', str(y))
         self.wait_for(f'{label} to be selected', lambda tree: value(tree, 'sketch.tool').startswith(label.lower() + ' '))
         self.runner.axe_ok(self.udid, 'draw', at(0.2, 0.75), at(0.8, 0.75))
