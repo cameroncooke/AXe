@@ -96,7 +96,7 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 - [x] Stale or duplicate tests (commit `49a587d4`: one shared AX-node fixture replaces 20 private copies; dead suites removed)
 - [~] The 17 older end-to-end suites that `make e2e` never runs: run them, then wire in or delete
 - [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
-- [ ] Unused IDBKit command families
+- [~] Unused IDBKit code: removed on branch `audit/idbkit-prune` (7 commits, 82 files, 6,456 lines), merge pending
 - [x] Stale documentation (see Phase 9)
 
 ## Phase 4: simplify the architecture
@@ -227,6 +227,23 @@ Triage of the three iPhone failures from the second run:
 
 The machine load during these runs was 8 to 261 on 18 cores, so a clean end-to-end verdict needs a run with no agents working.
 
+Duo "screens still changing" refusal, investigated on branch `audit/duo-display` (commit `e698010b1`, merge pending):
+
+| Scenario | Trials | Inner screen reported lit while inactive | Cleared by itself |
+| --- | --- | --- | --- |
+| Close from 180°, idle machine | 19 | 1.9 to 3.2 s | yes |
+| Close from 120° and from 90° | 10 each | 2.2 to 3.2 s | yes |
+| Close from 180°, load average 80 to 240 | 31 | 2.5 to 3.6 s | yes, except one stale case |
+| Open to 180° | 10 | none seen | yes |
+| Reboot while closed | 4 | about 8 s | yes |
+
+- Trigger: under heavy CPU load, CoreDevice's display report misses an update and stays stale (2 of about 65 closes; once for over 5 minutes). SpringBoard's log shows the inner screen did turn off. A hinge move or an app launch refreshes the report; it never clears by itself. A running AXe broker or a recording is not the cause.
+- New rule: a lit inactive screen is still treated as a fold in progress, unless the hinge is at rest at an end stop with the matching screen active, the active screen is lit, and the whole report and the hinge reading have been identical for 5 seconds. The proof is cached per simulator, so only the first command waits.
+- Why it cannot bind the wrong screen: during a real close the outgoing screen stays flagged active for up to 1 s at hinge 0, which the posture check refuses; the only lit-inactive shape that fits the hinge is a close's dwell, which ended within 3.5 s in 66 closes with the correct flag throughout; a stale report that flags the dark screen active is still refused (taps bound there never reached the app).
+- Red and green: in the natural stale state the old build's `axe displays` refused after 8 s and the new build answered in 5.3 s. With the stale report injected, the first tap took 5.9 s, later taps 0.4 s, and all landed. Over 20 open and close cycles, every accepted tap bound the correct screen.
+- Tap timing on the Duo in the normal state, median of 7: 0.423 s before, 0.390 s after.
+- Not conclusive: Duo matrix groups run under load averages of 100 to 240 failed on both the old and the new build (app launch failures and the known early-boot accessibility wedge), so they need the quiet final run.
+
 Follow-ups: document that turning VoiceOver on shows this alert; keep agents off the E2E simulators
 (already the rule; the settings agent ran before the rule existed).
 
@@ -269,7 +286,7 @@ Decisions made without the owner, with the reason.
 ## Blockers
 
 - **Physical devices unreachable through CoreDevice (open).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
-- **Duo screens intermittently read as "still changing" after boot (investigating).** Described under Phase 8. Workaround: fold the Duo open and closed once.
+- **Duo screens read as "still changing" when nothing moves (fixed on a branch, merge pending).** Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
 
 ## Commit log
 
