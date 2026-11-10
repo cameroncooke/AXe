@@ -9,7 +9,7 @@ axe --output json list-simulators
 axe --output json screenshot --udid <UDID> --output shot.png
 ```
 
-No format option preserves each command's existing output. `--output text|json` chooses the representation; ordinary formatted commands use the common command envelope, and JSON failures return one stdout result and a nonzero exit. Put the format before the command. Screenshot and movie `--output` after the command remains a file path. `stream-video` rejects explicit format selection before capture. See [output fields](agent-reference.md#output-format).
+Without a format, state commands print their state in a few lines, input commands print nothing (`tap`, `slider` and `batch` print a `✓` line), media commands print the path and failures print `Error: <message>` to stderr. `--output json` returns one command envelope, also on failure, with a nonzero exit; `--verbose` adds detail but never changes the exit status or code. Put the format before the command. Screenshot and movie `--output` after the command remains a file path. `stream-video` rejects explicit format selection before capture. See [output fields](agent-reference.md#output-format).
 
 ## Simulator discovery
 

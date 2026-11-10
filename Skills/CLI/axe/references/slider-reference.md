@@ -16,7 +16,7 @@ Use the existing current `sliderEndpoint` row. This adds no new row token or tap
 
 ## Value and input rules
 
-Native slider reads keep their separate identity session and current target/PID/domain checks. Removing the new general Duo AX-preparation layer does not remove normal IDB readiness or replace slider identity reads with cached coordinates.
+Native slider reads keep their separate identity session and current target/PID/domain checks; no cached coordinates replace them.
 
 A percentage maps to the native domain: `minimum + (maximum - minimum) * percentage / 100`. Numeric 0 and 100 select the existing minimum or maximum semantic route before input. Their receipt is `slider` (`action.slider` in agent mode). This is not a fallback after a physical failure. Endpoint behavior and its 20-action/15-second bounds remain unchanged.
 

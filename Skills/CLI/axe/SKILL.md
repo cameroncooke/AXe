@@ -80,11 +80,12 @@ Selectors are exact `--id`, `--label` or `--value`, or `--label-contains` and `-
 
 ## 7. When AXe refuses
 
-A refusal sent nothing: the reply has no `action`, or `action.outcome` is `failedBeforeInput` with `enqueuedEventCount: 0`. The reply usually carries the current screen; plan from it. AXe has already re-read and retried inside the call (`action.retried: true`), so sending the identical command again gets the same answer. Change something first:
+A refusal sent nothing: the reply has no `action`, or `action.outcome` is `failedBeforeInput` with `enqueuedEventCount: 0`. The reply usually carries the current screen; plan from it. When the screen or target changed and the target is still the same control, AXe has already re-read and retried inside the call (`action.retried: true`); a covered target or `busy` is not retried. Sending the identical command again gets the same answer. Change something first:
 
 - **The screen or target changed** (`screenChanged`, `targetChanged`, `snapshotMissing`, `unsupportedReference`): use the refs from the returned capture, or capture again if there is none.
 - **The keyboard covers the control** (`keyboardCovered`): a tap there would press a key. Scroll the form until the control is above the keyboard (the message names its scroll area), or dismiss the keyboard with a control the app shows for that, then tap its new ref. Never use the form's Cancel, Close or Done buttons to hide the keyboard: they can discard or save the form.
-- **The control cannot be hit for another reason** (`nativeActionFailed`), such as an overlay or a sheet still presenting: use the returned capture to find what is in the way.
+- **Something else covers the control** (`targetCovered`), such as an overlay or a sheet still presenting: use the returned capture to find what is in the way.
+- **Another input is still running** (`busy`): act again from a current capture once it has finished.
 - **A selector matched nothing or several controls** (`targetMissing`): narrow it, or use a ref.
 
 After an action that changes screens (Save, Done, Back, opening an item), the returned capture can show the screen mid-transition: a list can appear for a moment before the item you opened slides in. If the capture is not the screen you expected, run `describe-ui` before tapping anything.

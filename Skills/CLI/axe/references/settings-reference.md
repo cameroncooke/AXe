@@ -18,6 +18,6 @@ axe settings status-bar clear --udid <UDID>
 
 JSON `data.result`: `{udid, appearance, textSize, increaseContrast, reduceMotion, reduceTransparency, showBorders, liquidGlass: {style?, opacity}, colorFilter: {enabled, type?, intensity?}, voiceOver}`. Unreported settings are omitted.
 
-Restore what you change. Turn VoiceOver and colour filters off when done: VoiceOver changes how every touch works. Simulated location lasts until `location clear`.
+Restore what you change. Turn VoiceOver and colour filters off when done: VoiceOver changes how every touch works. Turning VoiceOver on shows a one-time "VoiceOver Gestures" alert that stays on screen, and blocks input, after VoiceOver is off again; capture the screen and tap its OK button. Simulated location lasts until `location clear`.
 
-Errors: `targetNotFound`, `notBooted`, `settingUnsupported` (device, OS or Xcode lacks it; iOS 27.2 has no Liquid Glass style, and physical devices have no status bar overrides), `invalidArguments`, `settingFailed` (devicectl's message). Nothing changes when validation fails.
+Errors: `targetNotFound`, `notBooted`, `settingUnsupported` (device, OS or Xcode lacks it: iOS 27.2 offers one Liquid Glass style, so `--liquid-glass` is refused while `--liquid-glass-opacity` works; status bar overrides are simulator-only), `invalidArguments`, `settingFailed` (devicectl's message). A physical device that is not ready fails with its `doctor` check code. Nothing changes when validation fails.

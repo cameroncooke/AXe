@@ -32,7 +32,7 @@ JSON failures write one result to stdout and exit nonzero, without a second plai
 
 Reading/navigation views cap top-level and batch-step `error.message` at 1024 Unicode scalars. A clipped message keeps its prefix and suffix with an omission separator, plus `messageTruncated: true` and `originalScalarLength` on the error object. Use the typed error code, action receipt and recovery fields; do not parse causes from message text. Native cleanup, quarantine, context and recovery evidence is unchanged. Full view preserves the complete message. Select full view before an operation when that detail is needed; do not repeat input to expand a diagnostic.
 
-Ordinary commands opt into `axe.output.command-result` with `--output json`. Its fields are `schema`, `schemaVersion: "1"`, `command` (the full path, such as `hinge set`), `didError`, `data` and `nextSteps`; a failure adds `error.code` and `error.message`. `data.result` holds the command's typed result, described per command in `schemas/axe.output.command-payloads.v1.schema.json`; `data.messages` holds text. Input commands return `{outcome: "completed"}`; media commands return `{path, pixelWidth, pixelHeight, frames?}`. Branch on `error.code` (`invalidArguments`, `targetNotFound`, `notBooted`, `busy`, `timeout`, `interrupted`, `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `elementNotFound`, `screenChanged`, …), never on the message. `--verbose` adds the full receipt in place of the result and never changes the code. No-format ordinary output and existing command-specific `--json` flags are unchanged.
+Ordinary commands opt into `axe.output.command-result` with `--output json`. Its fields are `schema`, `schemaVersion: "1"`, `command` (the full path, such as `hinge set`), `didError`, `data` and `nextSteps`; `error: {code, message}` is present exactly when `didError` is true. `data.result` holds the command's typed result, described per command in `schemas/axe.output.command-payloads.v1.schema.json`; `data.messages` holds text. Input commands return `{outcome: "completed"}`; media commands return `{path, pixelWidth, pixelHeight, frames?}`. Branch on `error.code` (`invalidArguments`, `targetNotFound`, `notBooted`, `busy`, `timeout`, `interrupted`, `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `elementNotFound`, `screenChanged`, …), never on the message. `--verbose` adds the full receipt in place of the result and never changes the code. No-format ordinary output and existing command-specific `--json` flags are unchanged.
 
 ### Refusal codes
 
@@ -52,15 +52,15 @@ Branch on `error.code`. A refusal that sent no input (`enqueuedEventCount` 0, no
 | `inputIncomplete` | Input started but did not finish. | Do not repeat it. Read the screen and check `enqueuedEventCount`. |
 | `cleanupUncertain` | AXe could not confirm the touch or key was released. | Send no input until you have followed the quarantine recovery steps. |
 | `responseTooLarge` | The reply was too large, and input may have been sent. | Read the screen; do not repeat the input. |
-| `nativeActionFailed` | Any other native failure. | Check the action receipt; do not repeat input that reports sent events. |
+| `notBooted`, `targetNotFound` | The simulator is shut down, or no simulator has the UDID. | Boot it or fix the UDID; agent mode does not run on physical devices. |
+| `invalidExpectedPID` | `--expected-pid` was zero or negative. | Omit it, or pass the positive PID from a capture. |
+| `nativeActionFailed` | Any other, untyped native failure. | Check the action receipt; do not repeat input that reports sent events. |
 
 Gesture and path guards use their own typed codes (for example `swipeHitChanged`, `dragStartChanged`, `opaqueFrameTapRejected`); they also send no input and carry the current screen.
 
 Prefer `axe --output json <command> ...`. Non-media leaf placement is accepted when unambiguous. Screenshot/movie `--output` after the command remains a destination path. Explicit formatted streaming rejects before capture. A real `--udid` is required; no implicit simulator is selected. Native-object refs require matched CLI, broker and runtime versions.
 
 ## Optional agent mode
-
-Keep the normal IDB accessibility-readiness check for selected captures and physical target checks. There is no new preparation option or retained preparation layer.
 
 Use `--agent` on `describe-ui`, `tap`, `type`, `swipe`, `drag`, `key`, `key-combo`, `key-sequence`, `slider`, `gesture double-tap`, `gesture pinch` and complete reference `touch` for stateful RS/1-style JSON. Keep ordinary commands without the flag when raw accessibility output or existing coordinate semantics are required. Do not confuse the flag with the autonomous `axe agent <goal>` command; the flag needs no model key.
 

@@ -9,9 +9,16 @@ axe screenshot --udid "$DEVICE_UDID" --output screen.png
 axe describe-ui --udid "$DEVICE_UDID"
 ```
 
-Pair the device in Xcode, enable Developer Mode and unlock the device. Resolve the checks reported by
-`doctor` before continuing. Use `axe --output json doctor --udid "$DEVICE_UDID"` for structured checks.
-Open the saved screenshot to verify what is visible.
+Pair the device in Xcode, enable Developer Mode and unlock the device; AXe does none of these. Resolve
+the checks reported by `doctor` before continuing: a failed check ends with `Error: <name> is not ready.`
+and its code is the check's ID (`notPaired`, `developerModeDisabled`, `deviceNotConnected`,
+`developerDiskImageUnavailable`, `deviceLocked`, `screenshotServiceUnavailable`). Use
+`axe --output json doctor --udid "$DEVICE_UDID"` for structured checks. Open the saved screenshot to
+verify what is visible.
+
+Devices use the same error codes as simulators: another command on the device is `busy`, a deadline is
+`timeout`, a possibly held touch or key is `cleanupUncertain`, and a CoreDevice failure is
+`xcodeUnavailable`, `readFailed` or `timeout`. A failed batch step keeps the step's code.
 
 ## Input and readback
 
@@ -33,8 +40,9 @@ any more input.
 If a modal alert blocks the tree, close the alert on the phone and read again.
 
 Coordinate taps, swipes, drags, draws, gestures, touch, rotation, typing, key commands, buttons and batches
-use the same hardware UDID. Focus the field before typing; `type` sends up to 256 UTF-8 bytes per
-command with the US key layout. Standalone touch requires both
+use the same hardware UDID, and so does `settings` apart from status bar overrides. Focus the field
+before typing; `type` sends up to 256 UTF-8 bytes per command with the US key layout, and other
+characters fail with `invalidArguments`. Standalone touch requires both
 `--down` and `--up`. A physical batch can hold a contact across steps and releases it on exit.
 The lock button requires `--allow-lock` and a person to unlock the device again. A batch refuses
 input after its own lock step, and checks the lock again after a quiet gap of 25 seconds or more.
@@ -60,7 +68,8 @@ axe stream-video --udid "$DEVICE_UDID" --format h264 > device.h264
 ```
 
 The screenshot stream supports `mjpeg`, `raw`, `ffmpeg` and `bgra`. The requested FPS is an upper
-limit. Recording writes an H.264 MP4 after a clean stop. Native `h264` writes Annex B to stdout and
+limit. Recording writes an H.264 MP4 after a clean stop and prints its path; JSON is
+`{path, pixelWidth, pixelHeight, frames}`, and `--verbose` prints the full receipt. Native `h264` writes Annex B to stdout and
 uses the device's encoding settings. Leave out `--fps`, `--quality` and `--scale` in this format.
 Native frames keep the display's native orientation. When they need turning, as on an iPad in
 portrait, stderr names the clockwise rotation that shows the interface upright at the start of the
