@@ -22,7 +22,13 @@ enum AgentBatchCommandAdapter {
         guard !bytes.isEmpty, bytes.count <= 16_384 else {
             throw ValidationError("Agent batch JSON must contain 1...16384 bytes.")
         }
-        let document = try JSONDecoder().decode(AgentBatchDocument.self, from: bytes)
+        let document: AgentBatchDocument
+        do {
+            document = try JSONDecoder().decode(AgentBatchDocument.self, from: bytes)
+        } catch is DecodingError {
+            // A malformed file is the caller's mistake, not a response AXe failed to read.
+            throw ValidationError("Agent batch JSON is malformed or lacks a steps array.")
+        }
         let batch = AgentBatchRequest(expectedPID: expectedPID, snapshotID: document.snapshotID, steps: document.steps)
         try batch.validate()
         var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),

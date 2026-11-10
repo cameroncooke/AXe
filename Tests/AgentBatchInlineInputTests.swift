@@ -56,6 +56,20 @@ struct AgentBatchInlineInputTests {
         }
     }
 
+    @Test("Malformed JSON is reported as an invalid argument that names JSON")
+    func malformedJSON() {
+        for text in ["{", "[]", #"{"steps":"tap"}"#, #"{"snapshotID":"x","steps":[]}"#] {
+            do {
+                _ = try AgentBatchCommandAdapter.request(data: Data(text.utf8), expectedPID: nil)
+                Issue.record("Accepted \(text)")
+            } catch {
+                let failure = CLIErrorMapping.failure(for: error)
+                #expect(failure.code == "invalidArguments", "\(text): \(failure.code)")
+                #expect(failure.message.contains("JSON"), "\(text): \(failure.message)")
+            }
+        }
+    }
+
     @Test("Inline preparation keeps the existing reference, schema and step limits")
     func existingDocumentContract() throws {
         let snapshot = "3FF70D78-26DA-4314-B37B-4CB57D2A1A85"
