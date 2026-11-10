@@ -80,7 +80,9 @@ private struct AgentLayoutInterruption {
         let frame = try session.core.frame(of: session.core.element(target, in: state))
         let arguments = try inputArguments(session, capture: capture, frame: frame, target: target)
         let before = try session.document.read()
-        let input = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(), arguments: arguments + ["--udid", session.agent.udid],
+        // The full view keeps the receipt's kind and replayed fields that the compact reply omits.
+        let input = try PlaygroundTestProcess(executable: TestHelpers.getAxePath(),
+            arguments: canonicalAgentArguments(arguments + ["--udid", session.agent.udid]),
             directory: session.artifacts, name: "interrupted-input")
         let externalPath = try #require(ProcessInfo.processInfo.environment["AXE_DUO_STATE_CHANGE_PATH"])
         let identity = catalogue.activePanel.identity

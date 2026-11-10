@@ -39,7 +39,7 @@ struct PlaygroundDuoTapWaitTests {
         }
         let timeout = test.kind == .immediate ? 0 : test.kind == .timeout ? 1 : 12
         let target = ["tap"] + selector + ["--element-type", "Button", "--expected-pid", String(app.pid),
-            "--tap-style", "physical", "--wait-timeout", String(timeout), "--poll-interval", "0.25"]
+            "--tap-style", "physical", "--wait-timeout", String(timeout)] + (timeout > 0 ? ["--poll-interval", "0.25"] : [])
         let arguments: [String]
         if test.batch {
             arguments = ["batch", "--step", target.map(controlsQuote).joined(separator: " "),
@@ -63,6 +63,9 @@ struct PlaygroundDuoTapWaitTests {
             }
             try await process.wait(timeout: 40)
             try #require((process.exitCode == 0) == test.kind.positive)
+            // A refused wait is worded for the reader, without a Swift type name.
+            let diagnostics = try process.diagnostics()
+            try #require(!diagnostics.contains("couldn\u{2019}t be completed") && !diagnostics.contains("SelectedAXWaitFailure"))
             let text = try process.output()
             // Signal cancellation may close stdout before a broker reply. Physical state and owner readback remain required.
             if test.kind != .cancelINT && test.kind != .cancelTERM {

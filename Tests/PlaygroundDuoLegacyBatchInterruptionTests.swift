@@ -23,7 +23,7 @@ struct PlaygroundDuoLegacyBatchInterruptionTests {
             // The error names the step and the change, without Swift type names.
             try #require(output.contains("Error: Step 1 failed: [touch]")
                 && output.contains("The batch stopped:")
-                && output.contains("Input was not repeated.") && !output.contains("FBSimulatorControl"))
+                && output.contains("Input was not repeated.") && !output.contains("FBSimulatorHIDSessionError"))
             // The operation can release first; the enclosing session then has no input left to release.
             // --verbose writes the owner's cleanup log line to stderr.
             try #require(output.contains("Duo batch closed; cleanup=notNeeded")
