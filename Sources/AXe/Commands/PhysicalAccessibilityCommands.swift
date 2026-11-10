@@ -41,7 +41,8 @@ enum PhysicalAccessibilityCommands {
     }
 
     static func tap(query: AccessibilityQuery, elementType: String?, waitTimeout: TimeInterval,
-                    pollInterval requestedPollInterval: TimeInterval?, on input: PhysicalDeviceInput) async throws {
+                    pollInterval requestedPollInterval: TimeInterval?, on input: PhysicalDeviceInput,
+                    steps: ((CGPoint) -> [PhysicalTouchStep])? = nil) async throws {
         if let elementType, elementType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw CLIOutputFailure(code: "invalidArguments", message: "Physical --element-type must not be empty.")
         }
@@ -90,10 +91,23 @@ enum PhysicalAccessibilityCommands {
         }
         try Task.checkCancellation()
         _ = try budget()
-        try await input.perform([
+        // A long press, double tap or two-finger tap supplies its own contact plan for the point.
+        try await input.perform(steps?(fresh.point) ?? [
             PhysicalTouchStep(points: [fresh.point], phase: .down, delayAfter: 0.05),
             PhysicalTouchStep(points: [fresh.point], phase: .up),
         ], on: fresh.display, admissionDeadline: deadline)
+    }
+
+    /// Whether one visible element on the device's screen matches the selector, for scrolling until it does.
+    static func isVisible(_ query: AccessibilityQuery, on input: PhysicalDeviceInput) async throws -> Bool {
+        let snapshot = try await input.readAccessibility(timeout: readBudget)
+        try snapshot.display.requireResolvedOrientation()
+        do {
+            return try VisibleTree(snapshot).target(matching: query, elementType: nil) != nil
+        } catch let failure as CLIOutputFailure where failure.code == "elementNotHittable" {
+            // In the tree but not yet fully on screen: keep scrolling.
+            return false
+        }
     }
 
     private static var missingTarget: CLIOutputFailure {

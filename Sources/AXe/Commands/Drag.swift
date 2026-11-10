@@ -5,10 +5,11 @@ struct Drag: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Drag from one point to another with explicit touch moves.",
         discussion: """
-        The touch rests briefly at both ends and moves in --steps events, which suits drag and drop. With --agent, --ref replaces the start point.
+        The touch rests briefly at both ends and moves in --steps events, which suits drag and drop. --hold makes the first rest longer: a list starts a reorder, and an icon lifts, only after about half a second. With --agent, --ref replaces the start point.
 
         Examples:
           axe drag --start-x 100 --start-y 500 --end-x 300 --end-y 500 --udid <UDID>
+          axe drag --start-x 200 --start-y 300 --end-x 200 --end-y 500 --hold 0.6 --udid <UDID>    # reorder a row
           axe drag --start-x 200 --start-y 300 --end-x 200 --end-y 700 --duration 1.5 --udid <UDID>
         """
     )
@@ -19,6 +20,7 @@ struct Drag: PhysicalDeviceCommand {
     /// Every drag route holds the contact this long before and after its movement.
     static let initialHold: TimeInterval = 0.05
     static let finalHold: TimeInterval = 0.05
+    static let maximumHold: TimeInterval = 10
 
     @Option(name: .customLong("start-x"), help: "Start X in points.")
     var startX: Double?
@@ -37,6 +39,9 @@ struct Drag: PhysicalDeviceCommand {
 
     @Option(name: .customLong("steps"), help: "Number of touch moves, 1 to 1000.")
     var steps: Int = Self.defaultSteps
+
+    @Option(name: .customLong("hold"), help: "Seconds the finger rests on the start before it moves, 0 to 10 (default 0.05). About 0.6 starts a reorder or lifts an item.")
+    var hold: Double?
 
     @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the drag, 0 to 10.")
     var preDelay: Double?
@@ -82,6 +87,14 @@ struct Drag: PhysicalDeviceCommand {
         guard (1...Self.maxSteps).contains(steps) else {
             throw ValidationError("Steps must be between 1 and \(Self.maxSteps).")
         }
+        if let hold {
+            guard hold.isFinite, (0...Self.maximumHold).contains(hold) else {
+                throw ValidationError("Hold must be between 0 and 10 seconds.")
+            }
+            guard !agentMode.enabled else {
+                throw ValidationError("Agent drag does not take --hold.")
+            }
+        }
         if let preDelay {
             guard preDelay >= 0 && preDelay <= 10.0 else {
                 throw ValidationError("Pre-delay must be between 0 and 10 seconds.")
@@ -94,7 +107,7 @@ struct Drag: PhysicalDeviceCommand {
         }
     }
 
-    var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .drag, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration, steps: steps, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
+    var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .drag, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration, steps: steps, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0, hold: hold) }
 
     func selectedRequest() throws -> SelectedHIDRequest {
         guard !agentMode.enabled else {
@@ -146,7 +159,7 @@ struct Drag: PhysicalDeviceCommand {
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
             let path = SelectedHIDPath(kind: .drag, startX: startX, startY: startY,
-                endX: endX, endY: endY, duration: duration, steps: steps, generator: .ordinary)
+                endX: endX, endY: endY, duration: duration, steps: steps, hold: hold, generator: .ordinary)
             try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Low-level drag completed successfully")
@@ -169,7 +182,7 @@ struct Drag: PhysicalDeviceCommand {
             to: physicalPoints[1],
             duration: duration,
             steps: steps,
-            initialHold: Self.initialHold,
+            initialHold: hold ?? Self.initialHold,
             finalHold: Self.finalHold,
             for: simulatorUDID,
             logger: logger

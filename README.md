@@ -92,6 +92,9 @@ For agents, `describe-ui --agent` returns compact rows with refs instead; see [A
 axe tap -x 200 -y 400 --udid "$UDID"
 axe tap --id SaveButton --element-type Button --udid "$UDID"
 axe tap --label "Done" --wait-timeout 5 --udid "$UDID"   # poll until it appears
+axe tap --label "Photo" --hold 1 --udid "$UDID"          # long press an element
+axe tap --id Map --count 2 --udid "$UDID"                # double tap
+axe tap --id Canvas --touches 2 --udid "$UDID"           # two-finger tap
 axe type 'Hello' --udid "$UDID"
 printf 'line one\nline two' | axe type --stdin --udid "$UDID"
 axe key 40 --udid "$UDID"                                 # Return
@@ -102,13 +105,17 @@ axe touch -x 100 -y 200 --down --up --delay 1.0 --udid "$UDID"   # long press
 axe slider --id volume --value 75 --udid "$UDID"
 ```
 
-`tap` selectors are `--id`, `--label` or `--value`, optionally narrowed with `--element-type`. `--tap-style` chooses `automatic` (the default: a touch for switches, a simulator tap otherwise), `simulator` or `physical`. `type` uses the US keyboard layout; characters outside it, such as `é` or `£`, fail with `invalidArguments` before anything is typed. Keys take HID usage codes. Buttons are `home`, `lock`, `side-button`, `siri` and `apple-pay`.
+`tap` selectors are `--id`, `--label` or `--value`, optionally narrowed with `--element-type`. On a point or an element, `--hold <seconds>` makes a long press, `--count 2` a double tap and `--touches 2` a two-finger tap (two contacts 40 points apart); these three send real touches and need plain input, without `--agent` or `--input-mode selected`. `--tap-style` chooses `automatic` (the default: a touch for switches, a simulator tap otherwise), `simulator` or `physical`. `type` uses the US keyboard layout; characters outside it, such as `é` or `£`, fail with `invalidArguments` before anything is typed. Keys take HID usage codes. Buttons are `home`, `lock`, `side-button`, `siri` and `apple-pay`.
 
 ## Swipes, gestures and drawing
 
 ```bash
 axe swipe --start-x 200 --start-y 600 --end-x 200 --end-y 300 --udid "$UDID"
 axe gesture scroll-up --udid "$UDID"
+axe gesture scroll-down --distance 0.6 --udid "$UDID"               # 60% of the screen height
+axe gesture scroll-up --until-label "Privacy" --udid "$UDID"        # scroll until it is on screen
+axe gesture swipe-from-top-right-corner --udid "$UDID"              # Control Centre
+axe drag --start-x 200 --start-y 300 --end-x 200 --end-y 500 --hold 0.6 --udid "$UDID"  # reorder a row
 axe gesture pinch --scale 2 --udid "$UDID"                          # zoom in at the screen centre
 axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid "$UDID"  # zoom out
 axe gesture rotate -x 200 -y 400 --radius 80 --degrees 90 --udid "$UDID"
@@ -116,7 +123,7 @@ axe draw 100,400 300,400 --udid "$UDID"                             # a line
 axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid "$UDID"  # a triangle
 ```
 
-Presets are `scroll-up|down|left|right` and `swipe-from-left|right|top|bottom-edge` (`--edge-inset` moves the start of an edge swipe). Presets act on the screen's size in points in the current orientation; `--screen-width` and `--screen-height` override it. Two routes do not measure the screen and assume 390×844 unless you pass both: a simulator without the DTUHID touch service, and a `gesture` step in a batch on a simulator other than the iPhone Duo. Coordinate gestures are `pinch`, `double-tap`, `rotate`, `two-finger-tap`, `two-finger-hold` and `two-finger-swipe`; they need no mode flag. `pinch` without `-x/-y` uses the centre of the active screen, and without `--radius` starts a quarter of the screen's shorter side from it, or closer so that the wider end stays 16 points inside the screen; `--scale` above 1 zooms in. On a simulator without the DTUHID touch service, coordinate gestures fail with `inputUnavailable` before input.
+Presets are `scroll-up|down|left|right`, `swipe-from-left|right|top|bottom-edge` (`--edge-inset` moves the start of an edge swipe) and `swipe-from-top-right-corner`, which opens Control Centre. A scroll preset moves 200 points, or `--distance` as a fraction of the screen's height or width (0.05 to 0.95). With `--until-id` or `--until-label` a scroll preset reads the screen, scrolls and reads again until that element is on screen, at most `--max-swipes` times (default 10, up to 50); it sends no input when the element is already there and fails with `elementNotFound` when it never appears. `drag --hold <seconds>` rests the finger on the start before it moves: about 0.6 starts a list reorder or lifts an icon. Presets act on the screen's size in points in the current orientation; `--screen-width` and `--screen-height` override it. Two routes do not measure the screen and assume 390×844 unless you pass both: a simulator without the DTUHID touch service, and a `gesture` step in a batch on a simulator other than the iPhone Duo. Coordinate gestures are `pinch`, `double-tap`, `rotate`, `two-finger-tap`, `two-finger-hold` and `two-finger-swipe`; they need no mode flag. `pinch` without `-x/-y` uses the centre of the active screen, and without `--radius` starts a quarter of the screen's shorter side from it, or closer so that the wider end stays 16 points inside the screen; `--scale` above 1 zooms in. On a simulator without the DTUHID touch service, coordinate gestures fail with `inputUnavailable` before input.
 
 `draw` moves one finger down at the first of 2 to 1,000 `x,y` points, in straight lines through the rest, and up at the last; `--close` returns to the first point. The stroke takes `--duration` seconds (default 1, at most 30). A point outside the active screen fails with `invalidArguments` before input. `drag` is the two-point case with explicit move events.
 

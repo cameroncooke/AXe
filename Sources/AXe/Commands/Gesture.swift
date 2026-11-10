@@ -12,7 +12,21 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
     case swipeFromRightEdge = "swipe-from-right-edge"
     case swipeFromTopEdge = "swipe-from-top-edge"
     case swipeFromBottomEdge = "swipe-from-bottom-edge"
-    
+    /// Down from the top right corner: Control Centre on an iPhone with Face ID and on an iPad.
+    case swipeFromTopRightCorner = "swipe-from-top-right-corner"
+
+    /// A scroll crosses this fraction of the screen's height or width when --distance is given.
+    static let distanceRange = 0.05...0.95
+    /// The corner preset's distance from the right edge, inside the area that opens Control Centre.
+    static let cornerInset = 30.0
+
+    var isScroll: Bool {
+        switch self {
+        case .scrollUp, .scrollDown, .scrollLeft, .scrollRight: return true
+        default: return false
+        }
+    }
+
     var description: String {
         switch self {
         case .scrollUp:
@@ -31,16 +45,22 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
             return "Swipe from top edge downward"
         case .swipeFromBottomEdge:
             return "Swipe from bottom edge upward"
+        case .swipeFromTopRightCorner:
+            return "Swipe down from the top right corner (Control Centre)"
         }
     }
-    
-    func coordinates(screenWidth: Double = 390, screenHeight: Double = 844, edgeInset: Double? = nil) -> (startX: Double, startY: Double, endX: Double, endY: Double) {
+
+    /// `distance` is a scroll's length as a fraction of the screen's height (up, down) or width (left, right);
+    /// nil keeps 200 points.
+    func coordinates(screenWidth: Double = 390, screenHeight: Double = 844, edgeInset: Double? = nil,
+                     distance: Double? = nil) -> (startX: Double, startY: Double, endX: Double, endY: Double) {
         let centerX = screenWidth / 2
         let centerY = screenHeight / 2
         let edgeMargin = 20.0
         let startInset = edgeInset ?? edgeMargin
-        let scrollDistance = 200.0
-        
+        let vertical = self == .scrollUp || self == .scrollDown
+        let scrollDistance = distance.map { $0 * (vertical ? screenHeight : screenWidth) } ?? 200.0
+
         switch self {
         case .scrollUp:
             return (centerX, centerY + scrollDistance/2, centerX, centerY - scrollDistance/2)
@@ -58,6 +78,16 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
             return (centerX, startInset, centerX, screenHeight - edgeMargin)
         case .swipeFromBottomEdge:
             return (centerX, screenHeight - startInset, centerX, edgeMargin)
+        case .swipeFromTopRightCorner:
+            return (screenWidth - Self.cornerInset, startInset, screenWidth - Self.cornerInset, screenHeight / 2)
+        }
+    }
+
+    func validateDistance(_ distance: Double?) throws {
+        guard let distance else { return }
+        guard isScroll else { throw ValidationError("--distance is available only for scroll presets.") }
+        guard distance.isFinite, Self.distanceRange.contains(distance) else {
+            throw ValidationError("Distance must be a fraction of the screen from 0.05 to 0.95.")
         }
     }
     
@@ -69,7 +99,7 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
         switch self {
         case .swipeFromLeftEdge, .swipeFromRightEdge:
             length = screenWidth
-        case .swipeFromTopEdge, .swipeFromBottomEdge:
+        case .swipeFromTopEdge, .swipeFromBottomEdge, .swipeFromTopRightCorner:
             length = screenHeight
         case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
             throw ValidationError("--edge-inset is available only for edge presets.")
@@ -88,7 +118,7 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
         switch self {
         case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
             return 0.5
-        case .swipeFromLeftEdge, .swipeFromRightEdge, .swipeFromTopEdge, .swipeFromBottomEdge:
+        case .swipeFromLeftEdge, .swipeFromRightEdge, .swipeFromTopEdge, .swipeFromBottomEdge, .swipeFromTopRightCorner:
             return 0.3
         }
     }
@@ -97,7 +127,7 @@ enum GesturePreset: String, CaseIterable, ExpressibleByArgument, Codable, Sendab
         switch self {
         case .scrollUp, .scrollDown, .scrollLeft, .scrollRight:
             return 25.0
-        case .swipeFromLeftEdge, .swipeFromRightEdge, .swipeFromTopEdge, .swipeFromBottomEdge:
+        case .swipeFromLeftEdge, .swipeFromRightEdge, .swipeFromTopEdge, .swipeFromBottomEdge, .swipeFromTopRightCorner:
             return 50.0
         }
     }
@@ -131,7 +161,7 @@ struct Gesture: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a preset swipe, a pinch or another multi-touch gesture.",
         discussion: """
-        Presets: scroll-up, scroll-down, scroll-left, scroll-right, swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge and swipe-from-bottom-edge. Physical devices do not support swipe-from-right-edge.
+        Presets: scroll-up, scroll-down, scroll-left, scroll-right, swipe-from-left-edge, swipe-from-right-edge, swipe-from-top-edge, swipe-from-bottom-edge and swipe-from-top-right-corner (Control Centre). A scroll preset moves 200 points, or the fraction of the screen given by --distance. Physical devices do not support swipe-from-right-edge.
 
         Coordinate gestures take points in the current orientation:
           pinch             --scale, and optionally -x/-y and --radius
@@ -196,6 +226,85 @@ struct Gesture: PhysicalDeviceCommand {
     @Option(name: .long, help: "Edge presets: start distance from the edge in points (default 20).")
     var edgeInset: Double?
 
+    @Option(name: .long, help: "Scroll presets: length as a fraction of the screen, 0.05 to 0.95 (default 200 points).")
+    var distance: Double?
+
+    @Option(name: .customLong("until-id"), help: "Scroll presets: scroll until the element with this accessibility identifier is on screen.")
+    var untilID: String?
+
+    @Option(name: .customLong("until-label"), help: "Scroll presets: scroll until an element with this accessibility label is on screen.")
+    var untilLabel: String?
+
+    @Option(name: .customLong("max-swipes"), help: "With --until-id or --until-label: the most scrolls to make, 1 to 50 (default 10).")
+    var maxSwipes: Int?
+
+    static let defaultMaxSwipes = 10
+    /// A scroll keeps moving after the finger lifts; the next read waits this long.
+    static let scrollSettle: TimeInterval = 0.4
+
+    /// The element a scroll preset repeats for, if any.
+    var untilQuery: AccessibilityQuery? {
+        if let untilID { return .id(untilID) }
+        if let untilLabel { return .label(untilLabel) }
+        return nil
+    }
+
+    private func validateUntil() throws {
+        guard untilID == nil || untilLabel == nil else {
+            throw ValidationError("Pass --until-id or --until-label, not both.")
+        }
+        guard untilQuery != nil else {
+            guard maxSwipes == nil else { throw ValidationError("--max-swipes needs --until-id or --until-label.") }
+            return
+        }
+        guard case let .preset(preset) = gesture, preset.isScroll else {
+            throw ValidationError("--until-id and --until-label are available only for scroll presets.")
+        }
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw ValidationError("--until-id and --until-label need plain input, without --agent or selected input.")
+        }
+        if let maxSwipes {
+            guard (1...50).contains(maxSwipes) else { throw ValidationError("--max-swipes must be 1 to 50.") }
+        }
+    }
+
+    /// Scrolls with `scroll` until `visible` reports the element, at most `maxSwipes` times.
+    /// It reads before the first scroll, so an element already on screen costs no input.
+    func scrollUntil(_ query: AccessibilityQuery, visible: () async throws -> Bool,
+                     scroll: () async throws -> Void) async throws {
+        let limit = maxSwipes ?? Self.defaultMaxSwipes
+        let name: String
+        switch query {
+        case .id(let value), .label(let value), .value(let value): name = value
+        }
+        for scrolls in 0...limit {
+            if try await visible() {
+                CLIOutput.message("✓ \(name) is on screen after \(scrolls) scroll\(scrolls == 1 ? "" : "s")")
+                return
+            }
+            guard scrolls < limit else { break }
+            try await scroll()
+            try await Task.sleep(for: .seconds(Self.scrollSettle))
+        }
+        throw CLIError(errorDescription: "\(name) was not on screen after \(limit) scrolls. Check the direction, or raise --max-swipes.",
+            code: .elementNotFound)
+    }
+
+    /// Whether the element is in the tree with its centre inside the application's frame.
+    @MainActor
+    private func isOnScreen(_ query: AccessibilityQuery, logger: AxeLogger) async throws -> Bool {
+        do {
+            let match = try await AccessibilityPoller.resolveElementWithPolling(query: query,
+                simulatorUDID: simulatorUDID, waitTimeout: 0, pollInterval: 0.25, logger: logger)
+            guard let frame = match.element.frame, let screen = match.applicationFrame,
+                  frame.width > 0, frame.height > 0 else { return false }
+            let x = frame.x + frame.width / 2, y = frame.y + frame.height / 2
+            return x >= screen.x && x <= screen.x + screen.width && y >= screen.y && y <= screen.y + screen.height
+        } catch let error as ElementResolutionError where error.isNotFound {
+            return false
+        }
+    }
+
     @Option(name: .customLong("screen-width"), help: "Presets: screen width in points, up to 2000. Defaults to the measured screen in the current orientation, or 390 where it is not measured (see README).")
     var screenWidth: Double?
     
@@ -235,6 +344,13 @@ struct Gesture: PhysicalDeviceCommand {
         }
         try selectedInput.validate()
         let physical = AutomationTarget.isPhysicalInputUDID(simulatorUDID)
+        try validateUntil()
+        if let distance {
+            guard case let .preset(preset) = gesture else {
+                throw ValidationError("--distance is available only for scroll presets.")
+            }
+            try preset.validateDistance(distance)
+        }
         if let edgeInset {
             guard case let .preset(preset) = gesture else {
                 throw ValidationError("--edge-inset is available only for edge presets.")
@@ -331,7 +447,7 @@ struct Gesture: PhysicalDeviceCommand {
     func legacySwipe(_ preset: GesturePreset, measured: (width: Double, height: Double)?) throws -> LegacySwipe {
         let width = screenWidth ?? measured?.width ?? 390
         let height = screenHeight ?? measured?.height ?? 844
-        let points = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset)
+        let points = preset.coordinates(screenWidth: width, screenHeight: height, edgeInset: edgeInset, distance: distance)
         let swipeDelta = delta ?? preset.defaultDelta
         if let edgeInset {
             try preset.validateEdgeInset(edgeInset, screenWidth: width, screenHeight: height)
@@ -354,7 +470,7 @@ struct Gesture: PhysicalDeviceCommand {
         }
         return SelectedHIDPath(kind: .preset, preset: preset, duration: duration ?? preset.defaultDuration,
             delta: delta ?? preset.defaultDelta, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0,
-            expectedWidth: screenWidth, expectedHeight: screenHeight, edgeInset: edgeInset)
+            expectedWidth: screenWidth, expectedHeight: screenHeight, edgeInset: edgeInset, distance: distance)
     }
 
     func selectedPinch() throws -> SelectedHIDPinch {
@@ -482,9 +598,16 @@ struct Gesture: PhysicalDeviceCommand {
             switch preset {
             case .swipeFromLeftEdge: edge = .left
             case .swipeFromBottomEdge: edge = .bottom
+            case .swipeFromTopRightCorner: edge = .top
             default: edge = .none
             }
-            try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input)
+            if let untilQuery {
+                try await scrollUntil(untilQuery,
+                    visible: { try await PhysicalAccessibilityCommands.isVisible(untilQuery, on: input) },
+                    scroll: { try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input) })
+            } else {
+                try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input)
+            }
         case .pinch:
             try await PhysicalDeviceGestures.pinch(selectedPinch(), on: input)
         case .doubleTap, .rotate, .twoFingerTap, .twoFingerHold, .twoFingerSwipe:
@@ -535,6 +658,23 @@ struct Gesture: PhysicalDeviceCommand {
         logger.info().log("Screen size: \(swipe.width)x\(swipe.height)")
         logger.info().log("Coordinates: (\(swipe.startX), \(swipe.startY)) to (\(swipe.endX), \(swipe.endY))")
         logger.info().log("Duration: \(swipe.duration)s, Delta: \(swipe.delta)px")
+
+        if let untilQuery {
+            // The route capture above already waited the pre-delay; each scroll then goes out alone.
+            try await scrollUntil(untilQuery, visible: { try await isOnScreen(untilQuery, logger: logger) }) {
+                if let context {
+                    let path = SelectedHIDPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
+                        endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta, generator: .ordinary)
+                    try await OrdinaryBrokerInput.perform(path: path, context: context,
+                        simulatorUDID: simulatorUDID, postDelay: nil, logger: logger, verbose: false)
+                } else {
+                    try await HIDInteractor.performHIDEvent(swipe.event(preDelay: nil, postDelay: nil),
+                        for: simulatorUDID, logger: logger)
+                }
+            }
+            if let postDelay, postDelay > 0 { try await Task.sleep(for: .seconds(postDelay)) }
+            return
+        }
 
         if let context {
             let path = SelectedHIDPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,

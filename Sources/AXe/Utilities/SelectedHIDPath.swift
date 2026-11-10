@@ -21,10 +21,15 @@ struct SelectedHIDPath: Codable, Sendable {
     var expectedWidth: Double? = nil
     var expectedHeight: Double? = nil
     var edgeInset: Double? = nil
+    /// Scroll presets only: length as a fraction of the screen. Nil keeps 200 points.
+    var distance: Double? = nil
     /// Agent swipes slow to rest before lift-off. A linear swipe releases at full speed and the
     /// content keeps decelerating for about two seconds; at rest it stops with the finger, moves
     /// the path distance, and the replacement read settles at once. Raw swipes stay linear.
     var endsAtRest: Bool? = nil
+    /// Drag only: seconds the finger rests on the start point before it moves. Nil is `Drag.initialHold`.
+    /// A list starts a reorder, and an icon lifts, only after a rest of about half a second.
+    var hold: Double? = nil
     /// Draw only: every point of the stroke, in order. A drag is the two-point stroke of its endpoints.
     var points: [SelectedHIDCompleteGesture.Point]? = nil
     /// Nil is `selected`.
@@ -33,12 +38,19 @@ struct SelectedHIDPath: Codable, Sendable {
     /// Bounds allocation before an ordinary swipe expands into native events.
     private static let maximumOrdinaryMoves = 100_000
 
+    var initialHold: Double { hold ?? Drag.initialHold }
+
     var strokePoints: [CGPoint] {
         if let points { return points.map(\.cgPoint) }
         return [CGPoint(x: startX ?? 0, y: startY ?? 0), CGPoint(x: endX ?? 0, y: endY ?? 0)]
     }
 
     func validate() throws {
+        if let hold {
+            guard kind == .drag, hold.isFinite, (0...Drag.maximumHold).contains(hold) else {
+                throw SelectedHIDFailure.invalid("Only a drag takes a hold, of 0 to 10 seconds")
+            }
+        }
         if generator == .ordinary { return try validateOrdinary() }
         guard endsAtRest != true || kind == .swipe else {
             throw SelectedHIDFailure.invalid("Only a swipe can end at rest")
@@ -47,7 +59,7 @@ struct SelectedHIDPath: Codable, Sendable {
             throw SelectedHIDFailure.invalid("Only a draw carries a point list")
         }
         if kind == .draw {
-            guard preset == nil, edgeInset == nil, expectedWidth == nil, expectedHeight == nil,
+            guard preset == nil, edgeInset == nil, distance == nil, expectedWidth == nil, expectedHeight == nil,
                   startX == nil, startY == nil, endX == nil, endY == nil, delta == nil, steps == nil,
                   duration.isFinite, duration > 0, duration <= TouchStroke.maximumDuration,
                   preDelay.isFinite, (0...10).contains(preDelay),
@@ -62,7 +74,7 @@ struct SelectedHIDPath: Codable, Sendable {
               postDelay.isFinite, (0...10).contains(postDelay) else {
             throw SelectedHIDFailure.invalid("Selected path duration must be in (0,10]; delays must be in [0,10]")
         }
-        let holds = kind == .drag ? Drag.initialHold + Drag.finalHold : 0
+        let holds = kind == .drag ? initialHold + Drag.finalHold : 0
         guard preDelay + duration + holds + postDelay <= 20 else {
             throw SelectedHIDFailure.invalid("Selected path total delay exceeds 20 seconds")
         }
@@ -71,8 +83,10 @@ struct SelectedHIDPath: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Preset requires a named pattern and no explicit endpoints")
             }
             try preset.validateEdgeInset(edgeInset)
+            do { try preset.validateDistance(distance) }
+            catch { throw SelectedHIDFailure.invalid("Distance is a scroll preset's fraction of the screen, 0.05 to 0.95") }
         } else {
-            guard preset == nil, edgeInset == nil, expectedWidth == nil, expectedHeight == nil,
+            guard preset == nil, edgeInset == nil, distance == nil, expectedWidth == nil, expectedHeight == nil,
                   let startX, let startY, let endX, let endY,
                   [startX, startY, endX, endY].allSatisfy({ $0.isFinite && $0 >= 0 }),
                   startX != endX || startY != endY else {
@@ -99,7 +113,7 @@ struct SelectedHIDPath: Codable, Sendable {
         guard (points != nil) == (kind == .draw) else {
             throw SelectedHIDFailure.invalid("Only a draw carries a point list")
         }
-        guard kind != .preset, preset == nil, edgeInset == nil, expectedWidth == nil, expectedHeight == nil,
+        guard kind != .preset, preset == nil, edgeInset == nil, distance == nil, expectedWidth == nil, expectedHeight == nil,
               endsAtRest == nil, preDelay == 0, postDelay == 0 else {
             throw SelectedHIDFailure.invalid("An ordinary path takes endpoints or points, a duration and delta or steps only")
         }
@@ -160,7 +174,7 @@ struct SelectedHIDPath: Codable, Sendable {
         }
         let moves = steps ?? TouchStroke.moveCount(duration: duration)
         return .composite(TouchStroke.primitives(through: stroke, duration: duration, moves: moves,
-            initialHold: Drag.initialHold, finalHold: Drag.finalHold).map(\.event))
+            initialHold: initialHold, finalHold: Drag.finalHold).map(\.event))
     }
 
     func primitives(logicalSize: CGSize) throws -> [SelectedHIDPrimitive] {
@@ -182,7 +196,7 @@ struct SelectedHIDPath: Codable, Sendable {
             let moves = steps ?? TouchStroke.moveCount(duration: duration)
             var result: [SelectedHIDPrimitive] = preDelay > 0 ? [.delay(preDelay)] : []
             result += TouchStroke.primitives(through: points, duration: duration, moves: moves,
-                initialHold: Drag.initialHold, finalHold: Drag.finalHold)
+                initialHold: initialHold, finalHold: Drag.finalHold)
             if postDelay > 0 { result.append(.delay(postDelay)) }
             // Geometry and complete contact lifecycle are preflighted by the owned V12 session.
             return result
@@ -191,7 +205,8 @@ struct SelectedHIDPath: Codable, Sendable {
         let end: CGPoint
         if let preset {
             try preset.validateEdgeInset(edgeInset, screenWidth: logicalSize.width, screenHeight: logicalSize.height)
-            let points = preset.coordinates(screenWidth: logicalSize.width, screenHeight: logicalSize.height, edgeInset: edgeInset)
+            let points = preset.coordinates(screenWidth: logicalSize.width, screenHeight: logicalSize.height,
+                edgeInset: edgeInset, distance: distance)
             start = CGPoint(x: points.startX, y: points.startY)
             end = CGPoint(x: points.endX, y: points.endY)
         } else {

@@ -7,12 +7,15 @@ struct Tap: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Tap a point, or an element found by accessibility.",
         discussion: """
-        Pass -x and -y, or one of --id, --label and --value; --element-type narrows a selector. On success it prints the tapped point.
+        Pass -x and -y, or one of --id, --label and --value; --element-type narrows a selector. On success it prints the tapped point. --hold makes a long press, --count 2 a double tap and --touches 2 a two-finger tap, on a point or on an element.
 
         Examples:
           axe tap -x 200 -y 400 --udid <UDID>
           axe tap --id SaveButton --element-type Button --udid <UDID>
           axe tap --label Done --wait-timeout 5 --udid <UDID>
+          axe tap --label Photo --hold 1 --udid <UDID>          # long press
+          axe tap --id Map --count 2 --udid <UDID>              # double tap
+          axe tap --id Canvas --touches 2 --udid <UDID>         # two-finger tap
         """
     )
 
@@ -52,6 +55,15 @@ struct Tap: PhysicalDeviceCommand {
     @Option(name: .customLong("post-delay"), help: "Seconds to wait after the tap, 0 to 10.")
     var postDelay: Double?
 
+    @Option(name: .customLong("hold"), help: "Seconds the finger stays down, above 0 to 10: a long press.")
+    var hold: Double?
+
+    @Option(name: .customLong("count"), help: "Taps in a row, 1 or 2; 2 is a double tap.")
+    var count: Int = 1
+
+    @Option(name: .customLong("touches"), help: "Fingers, 1 or 2; 2 is a two-finger tap, 40 points apart around the point.")
+    var touches: Int = 1
+
     @Option(name: .customLong("tap-style"), help: "Event style: automatic touches switches and sends a simulator tap otherwise; physical always touches; simulator always sends a simulator tap. Default automatic, or physical with selected input or --agent.")
     var tapStyle: TapStyle?
 
@@ -70,7 +82,66 @@ struct Tap: PhysicalDeviceCommand {
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
 
+    /// Half the distance between the two contacts of a two-finger tap.
+    static let twoFingerHalfSpread = 20.0
+
+    /// A long press, a double tap or a two-finger tap, rather than one quick tap.
+    var isTouchGesture: Bool { hold != nil || count != 1 || touches != 1 }
+
+    private func validateTouchGesture() throws {
+        if let hold {
+            guard hold.isFinite, hold > 0, hold <= 10 else {
+                throw ValidationError("Hold must be above 0 and at most 10 seconds.")
+            }
+        }
+        guard (1...2).contains(count) else { throw ValidationError("Count must be 1 or 2.") }
+        guard (1...2).contains(touches) else { throw ValidationError("Touches must be 1 or 2.") }
+        guard isTouchGesture else { return }
+        guard count == 1 || touches == 1 else {
+            throw ValidationError("A double tap takes one finger: pass --count 2 or --touches 2, not both.")
+        }
+        guard !semanticPress, tapStyle == nil || tapStyle == .physical else {
+            throw ValidationError("--hold, --count and --touches send real touches: remove --semantic-press and --tap-style.")
+        }
+        guard !agentMode.enabled, selectedInput.mode != .selected else {
+            throw ValidationError("--hold, --count and --touches need plain input. With --agent or selected input, use touch or gesture with a point or --ref.")
+        }
+    }
+
+    /// The contacts of the tap around `point`: one, or two side by side kept on the screen's left edge.
+    static func contacts(at point: CGPoint, touches: Int) -> [CGPoint] {
+        guard touches == 2 else { return [point] }
+        let centre = max(point.x, twoFingerHalfSpread)
+        return [CGPoint(x: centre - twoFingerHalfSpread, y: point.y), CGPoint(x: centre + twoFingerHalfSpread, y: point.y)]
+    }
+
+    /// The device touch plan for a long press, a double tap or a two-finger tap at `point`.
+    func deviceSteps(at point: CGPoint) -> [PhysicalTouchStep] {
+        let points = Self.contacts(at: point, touches: touches)
+        return (0..<count).flatMap { index in
+            [PhysicalTouchStep(points: points, phase: .down, delayAfter: hold ?? 0.05),
+             PhysicalTouchStep(points: points, phase: .up, delayAfter: index + 1 < count ? 0.1 : 0)]
+        }
+    }
+
+    /// The sibling command that performs this tap's gesture on a simulator, as its arguments.
+    func simulatorGestureArguments(at point: (x: Double, y: Double)) -> [String] {
+        let contacts = Self.contacts(at: CGPoint(x: point.x, y: point.y), touches: touches)
+        let first = ["-x", String(Double(contacts[0].x)), "-y", String(Double(contacts[0].y))]
+        let target = ["--udid", simulatorUDID]
+        if touches == 2 {
+            let second = ["--x2", String(Double(contacts[1].x)), "--y2", String(Double(contacts[1].y))]
+            if let hold { return ["gesture", "two-finger-hold"] + first + second + ["--hold", String(hold)] + target }
+            return ["gesture", "two-finger-tap"] + first + second + target
+        }
+        if count == 2 {
+            return ["gesture", "double-tap"] + first + (hold.map { ["--hold", String($0)] } ?? []) + target
+        }
+        return ["touch"] + first + ["--down", "--up", "--delay", String(hold ?? 0.1)] + target
+    }
+
     func validate() throws {
+        try validateTouchGesture()
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
             if hasSimulatorOnlyOptions || (!semanticPress && tapStyle == .simulator) { return }
             if semanticPress {
@@ -339,7 +410,11 @@ struct Tap: PhysicalDeviceCommand {
         }
         if let preDelay { try await Task.sleep(for: .seconds(preDelay)) }
         if let pointX, let pointY {
-            try await input.tap(at: CGPoint(x: pointX, y: pointY))
+            if isTouchGesture {
+                try await input.perform(deviceSteps(at: CGPoint(x: pointX, y: pointY)))
+            } else {
+                try await input.tap(at: CGPoint(x: pointX, y: pointY))
+            }
         } else {
             let query: AccessibilityQuery
             if let elementID { query = .id(elementID) }
@@ -348,7 +423,8 @@ struct Tap: PhysicalDeviceCommand {
             else { throw ValidationError("Physical tap requires coordinates or one accessibility selector.") }
 
             try await PhysicalAccessibilityCommands.tap(query: query, elementType: elementType,
-                waitTimeout: waitTimeout, pollInterval: pollInterval, on: input)
+                waitTimeout: waitTimeout, pollInterval: pollInterval, on: input,
+                steps: isTouchGesture ? { deviceSteps(at: $0) } : nil)
         }
         if let postDelay { try await Task.sleep(for: .seconds(postDelay)) }
         return nil
@@ -381,6 +457,11 @@ struct Tap: PhysicalDeviceCommand {
         try await setup(logger: logger)
 
         try await performGlobalSetup(logger: logger)
+
+        if isTouchGesture {
+            try await performTouchGesture(logger: logger)
+            return
+        }
 
         // Verified DTUHID devices use the broker's retained connection, as the Duo does, so
         // a plain tap neither opens a new guest connection nor waits to drain before exit.
@@ -430,6 +511,40 @@ struct Tap: PhysicalDeviceCommand {
 
         logger.info().log("Tap completed successfully")
         CLIOutput.message("✓ Tap at \(resolvedDescription) completed successfully")
+    }
+
+    private var selectorQuery: AccessibilityQuery? {
+        if let elementID { return .id(elementID) }
+        if let elementLabel { return .label(elementLabel) }
+        if let elementValue { return .value(elementValue) }
+        return nil
+    }
+
+    /// A long press, double tap or two-finger tap: find the point as a tap does, then run the touch or
+    /// gesture command that already sends those contacts on every simulator route.
+    private func performTouchGesture(logger: AxeLogger) async throws {
+        let point: (x: Double, y: Double)
+        if let pointX, let pointY {
+            point = (pointX, pointY)
+        } else if let selectorQuery {
+            point = try await AccessibilityPoller.resolveWithPolling(query: selectorQuery, simulatorUDID: simulatorUDID,
+                waitTimeout: waitTimeout, pollInterval: pollInterval ?? 0.25, elementType: elementType, logger: logger).point
+        } else {
+            throw CLIError(errorDescription: "Pass -x and -y, --id, --label or --value.", code: .invalidArguments)
+        }
+        if let preDelay, preDelay > 0 { try await Task.sleep(for: .seconds(preDelay)) }
+        let arguments = simulatorGestureArguments(at: point)
+        logger.info().log("Tap gesture: \(arguments.joined(separator: " "))")
+        if arguments[0] == "touch" {
+            let command = try Touch.parse(Array(arguments.dropFirst()))
+            try await command.run()
+        } else {
+            let command = try Gesture.parse(Array(arguments.dropFirst()))
+            try await command.run()
+        }
+        if let postDelay, postDelay > 0 { try await Task.sleep(for: .seconds(postDelay)) }
+        let kind = touches == 2 ? "Two-finger tap" : count == 2 ? "Double tap" : "Long press"
+        CLIOutput.message("✓ \(kind) at (\(point.x), \(point.y)) completed successfully")
     }
 
     private func performLegacyTap(resolution: TapResolution, logger: AxeLogger) async throws {
