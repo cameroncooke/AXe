@@ -20,7 +20,6 @@ public actor FBSimulatorAXHostedWebPointOperation: FBSimulatorHIDInputAdmissionG
   private var validating = false
   private var consumed = false
   private var evidence: Data?
-  private var admitted = false
 
   private init(simulator: FBSimulator, expectedPID: Int32, label: String, point: CGPoint,
                observation: FBSimulatorHIDSessionObservation,
@@ -64,7 +63,6 @@ public actor FBSimulatorAXHostedWebPointOperation: FBSimulatorHIDInputAdmissionG
           provider: provider, budget: budget)
       }, onCancel: { budget.stop(.cancelled) })
       try budget.check(); try Task.checkCancellation()
-      admitted = true
     } catch let failure as FBSimulatorAXHostedWebFailure {
       evidence = failure.evidenceJSON
       throw failure
@@ -72,7 +70,6 @@ public actor FBSimulatorAXHostedWebPointOperation: FBSimulatorHIDInputAdmissionG
   }
 
   public func evidenceJSON() -> Data? { evidence }
-  public func admissionCompleted() -> Bool { admitted }
   /// Await the input operation, session close and feed close before this call.
   public func close() throws {
     guard !validating else { throw FBSimulatorAXTargetError.busy }

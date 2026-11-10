@@ -10,7 +10,7 @@ struct FBSimulatorAXNativeObjectIndexTests {
     let result = try index.resolve(identity: fixture.key, elementType: "Button", expectedPID: 42)
     #expect(!result.isAlias)
     #expect(result.canonicalIndex == 0)
-    #expect(try index.uniqueOccurrence(identity: fixture.key, elementType: "Button", expectedPID: 42).path == [0])
+    #expect(result.occurrences.map(\.path) == [[0]])
   }
 
   @Test func equalAliasesKeepBothDifferentOwnershipPaths() throws {
@@ -26,9 +26,6 @@ struct FBSimulatorAXNativeObjectIndexTests {
     let result = try index.resolve(identity: button.key, elementType: "Button", expectedPID: 42)
     #expect(result.occurrences.map(\.path) == [[0, 0, 0], [0, 1]])
     #expect(index.nodes.count == 6)
-    #expect(throws: FBSimulatorAXNativeObjectIndex.Failure.nonUniqueOccurrence) {
-      _ = try index.uniqueOccurrence(identity: button.key, elementType: "Button", expectedPID: 42)
-    }
   }
 
   @Test(arguments: ["pid", "type", "role", "subrole", "description", "identifier", "label", "value",

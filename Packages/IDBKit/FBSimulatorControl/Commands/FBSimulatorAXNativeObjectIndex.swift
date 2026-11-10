@@ -6,7 +6,7 @@ import CryptoKit
 public struct FBSimulatorAXNativeObjectIndex: Sendable {
   public enum Failure: String, Error, Equatable, Sendable {
     case incompleteTree, invalidIdentity, hierarchyBound, missingObject
-    case conflictingAliases, unavailableOccurrence, wrongOwnerOrType, nonUniqueOccurrence, unprovableValue
+    case conflictingAliases, unavailableOccurrence, wrongOwnerOrType, unprovableValue
   }
 
   public struct Occurrence: Codable, Sendable {
@@ -130,14 +130,6 @@ public struct FBSimulatorAXNativeObjectIndex: Sendable {
       throw Failure.wrongOwnerOrType
     }
     return Resolution(node: node, occurrences: matches)
-  }
-
-  /// Identity consistency never supplies a unique gesture/focus/ownership path.
-  public func uniqueOccurrence(identity: FBSimulatorAXNativeIdentity, elementType: String,
-    expectedPID: Int32) throws -> Occurrence {
-    let result = try resolve(identity: identity, elementType: elementType, expectedPID: expectedPID)
-    guard result.occurrences.count == 1 else { throw Failure.nonUniqueOccurrence }
-    return result.occurrences[0]
   }
 
   // Typed AX numbers use Double and can lose source decimal distinctions at any
