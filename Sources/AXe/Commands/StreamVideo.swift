@@ -160,11 +160,12 @@ struct StreamVideo: AsyncParsableCommand {
         FileHandle.standardError.write(Data("Press Ctrl+C to stop streaming\n".utf8))
 
         let frameInterval = 1.0 / Double(fps)
-        let mjpegBoundary = "--mjpegstream"
+        // RFC 2046: the declared boundary has no hyphens; each part starts with two.
+        let mjpegBoundary = "--\(SelectedStreamFrame.boundary)"
         let destination = FileHandle.standardOutput
 
         if format == .mjpeg {
-            let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=\(mjpegBoundary)\r\n\r\n"
+            let header = "HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=\(SelectedStreamFrame.boundary)\r\n\r\n"
             destination.write(Data(header.utf8))
         }
 

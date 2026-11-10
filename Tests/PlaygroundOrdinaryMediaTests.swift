@@ -31,8 +31,8 @@ struct PlaygroundOrdinaryMediaTests {
             try stream.signal(SIGINT)
             try await stream.wait(timeout: 15)
             try #require(stream.exitCode == 0, "stream-video did not stop cleanly: \((try? stream.errorOutput()) ?? "")")
-            frames = try PlaygroundMediaAssertions.streamFrames(OrdinaryPlaygroundSession.selectedFraming(try stream.stdoutData(),
-                format: format), format: format, width: 0, height: 0, complete: true)
+            frames = try PlaygroundMediaAssertions.streamFrames(try stream.stdoutData(), format: format,
+                width: 0, height: 0, complete: true)
         } catch { await stream.finish(); throw error }
         await stream.finish()
         try #require(frames.count >= 2)
@@ -120,18 +120,6 @@ extension OrdinaryPlaygroundSession {
         }
     }
 
-    /// The plain MJPEG stream declares `boundary=--mjpegstream` but delimits parts with
-    /// `--mjpegstream`. Parse its parts with the selected stream's header so the frames are checked.
-    static func selectedFraming(_ data: Data, format: String) throws -> Data {
-        guard format == "mjpeg" else { return data }
-        let prefix = Data("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=".utf8)
-        guard data.count >= prefix.count else { return data }
-        try #require(data.prefix(prefix.count) == prefix, "The MJPEG stream has no multipart HTTP header.")
-        let end = try #require(data.range(of: Data("\r\n\r\n".utf8)), "The MJPEG header is incomplete.")
-        let selected = Data("HTTP/1.1 200 OK\r\nContent-Type: multipart/x-mixed-replace; boundary=mjpegstream\r\n\r\n".utf8)
-        return selected + data.subdata(in: end.upperBound..<data.count)
-    }
-
     /// Decodes every frame of a plain recording: the reported count, increasing times, upright markers.
     static func requireUprightMovie(_ url: URL, width: Int, height: Int, frames expected: Int) async throws {
         let asset = AVURLAsset(url: url)
@@ -170,7 +158,7 @@ extension OrdinaryPlaygroundSession {
         let deadline = Date().addingTimeInterval(30)
         repeat {
             try #require(process.isRunning, "The stream ended early: \((try? process.errorOutput()) ?? "")")
-            let frames = try PlaygroundMediaAssertions.streamFrames(Self.selectedFraming(try process.stdoutData(), format: format), format: format,
+            let frames = try PlaygroundMediaAssertions.streamFrames(try process.stdoutData(), format: format,
                 width: 0, height: 0, complete: false)
             if frames.count >= minimum { return }
             try await Task.sleep(nanoseconds: 100_000_000)
