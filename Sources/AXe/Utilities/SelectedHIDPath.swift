@@ -52,7 +52,7 @@ struct SelectedHIDPath: Codable, Sendable {
             }
         }
         if generator == .ordinary { return try validateOrdinary() }
-        guard endsAtRest != true || kind == .swipe else {
+        guard endsAtRest != true || kind == .swipe || kind == .preset else {
             throw SelectedHIDFailure.invalid("Only a swipe can end at rest")
         }
         guard (points != nil) == (kind == .draw) else {
@@ -114,7 +114,7 @@ struct SelectedHIDPath: Codable, Sendable {
             throw SelectedHIDFailure.invalid("Only a draw carries a point list")
         }
         guard kind != .preset, preset == nil, edgeInset == nil, distance == nil, expectedWidth == nil, expectedHeight == nil,
-              endsAtRest == nil, preDelay == 0, postDelay == 0 else {
+              endsAtRest == nil || kind == .swipe, preDelay == 0, postDelay == 0 else {
             throw SelectedHIDFailure.invalid("An ordinary path takes endpoints or points, a duration and delta or steps only")
         }
         if kind == .draw {
@@ -169,12 +169,41 @@ struct SelectedHIDPath: Codable, Sendable {
             throw SelectedHIDFailure.invalid("Path endpoints exceed the measured logical display")
         }
         if kind == .swipe, let delta {
+            if endsAtRest == true {
+                return .composite(Self.restingSwipe(from: stroke[0], to: stroke[1], duration: duration, delta: delta)
+                    .map(\.event))
+            }
             return .swipe(stroke[0].x, yStart: stroke[0].y, xEnd: stroke[1].x, yEnd: stroke[1].y,
                           delta: delta, duration: duration)
         }
         let moves = steps ?? TouchStroke.moveCount(duration: duration)
         return .composite(TouchStroke.primitives(through: stroke, duration: duration, moves: moves,
             initialHold: initialHold, finalHold: Drag.finalHold).map(\.event))
+    }
+
+    /// Down at the start, `count` moves over `duration`, up at the end.
+    static func swipe(from start: CGPoint, to end: CGPoint, duration: Double, count: Int,
+                      endsAtRest: Bool) -> [SelectedHIDPrimitive] {
+        var result: [SelectedHIDPrimitive] = [.touch(.down, x: start.x, y: start.y)]
+        for index in 1...count {
+            result.append(.delay(duration / Double(count)))
+            let linear = Double(index) / Double(count)
+            // Cubic ease-out: the last movements are small, so the release velocity is near zero.
+            let fraction = endsAtRest ? 1 - pow(1 - linear, 3) : linear
+            let point = index == count ? end : CGPoint(
+                x: start.x + (end.x - start.x) * fraction,
+                y: start.y + (end.y - start.y) * fraction)
+            result.append(.touch(.down, x: point.x, y: point.y))
+        }
+        result.append(.touch(.up, x: end.x, y: end.y))
+        return result
+    }
+
+    /// A swipe that ends at rest, for the routes that send one event: at least eight moves, so the
+    /// easing has small last movements even when `delta` is a large part of the path.
+    static func restingSwipe(from start: CGPoint, to end: CGPoint, duration: Double, delta: Double) -> [SelectedHIDPrimitive] {
+        let moves = ceil(hypot(end.x - start.x, end.y - start.y) / max(delta, 1))
+        return swipe(from: start, to: end, duration: duration, count: Int(min(1000, max(8, moves))), endsAtRest: true)
     }
 
     func primitives(logicalSize: CGSize) throws -> [SelectedHIDPrimitive] {
@@ -228,18 +257,7 @@ struct SelectedHIDPath: Codable, Sendable {
         }
         var result: [SelectedHIDPrimitive] = []
         if preDelay > 0 { result.append(.delay(preDelay)) }
-        result.append(.touch(.down, x: start.x, y: start.y))
-        for index in 1...count {
-            result.append(.delay(duration / Double(count)))
-            let linear = Double(index) / Double(count)
-            // Cubic ease-out: the last movements are small, so the release velocity is near zero.
-            let fraction = endsAtRest == true ? 1 - pow(1 - linear, 3) : linear
-            let point = index == count ? end : CGPoint(
-                x: start.x + (end.x - start.x) * fraction,
-                y: start.y + (end.y - start.y) * fraction)
-            result.append(.touch(.down, x: point.x, y: point.y))
-        }
-        result.append(.touch(.up, x: end.x, y: end.y))
+        result += Self.swipe(from: start, to: end, duration: duration, count: count, endsAtRest: endsAtRest == true)
         if postDelay > 0 { result.append(.delay(postDelay)) }
         // Geometry and complete contact lifecycle are preflighted by the owned V12 session.
         return result

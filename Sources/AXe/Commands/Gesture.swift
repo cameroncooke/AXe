@@ -389,10 +389,15 @@ struct Gesture: PhysicalDeviceCommand {
         let width, height, startX, startY, endX, endY, duration, delta: Double
 
         /// The HID swipe with the requested delays around it.
-        func event(preDelay: Double?, postDelay: Double?) -> FBSimulatorHIDEvent {
+        func event(preDelay: Double?, postDelay: Double?, endsAtRest: Bool = false) -> FBSimulatorHIDEvent {
             var events: [FBSimulatorHIDEvent] = []
             if let preDelay, preDelay > 0 { events.append(.delay(preDelay)) }
-            events.append(.swipe(startX, yStart: startY, xEnd: endX, yEnd: endY, delta: delta, duration: duration))
+            if endsAtRest {
+                events += SelectedHIDPath.restingSwipe(from: CGPoint(x: startX, y: startY), to: CGPoint(x: endX, y: endY),
+                    duration: duration, delta: delta).map(\.event)
+            } else {
+                events.append(.swipe(startX, yStart: startY, xEnd: endX, yEnd: endY, delta: delta, duration: duration))
+            }
             if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
             return events.count == 1 ? events[0] : .composite(events)
         }
@@ -562,7 +567,12 @@ struct Gesture: PhysicalDeviceCommand {
             if let query = until.query {
                 try await until.run(query, waitsForRest: false,
                     observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
-                    scroll: { try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input) })
+                    scroll: {
+                        // Each step ends at rest; see `Swipe.restingPath`.
+                        var path = try selectedPath()
+                        path.endsAtRest = true
+                        try await PhysicalDeviceGestures.path(path, edge: edge, on: input)
+                    })
             } else {
                 try await PhysicalDeviceGestures.path(selectedPath(), edge: edge, on: input)
             }
@@ -635,13 +645,15 @@ struct Gesture: PhysicalDeviceCommand {
             try await until.run(query, observe: {
                 try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
             }) {
+                // Each step ends at rest; see `Swipe.restingPath`.
                 if let context {
                     let path = SelectedHIDPath(kind: .swipe, startX: swipe.startX, startY: swipe.startY,
-                        endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta, generator: .ordinary)
+                        endX: swipe.endX, endY: swipe.endY, duration: swipe.duration, delta: swipe.delta,
+                        endsAtRest: true, generator: .ordinary)
                     try await OrdinaryBrokerInput.perform(path: path, context: context,
                         simulatorUDID: simulatorUDID, postDelay: nil, logger: logger, verbose: false)
                 } else {
-                    try await HIDInteractor.performHIDEvent(swipe.event(preDelay: nil, postDelay: nil),
+                    try await HIDInteractor.performHIDEvent(swipe.event(preDelay: nil, postDelay: nil, endsAtRest: true),
                         for: simulatorUDID, logger: logger)
                 }
             }

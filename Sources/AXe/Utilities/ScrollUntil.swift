@@ -46,9 +46,10 @@ struct ScrollUntilOptions: ParsableArguments {
     }
 
     /// Reads, then scrolls and reads again, until the element is visible with the screen at rest, so the
-    /// next command can tap it. Content keeps gliding after a scroll, by about as far again as the finger
-    /// moved, so every read waits until two reads in a row match before it is judged: an element seen
-    /// mid-glide may be gone a moment later, and a tap sent mid-glide only stops the content.
+    /// next command can tap it. The caller's scroll ends at rest (`Swipe.restingPath`), so the content moves
+    /// the swipe's length and stops: a flick would carry it about as far again, past an element between two
+    /// reads. Content can still settle or bounce, so every read waits until two reads in a row match before
+    /// it is judged: a tap sent while it moves only stops it.
     /// It reads before the first scroll, so an element already on screen costs no input, and it stops as
     /// soon as a scroll moves nothing: the content is at its end, and more scrolls would only bounce it.
     /// `waitsForRest` is false where one read takes longer than the glide, as on a physical device.

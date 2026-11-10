@@ -156,6 +156,15 @@ struct Swipe: PhysicalDeviceCommand {
 
     var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .swipe, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration ?? 1, delta: delta ?? 50, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
 
+    /// The swipe as a step of scrolling until an element is on screen: it slows to a stop before it lifts,
+    /// so the content moves the swipe's length and no further. A linear swipe flicks the content about
+    /// as far again, which can carry the element across the screen between two reads.
+    var restingPath: SelectedHIDPath {
+        var path = selectedPath
+        path.endsAtRest = true
+        return path
+    }
+
     func validateOnDevice(inBatch: Bool) throws {
         try selectedInput.refuseOnDevice(agent: agentMode.enabled)
         try selectedPath.validate()
@@ -165,7 +174,7 @@ struct Swipe: PhysicalDeviceCommand {
         if let query = until.query {
             try await until.run(query, waitsForRest: false,
                 observe: { try await PhysicalAccessibilityCommands.observe(query, on: input) },
-                scroll: { try await PhysicalDeviceGestures.path(selectedPath, on: input) })
+                scroll: { try await PhysicalDeviceGestures.path(restingPath, on: input) })
         } else {
             try await PhysicalDeviceGestures.path(selectedPath, on: input)
         }
@@ -205,7 +214,9 @@ struct Swipe: PhysicalDeviceCommand {
             let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
             if let query = until.query {
-                // The same swipe, repeated until the element is on screen or the content stops moving.
+                // The same swipe, ending at rest, repeated until the element is on screen or the content stops moving.
+                var path = path
+                path.endsAtRest = true
                 try await until.run(query, observe: {
                     try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
                 }) {
@@ -222,7 +233,7 @@ struct Swipe: PhysicalDeviceCommand {
                 try await ScrollUntilOptions.observe(query, simulatorUDID: simulatorUDID, logger: logger)
             }) {
                 try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
-                    swipeDuration: swipeDuration, swipeDelta: swipeDelta, logger: logger)
+                    swipeDuration: swipeDuration, swipeDelta: swipeDelta, endsAtRest: true, logger: logger)
             }
         } else {
             try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,
@@ -233,7 +244,7 @@ struct Swipe: PhysicalDeviceCommand {
     }
     private func performLegacySwipe(
         startX: Double, startY: Double, endX: Double, endY: Double,
-        swipeDuration: Double, swipeDelta: Double, logger: AxeLogger
+        swipeDuration: Double, swipeDelta: Double, endsAtRest: Bool = false, logger: AxeLogger
     ) async throws {
         let physicalPoints = try await OrientationAwareCoordinates.translateBatch(
             points: [(x: startX, y: startY), (x: endX, y: endY)],
@@ -241,17 +252,23 @@ struct Swipe: PhysicalDeviceCommand {
             logger: logger
         )
         try await HIDInteractor.performHIDEvent(
-            hidEvent(from: physicalPoints[0], to: physicalPoints[1], duration: swipeDuration, delta: swipeDelta),
+            hidEvent(from: physicalPoints[0], to: physicalPoints[1], duration: swipeDuration, delta: swipeDelta,
+                     endsAtRest: endsAtRest),
             for: simulatorUDID, logger: logger)
     }
 
     /// The ordinary swipe between physical points with its pre and post delays, for the
     /// standalone command and batch steps.
     func hidEvent(from start: (x: Double, y: Double), to end: (x: Double, y: Double),
-                  duration: Double, delta: Double) -> FBSimulatorHIDEvent {
+                  duration: Double, delta: Double, endsAtRest: Bool = false) -> FBSimulatorHIDEvent {
         var events: [FBSimulatorHIDEvent] = []
         if let preDelay, preDelay > 0 { events.append(.delay(preDelay)) }
-        events.append(.swipe(start.x, yStart: start.y, xEnd: end.x, yEnd: end.y, delta: delta, duration: duration))
+        if endsAtRest {
+            events += SelectedHIDPath.restingSwipe(from: CGPoint(x: start.x, y: start.y), to: CGPoint(x: end.x, y: end.y),
+                duration: duration, delta: delta).map(\.event)
+        } else {
+            events.append(.swipe(start.x, yStart: start.y, xEnd: end.x, yEnd: end.y, delta: delta, duration: duration))
+        }
         if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
         return events.count == 1 ? events[0] : .composite(events)
     }

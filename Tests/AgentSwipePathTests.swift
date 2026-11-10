@@ -47,6 +47,32 @@ struct AgentSwipePathTests {
         #expect(steps.last! < 1 && steps.first! > 50)
     }
 
+    @Test("A scroll-until step on a one-event route ends at rest with at least eight moves")
+    func restingSwipeOnOrdinaryRoutes() throws {
+        // A 200-point scroll with the default 50-point delta would ease over four moves only.
+        let resting = SelectedHIDPath.restingSwipe(from: CGPoint(x: 200, y: 600), to: CGPoint(x: 200, y: 400),
+            duration: 0.5, delta: 50)
+        let y = resting.filter { $0.kind != .delay }.compactMap(\.y)
+        #expect(y.count == 10 && y.first == 600 && y.last == 400)
+        #expect(resting.first?.kind == .down && resting.last?.kind == .up)
+        let moves = zip(y, y.dropFirst()).map { $0 - $1 }.dropLast()
+        #expect(moves.count == 8 && moves.first! > 25 && moves.last! < 1)
+        #expect(abs(resting.compactMap(\.duration).reduce(0, +) - 0.5) < 0.0001)
+        // A long path keeps a move per delta.
+        #expect(SelectedHIDPath.restingSwipe(from: .zero, to: CGPoint(x: 0, y: 600), duration: 1, delta: 50)
+            .filter { $0.kind != .delay }.count == 14)
+
+        var ordinary = SelectedHIDPath(kind: .swipe, startX: 200, startY: 600, endX: 200, endY: 400,
+            duration: 0.5, delta: 50, generator: .ordinary)
+        try ordinary.validate()
+        ordinary.endsAtRest = true
+        try ordinary.validate()
+        var preset = SelectedHIDPath(kind: .preset, preset: .scrollUp, duration: 0.5, delta: 50)
+        preset.endsAtRest = true
+        try preset.validate()
+        #expect(try preset.primitives(logicalSize: CGSize(width: 402, height: 874)).last?.kind == .up)
+    }
+
     @Test("Only a swipe may end at rest")
     func onlySwipeEndsAtRest() throws {
         var drag = SelectedHIDPath(kind: .drag, startX: 10, startY: 10, endX: 100, endY: 100,
