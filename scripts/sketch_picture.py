@@ -51,7 +51,7 @@ class SketchPlayer:
         self.axe, self.tree, self.log = axe, tree, log
         self.strokes = 0
         self.inks = []
-        self.tool = self.colour = None
+        self.tool = self.weight = self.colour = None
         current = self.tree()
         if len(self.tool_frames(current)) < 3:
             # A narrow screen shows the picker as one round button, the selected tool, until it is tapped.
@@ -71,6 +71,10 @@ class SketchPlayer:
         # A tap on this label closes a tool's options. On a device the options hide it from the tree.
         self.outside = self.find(current, 'sketch.strokeCount')['frame']
         self.selected = (self.value(current, 'sketch.tool') or '').split(' ')[0]
+        # The swatches do not move, so each is tapped at its place: finding it by identifier reads the
+        # whole screen first, which takes two to three seconds on a physical device.
+        self.swatches = {str(node['AXUniqueId'])[len('sketch.colour.'):]: node['frame'] for node in walk(current)
+                         if str(node.get('AXUniqueId') or '').startswith('sketch.colour.') and node.get('frame')}
 
     # Reading the screen
     @staticmethod
@@ -124,6 +128,8 @@ class SketchPlayer:
 
     def use(self, name, weight=None):
         """Selects a tool, and with a weight opens its options with a second tap and picks it."""
+        if (name, weight) == (self.tool, self.weight):
+            return      # already in hand, with its colour
         ink = INKS[name]
         frame = self.reveal(name)
         if self.selected != ink:
@@ -139,13 +145,21 @@ class SketchPlayer:
             self.tap(choice['frame'])
             self.tap(self.outside)
             self.wait(f'{name} options to close', lambda tree: not self.buttons(tree, 'Weight'))
-        self.tool = name
+        self.tool, self.weight = name, weight
         self.colour = None      # the picker gives the canvas its own colour again
 
     def paint(self, colour):
-        if colour != self.colour:
-            self.axe('tap', '--id', 'sketch.colour.' + colour)
-            self.colour = colour
+        if colour == self.colour:
+            return
+        if colour not in self.swatches:
+            raise PictureFailed(f'the Sketch screen has no {colour} swatch')
+        try:
+            self.tap(self.swatches[colour])
+        except Exception:
+            # A device can fail to answer in time. Tapping a swatch twice changes nothing, so try once more.
+            time.sleep(1)
+            self.tap(self.swatches[colour])
+        self.colour = colour
 
     # Strokes
     def draw(self, points, seconds=None):
