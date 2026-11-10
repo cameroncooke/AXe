@@ -7,7 +7,7 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: simulator and device work is done and verified. Last update 10 November, about 09:50.
+- State: verified on simulators and devices up to `e9cb2485c`. Since then: a PencilKit screen, a painting demo and new end-to-end checks that have not been run (Phase 10). Still to do: the gesture conveniences in Phase 10 and the two input-stack refactors (SEL-16, SEL-17). Last update 10 November, about 10:50.
 - Simulators: unit tests 845 of 845; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
 - Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
@@ -384,6 +384,43 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 - CHANGELOG "Fixed" keeps only bugs confirmed to exist in v1.8.0 (110 bullets to 7); attributions #64, #68, #77 and #80 are kept.
 - Left out because they could not be verified: Duo `displays` and `hinge` example output (described in words), and `button siri` on physical devices.
 
+## Phase 10: drawing evidence, PencilKit and the competitor comparison (10 November)
+
+- [x] Drawing shown on a simulator and both devices: nine strokes (star, house, "AXe", wave, 120-point spiral) with `axe draw` on the iPhone 18 Pro simulator, the iPhone 16 Pro Max and the iPad Pro. The app counted 9 strokes on each. Screenshots in `e2e-results/drawing-demo/`.
+- [x] A PencilKit screen in the Playground (`Sketch`, `c1995e53f`): a `PKCanvasView` with the system tool picker. A finger draws, so `axe draw` leaves real ink. The screen reports the stroke count, the selected tool and the last stroke's ink.
+- [x] A painting made with axe alone (`scripts/demos/paint-sunset.py`): a sunset with a sun, mountains, a tree, a boat, stars and birds. 78 strokes from 235 axe commands in 4.5 minutes on the iPhone 18 Pro simulator. Tools and line weights are chosen in the tool picker by accessibility label, opacity by dragging the picker's slider, colours by tapping the system colour picker's grid. Picture and recording: `e2e-results/sketch-demo/sunset-iphone-sim.png` and `.mp4` (keep).
+- [~] End-to-end checks for it (`ea1115840`): `PlaygroundSketchTests` (4 cases, on the iPhone, iPad and Duo profiles) and a device check, "PencilKit ink and tool picker". Written and compiled; not run, at the owner's instruction.
+- [ ] Gesture conveniences that FlowDeck or RocketSim have and AXe lacks (table below)
+
+What the painting found:
+
+- The pen's line gets thinner as the finger moves faster, so fills made with it leave gaps. Monoline keeps one width (about 7 points at "Very Heavy") and is opaque, so every solid shape uses it. The marker blends like a highlighter and suits the sky and water washes only.
+- `axe slider --id Opacity --value 100` fails on the tool picker's opacity slider with `unsupportedValueDomain`: the slider reports its value as "80%" and no numeric range. The script drags the knob instead. Not fixed.
+- The system colour picker draws in another process and exposes no elements, so its grid is tapped by position (measured for a 402-point-wide iPhone).
+- A tap sent 0.6 s after the picker expanded was ignored once; the script checks that the colour picker opened and taps again.
+
+Gesture and drawing commands compared (FlowDeck 1.34.0 `flowdeck ui simulator`, RocketSim 16.8.0 `rocketsim interact`, both read from the installed command lines):
+
+| Capability | AXe | FlowDeck | RocketSim |
+| --- | --- | --- | --- |
+| Tap by point or element | yes | yes | yes |
+| Long press | point: `touch --down --up --delay`; element: agent `--ref` only | `tap --duration`, point or label | `long-press`, point or selector |
+| Double tap | point; element: agent `--ref` only | point or label | no |
+| Two-finger tap and hold | yes, two points | no | `--touches 2`, point or selector |
+| Swipe between points | yes | yes | yes |
+| Swipe by direction | presets `scroll-*`, fixed length; inside an element with agent `--ref` | direction and `--distance` | direction; from an element |
+| Hold, then drag (reorder) | `drag` rests briefly, not adjustable | `swipe --hold` | no |
+| Scroll until an element shows | no | `scroll --until` | no (pages only) |
+| Edge and system swipes | left, right, top and bottom edge presets | `back` | back, Notification Centre, Control Centre |
+| Pinch | yes, centre, radius, scale | yes | no |
+| Rotate | yes | yes | no |
+| Two-finger swipe | yes | no | no |
+| Draw a path of points | `draw`, up to 1,000 points | no (`touch` has down and up only) | no |
+| Touch down, move, up | yes | down and up | no |
+| Physical iPhone and iPad | yes | no | no |
+
+AXe has every gesture type the other two have and is the only one that can draw. Its gaps are conveniences: a long press or double tap on an element without agent mode, an adjustable hold before a drag, scrolling until an element is visible, a distance for direction swipes, and a Control Centre swipe.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -415,7 +452,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 100 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
+All 104 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
 
 | Commit | Subject |
 | --- | --- |
@@ -519,3 +556,7 @@ All 100 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. Th
 | `25dfab0ca` | docs(release): Correct the run counts and record the Duo triage and timing |
 | `2faeeedbc` | fix(gesture): Keep a default pinch radius inside the screen |
 | `ba8619661` | test(device): Rerun single device checks with AXE_E2E_CHECKS |
+| `ce809e81a` | docs(release): Record the device run, the pinch fix and the zoom reruns |
+| `e9cb2485c` | docs(release): Close the device items in the progress log |
+| `c1995e53f` | feat(playground): Add a PencilKit Sketch screen and a painting demo |
+| `ea1115840` | test(e2e): Add PencilKit sketch checks for simulators and devices |
