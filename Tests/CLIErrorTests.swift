@@ -143,6 +143,8 @@ struct CLIErrorTests {
         #expect(CLIErrorMapping.readable("busy") == nil)
         #expect(CLIErrorMapping.readable("interrupted(reason: staleContext, cleanup: notNeeded)") == nil)
         #expect(CLIErrorMapping.readable(" ") == nil)
+        // Foundation's text for an error that has no description of its own.
+        #expect(CLIErrorMapping.readable("The operation couldn\u{2019}t be completed. (AXe.SelectedAXWaitFailure error 1.)") == nil)
         #expect(CLIErrorMapping.readable("Target moved") == "Target moved.")
         #expect(CLIErrorMapping.readable("Selected siri boot identity differs; no input") == "Selected siri boot identity differs; no input.")
     }

@@ -35,6 +35,18 @@ struct SelectedAXWaitFailure: Error, CustomStringConvertible {
     }
 }
 
+extension SelectedAXWaitFailure: LocalizedError {
+    /// What a selected command prints. The probe count and the cause stay in `description`.
+    var errorDescription: String? {
+        switch receipt.outcome {
+        case .timedOut: "The control did not become ready before the wait ended"
+        case .cancelled: "The wait for the control was cancelled"
+        case .failed, .matched:
+            (cause as? LocalizedError)?.errorDescription ?? "AXe could not read the app's accessibility tree"
+        }
+    }
+}
+
 struct SelectedAXWaitAcquisitionFailure: Error, CustomStringConvertible {
     let acquisition: FBSimulatorAXAcquisition
     var description: String {

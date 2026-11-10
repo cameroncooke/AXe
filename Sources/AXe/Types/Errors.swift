@@ -170,7 +170,7 @@ enum CLIErrorMapping {
     /// `Error Domain=…`. Dumps stay in the `--verbose` receipt.
     static func readable(_ detail: String?) -> String? {
         guard let detail = detail?.trimmingCharacters(in: .whitespacesAndNewlines), !detail.isEmpty else { return nil }
-        let dump = #"^[a-z][A-Za-z0-9]*(\(.*\))?$|^[A-Z][A-Za-z0-9.]*\(.*\)$|^Error Domain=|FBSimulatorControl\.|FBControlCore\."#
+        let dump = #"^[a-z][A-Za-z0-9]*(\(.*\))?$|^[A-Z][A-Za-z0-9.]*\(.*\)$|^Error Domain=|FBSimulatorControl\.|FBControlCore\.|\(\S+ error -?\d+\.\)$"#
         guard detail.range(of: dump, options: .regularExpression) == nil else { return nil }
         return sentence(detail)
     }

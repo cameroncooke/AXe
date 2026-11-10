@@ -133,6 +133,8 @@ struct SelectedAXWaitTests {
         } catch let failure as SelectedAXWaitFailure {
             #expect(failure.receipt.outcome == .timedOut && failure.receipt.attempts == 2)
             #expect(failure.receipt.elapsedSeconds == 0.5)
+            // The printed text is a sentence for the reader, not Foundation's rendering of the type.
+            #expect(failure.localizedDescription == "The control did not become ready before the wait ended")
         }
         #expect(sleeps == [0.3, 0.2])
     }
