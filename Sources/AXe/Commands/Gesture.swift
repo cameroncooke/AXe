@@ -148,7 +148,7 @@ struct Gesture: AsyncParsableCommand {
           axe gesture pinch --scale 2 --udid UDID
           axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid UDID
           axe gesture rotate -x 200 -y 400 --radius 80 --degrees 90 --udid UDID
-          axe gesture two-finger-swipe -x 150 -y 500 --x2 250 -y2 500 --end-x 150 --end-y 300 --end-x2 250 --end-y2 300 --udid UDID
+          axe gesture two-finger-swipe -x 150 -y 500 --x2 250 --y2 500 --end-x 150 --end-y 300 --end-x2 250 --end-y2 300 --udid UDID
         """
     )
     

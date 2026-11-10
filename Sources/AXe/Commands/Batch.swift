@@ -43,7 +43,7 @@ struct Batch: AsyncParsableCommand {
         Keyboard steps require --focus-id; per-step --expected-pid is an optional guard.
 
         Legacy step commands:
-          tap, swipe, gesture, touch, type, button, key, key-sequence, key-combo
+          tap, swipe, gesture, draw, touch, type, button, key, key-sequence, key-combo
 
         Batch-only pseudo-step:
           sleep <seconds>

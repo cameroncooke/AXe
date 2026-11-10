@@ -107,6 +107,8 @@ axe tap --agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> -x 201 -y 640
 
 Use logical points, not screenshot pixels: `capture.screen` is `[screenID, width, height, rotation]`. Measure from a fresh screenshot of the same screen, and take a new capture and screenshot after any layout change. Coordinates skip the target check, so use them only as a deliberate choice for that control, never as an automatic retry for a refused ref. Coordinate swipes take `--start-x`, `--start-y`, `--end-x` and `--end-y` with `--agent --snapshot-id`.
 
+To draw a shape or pinch where no ref advertises `pinchWithin`, use the coordinate commands without `--agent`: `axe draw 100,400 300,400 300,600 --close --udid <UDID>` moves one finger through the points, and `axe gesture pinch --scale 2 --udid <UDID>` zooms in at the centre of the screen (`--scale 0.5` zooms out; `-x/-y` and `--radius` place it). They do not return a capture, so capture again afterwards. See [cli-quick-reference.md](references/cli-quick-reference.md#gestures-and-drawing).
+
 ## More agent actions
 
 Each takes `--agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref <REF>`:

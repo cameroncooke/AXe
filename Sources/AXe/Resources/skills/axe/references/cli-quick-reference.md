@@ -71,6 +71,17 @@ printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UDID>
 
 Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md).
 
+## Gestures and drawing
+
+```bash
+axe draw 100,400 300,400 --udid <UDID>                            # a line
+axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid <UDID>  # a triangle
+axe gesture pinch --scale 2 --udid <UDID>                         # zoom in at the screen centre
+axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid <UDID>  # zoom out
+```
+
+Logical points in the current orientation; no mode flag on simulators, the Duo or devices. `draw` takes 2 to 1,000 `x,y` points, one finger, `--duration` 1 second by default (at most 30), and refuses a point outside the screen with `invalidArguments` before input. `pinch` without `-x/-y` uses the screen centre, without `--radius` a quarter of the shorter side. `double-tap`, `rotate`, `two-finger-tap`, `two-finger-hold` and `two-finger-swipe` take explicit points; see `axe gesture --help`. Neither command returns a capture or proves that the app recognised the gesture: read the screen afterwards.
+
 ## Hardware buttons
 
 ```bash

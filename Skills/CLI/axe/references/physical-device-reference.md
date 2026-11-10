@@ -32,7 +32,7 @@ after}` and `--verbose` prints the full receipt. If the outcome is uncertain, re
 any more input.
 If a modal alert blocks the tree, close the alert on the phone and read again.
 
-Coordinate taps, swipes, drags, gestures, touch, rotation, typing, key commands, buttons and batches
+Coordinate taps, swipes, drags, draws, gestures, touch, rotation, typing, key commands, buttons and batches
 use the same hardware UDID. Focus the field before typing; `type` sends up to 256 UTF-8 bytes per
 command with the US key layout. Standalone touch requires both
 `--down` and `--up`. A physical batch can hold a contact across steps and releases it on exit.
