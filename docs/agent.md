@@ -218,6 +218,7 @@ Screen text is labelled as untrusted observation in every decision prompt. The o
 - Picker wheels, sliders, drag-and-drop and hardware-button plans are not yet exposed to Jev.
 - App launch depends on CoreSimulator's installed-app metadata; hidden services and extensions are filtered but unusual system bundles may still appear.
 - Reads reuse the frontmost-application handle between actions, so a system alert that appears while the app's own screen also changes may not be observed until the next refresh.
+
 ## Environment summary
 
 | Variable | Purpose | Default |
