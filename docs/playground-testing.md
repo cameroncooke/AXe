@@ -62,17 +62,17 @@ The result directory must be new. Earlier failed output is never replaced. The d
 
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
-| Core controls | 67 | 63 | 259 | Find, tap, type, scroll, swipe, drag, draw, PencilKit ink and tool picker, pinch, switches, sliders, retained contacts and batches |
+| Core controls | 75 | 71 | 267 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
 | Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
 | Keyboard and hardware | 16 | 10 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 6 | 6 | 28 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **236** | **84** | **525** | **845 case executions** |
+| **Total** | **244** | **92** | **533** | **869 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
-The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases, three raw/selected input handover cases and the eleven drawing, zoom and PencilKit sketch cases that every device runs. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
+The Duo core group has 20 explicit core cases, 217 expanded cases, eight selected client-exit cases, three raw/selected input handover cases and the nineteen drawing, zoom, PencilKit sketch and gesture cases that every device runs. The ordinary iPhone also checks cold-broker admission. Agent checks include the Photos permission buttons and slider input during folding and rotation.
 
 ## Physical devices
 
@@ -105,6 +105,8 @@ and `AXE_E2E_ALLOW_PROVISIONING_UPDATES=1` to let Xcode register a new device wh
 | Typing and keys | The text field holds `axe e2e`, then `axe e2` after backspace |
 | Drawing | `draw` with `--close` through a triangle: Drawing records one stroke from and back to the first corner, within 2 points of the corners' bounds, one contact, not cancelled |
 | PencilKit ink and tool picker | Sketch (a PencilKit canvas with the system tool picker): a `draw` triangle becomes one stroke with the selected tool's ink; after a tap on another tool in the picker, the next stroke has that tool's ink |
+| Long press, double tap, two fingers, drag hold | On Drawing: `tap --id --hold 1` records one contact of about a second, `--count 2` two short ones, `--touches 2` two fingers; `drag --hold 0.7` takes about 0.65 s longer than the same drag without it |
+| Scroll distance and scroll until | `gesture scroll-down --distance 0.4` moves 0.4 of the screen height; `scroll-up --until-id` brings a row 12 below the last visible one on screen, sends nothing when run again, and fails with `elementNotFound` for a missing element |
 | Pinch | `gesture pinch --scale 2`, then `0.5`, at the default centre and radius: Zoom records one zoom in above 1.3, then one zoom out at least 0.3 lower |
 | Element tap and point lookup | `describe-ui --point` finds `media-pattern-next`; `tap --id` advances the marker phase |
 | Screenshot | Upright: four squares, eight edge samples and the app's current phase |

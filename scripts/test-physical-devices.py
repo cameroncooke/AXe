@@ -226,6 +226,8 @@ class Device:
         """Every check after the doctor, by the name it reports under, in run order."""
         return {'coordinate taps': self.taps, 'typing and keys': self.typing,
                 'draw a closed triangle': self.drawing, 'PencilKit ink and tool picker': self.sketch,
+                'long press, double tap, two fingers, drag hold': self.touch_gestures,
+                'scroll distance and scroll until': self.scrolling,
                 'pinch in and out': self.pinch,
                 'element tap and point lookup': self.markers, 'screenshot': self.screenshot,
                 'raw stream': self.raw_stream, 'MP4 recording': self.recording,
@@ -326,6 +328,61 @@ class Device:
         second = value(tree, 'sketch.last.ink')
         require(second.startswith(label.lower() + ' '), f'{label} drew {second}')
         return f'{first}, then {second}'
+
+    def stroke(self, count):
+        """The Drawing screen's last stroke once it has recorded `count` completed strokes."""
+        value = lambda tree, name: str(element(tree, name).get('AXValue'))
+        tree = self.wait_for(f'{count} completed strokes', lambda tree: value(tree, 'drawing.strokeCount') == str(count)
+                             and value(tree, 'drawing.active') == 'false')
+        return dict(duration=float(value(tree, 'drawing.last.duration')), length=float(value(tree, 'drawing.last.length')),
+                    touches=int(value(tree, 'drawing.last.maxTouches')))
+
+    def touch_gestures(self):
+        """tap --hold, --count 2 and --touches 2 on an element, and drag --hold, read back as recorded strokes."""
+        tree = self.runner.launch(self.udid, 'drawing', 'drawing.canvas')
+        frame = element(tree, 'drawing.canvas')['frame']
+        x, top = round(frame['x'] + frame['width'] / 2), round(frame['y'] + frame['height'] * 0.3)
+        self.runner.axe_ok(self.udid, 'tap', '--id', 'drawing.canvas', '--hold', '1')
+        held = self.stroke(1)
+        require(held['touches'] == 1 and 0.8 <= held['duration'] <= 1.6, f'long press recorded {held}')
+        self.runner.axe_ok(self.udid, 'tap', '--id', 'drawing.canvas', '--count', '2')
+        double = self.stroke(3)
+        require(double['duration'] < 0.5, f'double tap recorded {double}')
+        self.runner.axe_ok(self.udid, 'tap', '--id', 'drawing.canvas', '--touches', '2')
+        two = self.stroke(4)
+        require(two['touches'] == 2, f'two-finger tap recorded {two}')
+        line = ['--start-x', str(x), '--start-y', str(top), '--end-x', str(x), '--end-y', str(top + 200), '--duration', '0.5']
+        self.runner.axe_ok(self.udid, 'drag', *line)
+        plain = self.stroke(5)
+        self.runner.axe_ok(self.udid, 'drag', *line, '--hold', '0.7')
+        rested = self.stroke(6)
+        require(abs(rested['length'] - 200) <= 6 and 0.45 <= rested['duration'] - plain['duration'] <= 1.1,
+                f'drag {plain}, with --hold 0.7 {rested}')
+        return (f"hold {held['duration']} s, double tap, two fingers, "
+                f"drag {plain['duration']} s and {rested['duration']} s with --hold 0.7")
+
+    def scrolling(self):
+        """A scroll preset's --distance, and --until-id on the long list."""
+        tree = self.runner.launch(self.udid, 'drawing', 'drawing.canvas')
+        _, height = application_size(tree)
+        self.runner.axe_ok(self.udid, 'gesture', 'scroll-down', '--distance', '0.4')
+        length = self.stroke(1)['length']
+        require(abs(length - height * 0.4) <= 12, f'scroll of 0.4 moved {length} on a {height}-point screen')
+        tree = self.runner.launch(self.udid, 'long-scroll-test', 'long-scroll-test-state')
+        rows = [int(str(node.get('AXUniqueId')).rsplit('-', 1)[1]) for node in walk(tree)
+                if str(node.get('AXUniqueId') or '').startswith('long-scroll-test-row-')]
+        require(rows, 'the long list shows no rows')
+        target = f'long-scroll-test-row-{max(rows) + 12}'
+        found = self.runner.axe_ok(self.udid, 'gesture', 'scroll-up', '--distance', '0.4', '--until-id', target,
+                                   '--max-swipes', '20')
+        tree = self.runner.tree(self.udid)
+        require(element(tree, target) is not None, f'{target} is not in the tree after scrolling')
+        again = self.runner.axe_ok(self.udid, 'gesture', 'scroll-up', '--until-id', target)
+        require('after 0 scrolls' in ' '.join(again.get('messages', [])), f'a second run scrolled: {again}')
+        _, error = self.runner.axe_json(self.udid, 'gesture', 'scroll-down', '--until-id', 'no-such-element',
+                                        '--max-swipes', '2')
+        require(error == 'elementNotFound', f'a missing element gave {error}')
+        return f"0.4 of the screen moved {length} points; {' '.join(found.get('messages', []))[-60:]}"
 
     def pinch(self):
         self.runner.launch(self.udid, 'zoom', 'zoom.surface')

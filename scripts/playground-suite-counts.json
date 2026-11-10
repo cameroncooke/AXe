@@ -3,6 +3,7 @@
   "PlaygroundDrawingTests": 5,
   "PlaygroundZoomTests": 2,
   "PlaygroundSketchTests": 4,
+  "PlaygroundGestureConvenienceTests": 8,
   "PlaygroundKeyboardTests": 1,
   "PlaygroundAgentTests": 4,
   "PlaygroundAgentAdaptiveOutputTests": 4,
