@@ -7,14 +7,14 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: verified on simulators and devices up to `e9cb2485c`. Since then: a PencilKit screen, a painting demo and new end-to-end checks that have not been run (Phase 10). Still to do: the gesture conveniences in Phase 10 and the two input-stack refactors (SEL-16, SEL-17). Last update 10 November, about 10:50.
-- Simulators: unit tests 845 of 845; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
+- State: simulators verified in isolated runs up to `04762105a`; the full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Since the last full run: a PencilKit screen and a painted car in the checks (Phase 10), the gesture conveniences and SEL-16 (Phase 11), and a device speed-up, the Device MCP comparison and a scroll-until fix (Phase 12). Still to do: SEL-17 (measure first), the slider on percentage sliders (B1), and the device rerun of the two changed checks. Last update 10 November, about 13:45.
+- Simulators: unit tests 866 of 866; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
 - Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
 - Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
 - Nothing is pushed.
 - Commits made by this audit: see the commit log at the end.
-- Blockers: none open. The devices were unreachable through CoreDevice from about 22:45 until 09:35.
+- Blockers: the iPad Pro cannot be reached through CoreDevice again (since about 12:30 on 10 November; the iPhone came back by itself). Restarting `CoreDeviceService` should clear it; I must not restart system services. The first outage ran from about 22:45 until 09:35.
 
 ## Phase 0: baseline
 
@@ -459,6 +459,56 @@ Input-stack refactors carried over from Phase 4:
 - [x] SEL-16. `SelectedHIDRequest` now has header fields and one `Payload` enum instead of thirteen optional fields (`986ecf927`). A mixed request cannot be built or decoded, and the validation that policed mixes is gone; 42 files, 21 fewer lines. Unit suite passes. End to end, run alone at `76f538fd9` (`e2e-results/sketch-sel16-1`): 17 of 17 suite runs passed across the three simulators (core, agent, agent pinch, ordinary regression and Sketch on the iPhone and iPad; Duo core, hardware, selected batch keyboard, selected Home batch, hinge window, agent, agent pinch and Sketch on the Duo), and 6 of 6 device checks
 - [ ] SEL-17. Fold the ordinary input route into the selected route. Not started: in the timing run of Phase 8 a selected tap took 0.183 s and a plain tap 0.153 s, so the fold may make plain taps slower, which `AGENTS.md` counts as a regression. To be measured and put to the owner before any change
 
+## Phase 12: device speed, the Device MCP comparison and scroll-until (10 November, afternoon)
+
+The owner found device commands far too slow while watching the car being painted on the iPad, and asked for the cause and a comparison with Device MCP.
+
+Where the time went, measured on the iPhone 16 Pro Max (iOS 27.2, USB):
+
+- [x] Every command made the device broker run `devicectl` twice before doing anything: device details, then lock state, 0.25 s each. A coordinate tap took 0.60 s, of which the touch was 0.07 s. `devicectl --version` alone takes 0.19 s, so the cost is starting the tool, not the query.
+- [x] A read of the accessibility tree is a new request to the device each time, and the wait is on the device: the first part of the tree arrives after about 0.9 s and the identifiers in a second part, about 40 ms per element in all. The broker sits idle in `poll` meanwhile, and turning the tree into JSON takes 0.01 s. Keeping accessibility switched on between reads did not shorten it, and a held subscription sent nothing in 4 s after a tap changed a label, so each read has to ask.
+- [x] `tap --id`, `--label` and `--value` read the tree twice and compared the target before tapping.
+- [x] The device does not offer its lock state over the tunnel: the request was sent to every `com.apple.coredevice.*` service and each answered "not implemented". So the lock check cannot be made cheaper than a `devicectl` run.
+
+Changes (`7ca36099c`):
+
+- The broker skips the two readiness reads when it sent input to the device in the last 25 seconds, the quiet gap a batch already used. A failed operation or `button lock` ends that. After a quiet gap the first command pays the 0.5 s again (measured: 0.64 s, then 0.10 s).
+- A tap by selector taps from one read. A target that appeared while `--wait-timeout` was polling is still read a second time and refused with `targetChanged` if it moved.
+- Tried and withdrawn: running the two `devicectl` reads at once. Right after it, three commands in a row failed with "devicectl device info … The operation failed" after 10 s each, then recovered. I could not show that the parallel reads caused it, so they run in sequence as before.
+
+| iPhone 16 Pro Max | AXe before | AXe now | Device MCP 0.9.0 |
+| --- | --- | --- | --- |
+| Tap at a point | 0.60 s | 0.10 s | 0.055 s |
+| Tree after a tap | 1.86 s | 1.4 s | 1.6 to 1.8 s |
+| Tree with no input before it | 1.86 s | 1.86 s | 1.0 s without identifiers; 0.01 s from its cache |
+| Tap by label | 2.8 s | 1.45 s | 1.75 s |
+
+Device MCP (Proxyman, `/Applications/Device MCP.app`), driven through its `device-mcp` bridge and sampled while it read (`e2e-results/device-perf/device-mcp-sample.txt`, `device-mcp-log.txt`):
+
+- It waits on the device for the tree exactly as AXe does: its session thread is parked in `kevent` for the whole read and parsing the dump takes 6 ms of 5.9 s sampled. It uses the same accessibility service and the same HID service.
+- It is one long-running app that keeps its connections, so a tap costs 0.055 s with no process start and no readiness check. It opens its own tunnel through usbmux and never calls `devicectl`, which is why it listed the iPad as ready while CoreDevice could not answer for it.
+- Its first answer is a "quick pass" tree that may lack identifiers (it does not wait for the second part), and it serves a tree from a cache for a few seconds. After a tap made outside it, it returned the old tree in 0.00 s ("Selected: Row 14" when the screen showed Row 17).
+- The owner's decision: the tree wait is the device's and is the same in both, so it stays.
+
+Scroll-until skipped its target (found by the isolated rerun at `a1b74d1c3`, `e2e-results/sketch-car-2`):
+
+- [x] Cause: each step was a flick. A `scroll-up --distance 0.4` moved the list 10.5 rows on a screen that shows 10, so a row could cross the screen between two reads. Each step now slows to a stop before the finger lifts, on simulators and devices, and moves exactly its own length (5 rows, at rest at once). By hand: the failing case finds row 22 in 3 scrolls on the iPhone simulator and row 40 in 4 scrolls on the physical iPhone, and the row is tappable straight away. Device MCP's `scroll_to` documents the same rule.
+- [x] The picture player swiped the tool picker from a point on its colour button, where a drag moves or minimises the palette instead of scrolling the tools. It now swipes between the first and third tools.
+- [x] The Sketch screen selects the pen on every visit. The system tool picker restores the last launch's tool, so the first check drew with whatever the car painting left selected.
+
+Isolated reruns of the two suites the changes touch, never the full suite:
+
+| Run | Commit | iPhone | iPad | Duo |
+| --- | --- | --- | --- | --- |
+| `e2e-results/sketch-car-2` | `a1b74d1c3` | Sketch 4 of 5, gestures 7 of 8 | Sketch 1 of 5, gestures 8 of 8 | Sketch 1 of 5, gestures 8 of 8 |
+| `e2e-results/sketch-car-3` | `948517299` | Sketch 4 of 5 (the car stopped on "Monoline options"), gestures 8 of 8 | Sketch 5 of 5, gestures 8 of 8 | Sketch 5 of 5, gestures 8 of 8 |
+| `e2e-results/sketch-car-4` | `04762105a` | Sketch 5 of 5 (car: 161 strokes, 23 inks, 172 s) | not rerun | not rerun |
+
+- [x] The last iPhone failure: a tool selected at the edge of the picker's strip slides into view, so the tap that opens its options landed where it had been. The player now waits until two reads agree on the tool's frame (`04762105a`).
+- [x] By hand with the same player: the car on the iPad Air simulator (164 strokes, 170 s, `e2e-results/sketch-demo/car-ipad-sim.png`) and on the iPhone 18 Pro simulator (161 strokes, 183 s).
+- [ ] Not rerun on the devices: "PencilKit ink and tool picker" and "scroll distance and scroll until". The iPad still cannot be reached through CoreDevice (`devicectl device info lockState` times out; `CoreDeviceService` has not been restarted since the morning), and `make e2e-devices` runs both devices. On the iPhone, by hand: taps, reads, tap by label and by identifier, and scroll-until in both directions.
+- Unit tests: 866 of 866. Script tests: 19 of 19.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -490,7 +540,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 104 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
+All 128 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
 
 | Commit | Subject |
 | --- | --- |
@@ -598,3 +648,27 @@ All 104 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. Th
 | `e9cb2485c` | docs(release): Close the device items in the progress log |
 | `c1995e53f` | feat(playground): Add a PencilKit Sketch screen and a painting demo |
 | `ea1115840` | test(e2e): Add PencilKit sketch checks for simulators and devices |
+| `2a8dc0834` | docs(release): Record the drawing evidence, PencilKit work and comparison |
+| `f97d11824` | docs(release): List the gesture gaps, painting bugs and remaining refactors |
+| `cea002db1` | test(device): Find the Sketch canvas through elements a device lists |
+| `a551b96ff` | feat(gesture): Add long press, double tap, drag hold and scroll-until |
+| `9e325e7c5` | test(e2e): Cover the new gesture options on simulators and devices |
+| `5974d8507` | test(device): Name the touch gesture check without commas |
+| `abaa6cc23` | test(e2e): Open the Control Centre check from a screen with a known marker |
+| `4c6501a46` | test(e2e): Paint a picture in the PencilKit checks |
+| `47f7cec06` | fix(gesture): Retry a failed device screen read while scrolling until |
+| `79ca2f220` | test(e2e): Drop repeated points from a picture's fill strokes |
+| `986ecf927` | ref(selected): Give a request one payload enum instead of thirteen optionals |
+| `76f538fd9` | test(device): Close a tool's options from a point read before they opened |
+| `5f783420e` | docs(release): Record the gesture options, the picture checks and SEL-16 |
+| `95335a390` | feat(gesture): Scroll inside an element, and stop at the end of the content |
+| `6a5eaab54` | fix(gesture): Treat an empty point lookup as not visible while scrolling |
+| `4b6b93964` | fix(gesture): Wait for the content to rest before scroll-until succeeds |
+| `ad67ba737` | test(e2e): Paint a shaded 3D car in the PencilKit checks |
+| `f657505b1` | docs(release): Record SEL-16's end-to-end run, the car picture and the slider limit |
+| `0fd758ac1` | test(e2e): Tap the Sketch swatches by position and keep a tool in hand |
+| `a1b74d1c3` | fix(gesture): Judge scroll-until only at rest, and let an element own its parts |
+| `7ca36099c` | perf(device): Skip readiness reads after recent input and tap from one tree read |
+| `614b25e5d` | fix(gesture): End each scroll-until step at rest so nothing is flicked past |
+| `948517299` | test(e2e): Start the Sketch screen on the pen and scroll the picker under its tools |
+| `04762105a` | test(e2e): Tap a picker tool for its options only once the strip is at rest |
