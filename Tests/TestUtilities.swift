@@ -9,10 +9,6 @@ let isE2EEnabled = {
     let raw = ProcessInfo.processInfo.environment["AXE_E2E"]?.lowercased() ?? ""
     return raw == "1" || raw == "true" || raw == "yes"
 }()
-let isLandscapeE2EEnabled = {
-    let raw = ProcessInfo.processInfo.environment["AXE_LANDSCAPE_E2E"]?.lowercased() ?? ""
-    return isE2EEnabled && (raw == "1" || raw == "true" || raw == "yes")
-}()
 
 struct CommandOutput {
     let output: String
@@ -219,144 +215,6 @@ struct TestHelpers {
         throw TestError.unexpectedState("axe binary not found at \(axePath). Please run 'swift build'.")
     }
     
-    static func setSimulatorOrientationPortrait() async throws {
-        try await setSimulatorOrientation(menuItem: "Portrait")
-    }
-
-    static func setSimulatorOrientationLandscapeLeft() async throws {
-        try await setSimulatorOrientation(menuItem: "Landscape Left")
-    }
-
-    static func setSimulatorOrientationLandscapeRight() async throws {
-        try await setSimulatorOrientation(menuItem: "Landscape Right")
-    }
-
-    private static func setSimulatorOrientation(menuItem: String) async throws {
-        let script = """
-        tell application "Simulator" to activate
-        delay 0.5
-        tell application "System Events"
-            tell process "Simulator"
-                click menu item "\(menuItem)" of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1
-            end tell
-        end tell
-        """
-        let escapedScript = script.replacingOccurrences(of: "'", with: "'\\''")
-        _ = try await CommandRunner.run("osascript -e '\(escapedScript)'", timeout: 10)
-        try await Task.sleep(nanoseconds: 1_500_000_000)
-    }
-
-    static func getUIState(simulatorUDID: String? = nil) async throws -> UIElement {
-        let udid: String
-        if let simulatorUDID {
-            udid = simulatorUDID
-        } else {
-            udid = try requireSimulatorUDID()
-        }
-        let result = try await runAxeCommand("describe-ui", simulatorUDID: udid)
-        
-        // Check if the command failed
-        if result.exitCode != 0 {
-            throw TestError.unexpectedState("axe describe-ui command failed with exit code \(result.exitCode). Output: \(result.output)")
-        }
-                
-        let roots = try UIStateParser.parseDescribeUIRoots(result.output)
-        if let playgroundRoot = roots.first(where: { root in
-            root.type == "Application" && root.label == "AxePlayground"
-        }) {
-            return playgroundRoot
-        }
-        guard let firstRoot = roots.first else {
-            throw TestError.invalidJSON("No UI elements found")
-        }
-        return firstRoot
-    }
-
-    static func waitForLandscapeCoordinateFixtureLayout(timeout: TimeInterval) async throws -> UIElement {
-        let deadline = Date().addingTimeInterval(timeout)
-
-        while Date() < deadline {
-            let uiState = try await getUIState()
-            if UIStateParser.findElement(in: uiState, matching: { element in
-                element.label == "Layout: landscape" && element.value == "landscape"
-            }) != nil {
-                return uiState
-            }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        throw TestError.unexpectedState("Timed out waiting for landscape fixture layout")
-    }
-
-    static func resetLandscapeCoordinateFixtureToPortrait() async throws {
-        try await setSimulatorOrientationPortrait()
-
-        let deadline = Date().addingTimeInterval(3)
-        while Date() < deadline {
-            let uiState = try await getUIState()
-            if UIStateParser.findElement(in: uiState, matching: { element in
-                element.label == "Layout: portrait" && element.value == "portrait"
-            }) != nil {
-                return
-            }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        throw TestError.unexpectedState("Unable to reset simulator to portrait fixture layout")
-    }
-
-    /// Waits until the label containing `text` reports `x:…,y:…` within one point of the expected point.
-    static func assertLastNamedCoordinate(
-        containing text: String,
-        expectedX: Int,
-        expectedY: Int,
-        timeout: TimeInterval
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        var lastValue: String?
-
-        while Date() < deadline {
-            let uiState = try await getUIState()
-            if let label = UIStateParser.findElementContainingLabel(in: uiState, containing: text)?.label {
-                lastValue = label
-                if let point = CoordinateParser.parseNamedCoordinates(from: label),
-                   abs(point.x - expectedX) <= 1,
-                   abs(point.y - expectedY) <= 1 {
-                    return
-                }
-            }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        throw TestError.unexpectedState(
-            "Timed out waiting for \(text) near x:\(expectedX),y:\(expectedY). Last value: \(lastValue ?? "none")"
-        )
-    }
-
-    static func waitForLabel(
-        containing text: String,
-        timeout: TimeInterval,
-        simulatorUDID: String? = nil,
-        satisfies predicate: (String) -> Bool
-    ) async throws -> String {
-        let deadline = Date().addingTimeInterval(timeout)
-        var lastValue: String?
-
-        while Date() < deadline {
-            let uiState = try await getUIState(simulatorUDID: simulatorUDID)
-            if let element = UIStateParser.findElementContainingLabel(in: uiState, containing: text),
-               let label = element.label {
-                lastValue = label
-                if predicate(label) {
-                    return label
-                }
-            }
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        throw TestError.unexpectedState("Timed out waiting for label containing '\(text)'. Last value: \(lastValue ?? "none")")
-    }
-    
     @discardableResult
     static func runAxeCommand(
         _ command: String,
@@ -401,31 +259,6 @@ struct TestHelpers {
         )
 
         return CommandOutput(output: output, exitCode: exitCode)
-    }
-
-    static func waitForProcessExit(
-        _ process: Process,
-        timeout: TimeInterval,
-        description: String
-    ) async throws {
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning, Date() < deadline {
-            try await Task.sleep(nanoseconds: 100_000_000)
-        }
-
-        if process.isRunning {
-            process.terminate()
-            try await Task.sleep(nanoseconds: 500_000_000)
-        }
-
-        if process.isRunning {
-            kill(process.processIdentifier, SIGKILL)
-            try await Task.sleep(nanoseconds: 200_000_000)
-        }
-
-        if process.isRunning {
-            throw TestError.unexpectedState(description)
-        }
     }
 }
 

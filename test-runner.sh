@@ -65,13 +65,14 @@ show_usage() {
     echo "  AXE_E2E_RESOURCE_PROBE_PATH Public process probe from the matching matrix run"
     echo "  AXE_MEDIA_PROCESS_OBSERVER_PATH Process observer for Photos and media checks"
     echo "  Other Playground helper paths are listed in scripts/playground-acceptance.json"
-    echo "  AXE_LANDSCAPE_E2E=1  Run gated landscape orientation precision tests when Simulator menu automation is available"
     echo ""
     echo "Test Filters (optional):"
-    echo "  SwipeTests          Run only swipe tests"
-    echo "  DragTests           Run only drag tests"
-    echo "  SliderTests         Run only slider tests"
     echo "  PlaygroundCoreTests Run the portable iPhone/Duo core action checks"
+    echo "  PlaygroundOrdinaryInputTests Run plain taps, swipes, gestures, touch and presentations on an ordinary device"
+    echo "  PlaygroundOrdinaryBatchTests Run plain batch sources, cache and wait checks on an ordinary device"
+    echo "  PlaygroundOrdinaryTextTests Run plain typing and key checks on an ordinary device"
+    echo "  PlaygroundOrdinaryButtonTests Run plain hardware button checks on an ordinary iPhone"
+    echo "  PlaygroundOrdinaryMediaTests Run plain screenshot, stream and recording checks on an ordinary device"
     echo "  PlaygroundAgentTests Run optional agent capture and reference checks"
     echo "  PlaygroundAgentLifecycleTests Run six reference lifetime and invalidation checks"
     echo "  PlaygroundAutomaticPIDTests Run six automatic app-PID safety checks"
@@ -84,26 +85,12 @@ show_usage() {
     echo "  PlaygroundDuoTests  Run Duo hinge, rotation and display-selection checks"
     echo "  PlaygroundDuoInterruptionTests Run held-touch, drag and pinch interruption checks"
     echo "  PhotosButtonLeafE2ETests Run Photos permission button checks"
-    echo "  PresentationFixtureTests Run the app presentation checks"
-    echo "  DescribeUITests     Run only describe-ui tests"
     echo "  InitTests           Run only init tests"
-    echo "  KeyComboTests       Run only key-combo tests"
-    echo "  KeySequenceTests    Run only key-sequence tests"
-    echo "  TapTests            Run only tap tests"
-    echo "  KeyTests            Run only key tests"
-    echo "  TouchTests          Run only touch tests"
-    echo "  TypeTests           Run only type tests"
-    echo "  ButtonTests         Run only button tests"
-    echo "  GestureTests        Run only gesture tests"
-    echo "  ListSimulatorsTests Run only list simulators tests"
-    echo "  RecordVideoTests    Run only record video tests"
-    echo "  StreamVideoTests    Run only stream video tests"
     echo ""
     echo "Examples:"
     echo "  $0                  # Build everything and run all tests"
-    echo "  $0 SwipeTests       # Build everything and run only swipe tests"
-    echo "  $0 DragTests        # Build everything and run only drag tests"
-    echo "  $0 -t SwipeTests    # Skip building, run only swipe tests"
+    echo "  $0 PlaygroundOrdinaryInputTests     # Build everything and run only the ordinary input checks"
+    echo "  $0 -t PlaygroundOrdinaryInputTests  # Skip building, run only the ordinary input checks"
     echo "  $0 -u               # Build and run non-E2E Swift tests without a simulator"
     echo "  $0 -b               # Only build, skip tests"
     echo "  $0 -c               # Clean build and run all tests"
@@ -157,7 +144,7 @@ while [[ $# -gt 0 ]]; do
             VERBOSE=true
             shift
             ;;
-        BatchTests|ButtonTests|DescribeUITests|GestureTests|InitTests|KeyComboTests|KeySequenceTests|KeyTests|ListSimulatorsTests|RecordVideoTests|StreamVideoTests|SwipeTests|DragTests|SliderTests|TapTests|TouchTests|TypeTests|PlaygroundCoreTests|PlaygroundAgentTests|PlaygroundKeyboardTests|PlaygroundDuoCoreTests|PlaygroundDuoTests|PlaygroundDuoInterruptionTests|PhotosButtonLeafE2ETests|PresentationFixtureTests)
+        InitTests|PhotosButtonLeafE2ETests)
             TEST_FILTER="$1"
             shift
             ;;
@@ -408,7 +395,6 @@ run_unit_tests() {
     AXE_BIN_PATH="$(run_selected_swift build --show-bin-path)/axe"
     export AXE_BIN_PATH
     export AXE_E2E=0
-    export AXE_LANDSCAPE_E2E=0
 
     local args=(--skip-build --no-parallel)
     [[ "$VERBOSE" == true ]] && args+=(--verbose)
@@ -485,17 +471,6 @@ generate_playground_project() {
     xcodegen generate --spec AxePlaygroundApp/project.yml --project build_products/playground-project
 }
 
-landscape_orientation_menu_available() {
-    local enabled_items
-    enabled_items=$(osascript \
-        -e 'tell application "Simulator" to activate' \
-        -e 'delay 0.5' \
-        -e 'tell application "System Events" to tell process "Simulator" to get enabled of menu items of menu "Orientation" of menu item "Orientation" of menu "Device" of menu bar 1' \
-        2>/dev/null || true)
-
-    [[ "$enabled_items" == true,\ true,\ true,\ true* ]]
-}
-
 playground_expected_count() {
     python3 - "$1" <<'PY'
 import json
@@ -529,24 +504,7 @@ run_tests() {
         exit 1
     fi
 
-    local requested_landscape_e2e="${AXE_LANDSCAPE_E2E:-0}"
-    local normalized_landscape_e2e
-    normalized_landscape_e2e=$(printf '%s' "$requested_landscape_e2e" | tr '[:upper:]' '[:lower:]')
-    case "$normalized_landscape_e2e" in
-        1|true|yes)
-            if landscape_orientation_menu_available; then
-                export AXE_LANDSCAPE_E2E=1
-            else
-                print_warning "Skipping landscape orientation precision tests because Simulator menu automation is unavailable. Open Simulator and grant macOS Accessibility permissions, then rerun with AXE_LANDSCAPE_E2E=1."
-                export AXE_LANDSCAPE_E2E=0
-            fi
-            ;;
-        *)
-            export AXE_LANDSCAPE_E2E=0
-            ;;
-    esac
-
-    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E, AXE_LANDSCAPE_E2E=$AXE_LANDSCAPE_E2E, AXE_BIN_PATH=$AXE_BIN_PATH"
+    print_info "Environment: SIMULATOR_UDID=$SIMULATOR_UDID, AXE_E2E=$AXE_E2E, AXE_BIN_PATH=$AXE_BIN_PATH"
 
     run_swift_test() {
         local filter="$1"
@@ -554,8 +512,8 @@ run_tests() {
         local expected_count
         local report_directory=""
         expected_count="$(playground_expected_count "$filter")"
-        # The filter is a regular expression, so a suite such as BatchTests also runs
-        # Playground suites whose names contain it. Every run gets an artifact directory.
+        # The filter is a regular expression, so a suite name also runs any
+        # other suite whose name contains it. Every run gets an artifact directory.
         mkdir -p build_products/test-runner-results || return 1
         report_directory="$(mktemp -d "build_products/test-runner-results/${filter}.XXXXXX")" || return 1
         export AXE_E2E_ARTIFACT_DIR="$PWD/$report_directory/artifacts"
@@ -591,26 +549,14 @@ run_tests() {
     if [[ "$SEQUENTIAL" == true ]]; then
         print_info "Running E2E suites one-by-one to avoid simulator contention"
         local suites=(
-            "BatchTests"
-            "ButtonTests"
-            "DescribeUITests"
-            "GestureTests"
             "InitTests"
-            "KeyComboTests"
-            "KeySequenceTests"
-            "KeyTests"
-            "ListSimulatorsTests"
             "PlaygroundCoreTests"
+            "PlaygroundOrdinaryInputTests"
+            "PlaygroundOrdinaryBatchTests"
+            "PlaygroundOrdinaryTextTests"
+            "PlaygroundOrdinaryButtonTests"
+            "PlaygroundOrdinaryMediaTests"
             "PlaygroundAgentTests"
-            "PresentationFixtureTests"
-            "RecordVideoTests"
-            "StreamVideoTests"
-            "SwipeTests"
-            "DragTests"
-            "SliderTests"
-            "TapTests"
-            "TouchTests"
-            "TypeTests"
         )
 
         echo ""
