@@ -23,8 +23,6 @@ public protocol AsynciOSTarget: AnyObject,
   AsyncLogCommands,
   AsyncScreenshotCommands,
   AsyncVideoRecordingCommands,
-  AsyncXCTraceRecordCommands,
-  AsyncInstrumentsCommands,
   AsyncLifecycleCommands,
   AsyncPowerCommands
 {

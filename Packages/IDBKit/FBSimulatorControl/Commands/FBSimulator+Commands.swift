@@ -52,14 +52,6 @@ extension FBSimulator {
     commandCache.resolve { FBSimulatorLaunchCtlCommands.commands(with: self) }
   }
 
-  func instrumentsCommands() throws -> FBInstrumentsCommands {
-    commandCache.resolve { FBInstrumentsCommands(target: self) }
-  }
-
-  func xctraceRecordCommands() throws -> FBXCTraceRecordCommands {
-    commandCache.resolve { FBXCTraceRecordCommands.commands(with: self) }
-  }
-
   // MARK: - Sim-only accessors
 
   func lifecycleCommands() throws -> FBSimulatorLifecycleCommands {
