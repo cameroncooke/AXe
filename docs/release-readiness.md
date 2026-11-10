@@ -51,9 +51,9 @@ The third and fourth are one owner with two admission styles and can be merged.
 
 ## Phase 2: bug fixes
 
-- [~] Device support bugs: fixed on branch `audit/device-fixes` (7 commits, 886 unit tests pass), merge into `v2` pending; final device run blocked
+- [~] Device support bugs: fixed and merged into `v2` (7 commits); the final device run is blocked
 - [x] Simulator input and broker bugs
-- [~] Agent mode bugs: fixed on branch `audit/agent-fixes` (13 commits, 905 unit tests pass), merge into `v2` pending
+- [x] Agent mode bugs: fixed and merged into `v2` (13 commits)
 
 Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
 
@@ -66,7 +66,10 @@ Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`)
 - Playground groups on the iPhone simulator: `PlaygroundOrdinaryRegressionTests` 5 of 5 and `PlaygroundInputHandoverTests` 3 of 3.
 - Net change: 617 lines added, 1,010 removed.
 
-Device wave evidence (branch `audit/device-fixes`):
+Merged state: after both branches were cherry-picked onto `v2` (no conflicts), `AXE_BUILD_ARCHS=arm64 make build`
+succeeded and `swift test --skip Playground` passed 922 tests in 127 suites.
+
+Device wave evidence:
 
 - Fixed: a device drag lost the wait before its first move and the whole `--duration` with `--steps 1` (fixture tests for 1, 4 and 60 steps); a gesture's post-delay ran inside the broker; the end-to-end harness left capture processes running after a failed check; a cold command spawned `devicectl list devices` twice; a redundant display read before an element tap; a leaked UDP receiver; duplicate helpers and dead cases.
 - One audit finding was wrong, measured on the iPad: reusing one `deviceinfo` connection is slower than a fresh one (a second request after a 0.5 s pause usually got no reply in 3 s; a fresh read takes 13 to 38 ms).
@@ -75,7 +78,7 @@ Device wave evidence (branch `audit/device-fixes`):
 - `make e2e-devices` could not build the Playground at first because its Xcode project is no longer checked in; the script now generates it with XcodeGen.
 - Not verified: a final device run on the fixed build (see Blockers), the drag timing on a device, and the top-edge swipe in landscape.
 
-Agent-mode wave evidence (branch `audit/agent-fixes`):
+Agent-mode wave evidence:
 
 - Fixed: an in-call retry could act on a different control at the same place (it now requires the same native object); certain refusals were retried five times for nothing; focus-and-type retries dropped their plan; paging a changed snapshot returned another snapshot's first page as a success; ticking text refused every action; a caller's invalid request cleared another caller's snapshot; `--focus-id` reported a batch error. `axe agent` refuses plain-HTTP base URLs for remote hosts.
 - New refusal codes agents can branch on: `targetCovered`, `busy`, `observationFailed`, `displayChanged`, `waitTimedOut`, `waitCancelled`, `inputIncomplete`, `cleanupUncertain`, `responseTooLarge`, `invalidExpectedPID`.
@@ -103,9 +106,22 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 
 ## Phase 5: output contracts
 
-- [~] Default output holds only what a person or agent needs; internals only with `--verbose`
-- [ ] JSON results match the published schemas
-- [ ] Schemas for per-command results
+- [x] Default output holds only what a person or agent needs; internals only with `--verbose`
+- [x] JSON results match the published schemas
+- [x] Schemas for per-command results (`schemas/axe.output.command-payloads.v1.schema.json`, 35 entries)
+- [~] Same error codes and result shapes on physical-device paths (branch `audit/integration`)
+
+Verification (commits `8f8f4a061` to `342581d55`):
+
+- `swift test --skip Playground` passed 897 tests at the end of this wave. The payload tests build each command's result from its real type and fail on any field the schema does not declare.
+- No error reaches the user as a Swift, NSError or framework description: one mapping in `Sources/AXe/Types/Errors.swift` serves both plain and JSON output. SIGINT and SIGTERM exit with 128 plus the signal number and print nothing.
+- Error sites that reported the catch-all `commandFailed`: 195 before; 32 remain without a specific code, 21 of them in files this wave could not edit and 11 internal pipe failures where the catch-all is accurate.
+- The envelope's `command` is now the full path (`hinge set`, not `hinge`), and `error` is required exactly when `didError` is true.
+- `shutdown`, `clipboard`, selected screenshots and recordings now print text by default and a compact result with `--output json`; their full receipts moved behind `--verbose`.
+- Convention for plain-text success: a command that reads or changes state prints that state in a few lines; input commands print nothing, except `tap`, `slider` and `batch`, which keep the "✓" line they printed in v1.8.0; media commands print the file path.
+- Run live on the iPhone simulator in plain and JSON form, success and one failure, with each JSON result validated against both schemas: `describe-ui`, `list-simulators`, `displays`, `settings show` and `set`, `status-bar`, `location scenarios`, `doctor`, `clipboard copy`, `init`, `tap`, `key`, `swipe`, `screenshot`, `record-video`, `batch`, `shutdown`. On the Duo: `displays`, `hinge read` and `set`, `rotate`, selected screenshot and recording.
+- Playground groups: clipboard passed on the iPhone; Duo media 18 of 18; Duo keyboard interruption groups 5 of 5. Two Duo groups could not run because of the Duo display problem described under Phase 8.
+- Not run live: `settings location set` and `clear`, and a successful selected slider move.
 
 ## Phase 6: `axe settings` command
 
@@ -145,9 +161,9 @@ changing anything. Devices do not support status bar overrides.
 
 ## Phase 7: gestures
 
-- [ ] Swipe works on simulators, the Duo and devices without extra flags
-- [ ] Pinch in and out works without `--input-mode selected`
-- [ ] Drawing: a multi-point path command for arbitrary shapes
+- [x] Swipe works on simulators, the Duo and devices without extra flags (already the case; end-to-end check pending)
+- [~] Pinch in and out works without `--input-mode selected`
+- [~] Drawing: `axe draw <x,y> <x,y> …` for arbitrary shapes
 - [x] Playground screens that record pinch scale and drawn paths (Drawing and Zoom)
 - [ ] End-to-end checks for each
 
@@ -234,5 +250,7 @@ Decisions made without the owner, with the reason.
 | `526878eac` | Legacy edge insets on the measured size; slider failure codes |
 | `aab61ae57` | Document result shapes, error codes and the payload schema |
 | `342581d55` | Keep framework dumps out of messages |
+| `4f1c…` to `80b3bcb74` | Device fixes (7 commits): drag duration, post-delay, harness leaks, cold-start spawn, dead code |
+| `…` to `4f28af3ee` | Agent-mode fixes (13 commits): retry binding, typed refusals, compact replies, file splits |
 
 Commits from `379715af0` onwards are unsigned: 1Password stopped answering signing requests.
