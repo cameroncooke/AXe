@@ -7,7 +7,11 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: in progress.
+- State: simulator work is done and verified; device verification is blocked. Last update 10 November, about 09:35.
+- Simulators: unit tests 845 of 845; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
+- Not verified: anything on the physical iPhone and iPad; timing against the v1.8.0 release binary (none on this Mac).
+- Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
+- Nothing is pushed.
 - Commits made by this audit: see the commit log at the end.
 - Blockers: 1 open (physical devices unreachable through CoreDevice since about 22:45). See Blockers.
 
@@ -54,7 +58,7 @@ The third and fourth are one owner with two admission styles and can be merged.
 - [~] Device support bugs: fixed and merged into `v2` (7 commits); the final device run is blocked
 - [x] Simulator input and broker bugs
 - [x] Agent mode bugs: fixed and merged into `v2` (13 commits)
-- [x] Bugs found by the final verification (4 fixes, `5b2427fd1` to `cc39c8d49`)
+- [x] Bugs found by the final verification (5 fixes, `5b2427fd1` to `edbb353fe`)
 
 Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
 
@@ -96,6 +100,7 @@ Bugs found by the final verification, each fixed and committed:
 | `axe displays` and agent reads failed on a locked iPhone or iPad simulator ("inconsistent screen layout") | A device with one screen was accepted only while lit; a locked Duo already read fine | `a35e1270d`: the one built-in screen is read in any reported state. Locked iPhone 18 Pro now prints `portrait, locked`, JSON `"state":"locked"`, and `describe-ui --agent` returns the lock screen. 10 IDBKit display tests pass. |
 | `batch --agent --file` with malformed JSON reported `readFailed` ("AXe could not read a response it expected") | The decoding error fell through to the generic mapping (a regression from the error-code unification) | `5b2427fd1`: `invalidArguments`, "Agent batch JSON is malformed or lacks a steps array." New unit test; the failing e2e case passes. |
 | Ordinary `stream-video --format mjpeg` declared `boundary=--mjpegstream` while parts start with `--mjpegstream` | Present since v1.8.0; a strict multipart parser finds no parts | `46c18a694`: declares `boundary=mjpegstream` like the selected stream; part bytes unchanged. |
+| A selected tap whose wait timed out printed "The operation couldn't be completed. (AXe.SelectedAXWaitFailure error 1.)" | The failure type had no description of its own, so Foundation's default text reached the output | `edbb353fe`: prints "The control did not become ready before the wait ended."; the readable-text filter also drops that default rendering for any other type. Unit tests, and `PlaygroundDuoTapWaitTests` passes on the Duo |
 
 Not done, with reasons: the audit's claim that the second DTUHID readiness wait is a no-op was wrong
 (the first wait is skipped when `dtuhidd` is not yet a child process), so it is kept.
@@ -104,7 +109,7 @@ Not done, with reasons: the audit's claim that the second DTUHID readiness wait 
 
 - [x] Unused Swift symbols in the input stack (`CoordinateHelpers.swift`, dead wrappers; commit `8d1c5a0f8`)
 - [x] Stale or duplicate tests (commit `49a587d4`: one shared AX-node fixture replaces 20 private copies; dead suites removed)
-- [~] The 17 older end-to-end suites that `make e2e` never runs: run them, then wire in or delete
+- [x] The 17 older end-to-end suites that `make e2e` never ran: run once (all passed), then replaced by five matrix suites (`b623e4f21` to `963cae85f`)
 - [x] Orphan scripts, stale goldens and unused fixtures (commit `eecb92b82`: 532 files, 7,770 lines; `swift package dump-package` parses, 19 script tests pass)
 - [x] Unused IDBKit code removed (7 commits ending `085823b4f`: 82 files, 6,456 lines; FBControlCore 4.86 MB to 3.63 MB, FBSimulatorControl 15.58 MB to 14.24 MB; the IDBKit test target passed 262 Swift Testing and 9 XCTest tests before and after; the universal build succeeds)
 - [x] Stale documentation (see Phase 9)
@@ -227,15 +232,17 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 
 - [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
 - [x] Second run on `v2` after the input-stack wave: iPhone 24 of 27 suites, iPad 5 of 5, Duo did not run
-- [x] Third run on `v2` at `e45b0d3db` (03:28, 70 minutes, one agent still testing on other simulators): 96 of 101 suites passed
+- [x] Third run on `v2` at `e45b0d3db` (03:28, 70 minutes, one agent still testing on other simulators): 43 of the 101 planned suites ran and 38 passed; the Duo stopped after 7 suites
 - [x] Targeted rerun of the 5 failed suites and the new ordinary suites on a quiet machine at `a35e1270d`
-- [~] Final full run on `v2` at `cc39c8d49`, quiet machine, simulators rebooted first (started 05:45)
+- [x] Fourth run on `v2` at `cc39c8d49`, simulators rebooted first, stopped by the owner after 2 h 20 min: iPhone 34 of 34 passed, Duo 47 of the 51 that ran; 13 Duo and 11 iPad suites did not run
+- [x] Isolated reruns of the four failed Duo suites: all four pass (three after fixes `edbb353fe` and `6463de619`)
+- [x] Isolated run of the 13 Duo suites the fourth run did not reach: 9 passed; the other 4 passed when rerun alone (one after a script fix, `c06e149e8`)
 - [x] Triage of the three failing iPhone cases: none is a regression (see below)
-- [ ] Unit tests
-- [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
-- [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad
-- [ ] Taps and typing on a simulator and on both devices
-- [ ] Performance against the pre-audit build (`make bench-quick`)
+- [x] Unit tests at `c06e149e8`: `swift test --skip Playground` 845 of 845 in 117 suites; script tests 19 of 19
+- [x] Simulator end-to-end suites affected by the changes: iPhone 34 of 34 at `cc39c8d49`; Duo 64 of 64 passed at least once at `cc39c8d49` or later, 8 of them only on an isolated rerun; iPad 11 of 11 at `e45b0d3db` and `a35e1270d`, not rerun after the last input fix
+- [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad: blocked, `devicectl` still times out at 08:50 on 10 November
+- [~] Taps and typing: verified on the iPhone, iPad and Duo simulators by the suites above; not run on the devices (blocked)
+- [x] Performance against the pre-audit build (`scripts/bench-quick.py`, 7 pairs, iPhone 18 Pro simulator): no regression in two runs
 
 Baseline run (`e2e-results/20261109T222215Z` in the verification checkout, 58 minutes): FAIL, for two
 environmental reasons, so it says nothing about the code.
@@ -277,17 +284,61 @@ Duo "screens still changing" refusal, investigated and fixed (merged into `v2`):
 - Tap timing on the Duo in the normal state, median of 7: 0.423 s before, 0.390 s after.
 - Not conclusive: Duo matrix groups run under load averages of 100 to 240 failed on both the old and the new build (app launch failures and the known early-boot accessibility wedge), so they need the quiet final run.
 
-Third run (`e2e-results/20261110T032721Z`, 70 minutes, `v2` at `e45b0d3db`): 96 of 101 suites passed; all 10 iPad suites passed. The ordinary-suite agent was still running its own simulators until about 04:00 (load average up to 370), so the run was not quiet. The five failures:
+Third run (`e2e-results/20261110T032721Z`, 70 minutes, `v2` at `e45b0d3db`): 43 of the 101 planned suites ran: iPhone 26 of 29 passed, iPad 7 of 7, Duo 5 of 7. The Duo part stopped at its seventh suite when its input was quarantined, so 57 Duo suites did not run. An earlier version of this log said "96 of 101 suites passed"; that wrongly counted the suites that never ran as passes. The ordinary-suite agent was still running its own simulators until about 04:00 (load average up to 370), so the run was not quiet. The five failures:
 
 | Suite | Failure | Verdict |
 | --- | --- | --- |
 | iPhone `PlaygroundAgentBatchTests` | Malformed batch file reported `readFailed` | Real regression, fixed (`5b2427fd1`); passes on rerun |
 | iPhone `PlaygroundAgentSliderTests` | Two interior-value cases ran out of time (13 to 14 s) | Load; passes on the quiet rerun |
 | iPhone `PlaygroundAgentKeyComboTests` | Two taps refused after an observation timed out | Load; passes on the quiet rerun |
-| Duo `PlaygroundDuoCoreTests` | `simctl launch` returned no process for the first test | Simulator launch failure under load; rerun in the final run |
-| Duo `PlaygroundDuoScrollCoverageTests` | A swipe stopped because the display feed was 0.57 s old (limit 0.5 s); cleanup uncertain, input quarantined | Load; rerun in the final run. The quarantine then correctly blocked every later Duo input until I rebooted that simulator and removed the record. |
+| Duo `PlaygroundDuoCoreTests` | `simctl launch` returned no process for the first test | Simulator launch failure under load; passed in the fourth run |
+| Duo `PlaygroundDuoScrollCoverageTests` | A swipe stopped because the display feed was 0.57 s old (limit 0.5 s); cleanup uncertain, input quarantined | Load; passed in the fourth run. The quarantine then correctly blocked every later Duo input until I rebooted that simulator and removed the record. |
 
 Targeted rerun on a quiet machine (`e2e-results/final-targeted-1`, 23 minutes, `v2` at `a35e1270d`, 19 suites): the three iPhone agent suites passed, all five iPad ordinary suites passed, and four of the six new ordinary iPhone suites passed. `PlaygroundOrdinaryBatchTests` and `PlaygroundOrdinaryButtonTests` failed with `DTUHID guest barrier timed out`, which led to the fix in `cc39c8d49` (Phase 2). The Duo suites did not run because of the quarantine record above.
+
+Fourth run (`e2e-results/20261110T053045Z`, `v2` at `cc39c8d49`, quiet machine): started as a last full run because `cc39c8d49` changes every plain input command. The owner stopped it after 2 hours 20 minutes: a full run is too expensive for one fix, and a few plain-input suites would have covered that change. The rule is now in `AGENTS.md` (Build and test). What it showed before it was stopped:
+
+- iPhone: 34 of 34 suites passed, including the two ordinary suites that had failed with `DTUHID guest barrier timed out`.
+- Duo: 51 of 64 suites ran, 47 passed. This was the first time since the audit began that more than 7 Duo suites ran.
+- Not run: 13 Duo suites and all 11 iPad suites. The iPad suites last passed at `e45b0d3db` (7 suites) and `a35e1270d` (5 ordinary suites).
+
+The four Duo failures, each rerun alone (`e2e-results/duo-isolated-1` on the old build, `duo-isolated-2` at `6463de619`):
+
+| Suite | Cause | Result |
+| --- | --- | --- |
+| `PlaygroundDuoAgentInterruptionTests` (11 issues) | The test launched its interrupted input without `--view full`, so the compact reply lacked the `kind` and `replayed` fields it decodes. Stale since `7c95e5f9e`. | Test fixed (`6463de619`); passes |
+| `PlaygroundDuoLegacyBatchInterruptionTests` (2) | The audit added `--verbose` and a ban on the string "FBSimulatorControl" in the same change (`8f8f4a061`); the verbose loader log always prints that string. | Test now bans the error type name (`6463de619`); passes |
+| `PlaygroundDuoTapWaitTests` (2) | The test passed `--poll-interval` with a zero wait, which `4b859379d` made an argument error. | Test fixed (`6463de619`); passes |
+| `PlaygroundClipboardTests` (9) | Every accessibility read on that boot timed out after 8 s: the known early-boot accessibility wedge of iOS 27.2, which lasts until reboot. | 9 of 9 pass alone on the unchanged build; no change |
+
+The tap-wait logs also showed a product bug: a selected tap whose wait timed out printed "The operation couldn't be completed. (AXe.SelectedAXWaitFailure error 1.)". It now prints "The control did not become ready before the wait ended. No input was sent." (`edbb353fe`, with unit tests; the tap-wait suite now refuses that text in every failing case).
+
+The 13 Duo suites the fourth run did not reach (`e2e-results/duo-remaining-13`, `v2` at `6463de619`, 25 minutes, load average 25 to 40 from system daemons and six idle simulators): 9 passed, 4 failed. Each failed suite was then rerun alone with the other simulators shut down (`duo-isolated-3`, `duo-isolated-4`):
+
+| Suite | Failure in the 13-suite run | Result alone |
+| --- | --- | --- |
+| `PlaygroundDuoTests` | Accessibility read failed with "No translation object" (early-boot wedge) | Passes |
+| `PlaygroundDuoInterruptionTests` | Same | Passes |
+| `PlaygroundDuoHardwareInterruptionTests` | Five reads refused with "The screens were still changing after 8 s" | One case then failed with `KeyError('home')`: the proof script read the held Home receipt under a key that `9cfd54a05` merged into `button`. Script fixed (`c06e149e8`); passes |
+| `PlaygroundDuoHeldModifierTests` | One hold stopped because the motion feed was 0.51 s old (limit 0.5 s) | First rerun: `simctl launch` returned no process for a different case. Second rerun: passes |
+
+So of the Duo failures seen since the fourth run began, 4 were stale test or script expectations left by the audit (fixed) and 6 were refusals or launch failures on a slow or freshly booted simulator that passed on rerun. The logs also exposed one product bug (the wait wording, fixed). No Duo suite fails at `c06e149e8`, but the last group shows the Duo suites are sensitive to machine load; see Open items.
+
+Background load found on the morning of 10 November: `PerfPowerServices` at about 150% of a core and Spotlight at about 100% (indexing is enabled on `/Volumes/Developer`), plus six idle booted simulators. Seven leftover wait loops from the night were also found and stopped; they only slept. The idle simulators are now shut down.
+
+Performance (`scripts/bench-quick.py --pairs 7`, baseline the pre-audit build `0aa6ed21b`, candidate the payload built at `6463de619`, iPhone 18 Pro simulator). There is no v1.8.0 release binary on this Mac, so this is not the release comparison that `AGENTS.md` asks for.
+
+| Command | Run 1 (load 39): baseline, candidate | Run 2 (load 31, all other simulators off): baseline, candidate |
+| --- | --- | --- |
+| cold `describe-ui` | 0.160 s, 0.161 s | 0.126 s, 0.121 s (faster in 7 of 7 pairs) |
+| selected `describe-ui` | 0.174 s, 0.183 s | 0.105 s, 0.101 s |
+| selected tap | 0.237 s, 0.253 s | 0.191 s, 0.183 s |
+| agent `describe-ui` | 0.129 s, 0.158 s | 0.121 s, 0.108 s (faster in 7 of 7) |
+| `describe-ui` | 0.130 s, 0.139 s | 0.126 s, 0.117 s (faster in 7 of 7) |
+| `key` | 0.303 s, 0.315 s | 0.288 s, 0.275 s (faster in 7 of 7) |
+| `tap` | 0.174 s, 0.195 s (slower in 6 of 7 pairs) | 0.162 s, 0.153 s (faster in 7 of 7) |
+
+Both runs ended "No regression". Run 1's plain `tap` was 15 ms slower in 6 of 7 pairs, which is why the run was repeated; in run 2 the candidate was faster in every pair, so run 1's difference was noise from the busy machine. The Duo was not timed in this pass.
 
 Ordinary-simulator coverage (merged as `b623e4f21` to `963cae85f`): 17 legacy end-to-end files that `make e2e` never ran were run once through their old path (all passed), then replaced by five matrix suites, 54 cases on the iPhone and 50 on the iPad, plus unit tests for option refusals and `list-simulators`. `make e2e` now plans iPhone 34 suites and 232 cases, iPad 11 and 80, Duo 64 and 521. The unit count fell from 958 to 845 because those files are gone; nothing that ran before was dropped. Not covered: ordinary BGRA streaming (output has padded rows and no frame boundaries) and ordinary landscape (`rotate` is Duo-only by design).
 
@@ -316,7 +367,8 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 - Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
 - A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, but back-to-back `button` presses are slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
-- The selected input path stops a gesture and quarantines input when its display feed is more than 0.5 s old. Under a load average of 100 or more that tripped once on the Duo. The limit is deliberate; it may deserve a second look for busy CI machines.
+- The selected input path stops input when its display or motion feed is more than 0.5 s old. That tripped twice on the Duo: the display feed (0.57 s) at a load average above 100, with input quarantined, and the motion feed (0.51 s) at a load average of about 40, released cleanly. The limit is deliberate; it needs a decision on whether busy machines get more margin.
+- The early-boot accessibility wedge ("No translation object" or every read timing out until reboot) hit three Duo suites on 10 November. The matrix's boot gate does not catch it; a rerun on a fresh boot passes.
 - Folding the "ordinary" input route into the selected route (audit item SEL-17) is not done: it changes the path of every ordinary tap and needs a quiet machine to benchmark against v1.8.0.
 
 ## Decisions
@@ -336,30 +388,108 @@ Decisions made without the owner, with the reason.
 ## Blockers
 
 - **Physical devices unreachable through CoreDevice (open).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
-- **Duo screens read as "still changing" when nothing moves (fixed and merged; the final quiet run must confirm).** Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
+- **Duo screens read as "still changing" when nothing moves (fixed and merged).** The refusal appeared once more on 10 November, in `PlaygroundDuoHardwareInterruptionTests` at a load average of about 40, and not when that suite was rerun alone. Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
 
 ## Commit log
 
-| Commit | Change |
-| --- | --- |
-| `6ab92d88d` | Add this log |
-| `2c7044ad1` | Playground: Drawing and Zoom screens |
-| `198a1e702` | `axe settings` command |
-| `eecb92b82` | Remove orphan scripts, stale goldens and unused fixtures |
-| `3d938025a` | Release a held contact before the raw broker exits; validate before input |
-| `6a7361854` | Same exit status and codes with `--verbose` |
-| `19ffbeddf` | Duo batch gesture presets use the measured screen |
-| `3979992b8` | A shut-down simulator reports `notBooted`; shared booted-simulator lookup |
-| `2f991f496` | Correct tap, batch and `--expected-pid` help |
-| `7ad37746a` | Build each command's events once; share signal scoping (wire version 85) |
-| `8d1c5a0f8` | Remove unused coordinate helpers and dead wrappers |
-| `01ac672d3` | Text size alone decides Larger Accessibility Sizes |
-| `8f8f4a061` | Code every error; compact results by default |
-| `a6fc4426d` | Payload schema for every command result |
-| `526878eac` | Legacy edge insets on the measured size; slider failure codes |
-| `aab61ae57` | Document result shapes, error codes and the payload schema |
-| `342581d55` | Keep framework dumps out of messages |
-| `4f1c…` to `80b3bcb74` | Device fixes (7 commits): drag duration, post-delay, harness leaks, cold-start spawn, dead code |
-| `…` to `4f28af3ee` | Agent-mode fixes (13 commits): retry binding, typed refusals, compact replies, file splits |
+All 97 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
 
-Commits from `379715af0` onwards are unsigned: 1Password stopped answering signing requests.
+| Commit | Subject |
+| --- | --- |
+| `6ab92d88d` | docs(release): Add the v2 release readiness log |
+| `2c7044ad1` | test(playground): Add Drawing and Zoom screens |
+| `198a1e702` | feat(settings): Add axe settings for appearance, accessibility and location |
+| `9f9d96ac9` | docs(release): Record audit results, settings and Playground evidence |
+| `eecb92b82` | chore(repo): Remove orphan scripts, stale goldens and unused fixtures |
+| `3d938025a` | fix(hid): Release a held contact before the raw broker exits |
+| `6a7361854` | fix(output): Keep exit status and codes the same with --verbose |
+| `19ffbeddf` | fix(batch): Use the measured screen for Duo gesture presets |
+| `3979992b8` | fix(input): Report a shut-down simulator as not booted |
+| `2f991f496` | docs(help): Correct tap, batch and --expected-pid help |
+| `7ad37746a` | ref(input): Build each command's events once and share signal scoping |
+| `8d1c5a0f8` | ref(input): Remove unused coordinate helpers and dead wrappers |
+| `01ac672d3` | fix(settings): Let the text size alone decide Larger Accessibility Sizes |
+| `3054520ba` | docs(release): Record the input-stack fix wave |
+| `379715af0` | docs(release): Record the invalid baseline end-to-end run |
+| `8f8f4a061` | fix(output): Code every error and print compact results by default |
+| `a6fc4426d` | feat(output): Publish a payload schema for every command result |
+| `526878eac` | fix(input): Check legacy edge insets on the measured size; code slider failures |
+| `aab61ae57` | docs(output): Document result shapes, error codes and the payload schema |
+| `342581d55` | fix(output): Keep framework dumps out of messages; name unparsed commands |
+| `eadb117e5` | docs(release): Record device and agent waves, second e2e run and blockers |
+| `274eea28b` | test(device): Generate the Playground project and stop leaked captures |
+| `8cd8dc359` | fix(device): Keep the whole drag duration and sleep post-delays locally |
+| `b7659d37a` | perf(device): Resolve devices in the broker and share one display read |
+| `38f773ca0` | ref(device): Run translator lookups off the pool and drop duplicate checks |
+| `0912e1cea` | ref(device): Name device files after the types they hold |
+| `e044d5a3f` | fix(device): Print readable check names in doctor text output |
+| `80b3bcb74` | ref(device): Share the readiness and lock gate with the display stream |
+| `f9084fd4c` | fix(agent): Refuse plain-HTTP model URLs for remote hosts |
+| `c7050c0e5` | fix(agent): Bind retries to the same native object and type refusals |
+| `402e4e121` | fix(agent): Refuse a page of a snapshot whose screen changed |
+| `7d4fe21c5` | fix(agent): Admit single actions on screens with ticking text |
+| `8a16aa638` | fix(agent): Keep the shared table on a caller's own request error |
+| `05471c02b` | fix(agent): Give ID and option refusals their own codes |
+| `7c95e5f9e` | perf(agent): Trim the compact agent reply to what an agent acts on |
+| `a57fd8df9` | ref(agent): Remove dead agent code and share repeated checks |
+| `df461bc96` | ref(agent): Merge the three owned-tree input paths in performReserved |
+| `b8bf74027` | ref(agent): Split AgentModeController into batch, focus and planner files |
+| `1294da23a` | ref(agent): Split AgentModeSnapshot into capture, fingerprint and index files |
+| `976137639` | docs(agent): State the HTTPS rule for model base URLs |
+| `4f28af3ee` | test(agent): Read the held-touch receipt from the full view |
+| `b93050d72` | docs(release): Record the merge, output-contract evidence and gesture plan |
+| `abedff34f` | feat(draw): Add axe draw for one-finger strokes through many points |
+| `f53c105bf` | feat(gesture): Run coordinate gestures on simulators without a flag |
+| `f75a93767` | test(e2e): Check draw and pinch on the Drawing and Zoom screens |
+| `3d3edfeeb` | docs(gestures): Document draw and flag-free gestures |
+| `be2335b1e` | test(e2e): Type only after the page settles above the keyboard |
+| `a7c65702d` | fix(output): Use one error vocabulary on device and agent paths |
+| `4b859379d` | ref(device): Treat explicit default options as given and drop duplicates |
+| `49a587d4d` | test: Share test fixtures and helpers and drop dead tests |
+| `1c6da9be2` | docs(release): Record gesture evidence, triage results and open items |
+| `bdd9ddcce` | ref(device): Route physical device commands through one protocol |
+| `762e228b3` | docs(readme): Rewrite the README as a user guide |
+| `614371b77` | docs(skill): Match refusal codes, device output and settings limits |
+| `e837aa93a` | docs(changelog): Describe v2 as its net change against v1.8.0 |
+| `6c7807450` | docs(device): Replace the device working log with a design document |
+| `cb6cc95f2` | docs(agent): Separate the environment summary heading |
+| `d9de6dfd8` | docs(release): Record the documentation rewrite |
+| `f3060e258` | ref(input): Carry ordinary swipe, drag and draw in SelectedHIDPath |
+| `9cfd54a05` | ref(input): Make Home a selected button kind |
+| `bdbde8021` | ref(input): Use one keyboard primitive list and drop the file channel |
+| `d6fa0cf73` | ref(input): Send raw keys without the raw broker's keyboard branch |
+| `5d18508a7` | ref(input): Let the selected owner decide success |
+| `48ca3215e` | ref(input): Rename LegacyDuo types to OrdinaryBroker |
+| `8a6daeff4` | docs(release): Record the Duo display investigation and IDBKit prune |
+| `f4f717862` | docs(help): Shorten the shared input and agent option help |
+| `0f66f3ff1` | docs(help): Rewrite the input command help as synopses and examples |
+| `db36a515a` | docs(help): Rewrite the media and device state command help |
+| `ed0814ce3` | docs(help): Rewrite the root, settings and setup command help |
+| `a3dfc799b` | fix(duo): Trust a steady stale display report that fits the hinge |
+| `e0ecca91f` | ref(idbkit): Remove two unused AX admission members |
+| `1c92ef4de` | ref(idbkit): Remove XCTest, REPL and device-only protocol leftovers |
+| `68eea2ed9` | ref(idbkit): Remove unreached FBControlCore utilities |
+| `667da47b8` | ref(idbkit): Remove instruments and xctrace support |
+| `fb12b4021` | ref(idbkit): Remove command families AXe never calls |
+| `75d57037e` | ref(idbkit): Remove code the command removals orphaned |
+| `085823b4f` | docs(idbkit): Describe what the trimmed IDBKit keeps and removes |
+| `e048b33da` | docs(release): Record the architecture wave and merged state |
+| `4f266cec1` | fix(gesture): Size presets from the measured screen on every simulator |
+| `20527d12c` | docs(readme): Match the bgra stream and follow-active recording to the code |
+| `1a0584df9` | fix(batch): Print a sentence for a selected step that fails to parse |
+| `e45b0d3db` | test(displays): Pin display read failures to a sentence and a code |
+| `2a4ee5093` | docs(release): Record the polish wave and the final run start |
+| `b623e4f21` | test: Check command option refusals and list-simulators as unit tests |
+| `7bc02cf5a` | test(e2e): Run plain commands on ordinary simulators in the matrix |
+| `879674514` | test(e2e): Delete unregistered suites now covered by matrix suites |
+| `963cae85f` | test(e2e): Fit the ordinary suites to the iPad and drop the BGRA case |
+| `5b2427fd1` | fix(batch): Report malformed agent batch JSON as invalid arguments |
+| `46c18a694` | fix(stream): Declare the ordinary MJPEG boundary without hyphens |
+| `a35e1270d` | fix(displays): Read a locked or dark rigid simulator screen |
+| `dbdb01118` | docs(testing): Say the capture suites cover ordinary screens too |
+| `cc39c8d49` | fix(hid): Wait for the guest input service before plain input |
+| `e908ab579` | docs(release): Record the third run, its triage and the four fixes |
+| `0d8a5b0d9` | docs(agents): Limit the full e2e suite to major milestones |
+| `edbb353fe` | fix(selected): Word a failed wait instead of printing its Swift type |
+| `6463de619` | test(duo): Match three Duo suites to the audited output |
+| `c06e149e8` | test(duo): Read the held Home receipt under the button key |
