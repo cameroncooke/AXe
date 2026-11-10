@@ -99,15 +99,27 @@ enum PhysicalAccessibilityCommands {
     }
 
     /// Whether one visible element on the device's screen matches the selector, for scrolling until it does.
+    /// A read taken while the content is still moving can fail; it is tried up to three times.
     static func isVisible(_ query: AccessibilityQuery, on input: PhysicalDeviceInput) async throws -> Bool {
-        let snapshot = try await input.readAccessibility(timeout: readBudget)
-        try snapshot.display.requireResolvedOrientation()
-        do {
-            return try VisibleTree(snapshot).target(matching: query, elementType: nil) != nil
-        } catch let failure as CLIOutputFailure where failure.code == "elementNotHittable" {
-            // In the tree but not yet fully on screen: keep scrolling.
-            return false
+        var lastError: Error = CLIOutputFailure(code: "readFailed", message: "The device's screen could not be read.")
+        for _ in 0..<3 {
+            do {
+                let snapshot = try await input.readAccessibility(timeout: readBudget)
+                try snapshot.display.requireResolvedOrientation()
+                return try VisibleTree(snapshot).target(matching: query, elementType: nil) != nil
+            } catch let failure as CLIOutputFailure where failure.code == "elementNotHittable" {
+                // In the tree but not yet fully on screen: keep scrolling.
+                return false
+            } catch let failure as CLIOutputFailure where failure.code == "ambiguousElement" {
+                throw failure
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                lastError = error
+                try await Task.sleep(for: .milliseconds(300))
+            }
         }
+        throw lastError
     }
 
     private static var missingTarget: CLIOutputFailure {
