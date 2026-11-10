@@ -95,6 +95,49 @@ struct CLIErrorTests {
             == "Context changed. No input was sent.")
     }
 
+    /// The early-boot display read failures that once printed `Error: ActivePanelReadError(…)`.
+    static let displayReadFailures: [Error] = [
+        ActivePanelReadError(childFailure: nil, validationFailure: .missingActiveFlag),
+        ActivePanelReadError(childFailure: nil, validationFailure: .activeStateUnavailable(2)),
+        ActivePanelReadError(childFailure: nil, validationFailure: .invalidDisplayCount),
+        ActivePanelReadError(childFailure: .nonzeroExit),
+        ActivePanelReadError(childFailure: .missingJSON),
+        ActivePanelValidationError.invalidGeometry(3),
+        ActivePanelValidationError.catalogMismatch,
+    ]
+
+    @Test("A displays read failure is a sentence and displayUnavailable in text and JSON")
+    func displayReadFailuresAreCodedSentences() throws {
+        // `displays` (with or without --verbose) lets these errors reach main unchanged; text
+        // output prints `fullMessage` of the mapped failure, --output renders it into the envelope.
+        for error in Self.displayReadFailures {
+            let failure = CLIErrorMapping.failure(for: error)
+            #expect(failure.code == "displayUnavailable", "\(error)")
+            let text = Axe.fullMessage(for: failure)
+            #expect(text == "Error: " + failure.message && !text.contains("ActivePanel") && !text.contains("("), "\(text)")
+            #expect(text.hasSuffix(".") && Axe.exitCode(for: failure) == .failure)
+            for format in [CLIOutputFormat.json, .text] {
+                let context = CLIOutputContext(format: format, command: "displays", agent: false)
+                let rendered = String(decoding: try CLIOutput.rendered(context, failure: failure), as: UTF8.self)
+                #expect(!rendered.contains("ActivePanel") && !rendered.contains("Optional"), "\(rendered)")
+                if format == .json {
+                    let envelope = try JSONDecoder().decode(DisplayFailureEnvelope.self, from: Data(rendered.utf8))
+                    #expect(envelope.command == "displays" && envelope.didError)
+                    #expect(envelope.error.code == "displayUnavailable" && envelope.error.message == failure.message)
+                } else {
+                    #expect(rendered.contains(failure.message))
+                }
+            }
+        }
+    }
+
+    private struct DisplayFailureEnvelope: Decodable {
+        struct Failure: Decodable { let code: String; let message: String }
+        let command: String
+        let didError: Bool
+        let error: Failure
+    }
+
     @Test("Broker details that are Swift value dumps stay out of messages")
     func readableFiltersValueDumps() {
         #expect(CLIErrorMapping.readable("busy") == nil)

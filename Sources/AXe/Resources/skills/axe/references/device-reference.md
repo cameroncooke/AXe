@@ -38,7 +38,7 @@ JSON is `{udid, previousDegrees, hinge: {degrees, mechanicalDegrees, posture}, a
 
 `axe rotate left|right --udid <UDID>` turns the Duo and prints `Rotated left` (or right) with the active screen; JSON is `{udid, direction, previousRotation, activeScreen}`. Without `--screen-id` and `--screen-uuid` it rotates the screen that is active when it starts; with the pair it refuses unless that screen is active. It fails with `bootChanged` if the simulator restarts. This device-wide action uses the common input lock and rejects held touches. It sends one request, observes two matching positions, and checks that the position remains after the connection closes. `--timeout` sets the observation budget (0.5...15 seconds, default 8); native reads have separate bounds. The Duo supports all four inner positions and skips upside-down portrait on the outer screen. Read the UI again before input; app layout readiness is not guaranteed. Do not replay a failed or uncertain request. An uncertain send holds the input lock and saves a recovery record. This command is separate from the two-finger `gesture rotate` and is not a batch step.
 
-These commands fail with one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `rotationFailed` or `quarantined`.
+These commands fail with one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `displayUnavailable` (the simulator has not reported a consistent set of screens, as in the first seconds after boot; read again), `rotationFailed` or `quarantined`.
 
 ## Selected Duo input
 

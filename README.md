@@ -153,7 +153,7 @@ Active  main   440×956 pt @3x  portrait
         id 1   C5182A5C-ECD6-48EE-A5A9-2D7707ED1542
 ```
 
-`displays` waits for a fold or rotation to finish, then shows each screen's role (`main` on a one-screen device, `outer` or `inner` on the iPhone Duo), size in points, scale and orientation, which one is active, and the Duo's hinge angle. JSON is `{udid, name, hinge?, activeScreen, otherScreens}`. Pass the active screen's `id` and `uuid` as `--screen-id` and `--screen-uuid` when a command must refuse to act on any other screen.
+`displays` waits for a fold or rotation to finish, then shows each screen's role (`main` on a one-screen device, `outer` or `inner` on the iPhone Duo), size in points, scale and orientation, which one is active, and the Duo's hinge angle. JSON is `{udid, name, hinge?, activeScreen, otherScreens}`. It fails with `displayUnavailable` while the simulator has not reported a consistent set of screens, as in the first seconds after boot, and with `screensDidNotSettle` if they keep changing; read again. Pass the active screen's `id` and `uuid` as `--screen-id` and `--screen-uuid` when a command must refuse to act on any other screen.
 
 On the iPhone Duo:
 
