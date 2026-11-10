@@ -536,6 +536,12 @@ What the first two runs found:
 - The early-boot accessibility wedge ("No translation object" or every read timing out until reboot) hit three Duo suites on 10 November. The matrix's boot gate does not catch it; a rerun on a fresh boot passes.
 - Folding the "ordinary" input route into the selected route (audit item SEL-17) is not done: it changes the path of every ordinary tap and needs a quiet machine to benchmark against v1.8.0.
 
+## Future improvements
+
+Not needed for the release; noted so they are not lost.
+
+- Send the car picture's strokes through `axe batch`. The picture player runs one `axe` command per stroke and per swatch tap, about 290 in all. `batch` accepts `draw` and `tap` steps on simulators and devices, so each run of "tap a swatch, draw several strokes" could go out as one batch, with the tool changes left as separate commands because they read the screen. Estimated saving: about 30 s of a 5 to 7 minute device run, not measured. The player would also have to work out which strokes landed when a batch stops on a failed step. The owner decided on 10 November to leave it out for now.
+
 ## Decisions
 
 Decisions made without the owner, with the reason.
