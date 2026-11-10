@@ -28,7 +28,6 @@
 #import <FBControlCore/FBProcessStream.h>
 #import <FBControlCore/FBProcessTerminationStrategy.h>
 #import <FBControlCore/FBScreenshotCommands.h>
-#import <FBControlCore/FBSettingsCommands.h>
 #import <FBControlCore/FBSubprocess.h>
 #import <FBControlCore/FBVideoStream.h>
 #import <FBControlCore/FBVideoStreamConfiguration.h>
