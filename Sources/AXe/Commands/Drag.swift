@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-struct Drag: AsyncParsableCommand {
+struct Drag: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a low-level point-to-point drag using explicit touch move events."
     )
@@ -103,25 +103,17 @@ struct Drag: AsyncParsableCommand {
             preDelay: preDelay ?? 0, postDelay: postDelay ?? 0), input: selectedInput)
     }
 
-    private func validateDeviceOptions() throws {
-        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled)
         try selectedPath.validate()
     }
 
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try validateDeviceOptions()
         try await PhysicalDeviceGestures.path(selectedPath, on: input)
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try validateDeviceOptions()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

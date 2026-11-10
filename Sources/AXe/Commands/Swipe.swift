@@ -4,7 +4,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct Swipe: AsyncParsableCommand {
+struct Swipe: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a swipe gesture from one point to another on the screen."
     )
@@ -145,25 +145,17 @@ struct Swipe: AsyncParsableCommand {
 
     var selectedPath: SelectedHIDPath { SelectedHIDPath(kind: .swipe, startX: startX, startY: startY, endX: endX, endY: endY, duration: duration ?? 1, delta: delta ?? 50, preDelay: preDelay ?? 0, postDelay: postDelay ?? 0) }
 
-    private func validateDeviceOptions() throws {
-        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled)
         try selectedPath.validate()
     }
 
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try validateDeviceOptions()
         try await PhysicalDeviceGestures.path(selectedPath, on: input)
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try validateDeviceOptions()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

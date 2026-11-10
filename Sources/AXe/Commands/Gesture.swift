@@ -127,7 +127,7 @@ enum GestureAction: ExpressibleByArgument {
     }
 }
 
-struct Gesture: AsyncParsableCommand {
+struct Gesture: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform a preset swipe, a pinch or another multi-touch gesture.",
         discussion: """
@@ -466,15 +466,17 @@ struct Gesture: AsyncParsableCommand {
             doubleTapTiming: .init(hold: hold ?? 0.06, interval: interval ?? 0.1)), input: selectedInput)
     }
 
-    private func validateDeviceOptions() throws {
-        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+    func validateOnDevice(inBatch: Bool) throws {
+        if inBatch, !isPreset {
+            throw AutomationTarget.unsupportedOnDevice("Physical batch gesture steps require a preset.")
+        }
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled)
         if case .preset(.swipeFromRightEdge) = gesture {
             throw AutomationTarget.unsupportedOnDevice("Right edge swipe is not supported on a physical device.")
         }
     }
 
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try validateDeviceOptions()
         switch gesture {
         case .preset(let preset):
             let edge: PhysicalTouchEdge
@@ -492,14 +494,7 @@ struct Gesture: AsyncParsableCommand {
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try validateDeviceOptions()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

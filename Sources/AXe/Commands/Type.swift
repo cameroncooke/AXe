@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct Type: AsyncParsableCommand {
+struct Type: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Type text by entering a sequence of characters.",
         discussion: """
@@ -109,16 +109,24 @@ struct Type: AsyncParsableCommand {
         return try selectedKeyboard.request(input: selectedInput, event: SelectedKeyboardRequest.textEvent(input))
     }
 
-    func physicalType(on input: PhysicalDeviceInput, standardInput: FileHandle = .standardInput) async throws {
-        guard !agentMode.enabled, selectedInput.mode != .selected else {
-            throw AutomationTarget.unsupportedOnDevice("Physical typing sends keys to the current focus without agent or selected display options.")
-        }
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled,
+            "Physical typing sends keys to the current focus without agent or selected display options.")
+        // Literal text is checked here; text from standard input or a file is read only once, in `runOnDevice`.
+        if let text { _ = try Self.physicalKeySteps(for: text) }
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
         let text = try AgentModeCommandAdapter.readText(text, useStdin: useStdin,
-            inputFile: inputFile, standardInput: standardInput)
+            inputFile: inputFile, standardInput: .standardInput)
+        try await input.keys(Self.physicalKeySteps(for: text))
+    }
+
+    static func physicalKeySteps(for text: String) throws -> [PhysicalKeyStep] {
         guard !text.isEmpty, text.utf8.count <= SelectedKeyboardRequest.maximumTextBytes else {
             throw ValidationError("Physical typing requires 1...256 UTF-8 bytes.")
         }
-        let steps = try text.flatMap { character -> [PhysicalKeyStep] in
+        return try text.flatMap { character -> [PhysicalKeyStep] in
             let event = KeyEvent.keyCodeForString(String(character))
             guard event.keyCode != 0 else {
                 throw TextToHIDEvents.TextConversionError.unsupportedCharacter(character)
@@ -130,17 +138,10 @@ struct Type: AsyncParsableCommand {
             }
             return press
         }
-        try await input.keys(steps)
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await physicalType(on: input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct Tap: AsyncParsableCommand {
+struct Tap: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Tap a point on the screen, or locate an element by accessibility and tap its activation point."
     )
@@ -315,8 +315,20 @@ struct Tap: AsyncParsableCommand {
         }
     }
 
-    func physicalTap(on input: PhysicalDeviceInput) async throws {
-        try validateDeviceTapOptions()
+    /// A semantic press runs only as a standalone command.
+    func validateOnDevice(inBatch: Bool) throws {
+        if semanticPress, !inBatch {
+            _ = try physicalSemanticIdentifier()
+        } else {
+            try validateDeviceTapOptions()
+        }
+    }
+
+    /// Returns the receipt of a semantic press, which the broker returns only for a confirmed value change.
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws -> PhysicalSemanticPressReceipt? {
+        if semanticPress {
+            return try await input.semanticPress(identifier: physicalSemanticIdentifier())
+        }
         if let preDelay { try await Task.sleep(for: .seconds(preDelay)) }
         if let pointX, let pointY {
             try await input.tap(at: CGPoint(x: pointX, y: pointY))
@@ -331,34 +343,22 @@ struct Tap: AsyncParsableCommand {
                 waitTimeout: waitTimeout, pollInterval: pollInterval, on: input)
         }
         if let postDelay { try await Task.sleep(for: .seconds(postDelay)) }
+        return nil
+    }
+
+    func reportOnDevice(_ receipt: PhysicalSemanticPressReceipt?) throws {
+        guard let receipt, let elementID else { return }
+        if selectedOutput.verbose {
+            try CLIOutput.writeJSON(receipt)
+        } else {
+            let output = SemanticPressOutput(identifier: elementID, before: receipt.stateBefore,
+                after: receipt.stateAfter)
+            try DeviceState.emit(output, text: [output.text])
+        }
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
-            let identifier = semanticPress ? try physicalSemanticIdentifier() : nil
-            if identifier == nil { try validateDeviceTapOptions() }
-            guard let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) else {
-                throw CLIOutputFailure(code: "targetNotFound", message: "Run axe list-devices and choose a physical device UDID.")
-            }
-            if let identifier {
-                // The broker returns a receipt only for a confirmed value change.
-                let receipt = try await PhysicalDeviceInput.withSession(for: device) { input in
-                    try await input.semanticPress(identifier: identifier)
-                }
-                if selectedOutput.verbose {
-                    try CLIOutput.writeJSON(receipt)
-                } else {
-                    let output = SemanticPressOutput(identifier: identifier, before: receipt.stateBefore,
-                        after: receipt.stateAfter)
-                    try DeviceState.emit(output, text: [output.text])
-                }
-            } else {
-                try await PhysicalDeviceInput.withSession(for: device) { input in
-                    try await physicalTap(on: input)
-                }
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct Touch: AsyncParsableCommand {
+struct Touch: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Perform precise touch down/up events at specific coordinates.",
         discussion: """
@@ -123,18 +123,18 @@ struct Touch: AsyncParsableCommand {
         return try selectedInput.request(operation: operation, token: token, primitives: primitives)
     }
 
-    private func validateDeviceOptions(allowPartial: Bool = false) throws {
-        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agent: agentMode)
+    /// A batch step may hold a contact for a later step; a standalone touch must lift it.
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled)
         guard contactToken == nil else {
             throw AutomationTarget.unsupportedOnDevice("Physical touch does not accept a simulator contact token.")
         }
-        guard allowPartial || (touchDown && touchUp) else {
+        guard inBatch || (touchDown && touchUp) else {
             throw AutomationTarget.unsupportedOnDevice("Use --down and --up together for a standalone physical device touch.")
         }
     }
 
-    func runOnDevice(_ input: PhysicalDeviceInput, allowPartial: Bool = false) async throws {
-        try validateDeviceOptions(allowPartial: allowPartial)
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
         guard let pointX, let pointY, touchDown || touchUp else {
             throw ValidationError("Physical touch requires coordinates and --down, --up or both.")
         }
@@ -147,18 +147,12 @@ struct Touch: AsyncParsableCommand {
         if touchUp {
             plan.append(PhysicalTouchStep(points: [point], phase: .up))
         }
-        try await input.perform(plan, allowPartial: allowPartial)
+        // Only a batch step reaches here with a partial touch.
+        try await input.perform(plan, allowPartial: !(touchDown && touchUp))
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try validateDeviceOptions()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

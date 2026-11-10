@@ -35,44 +35,43 @@ enum PhysicalDeviceBatch {
         guard !options.contains("--agent") else {
             throw AutomationTarget.unsupportedOnDevice("Physical batch steps do not support agent mode.")
         }
-        let args = ["--udid", udid] + arguments
+        guard let type = commandType(for: kind) else {
+            return try await sleep(arguments, keepingAlive: input)
+        }
+        let command = try parse(type, ["--udid", udid] + arguments)
+        try command.validateOnDevice(inBatch: true)
+        _ = try await command.runOnDevice(input)
+    }
+
+    private static func sleep(_ arguments: [String], keepingAlive input: PhysicalDeviceInput) async throws {
+        guard arguments.count == 1, let seconds = Double(arguments[0]), seconds.isFinite, seconds >= 0 else {
+            throw ValidationError("Use sleep <seconds> with a finite, non-negative duration.")
+        }
+        let start = ProcessInfo.processInfo.systemUptime
+        while true {
+            try Task.checkCancellation()
+            let remaining = seconds - (ProcessInfo.processInfo.systemUptime - start)
+            guard remaining > 0 else { return }
+            try await Task.sleep(for: .seconds(min(25, remaining)))
+            if remaining > 25 { try await input.keepAlive() }
+        }
+    }
+
+    /// The command each step runs, through the same checks and input as the standalone command;
+    /// nil for `sleep`.
+    static func commandType(for kind: BatchStepKind) -> (any PhysicalDeviceCommand.Type)? {
         switch kind {
-        case .tap:
-            try await parse(Tap.self, args).physicalTap(on: input)
-        case .swipe:
-            try await parse(Swipe.self, args).runOnDevice(input)
-        case .gesture:
-            let command = try parse(Gesture.self, args)
-            guard case .preset = command.gesture else {
-                throw AutomationTarget.unsupportedOnDevice("Physical batch gesture steps require a preset.")
-            }
-            try await command.runOnDevice(input)
-        case .draw:
-            try await parse(Draw.self, args).runOnDevice(input)
-        case .touch:
-            try await parse(Touch.self, args).runOnDevice(input, allowPartial: true)
-        case .type:
-            try await parse(Type.self, args).physicalType(on: input)
-        case .button:
-            try await parse(Button.self, args).physicalButton(on: input)
-        case .key:
-            try await parse(Key.self, args).physicalKeys(on: input)
-        case .keySequence:
-            try await parse(KeySequence.self, args).physicalKeys(on: input)
-        case .keyCombo:
-            try await parse(KeyCombo.self, args).physicalKeys(on: input)
-        case .sleep:
-            guard arguments.count == 1, let seconds = Double(arguments[0]), seconds.isFinite, seconds >= 0 else {
-                throw ValidationError("Use sleep <seconds> with a finite, non-negative duration.")
-            }
-            let start = ProcessInfo.processInfo.systemUptime
-            while true {
-                try Task.checkCancellation()
-                let remaining = seconds - (ProcessInfo.processInfo.systemUptime - start)
-                guard remaining > 0 else { return }
-                try await Task.sleep(for: .seconds(min(25, remaining)))
-                if remaining > 25 { try await input.keepAlive() }
-            }
+        case .tap: Tap.self
+        case .swipe: Swipe.self
+        case .gesture: Gesture.self
+        case .draw: Draw.self
+        case .touch: Touch.self
+        case .type: Type.self
+        case .button: Button.self
+        case .key: Key.self
+        case .keySequence: KeySequence.self
+        case .keyCombo: KeyCombo.self
+        case .sleep: nil
         }
     }
 

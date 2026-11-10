@@ -13,7 +13,7 @@ extension SelectedHIDCompleteGesture.Point: ExpressibleByArgument {
     }
 }
 
-struct Draw: AsyncParsableCommand {
+struct Draw: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Move one finger through a list of points to draw a line or shape.",
         discussion: """
@@ -113,20 +113,16 @@ struct Draw: AsyncParsableCommand {
             roots: roots, for: simulatorUDID, logger: logger).map { CGPoint(x: $0.x, y: $0.y) }
     }
 
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agent)
+    }
+
     func runOnDevice(_ input: PhysicalDeviceInput) async throws {
-        try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agentEnabled: agent)
         try await PhysicalDeviceGestures.path(selectedPath, on: input)
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try PhysicalDeviceGestures.requireCoordinateInput(selectedInput, agentEnabled: agent)
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await runOnDevice(input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
                 verbose: selectedOutput.verbose)

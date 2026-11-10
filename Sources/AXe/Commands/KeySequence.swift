@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct KeySequence: AsyncParsableCommand {
+struct KeySequence: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press a sequence of keys by their keycodes on a simulator or physical device.",
         discussion: """
@@ -86,10 +86,12 @@ struct KeySequence: AsyncParsableCommand {
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
-    func physicalKeys(on input: PhysicalDeviceInput) async throws {
-        guard !agentMode.enabled, selectedInput.mode != .selected else {
-            throw AutomationTarget.unsupportedOnDevice("Physical key sequences do not support agent or selected display options.")
-        }
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled,
+            "Physical key sequences do not support agent or selected display options.")
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
         let codes = try parseCommaSeparatedIntsStrict(keycodesString, fieldName: "keycodes")
         let steps = codes.enumerated().flatMap { index, code in
             let interval = index + 1 < codes.count ? delay ?? 0.1 : 0
@@ -100,13 +102,7 @@ struct KeySequence: AsyncParsableCommand {
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await physicalKeys(on: input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

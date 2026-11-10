@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct KeyCombo: AsyncParsableCommand {
+struct KeyCombo: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press a key while holding one or more modifier keys on a simulator or physical device.",
         discussion: """
@@ -83,15 +83,22 @@ struct KeyCombo: AsyncParsableCommand {
             ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
     }
 
-    func physicalKeys(on input: PhysicalDeviceInput) async throws {
-        guard !agentMode.enabled, selectedInput.mode != .selected else {
-            throw AutomationTarget.unsupportedOnDevice("Physical key combinations do not support agent or selected display options.")
-        }
+    func validateOnDevice(inBatch: Bool) throws {
+        try selectedInput.refuseOnDevice(agent: agentMode.enabled,
+            "Physical key combinations do not support agent or selected display options.")
+        _ = try physicalModifiers()
+    }
+
+    private func physicalModifiers() throws -> [UInt64] {
         let codes = try parseCommaSeparatedIntsStrict(modifiersString, fieldName: "modifier keycodes")
         guard codes.allSatisfy({ (224...231).contains($0) }), Set(codes).count == codes.count, !codes.contains(key) else {
             throw ValidationError("Use distinct HID modifiers in 224...231 and a different target key.")
         }
-        let modifiers = codes.map(UInt64.init)
+        return codes.map(UInt64.init)
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
+        let modifiers = try physicalModifiers()
         let steps = modifiers.map { PhysicalKeyStep(code: $0, pressed: true) }
             + [PhysicalKeyStep(code: UInt64(key), pressed: true), PhysicalKeyStep(code: UInt64(key), pressed: false)]
             + modifiers.reversed().map { PhysicalKeyStep(code: $0, pressed: false) }
@@ -99,13 +106,7 @@ struct KeyCombo: AsyncParsableCommand {
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await physicalKeys(on: input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

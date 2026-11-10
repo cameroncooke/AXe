@@ -1,7 +1,7 @@
 import ArgumentParser
 import Foundation
 
-struct DescribeUI: AsyncParsableCommand {
+struct DescribeUI: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Describe the accessibility hierarchy of a booted simulator or physical device."
     )
@@ -88,25 +88,28 @@ struct DescribeUI: AsyncParsableCommand {
             || textField != nil || textOffset != nil || textLimit != nil
     }
 
-    func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID) {
-            guard !hasSimulatorOnlyOptions else {
-                throw AutomationTarget.unsupportedOnDevice("Physical describe-ui does not accept agent mode or simulator display and process options.")
-            }
-            if let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-                let snapshot = try await PhysicalDeviceInput.withSession(for: device) { input in
-                    try await input.readAccessibility()
-                }
-                let data: Data
-                if let point = try parsedPoint() {
-                    data = try PhysicalAccessibilityCommands.pointJSON(at: point.cgPoint, in: snapshot)
-                } else {
-                    data = snapshot.json
-                }
-                try CLIOutput.writeJSONData(data)
-                return
-            }
+    func validateOnDevice(inBatch: Bool) throws {
+        guard !hasSimulatorOnlyOptions else {
+            throw AutomationTarget.unsupportedOnDevice("Physical describe-ui does not accept agent mode or simulator display and process options.")
         }
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws -> PhysicalAccessibilitySnapshot {
+        try await input.readAccessibility()
+    }
+
+    func reportOnDevice(_ snapshot: PhysicalAccessibilitySnapshot) throws {
+        let data: Data
+        if let point = try parsedPoint() {
+            data = try PhysicalAccessibilityCommands.pointJSON(at: point.cgPoint, in: snapshot)
+        } else {
+            data = snapshot.json
+        }
+        try CLIOutput.writeJSONData(data)
+    }
+
+    func run() async throws {
+        if try await runOnDeviceIfTargeted() { return }
         if agentMode.enabled {
             try AgentModeCommandAdapter.send(agentRequest(), simulatorUDID: simulatorUDID)
             return

@@ -2,16 +2,6 @@ import Foundation
 
 /// Maps the CLI's logical gestures to the phone's contact phases.
 enum PhysicalDeviceGestures {
-    static func requireCoordinateInput(_ selection: SelectedInputOptions, agent: AgentModeOptions) throws {
-        try requireCoordinateInput(selection, agentEnabled: agent.enabled)
-    }
-
-    static func requireCoordinateInput(_ selection: SelectedInputOptions, agentEnabled: Bool) throws {
-        guard selection.mode == .legacy, selection.screenID == nil, selection.screenUUID == nil, !agentEnabled else {
-            throw AutomationTarget.unsupportedOnDevice("Physical input uses coordinates without --agent or simulator display selection.")
-        }
-    }
-
     static func path(
         _ request: SelectedHIDPath,
         edge: PhysicalTouchEdge = .none,

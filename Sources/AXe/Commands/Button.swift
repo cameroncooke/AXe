@@ -41,7 +41,7 @@ enum ButtonType: String, CaseIterable, ExpressibleByArgument {
     }
 }
 
-struct Button: AsyncParsableCommand {
+struct Button: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press a hardware button on a simulator or physical device.",
         discussion: """
@@ -150,20 +150,16 @@ struct Button: AsyncParsableCommand {
         return button
     }
 
-    func physicalButton(on input: PhysicalDeviceInput) async throws {
+    func validateOnDevice(inBatch: Bool) throws {
+        _ = try physicalButtonTarget()
+    }
+
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
         try await input.pressButton(physicalButtonTarget(), hold: duration ?? 0.08, allowLock: allowLock)
     }
 
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            // Refuse an unavailable button before connecting to the device.
-            _ = try physicalButtonTarget()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await physicalButton(on: input)
-            }
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         if selectedInput.mode == .selected {
             try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
                 verbose: selectedOutput.verbose)

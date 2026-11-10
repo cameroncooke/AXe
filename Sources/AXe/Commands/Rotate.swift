@@ -3,7 +3,7 @@ import Foundation
 import FBControlCore
 import FBSimulatorControl
 
-struct Rotate: AsyncParsableCommand {
+struct Rotate: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Rotate a physical device or the iPhone Duo left or right.",
         discussion: "Sends one request and never repeats it. On a physical device, AXe waits until the display reaches the orientation the device reports. On the iPhone Duo, it shows the active screen afterwards. Without --screen-id and --screen-uuid, AXe uses the screen that is active when the command starts. With them, the command refuses if that screen is no longer active.")
@@ -48,23 +48,23 @@ struct Rotate: AsyncParsableCommand {
         return request
     }
 
-    private func validateDeviceOptions() throws {
+    func validateOnDevice(inBatch: Bool) throws {
         guard screenID == nil, screenUUID == nil, expectedBoot == nil, !verbose else {
             throw AutomationTarget.unsupportedOnDevice("Physical rotation does not accept simulator display, boot or verbose options.")
         }
     }
 
+    func runOnDevice(_ input: PhysicalDeviceInput) async throws {
+        try await input.rotate(direction == "left" ? .left : .right, timeout: timeout)
+    }
+
+    func reportOnDevice(_ result: Void) throws {
+        let output = RotateOutput(udid: simulatorUDID, direction: direction, previousRotation: nil, activeScreen: nil)
+        try DeviceState.emit(output, text: output.textLines)
+    }
+
     func run() async throws {
-        if AutomationTarget.isPhysicalInputUDID(simulatorUDID),
-           let device = try await AutomationTarget.physicalInputDevice(udid: simulatorUDID) {
-            try validateDeviceOptions()
-            try await PhysicalDeviceInput.withSession(for: device) { input in
-                try await input.rotate(direction == "left" ? .left : .right, timeout: timeout)
-            }
-            let output = RotateOutput(udid: simulatorUDID, direction: direction, previousRotation: nil, activeScreen: nil)
-            try DeviceState.emit(output, text: output.textLines)
-            return
-        }
+        if try await runOnDeviceIfTargeted() { return }
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: AxeLogger())
         let display: (id: UInt32, uuid: UUID)
         let boot: String
