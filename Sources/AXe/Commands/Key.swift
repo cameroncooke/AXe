@@ -105,7 +105,7 @@ struct Key: PhysicalDeviceCommand {
             logger.info().log("Duration: \(duration) seconds")
         }
 
-        try await LegacyDuoInput.performKeyboard(
+        try await OrdinaryBrokerInput.performKeyboard(
             hidEvent, simulatorUDID: simulatorUDID, logger: logger,
             verbose: selectedOutput.verbose
         )

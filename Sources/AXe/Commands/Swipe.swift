@@ -182,12 +182,12 @@ struct Swipe: PhysicalDeviceCommand {
         logger.info().log("Duration: \(swipeDuration)s, Delta: \(swipeDelta)px")
 
         // Duo and verified DTUHID devices use the broker's retained input connection.
-        if let context = try await LegacyDuoInput.captureRoute(
+        if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
             let path = SelectedHIDPath(kind: .swipe, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: swipeDuration, delta: swipeDelta, generator: .ordinary)
-            try await LegacyDuoInput.perform(path: path, context: context,
+            try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
         } else {
             try await performLegacySwipe(startX: startX, startY: startY, endX: endX, endY: endY,

@@ -3,7 +3,7 @@ import FBControlCore
 import FBSimulatorControl
 
 /// Keep the legacy CLI surface while using the measured input owner on the verified Duo.
-enum LegacyDuoInput {
+enum OrdinaryBrokerInput {
     static let duoDeviceTypeIdentifier = "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo"
 
     /// The measured context for the shared input owner, and whether it belongs to the Duo.
@@ -127,7 +127,7 @@ enum LegacyDuoInput {
         }
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, legacyKeyboard: try LegacyDuoKeyboard(event))
+            primitives: [], expectedContext: context, ordinaryKeyboard: try OrdinaryBrokerKeyboard(event))
         try await SignalScope.cancellingOnSignal {
             try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
         }
@@ -182,7 +182,7 @@ enum LegacyDuoInput {
     }
 
     static func perform(
-        touch: LegacyDuoTouch,
+        touch: OrdinaryBrokerTouch,
         context: SelectedHIDContext,
         simulatorUDID: String,
         logger: AxeLogger,
@@ -195,7 +195,7 @@ enum LegacyDuoInput {
         let request = SelectedHIDRequest(
             version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: context.screenID, screenUUID: uuid, operation: .complete, token: nil,
-            primitives: [], expectedContext: context, legacyTouch: touch
+            primitives: [], expectedContext: context, ordinaryTouch: touch
         )
         if touch.down { logger.info().log("Touch down") }
         if touch.down && touch.up {
@@ -214,8 +214,8 @@ enum LegacyDuoInput {
         verbose: Bool
     ) async throws {
         let response: SelectedHIDResponse
-        if request.legacyKeyboard != nil {
-            response = try await SelectedHIDBroker.sendLegacyKeyboard(request, simulatorUDID: simulatorUDID)
+        if request.ordinaryKeyboard != nil {
+            response = try await SelectedHIDBroker.sendOrdinaryKeyboard(request, simulatorUDID: simulatorUDID)
         } else {
             response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
         }

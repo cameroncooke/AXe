@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 /// The existing no-flag touch surface, bound to one measured Duo context.
-struct LegacyDuoTouch: Codable, Sendable {
+struct OrdinaryBrokerTouch: Codable, Sendable {
     let x: Double
     let y: Double
     let down: Bool

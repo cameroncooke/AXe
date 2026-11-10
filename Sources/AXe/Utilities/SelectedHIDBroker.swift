@@ -10,7 +10,7 @@ enum SelectedHIDBroker {
             developerDirectory: FBXcodeDirectory.resolveDeveloperDirectory(), version: SelectedHIDRequest.version)
     }
     static func send(_ request: SelectedHIDRequest, simulatorUDID: String) throws -> SelectedHIDResponse {
-        guard request.legacyKeyboard == nil else {
+        guard request.ordinaryKeyboard == nil else {
             throw SelectedHIDFailure.invalid("Legacy keyboard requires the cancellable owned exchange")
         }
         let data = try encoded(request)
@@ -27,12 +27,12 @@ enum SelectedHIDBroker {
     }
 
     /// Raw keyboard has no whole-command deadline. Cancellation closes this owned exchange, never replays it.
-    static func sendLegacyKeyboard(_ request: SelectedHIDRequest, simulatorUDID: String) async throws -> SelectedHIDResponse {
-        guard request.legacyKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
+    static func sendOrdinaryKeyboard(_ request: SelectedHIDRequest, simulatorUDID: String) async throws -> SelectedHIDResponse {
+        guard request.ordinaryKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
         let data = try encoded(request)
         try Task.checkCancellation()
         let descriptor = try readyDescriptor(simulatorUDID: simulatorUDID)
-        let socket = LegacyKeyboardSocket(descriptor: descriptor)
+        let socket = OrdinaryKeyboardSocket(descriptor: descriptor)
         defer { socket.close() }
         // A zero receive timeout preserves raw Type's existing unbounded whole-command duration.
         var timeout = timeval()
@@ -59,12 +59,12 @@ enum SelectedHIDBroker {
 
     /// Ordinary keyboard input may carry long text; every other request keeps the 64 KiB bound.
     private static func maximumRequestBytes(_ request: SelectedHIDRequest) -> Int {
-        request.legacyKeyboard == nil ? HIDBroker.maximumMessageBytes : LegacyDuoKeyboard.maximumMessageBytes
+        request.ordinaryKeyboard == nil ? HIDBroker.maximumMessageBytes : OrdinaryBrokerKeyboard.maximumMessageBytes
     }
 
     /// Reads one request from an admitted client. The larger read bound applies only to ordinary keyboard input.
     static func readRequest(from descriptor: Int32) throws -> SelectedHIDRequest {
-        let bytes = try HIDBroker.readMessage(from: descriptor, maximumBytes: LegacyDuoKeyboard.maximumMessageBytes)
+        let bytes = try HIDBroker.readMessage(from: descriptor, maximumBytes: OrdinaryBrokerKeyboard.maximumMessageBytes)
         let request = try JSONDecoder().decode(SelectedHIDRequest.self, from: bytes)
         guard bytes.count <= maximumRequestBytes(request) else { throw SelectedHIDFailure.invalid("Request too large") }
         return request
@@ -216,7 +216,7 @@ enum SelectedHIDBroker {
 }
 
 /// Cancellation can arrive on another thread while the send scope exits. Never act on a reused FD.
-private final class LegacyKeyboardSocket: @unchecked Sendable {
+private final class OrdinaryKeyboardSocket: @unchecked Sendable {
     private let lock = NSLock()
     private var descriptor: Int32?
 

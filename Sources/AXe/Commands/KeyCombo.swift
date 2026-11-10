@@ -123,7 +123,7 @@ struct KeyCombo: PhysicalDeviceCommand {
 
         logger.info().log("Pressing key combo: modifiers=\(modifiersString), key=\(key)")
 
-        try await LegacyDuoInput.performKeyboard(
+        try await OrdinaryBrokerInput.performKeyboard(
             try hidEvent(), simulatorUDID: simulatorUDID, logger: logger,
             verbose: selectedOutput.verbose
         )

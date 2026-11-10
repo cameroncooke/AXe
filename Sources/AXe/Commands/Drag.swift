@@ -135,12 +135,12 @@ struct Drag: PhysicalDeviceCommand {
         logger.info().log("Duration: \(duration)s, steps: \(steps)")
 
         // Duo and verified DTUHID devices use the broker's retained input connection.
-        if let context = try await LegacyDuoInput.captureRoute(
+        if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
             let path = SelectedHIDPath(kind: .drag, startX: startX, startY: startY,
                 endX: endX, endY: endY, duration: duration, steps: steps, generator: .ordinary)
-            try await LegacyDuoInput.perform(path: path, context: context,
+            try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Low-level drag completed successfully")
             return

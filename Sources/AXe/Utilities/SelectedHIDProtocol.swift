@@ -27,8 +27,8 @@ struct SelectedHIDRequest: Codable, Sendable {
     var includeReadingContinuation: Bool? = nil
     var agentAdmission: AgentModeAdmission? = nil
     var expectedContext: SelectedHIDContext? = nil
-    var legacyTouch: LegacyDuoTouch? = nil
-    var legacyKeyboard: LegacyDuoKeyboard? = nil
+    var ordinaryTouch: OrdinaryBrokerTouch? = nil
+    var ordinaryKeyboard: OrdinaryBrokerKeyboard? = nil
     /// Diagnostic only. Asks the broker to return its phase timings with the response.
     var timing: Bool? = nil
 
@@ -37,7 +37,7 @@ struct SelectedHIDRequest: Codable, Sendable {
         if activeDisplay != nil {
             guard activeDisplay == true, screenID == nil, screenUUID == nil, expectedContext == nil,
                   agentAdmission == nil, agent == nil, agentBatch == nil, hinge == nil,
-                  legacyTouch == nil, legacyKeyboard == nil else {
+                  ordinaryTouch == nil, ordinaryKeyboard == nil else {
                 throw SelectedHIDFailure.invalid("Active-display binding applies only to selected input without a screen pair")
             }
         }
@@ -50,18 +50,18 @@ struct SelectedHIDRequest: Codable, Sendable {
                   primitives.isEmpty, path == nil, pinch == nil, gesture == nil, ax == nil,
                   hinge == nil, keyboard == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil, expectedContext == nil,
-                  legacyTouch == nil, legacyKeyboard == nil else {
+                  ordinaryTouch == nil, ordinaryKeyboard == nil else {
                 throw AgentModeFailure("mixedBatchPayload", "Agent batch cannot contain other action, display, reference or retained-input payloads.")
             }
             return
         }
         let ordinaryPath = path?.generator == .ordinary
-        if ordinaryPath || legacyTouch != nil || legacyKeyboard != nil, expectedContext == nil {
+        if ordinaryPath || ordinaryTouch != nil || ordinaryKeyboard != nil, expectedContext == nil {
             throw SelectedHIDFailure.invalid("Legacy Duo input requires a measured expected context")
         }
         if let expectedContext {
             guard operation == .complete, token == nil,
-                  [!primitives.isEmpty, ordinaryPath, legacyTouch != nil, legacyKeyboard != nil].filter({ $0 }).count == 1,
+                  [!primitives.isEmpty, ordinaryPath, ordinaryTouch != nil, ordinaryKeyboard != nil].filter({ $0 }).count == 1,
                   path == nil || ordinaryPath, pinch == nil, gesture == nil, ax == nil, hinge == nil,
                   keyboard == nil, button == nil, rotation == nil,
                   agent == nil, agentAdmission == nil,
@@ -112,7 +112,7 @@ struct SelectedHIDRequest: Codable, Sendable {
                 throw AgentModeFailure("missingPinchAdmission", "A reference pinch requires fresh agent area admission.")
             }
         }
-        guard [path != nil, legacyTouch != nil, legacyKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
+        guard [path != nil, ordinaryTouch != nil, ordinaryKeyboard != nil, pinch != nil, gesture != nil, ax != nil, hinge != nil, keyboard != nil, button != nil, rotation != nil].filter({ $0 }).count <= 1 else {
             throw SelectedHIDFailure.invalid("Selected input payloads cannot be mixed")
         }
         if let hinge {
@@ -126,12 +126,12 @@ struct SelectedHIDRequest: Codable, Sendable {
         guard (screenID != nil && screenUUID != nil) || activeDisplay == true else {
             throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID, or the active screen")
         }
-        if let legacyTouch {
-            try legacyTouch.validate()
+        if let ordinaryTouch {
+            try ordinaryTouch.validate()
             return
         }
-        if let legacyKeyboard {
-            try legacyKeyboard.validate()
+        if let ordinaryKeyboard {
+            try ordinaryKeyboard.validate()
             return
         }
         if let rotation {
@@ -218,7 +218,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var event: FBSimulatorHIDEvent { .composite(primitives.map(\.event)) }
     func completeEvent(observation: FBSimulatorHIDSessionObservation) throws -> FBSimulatorHIDEvent {
         try validate()
-        guard keyboard == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
+        guard keyboard == nil, rotation == nil, ordinaryTouch == nil, ordinaryKeyboard == nil else { throw SelectedHIDFailure.invalid("Keyboard, rotation and legacy input require separate admission") }
         if let button { return try button.event(observation: observation) }
         if let pinch { return try pinch.event(observation: observation) }
         if let gesture { return try gesture.event(observation: observation) }
@@ -226,7 +226,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     }
 
     func completeEvent(logicalSize: CGSize) throws -> FBSimulatorHIDEvent {
-        guard pinch == nil, gesture == nil, keyboard == nil, button == nil, rotation == nil, legacyTouch == nil, legacyKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
+        guard pinch == nil, gesture == nil, keyboard == nil, button == nil, rotation == nil, ordinaryTouch == nil, ordinaryKeyboard == nil else { throw SelectedHIDFailure.invalid("Complete gestures require a fresh selected observation") }
         guard let path else { return event }
         return try path.event(logicalSize: logicalSize)
     }
@@ -352,7 +352,7 @@ enum SelectedHIDFailure: Error, LocalizedError {
 
 /// Value-state admission is checked before any asynchronous work.
 struct SelectedHIDAdmission {
-    enum Origin { case selected, legacyTouch }
+    enum Origin { case selected, ordinaryTouch }
     private(set) var inFlight = false
     private(set) var token: UUID?
     private(set) var screenID: UInt32?
@@ -362,10 +362,10 @@ struct SelectedHIDAdmission {
         try request.validate()
         guard !inFlight else { throw SelectedHIDFailure.busy }
         if let token {
-            if origin == .legacyTouch {
-                guard request.legacyTouch != nil, request.token == nil else { throw SelectedHIDFailure.busy }
+            if origin == .ordinaryTouch {
+                guard request.ordinaryTouch != nil, request.token == nil else { throw SelectedHIDFailure.busy }
             } else {
-                guard request.legacyTouch == nil, request.token == token else { throw SelectedHIDFailure.busy }
+                guard request.ordinaryTouch == nil, request.token == token else { throw SelectedHIDFailure.busy }
             }
             guard request.screenID == screenID, request.screenUUID == screenUUID else { throw SelectedHIDFailure.selectionChanged }
         } else if request.token != nil { throw SelectedHIDFailure.invalidToken }

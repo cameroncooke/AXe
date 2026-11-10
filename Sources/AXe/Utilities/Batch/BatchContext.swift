@@ -66,13 +66,13 @@ final class BatchContext {
 
     func validateCurrentContext() async throws {
         guard let duoOwner else { return }
-        do { try await duoOwner.validateLegacyBatchContext() }
+        do { try await duoOwner.validateOrdinaryBatchContext() }
         catch { cachedRoots = nil; throw error }
     }
 
     func validateInputBoundary() async throws {
         guard let duoOwner else { return }
-        do { try await duoOwner.validateLegacyBatchBoundary() }
+        do { try await duoOwner.validateOrdinaryBatchBoundary() }
         catch { cachedRoots = nil; throw error }
     }
 

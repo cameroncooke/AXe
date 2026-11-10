@@ -209,7 +209,7 @@ struct Batch: AsyncParsableCommand {
 
     @MainActor
     private func runOrdinaryBatch(_ lines: [String], logger: AxeLogger) async throws {
-        let measured = try await LegacyDuoInput.captureRoute(
+        let measured = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger)?.context
         let owner: SelectedHIDOwner?
         if measured != nil {
@@ -225,7 +225,7 @@ struct Batch: AsyncParsableCommand {
         if let owner, let measured {
             let runner = BatchPlanRunner(duoOwner: owner, logger: logger)
             try await SignalScope.cancellingOnSignal {
-                try await owner.withLegacyBatch(context: measured) {
+                try await owner.withOrdinaryBatch(context: measured) {
                     try await runSteps(lines, context: context, runner: runner, logger: logger)
                 }
             }

@@ -135,13 +135,13 @@ struct Draw: PhysicalDeviceCommand {
         logger.info().log("Drawing through \(stroke.count) points in \(duration)s")
 
         // Duo and verified DTUHID devices use the broker's retained input connection.
-        if let context = try await LegacyDuoInput.captureRoute(
+        if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context {
             try TouchStroke.requireInside(stroke, width: context.logicalWidth, height: context.logicalHeight)
             let path = SelectedHIDPath(kind: .draw, duration: duration,
                 points: stroke.map { SelectedHIDCompleteGesture.Point(x: $0.x, y: $0.y) }, generator: .ordinary)
-            try await LegacyDuoInput.perform(path: path, context: context,
+            try await OrdinaryBrokerInput.perform(path: path, context: context,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose)
             return
         }

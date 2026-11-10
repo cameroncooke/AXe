@@ -215,10 +215,10 @@ struct Slider: AsyncParsableCommand {
         // so an endpoint never adds a refusal that the drag did not have.
         let ownedDisplay: ActivePanelIdentity?
         if endpoint != nil {
-            ownedDisplay = try? await LegacyDuoInput.captureSliderDisplay(
+            ownedDisplay = try? await OrdinaryBrokerInput.captureSliderDisplay(
                 simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger)
         } else if targetNormalized > 0, targetNormalized < 1 {
-            ownedDisplay = try await LegacyDuoInput.captureSliderDisplay(
+            ownedDisplay = try await OrdinaryBrokerInput.captureSliderDisplay(
                 simulatorUDID: simulatorUDID, hasStableIdentifier: resolvedIdentifier != nil, logger: logger)
         } else {
             ownedDisplay = nil

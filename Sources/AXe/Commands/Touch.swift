@@ -172,12 +172,12 @@ struct Touch: PhysicalDeviceCommand {
 
         // A complete press uses the broker's retained connection on verified DTUHID devices too.
         // A partial down or up keeps its route there, so a held contact keeps one owner.
-        if let context = try await LegacyDuoInput.captureRoute(
+        if let context = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger,
             includeVerifiedRigid: touchDown && touchUp
         )?.context {
-            let touch = LegacyDuoTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
-            try await LegacyDuoInput.perform(touch: touch, context: context,
+            let touch = OrdinaryBrokerTouch(x: pointX, y: pointY, down: touchDown, up: touchUp, delay: delay)
+            try await OrdinaryBrokerInput.perform(touch: touch, context: context,
                 simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose)
             logger.info().log("Touch events completed successfully")
             return

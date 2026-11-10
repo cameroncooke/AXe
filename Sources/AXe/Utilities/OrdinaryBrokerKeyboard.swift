@@ -4,7 +4,7 @@ import FBSimulatorControl
 /// Ordinary keyboard input for the broker route in a compact form, so the text of a long `type` fits
 /// one message on the broker socket. It keeps the ordinary contract: any length, repeated modifiers
 /// and long key-sequence delays.
-struct LegacyDuoKeyboard: Codable, Sendable, Equatable {
+struct OrdinaryBrokerKeyboard: Codable, Sendable, Equatable {
     /// `code` presses a key, `code + 256` releases it, and `delayMarker` waits for the next value of `delays`.
     let keys: [Int]
     let delays: [Double]

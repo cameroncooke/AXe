@@ -120,7 +120,7 @@ struct KeySequence: PhysicalDeviceCommand {
         logger.info().log("Pressing key sequence: \(keycodesString)")
         logger.info().log("Delay between keys: \(delay ?? 0.1) seconds")
 
-        try await LegacyDuoInput.performKeyboard(
+        try await OrdinaryBrokerInput.performKeyboard(
             try hidEvent(), simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose
         )
         

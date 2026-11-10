@@ -376,7 +376,7 @@ struct Tap: PhysicalDeviceCommand {
 
         // Verified DTUHID devices use the broker's retained connection, as the Duo does, so
         // a plain tap neither opens a new guest connection nor waits to drain before exit.
-        let duoContext = try await LegacyDuoInput.captureRoute(
+        let duoContext = try await OrdinaryBrokerInput.captureRoute(
             simulatorUDID: simulatorUDID, preDelay: preDelay, logger: logger, includeVerifiedRigid: true
         )?.context
         let resolution: TapResolution
@@ -412,7 +412,7 @@ struct Tap: PhysicalDeviceCommand {
         logger.info().log("Tapping at \(resolvedDescription)")
 
         if let duoContext {
-            try await LegacyDuoInput.perform(
+            try await OrdinaryBrokerInput.perform(
                 at: resolution.point, style: resolvedTapStyle(for: resolution), context: duoContext,
                 simulatorUDID: simulatorUDID, postDelay: postDelay, logger: logger, verbose: selectedOutput.verbose
             )

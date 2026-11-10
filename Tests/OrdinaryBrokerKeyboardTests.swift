@@ -5,7 +5,7 @@ import Testing
 @testable import AXe
 
 @Suite("Ordinary broker keyboard payload")
-struct LegacyDuoKeyboardTests {
+struct OrdinaryBrokerKeyboardTests {
     private func observation() throws -> FBSimulatorHIDSessionObservation {
         try FBSimulatorHIDSessionObservation(simulatorUDID: "fixture", bootIdentity: "boot-one",
             screenID: 3, screenUniqueID: "00000000-0000-0000-0000-000000000003", axDisplayID: 3,
@@ -13,11 +13,11 @@ struct LegacyDuoKeyboardTests {
                 nativePixelSize: CGSize(width: 300, height: 600), scale: 3, rotation: .rot0),
             poseRevision: "pose-one")
     }
-    private func request(_ value: LegacyDuoKeyboard) throws -> SelectedHIDRequest {
+    private func request(_ value: OrdinaryBrokerKeyboard) throws -> SelectedHIDRequest {
         SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: 3, screenUUID: UUID(uuidString: "00000000-0000-0000-0000-000000000003"),
             operation: .complete, token: nil, primitives: [],
-            expectedContext: SelectedHIDContext(try observation()), legacyKeyboard: value)
+            expectedContext: SelectedHIDContext(try observation()), ordinaryKeyboard: value)
     }
 
     /// Writes `data` and a newline into one end of a socket pair and reads it as the broker does.
@@ -34,15 +34,15 @@ struct LegacyDuoKeyboardTests {
     func longTextRoundTripsThroughTheBrokerRead() throws {
         let text = String(repeating: "aQ7", count: 20_000)
         let events = try TextToHIDEvents.convertTextToHIDEvents(text)
-        let value = try LegacyDuoKeyboard(.composite(events))
+        let value = try OrdinaryBrokerKeyboard(.composite(events))
         let original = try KeyboardPrimitives.from(.composite(events), limits: .ordinary)
         // The enum encoding the file side channel carried would not fit one 64 KiB message.
         #expect(try JSONEncoder().encode(original).count > 16 * HIDBroker.maximumMessageBytes)
         let wire = try JSONEncoder().encode(request(value))
-        #expect(wire.count > HIDBroker.maximumMessageBytes && wire.count < LegacyDuoKeyboard.maximumMessageBytes)
+        #expect(wire.count > HIDBroker.maximumMessageBytes && wire.count < OrdinaryBrokerKeyboard.maximumMessageBytes)
         let decoded = try brokerRead(wire)
         try decoded.validate()
-        let keyboard = try #require(decoded.legacyKeyboard)
+        let keyboard = try #require(decoded.ordinaryKeyboard)
         #expect(keyboard == value)
         // The same events in the same order, with no delay added or dropped, keep the typing timing.
         #expect(FBSimulatorHIDEvent.composite(try keyboard.primitives().map(\.event))
@@ -75,8 +75,8 @@ struct LegacyDuoKeyboardTests {
             events += [.keyboard(direction: .down, keyCode: 4), .keyboard(direction: .up, keyCode: 4)]
             if index < 99 { events.append(.delay(5)) }
         }
-        let value = try LegacyDuoKeyboard(.composite(events))
-        let decoded = try JSONDecoder().decode(LegacyDuoKeyboard.self, from: JSONEncoder().encode(value))
+        let value = try OrdinaryBrokerKeyboard(.composite(events))
+        let decoded = try JSONDecoder().decode(OrdinaryBrokerKeyboard.self, from: JSONEncoder().encode(value))
         #expect(FBSimulatorHIDEvent.composite(try decoded.primitives().map(\.event)) == .composite(events))
         #expect(decoded.delays == Array(repeating: 5, count: 99))
     }
@@ -87,7 +87,7 @@ struct LegacyDuoKeyboardTests {
             .keyboard(direction: .down, keyCode: 4), .shortKeyPress(256), .tapAt(x: 1, y: 2),
             .composite([.keyboard(direction: .down, keyCode: 4), .delay(.nan), .keyboard(direction: .up, keyCode: 4)])]
         for event in invalid {
-            #expect(throws: (any Error).self) { _ = try LegacyDuoKeyboard(event) }
+            #expect(throws: (any Error).self) { _ = try OrdinaryBrokerKeyboard(event) }
         }
     }
 
@@ -97,14 +97,14 @@ struct LegacyDuoKeyboardTests {
         #"{"keys":[4],"delays":[]}"#, #"{"keys":[-1],"delays":[1]}"#, #"{"keys":[4,-1,260],"delays":[-1]}"#,
     ])
     func changedPayloadIsRefused(json: String) throws {
-        let value = try JSONDecoder().decode(LegacyDuoKeyboard.self, from: Data(json.utf8))
+        let value = try JSONDecoder().decode(OrdinaryBrokerKeyboard.self, from: Data(json.utf8))
         #expect(throws: (any Error).self) { try value.validate() }
         #expect(throws: (any Error).self) { try request(value).validate() }
     }
 
     @Test("The measured context and single payload must match the request")
     func mixedAndOldWireCannotEnter() throws {
-        let value = try LegacyDuoKeyboard(.shortKeyPress(4))
+        let value = try OrdinaryBrokerKeyboard(.shortKeyPress(4))
         let clean = try request(value)
         try clean.validate()
         var invalid: [SelectedHIDRequest] = []
@@ -113,10 +113,10 @@ struct LegacyDuoKeyboardTests {
         invalid.append(SelectedHIDRequest(version: clean.version, requestID: clean.requestID,
             screenID: clean.screenID, screenUUID: clean.screenUUID, operation: clean.operation,
             token: clean.token, primitives: [.touch(.down, x: 1, y: 2)],
-            expectedContext: clean.expectedContext, legacyKeyboard: value))
+            expectedContext: clean.expectedContext, ordinaryKeyboard: value))
         invalid.append(SelectedHIDRequest(version: 35, requestID: clean.requestID, screenID: clean.screenID,
             screenUUID: clean.screenUUID, operation: .complete, token: nil, primitives: [],
-            expectedContext: clean.expectedContext, legacyKeyboard: value))
+            expectedContext: clean.expectedContext, ordinaryKeyboard: value))
         for input in invalid {
             var admission = SelectedHIDAdmission()
             #expect(throws: (any Error).self) { try admission.enter(input) }

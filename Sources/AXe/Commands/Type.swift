@@ -227,7 +227,7 @@ struct Type: PhysicalDeviceCommand {
         if !hidEvents.isEmpty {
             // Keep typing in one ordered session. Indigo awaits each send, while DTUHID adds its
             // own keyboard pacing; unconditional delays here would double-pace the DTUHID path.
-            try await LegacyDuoInput.performKeyboard(
+            try await OrdinaryBrokerInput.performKeyboard(
                 .composite(hidEvents), simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose
             )
         }

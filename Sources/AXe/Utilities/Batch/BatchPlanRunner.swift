@@ -60,7 +60,7 @@ struct BatchPlanRunner {
                 guard case .duo(let owner) = executor else {
                     throw SelectedHIDFailure.invalid("Duo touch release requires the measured batch owner")
                 }
-                try await owner.releaseLegacyBatchTouch(at: point)
+                try await owner.releaseOrdinaryBatchTouch(at: point)
             }
         }
 
@@ -70,14 +70,14 @@ struct BatchPlanRunner {
     private func submit(_ event: FBSimulatorHIDEvent) async throws {
         switch executor {
         case .legacy(let session): try await HIDInteractor.performHIDEvent(event, in: session, logger: logger)
-        case .duo(let owner): try await owner.submitLegacyBatchPart(event)
+        case .duo(let owner): try await owner.submitOrdinaryBatchPart(event)
         }
     }
 
     private func wait(_ seconds: Double) async throws {
         switch executor {
         case .legacy: try await Task.sleep(for: .seconds(seconds))
-        case .duo(let owner): try await owner.waitForLegacyBatch(seconds: seconds)
+        case .duo(let owner): try await owner.waitForOrdinaryBatch(seconds: seconds)
         }
     }
 }

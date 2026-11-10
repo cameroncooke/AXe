@@ -62,7 +62,7 @@ final class SelectedHIDOwner {
         }
         catch { return response(request, outcome: "rejectedBeforeInput", error: error) }
         defer { admission.finish(); lastActivity = dependencies.now() }
-        if request.legacyTouch != nil { return await performLegacyTouch(request) }
+        if request.ordinaryTouch != nil { return await performOrdinaryTouch(request) }
         if request.agentAdmission != nil, request.ax == nil, request.keyboard == nil {
             do {
                 try acquireLease()
@@ -120,7 +120,7 @@ final class SelectedHIDOwner {
             if request.expectedContext != nil, session != nil {
                 throw SelectedHIDFailure.invalid("Context-bound input requires a fresh complete session")
             }
-            let legacyKeyboardEvents = try request.legacyKeyboard?.primitives()
+            let ordinaryKeyboardEvents = try request.ordinaryKeyboard?.primitives()
             try Task.checkCancellation()
             if session == nil { try await open(request) }
             guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned session") }
@@ -128,9 +128,9 @@ final class SelectedHIDOwner {
             let receipt: FBSimulatorHIDSessionReceipt
             switch request.operation {
             case .complete:
-                if let legacyKeyboardEvents {
+                if let ordinaryKeyboardEvents {
                     // Keep the raw keyboard lifecycle, including repeated modifier credits and boundary checks.
-                    receipt = try await session.executeLegacyKeyboard(.composite(legacyKeyboardEvents.map(\.event)))
+                    receipt = try await session.executeLegacyKeyboard(.composite(ordinaryKeyboardEvents.map(\.event)))
                     try await HIDInteractor.waitForStabilization(logger: logger)
                     try await session.validateLegacyBatchBoundary()
                     break
@@ -191,13 +191,13 @@ final class SelectedHIDOwner {
         }
     }
 
-    private func performLegacyTouch(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
+    private func performOrdinaryTouch(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
         var beforeCount = 0
         do {
-            guard let touch = request.legacyTouch, let expected = request.expectedContext else {
+            guard let touch = request.ordinaryTouch, let expected = request.expectedContext else {
                 throw SelectedHIDFailure.invalid("Missing measured Duo touch payload")
             }
-            let hadContact = admission.origin == .legacyTouch
+            let hadContact = admission.origin == .ordinaryTouch
             if session == nil { try await open(request) }
             guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing owned Duo touch session") }
             beforeCount = await session.status().enqueuedEventCount
@@ -222,7 +222,7 @@ final class SelectedHIDOwner {
                 clear()
                 return result
             }
-            admission.retain(request, token: admission.token ?? UUID(), origin: .legacyTouch)
+            admission.retain(request, token: admission.token ?? UUID(), origin: .ordinaryTouch)
             return response(request, outcome: receipt.outcome.rawValue, count: count)
         } catch {
             var cleanup = "notNeeded"
@@ -255,7 +255,7 @@ final class SelectedHIDOwner {
                 return
             }
         }
-        let idleTimeout: TimeInterval = admission.origin == .legacyTouch ? 60 : 30
+        let idleTimeout: TimeInterval = admission.origin == .ordinaryTouch ? 60 : 30
         guard dependencies.now() - lastActivity >= idleTimeout else { return }
         // A live reference table retains the process, never an idle touch.
         if retainingAgentSnapshot, admission.token == nil { return }
@@ -349,8 +349,8 @@ final class SelectedHIDOwner {
         // DTUHID rigid devices; the shared-owner check refuses any other profile before input.
         try await open(displayID: display.id, displayUUID: display.uuid,
             expectedContext: request.expectedContext, requiresDuo: false,
-            requiresSharedOwner: request.path?.generator == .ordinary || request.legacyTouch != nil
-                || request.legacyKeyboard != nil) { observation in
+            requiresSharedOwner: request.path?.generator == .ordinary || request.ordinaryTouch != nil
+                || request.ordinaryKeyboard != nil) { observation in
                 try request.button?.validate(observation: observation)
             }
     }
@@ -361,12 +361,12 @@ final class SelectedHIDOwner {
         try acquireLease()
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         if requiresDuo {
-            guard LegacyDuoInput.isDuo(simulator) else {
+            guard OrdinaryBrokerInput.isDuo(simulator) else {
                 throw SelectedHIDFailure.invalid("Legacy Duo input requires the verified Duo device profile")
             }
-            try LegacyDuoInput.requireVerifiedDuo(simulator)
+            try OrdinaryBrokerInput.requireVerifiedDuo(simulator)
         }
-        if requiresSharedOwner, try !LegacyDuoInput.usesSharedKeyboardOwner(for: simulator) {
+        if requiresSharedOwner, try !OrdinaryBrokerInput.usesSharedKeyboardOwner(for: simulator) {
             throw SelectedHIDFailure.invalid("Raw input transport or verified profile changed before input")
         }
         let feed = try await FBSimulatorHIDNativeFreshnessProvider.start(for: simulator,
@@ -388,7 +388,7 @@ final class SelectedHIDOwner {
     }
 
     /// One in-process owner for the complete ordinary batch. It never rebinds after failure.
-    func withLegacyBatch(context: SelectedHIDContext,
+    func withOrdinaryBatch(context: SelectedHIDContext,
                          body: @MainActor () async throws -> Void) async throws {
         guard !isBusy, session == nil, admission.token == nil else { throw SelectedHIDFailure.busy }
         try context.validate()
@@ -402,7 +402,7 @@ final class SelectedHIDOwner {
             try await open(displayID: context.screenID, displayUUID: uuid,
                 expectedContext: context, requiresDuo: true)
             try await body()
-            try await validateLegacyBatchBoundary()
+            try await validateOrdinaryBatchBoundary()
         } catch { actionError = error }
 
         var cleanup = "notNeeded"
@@ -434,7 +434,7 @@ final class SelectedHIDOwner {
         }
     }
 
-    func validateLegacyBatchContext() async throws {
+    func validateOrdinaryBatchContext() async throws {
         try Task.checkCancellation()
         guard batchRunning, !quarantined, let session, let feed, let observation else {
             throw SelectedHIDFailure.invalid("Missing fixed Duo batch owner")
@@ -447,14 +447,14 @@ final class SelectedHIDOwner {
         try Task.checkCancellation()
     }
 
-    func validateLegacyBatchBoundary() async throws {
-        try await validateLegacyBatchContext()
+    func validateOrdinaryBatchBoundary() async throws {
+        try await validateOrdinaryBatchContext()
         guard let session else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
         try await session.validateLegacyBatchBoundary()
     }
 
-    func submitLegacyBatchPart(_ event: FBSimulatorHIDEvent) async throws {
-        try await validateLegacyBatchContext()
+    func submitOrdinaryBatchPart(_ event: FBSimulatorHIDEvent) async throws {
+        try await validateOrdinaryBatchContext()
         guard let session else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
         let receipt = try await session.submitLegacyBatchPart(event)
         logger.info().log("Duo batch part completed; events=\(receipt.enqueuedEventCount); outcome=\(receipt.outcome.rawValue)")
@@ -463,25 +463,25 @@ final class SelectedHIDOwner {
 
     /// Only the typed ordinary UP-only step has the legacy no-contact no-op policy.
     /// Generic parts, including composites, retain strict native release validation.
-    func releaseLegacyBatchTouch(at point: (x: Double, y: Double)) async throws {
-        try await validateLegacyBatchContext()
+    func releaseOrdinaryBatchTouch(at point: (x: Double, y: Double)) async throws {
+        try await validateOrdinaryBatchContext()
         guard let session, let observation else { throw SelectedHIDFailure.invalid("Missing Duo batch session") }
         _ = try observation.displayContext.normalizedPoint(from: CGPoint(x: point.x, y: point.y))
         guard await session.status().hasRetainedContact else {
             logger.info().log("Duo batch touch up has no owned contact; no input sent")
             return
         }
-        try await submitLegacyBatchPart(.touch(direction: .up, x: point.x, y: point.y))
+        try await submitOrdinaryBatchPart(.touch(direction: .up, x: point.x, y: point.y))
     }
 
-    func waitForLegacyBatch(seconds: Double) async throws {
+    func waitForOrdinaryBatch(seconds: Double) async throws {
         guard seconds.isFinite, seconds >= 0 else {
             throw SelectedHIDFailure.invalid("Duo batch wait must be finite and non-negative")
         }
         let clock = ContinuousClock()
         let start = clock.now
         while true {
-            try await validateLegacyBatchContext()
+            try await validateOrdinaryBatchContext()
             let components = start.duration(to: clock.now).components
             let elapsed = Double(components.seconds) + Double(components.attoseconds) / 1e18
             guard elapsed < seconds else { return }
