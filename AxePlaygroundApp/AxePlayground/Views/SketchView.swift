@@ -3,8 +3,10 @@ import SwiftUI
 import UIKit
 
 /// A PencilKit canvas with the system tool picker. A finger draws, so AXe's touch input paints real
-/// ink, and the picker's tools and colours are chosen by tapping them like any other control.
-/// The stroke count and the last stroke's ink are reported through accessibility values.
+/// ink, and the picker's tools and line weights are chosen by tapping them like any other control.
+/// The system colour picker exposes no elements, so a row of swatches gives the selected tool a
+/// named colour. The stroke count, the inks used and the last stroke are reported through
+/// accessibility values.
 struct SketchView: View {
     var body: some View {
         SketchControllerView()
@@ -25,6 +27,14 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
     private let lastBounds = UILabel()
     private let tool = UILabel()
     private let drawable = UILabel()
+    private let inks = UILabel()
+    private let extent = UILabel()
+
+    /// Swatches in the order they are shown; the identifier is `sketch.colour.<name>`.
+    static let colours: [(name: String, hex: UInt32)] = [
+        ("sky", 0x6EC6FF), ("sun", 0xFFD60A), ("orange", 0xFF9500), ("grass", 0x34C759), ("leaf", 0x1E7D32),
+        ("wood", 0x8B5A2B), ("red", 0xD62828), ("white", 0xFFFFFF), ("night", 0x1D3557), ("black", 0x000000),
+    ]
     private var popWasEnabled: [UIGestureRecognizer: Bool] = [:]
 
     override func viewDidLoad() {
@@ -49,12 +59,31 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
                 field(lastInk, id: "sketch.last.ink", name: "Last ink"),
                 field(lastBounds, id: "sketch.last.bounds", name: "Last bounds"),
             ]),
-            UIStackView(arrangedSubviews: [field(drawable, id: "sketch.drawable", name: "Drawable area")]),
+            UIStackView(arrangedSubviews: [
+                field(drawable, id: "sketch.drawable", name: "Drawable area"),
+                field(extent, id: "sketch.bounds", name: "Drawing bounds"),
+            ]),
+            UIStackView(arrangedSubviews: [field(inks, id: "sketch.inks", name: "Inks used")]),
         ]
         for row in rows {
             row.spacing = 12
             row.distribution = .fill
         }
+        let swatches = UIStackView(arrangedSubviews: Self.colours.enumerated().map { index, colour in
+            let button = UIButton(type: .custom)
+            button.backgroundColor = Self.colour(colour.hex)
+            button.layer.cornerRadius = 6
+            button.layer.borderWidth = 1
+            button.layer.borderColor = UIColor.separator.cgColor
+            button.tag = index
+            button.accessibilityIdentifier = "sketch.colour." + colour.name
+            button.accessibilityLabel = colour.name + " colour"
+            button.heightAnchor.constraint(equalToConstant: 30).isActive = true
+            button.addTarget(self, action: #selector(pickColour(_:)), for: .touchUpInside)
+            return button
+        })
+        swatches.spacing = 6
+        swatches.distribution = .fillEqually
 
         // A finger draws; without this only Apple Pencil does. One finger never scrolls the canvas.
         canvas.drawingPolicy = .anyInput
@@ -64,7 +93,7 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
         canvas.delegate = self
         canvas.accessibilityIdentifier = "sketch.canvas"
 
-        let outer = UIStackView(arrangedSubviews: rows + [canvas])
+        let outer = UIStackView(arrangedSubviews: rows + [swatches, canvas])
         outer.axis = .vertical
         outer.spacing = 4
         outer.translatesAutoresizingMaskIntoConstraints = false
@@ -135,8 +164,22 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
         label.accessibilityLabel = name
         label.isAccessibilityElement = true
         label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.6
+        label.minimumScaleFactor = 0.5
+        label.lineBreakMode = .byTruncatingTail
         return label
+    }
+
+    private static func colour(_ hex: UInt32) -> UIColor {
+        UIColor(red: CGFloat((hex >> 16) & 0xFF) / 255, green: CGFloat((hex >> 8) & 0xFF) / 255,
+                blue: CGFloat(hex & 0xFF) / 255, alpha: 1)
+    }
+
+    /// Gives the selected tool the swatch's colour, keeping its kind and width. The tool picker gives
+    /// the canvas its own tool again when another tool or weight is chosen there.
+    @objc private func pickColour(_ sender: UIButton) {
+        guard let inking = canvas.tool as? PKInkingTool, Self.colours.indices.contains(sender.tag) else { return }
+        canvas.tool = PKInkingTool(inking.inkType, color: Self.colour(Self.colours[sender.tag].hex), width: inking.width)
+        publish()
     }
 
     @objc private func clearDrawing() {
@@ -179,6 +222,15 @@ final class SketchController: UIViewController, PKCanvasViewDelegate, PKToolPick
         } else {
             set(lastInk, "last ink", "none")
             set(lastBounds, "last bounds", "none")
+        }
+        var used: [String] = []
+        for stroke in strokes where !used.contains(describe(stroke.ink)) { used.append(describe(stroke.ink)) }
+        set(inks, "inks", used.isEmpty ? "none" : used.joined(separator: ", "))
+        if let window = view.window, !strokes.isEmpty {
+            let all = canvas.convert(canvas.drawing.bounds, to: window.screen.coordinateSpace)
+            set(extent, "bounds", String(format: "%.0f,%.0f,%.0f,%.0f", all.minX, all.minY, all.maxX, all.maxY))
+        } else {
+            set(extent, "bounds", "none")
         }
         let frame = drawableFrame()
         set(drawable, "drawable", String(format: "%.0f,%.0f,%.0f,%.0f", frame.minX, frame.minY, frame.width, frame.height))
