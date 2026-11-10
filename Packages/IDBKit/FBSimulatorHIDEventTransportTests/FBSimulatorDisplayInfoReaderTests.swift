@@ -21,10 +21,19 @@ struct FBSimulatorDisplayInfoReaderTests {
     #expect(snapshot.activePanel.active == nil && snapshot.activePanel.currentOrientation == .rot0)
   }
 
-  @Test func rigidReplyWithoutActiveFlagNeedsPrimaryAndLitPanel() throws {
-    for row in [rigidRow(primary: false), rigidRow(backlight: "off"), rigidRow(backlight: nil)] {
+  @Test func rigidReplyWithoutActiveFlagNeedsPrimaryStartedPanel() throws {
+    for row in [rigidRow(primary: false), rigidRow(backlight: "unknown"), rigidRow(backlight: nil)] {
       let rows = try FBSimulatorDisplayInfoReader.decode(reply([row]))
       #expect(failure { try discover(rows, catalog: [entry(1, rigid, 1206, 2622)]) } == .missingActiveFlag)
+    }
+  }
+
+  @Test func rigidReplySelectsALockedOrDarkPanel() throws {
+    for backlight in ["inactiveOn", "off", "activeDimmed"] {
+      let rows = try FBSimulatorDisplayInfoReader.decode(reply([rigidRow(backlight: backlight)]))
+      let snapshot = try discover(rows, catalog: [entry(1, rigid, 1206, 2622)]).snapshot
+      #expect(snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
+      #expect(snapshot.activePanel.backlightState == backlight)
     }
   }
 

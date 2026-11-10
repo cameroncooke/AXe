@@ -183,9 +183,11 @@ public enum FBSimulatorDisplayInfoReader {
     let panel: ActivePanel
     let basis: ActivePanelSelectionBasis
     if panels.allSatisfy({ $0.active == nil }) {
-      // Rigid devices omit the flag. Only one lit primary integrated panel can be selected.
+      // Rigid devices omit the flag. Their one primary integrated panel is the screen whether it
+      // is lit, locked or off, as the active panel of a locked Duo is. A panel that has not
+      // reported a backlight state yet is still starting.
       guard panels.count == 1, let only = panels.first, only.primary,
-            Self.litBacklightStates.contains(only.backlightState ?? "") else {
+            let backlight = only.backlightState, backlight != "unknown" else {
         throw ActivePanelValidationError.missingActiveFlag
       }
       panel = only
