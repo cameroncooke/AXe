@@ -118,8 +118,7 @@ two outcomes apart. It requires at least two confirmed turns.
 
 The suite does not exercise swipes, drags, gestures other than pinch, other two-finger input, edge presets, standalone `touch`,
 batches with held contacts, key sequences and combinations, hardware buttons, semantic press, the lock
-refusal or `deviceStreamReplaced`. See [device-support.md](device-support.md) for which of these have
-live checks.
+refusal or `deviceStreamReplaced`. See [device-support.md](device-support.md) for what devices support.
 
 ## Quick performance check
 

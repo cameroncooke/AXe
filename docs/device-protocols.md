@@ -1,8 +1,9 @@
 # Device protocol notes
 
-AXe's record of the wire formats it uses to reach a physical device. The Phase 1 wire notes use local
-research captures, which are not checked into the repository. The captures were taken on 2026-11-09
-from an iPhone 16 Pro Max on iOS 27.2 over the local network, with CoreDevice 689.2 on the Mac.
+AXe's record of the wire formats it uses to reach a physical device. The notes come from local research
+captures, which are not checked into the repository, taken from an iPhone 16 Pro Max and an iPad Pro
+11-inch (3rd generation) on iOS 27.2, with CoreDevice 689.2 on the Mac. The design and limitations are in
+[device-support.md](device-support.md).
 
 ## Reaching the device
 
@@ -153,7 +154,7 @@ capability handshake: `clientNeedsAccessibility:` (BOOL) on the control channel 
 holding `treeDump` (an array of `AXPTranslatorResponse`) and `treeDumpType`
 (`AXPTreeDumpTypeInitialDump`, then `AXPTreeDumpTypeAdditionalData`). Sending NO closes the channel.
 
-A Phase 3 capture confirmed the 32-byte little-endian message header. It contains magic, header size,
+A capture confirmed the 32-byte little-endian message header. It contains magic, header size,
 16-bit fragment index and count, body size, message identifier, conversation, signed channel and
 reply flag. For a fragmented message, fragment zero carries the total size and has no body. The
 16-byte payload header gives payload type, auxiliary size and total payload size.
@@ -164,15 +165,13 @@ Both peers publish capabilities on channel 0. The host acknowledges reply-bearin
 InitialDump and a slow AdditionalData and discarded the pair. It validates the root and child graph of each push, then
 uses the complete AdditionalData tree. Object IDs can differ between the two pushes.
 
-
-A Phase 4 probe sent a securely archived translator attribute request as NSData with
+A probe sent a securely archived translator attribute request as NSData with
 `processDataFromHost:`. The empty DTX acknowledgement matched the outbound identifier. A separate
 `processDataFromRemoteDevice:` push carried the result and its associated request type, attribute,
 PID and object ID. The push has its own DTX identifier. The client sends one request at a time.
 
 A second YES on the same raw connection replayed the previous archive. NO closed that connection.
 For fresh reads, the broker replaces the raw DTX channel while keeping its RSD and HID connections.
-
 
 A physical AXPress uses request type 7, action 5 and client type 2. Its separate push reports
 associated request type 7, attribute 0 and a native Boolean, with a null associated translation.
