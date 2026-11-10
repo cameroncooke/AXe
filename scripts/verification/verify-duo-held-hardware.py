@@ -232,7 +232,8 @@ try:
     finish_probe()
     raw = json.loads((check.folder / 'hardware-probe-stdout').read_text())
     if args.public:
-        execution = raw['home'] if args.button == 'home' else raw['button']['execution']
+        # Home is a selected button kind, so both buttons report under the same key.
+        execution = raw['button']['execution']
         assert execution['plannedPrimitiveCount'] == 2 and execution['sentPrimitiveCount'] == 1
         assert execution['boundContext'] == raw['context']
         receipt = {'outcome': raw['outcome'], 'normalEventCount': raw['enqueuedEventCount'],
