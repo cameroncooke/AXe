@@ -7,13 +7,14 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: simulator work is done and verified; device verification is blocked. Last update 10 November, about 09:35.
+- State: simulator and device work is done and verified. Last update 10 November, about 09:50.
 - Simulators: unit tests 845 of 845; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
-- Not verified: anything on the physical iPhone and iPad; timing against the v1.8.0 release binary (none on this Mac).
+- Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
+- Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
 - Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
 - Nothing is pushed.
 - Commits made by this audit: see the commit log at the end.
-- Blockers: 1 open (physical devices unreachable through CoreDevice since about 22:45). See Blockers.
+- Blockers: none open. The devices were unreachable through CoreDevice from about 22:45 until 09:35.
 
 ## Phase 0: baseline
 
@@ -58,7 +59,7 @@ The third and fourth are one owner with two admission styles and can be merged.
 - [~] Device support bugs: fixed and merged into `v2` (7 commits); the final device run is blocked
 - [x] Simulator input and broker bugs
 - [x] Agent mode bugs: fixed and merged into `v2` (13 commits)
-- [x] Bugs found by the final verification (5 fixes, `5b2427fd1` to `edbb353fe`)
+- [x] Bugs found by the final verification (6 fixes, `5b2427fd1` to `2faeeedbc`)
 
 Verification of the simulator input wave (8 commits, `3d938025a` to `01ac672d3`):
 
@@ -101,6 +102,7 @@ Bugs found by the final verification, each fixed and committed:
 | `batch --agent --file` with malformed JSON reported `readFailed` ("AXe could not read a response it expected") | The decoding error fell through to the generic mapping (a regression from the error-code unification) | `5b2427fd1`: `invalidArguments`, "Agent batch JSON is malformed or lacks a steps array." New unit test; the failing e2e case passes. |
 | Ordinary `stream-video --format mjpeg` declared `boundary=--mjpegstream` while parts start with `--mjpegstream` | Present since v1.8.0; a strict multipart parser finds no parts | `46c18a694`: declares `boundary=mjpegstream` like the selected stream; part bytes unchanged. |
 | A selected tap whose wait timed out printed "The operation couldn't be completed. (AXe.SelectedAXWaitFailure error 1.)" | The failure type had no description of its own, so Foundation's default text reached the output | `edbb353fe`: prints "The control did not become ready before the wait ended."; the readable-text filter also drops that default rendering for any other type. Unit tests, and `PlaygroundDuoTapWaitTests` passes on the Duo |
+| `gesture pinch --scale 2` without `--radius` failed on both devices with `pointOutsideDisplay` | The default radius put the end of the motion exactly on the screen edge, which a device refuses | `2faeeedbc`: the default radius keeps the wider end 16 points inside the screen. Unit tests; the device pinch check passes on the iPhone and the iPad |
 
 Not done, with reasons: the audit's claim that the second DTUHID readiness wait is a no-op was wrong
 (the first wait is skipped when `dtuhidd` is not yet a child process), so it is kept.
@@ -239,9 +241,10 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 - [x] Isolated run of the 13 Duo suites the fourth run did not reach: 9 passed; the other 4 passed when rerun alone (one after a script fix, `c06e149e8`)
 - [x] Triage of the three failing iPhone cases: none is a regression (see below)
 - [x] Unit tests at `c06e149e8`: `swift test --skip Playground` 845 of 845 in 117 suites; script tests 19 of 19
+- [x] Zoom suite on all three simulators after the pinch fix: passes (the iPad on a rerun)
 - [x] Simulator end-to-end suites affected by the changes: iPhone 34 of 34 at `cc39c8d49`; Duo 64 of 64 passed at least once at `cc39c8d49` or later, 8 of them only on an isolated rerun; iPad 11 of 11 at `e45b0d3db` and `a35e1270d`, not rerun after the last input fix
-- [ ] Device end-to-end suite (`make e2e-devices`) on the iPhone and iPad: blocked, `devicectl` still times out at 08:50 on 10 November
-- [~] Taps and typing: verified on the iPhone, iPad and Duo simulators by the suites above; not run on the devices (blocked)
+- [x] Device end-to-end suite (`make e2e-devices`) on the iPhone 16 Pro Max and iPad Pro at `25dfab0ca`: 21 of 23 checks; the 2 pinch failures fixed (`2faeeedbc`) and that check rerun alone, passing on both
+- [x] Taps and typing: verified on the iPhone, iPad and Duo simulators by the suites above, and on both devices ("coordinate taps", "typing and keys" and "element tap and point lookup" pass)
 - [x] Performance against the pre-audit build (`scripts/bench-quick.py`, 7 pairs, iPhone 18 Pro simulator): no regression in two runs
 
 Baseline run (`e2e-results/20261109T222215Z` in the verification checkout, 58 minutes): FAIL, for two
@@ -326,6 +329,26 @@ So of the Duo failures seen since the fourth run began, 4 were stale test or scr
 
 Background load found on the morning of 10 November: `PerfPowerServices` at about 150% of a core and Spotlight at about 100% (indexing is enabled on `/Volumes/Developer`), plus six idle booted simulators. Seven leftover wait loops from the night were also found and stopped; they only slept. The idle simulators are now shut down.
 
+Physical devices (`e2e-results/devices-20261110T093536Z`, `v2` at `25dfab0ca`, about 6 minutes): the owner made the devices reachable again at 09:35. 21 of 23 checks passed.
+
+| Check | iPad Pro (11-inch, M1) | iPhone 16 Pro Max |
+| --- | --- | --- |
+| Doctor | ready | ready |
+| Coordinate taps | 2 exact, 970×1389 points | 2 exact, 440×956 points |
+| Typing and keys | pass | pass |
+| Draw a closed triangle | pass, 1.29 s | pass, 1.27 s |
+| Pinch in and out | FAIL `pointOutsideDisplay` | FAIL `pointOutsideDisplay` |
+| Element tap and point lookup | pass | pass |
+| Screenshot | 1940×2778 upright | 1320×2868 upright |
+| Raw stream, MP4 recording | pass | pass |
+| Native H.264 over 20 s | 288 frames | 1008 frames |
+| Rotation with taps | 4 turns confirmed | 3 confirmed, 1 unconfirmed (the tap after it landed exactly) |
+| Both at once: capture and input | pass | pass |
+
+Pinch: without `--radius` a pinch started a quarter of the shorter side from the centre, so `--scale 2` ended exactly on the screen edge (x = 0 and x = 440 on the iPhone). A device refuses a point on the edge; a simulator accepts it. The default radius is now reduced when needed so the wider end stays 16 points inside the screen (`2faeeedbc`, unit tests). Rerun of that one check with the new `AXE_E2E_CHECKS="pinch in and out"` option (`ba8619661`; `e2e-results/devices-20261110T094519Z`): iPad 1.00 → 1.81 → 0.98, iPhone 1.00 → 1.68 → 0.97, both pass.
+
+The pinch fix also changes the default radius on simulators, so `PlaygroundZoomTests` alone was run on all three (`e2e-results/zoom-isolated-1` and `-2`, `v2` at `ba8619661`): iPhone and Duo passed; the iPad failed once with a default-pinch zoom of 1.27 (the check needs more than 1.3) and passed on rerun with 1.82, the same value as before the change. Fourteen isolated pinches on that simulator, eight with the new default and six with the old 205-point radius, gave 1.82 to 1.91, so the 1.27 was not caused by the radius. The measured zoom depends on when the app's recogniser sees the first movement, which varies when the machine is busy.
+
 Performance (`scripts/bench-quick.py --pairs 7`, baseline the pre-audit build `0aa6ed21b`, candidate the payload built at `6463de619`, iPhone 18 Pro simulator). There is no v1.8.0 release binary on this Mac, so this is not the release comparison that `AGENTS.md` asks for.
 
 | Command | Run 1 (load 39): baseline, candidate | Run 2 (load 31, all other simulators off): baseline, candidate |
@@ -363,7 +386,7 @@ Verification (commits `762e228b3` to `cb6cc95f2`):
 
 ## Open items for the owner
 
-- Restart `CoreDeviceService` (or replug the devices), then run `make e2e-devices`: nothing changed tonight on device paths has been run on hardware.
+- Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
 - Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
 - A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, but back-to-back `button` presses are slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
@@ -387,12 +410,12 @@ Decisions made without the owner, with the reason.
 
 ## Blockers
 
-- **Physical devices unreachable through CoreDevice (open).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
+- **Physical devices unreachable through CoreDevice (closed at 09:35 on 10 November, when the owner made them reachable).** From about 22:45, `devicectl device info lockState` and `details` time out for both the iPhone and the iPad (20 to 30 seconds each, still failing at 00:09), while `devicectl list devices` shows both as connected and simulator calls answer in 0.5 s. Every AXe device command makes those calls, so no device check can run. A direct tunnel screenshot by the device agent showed both devices awake and unlocked. It started during the device agent's first `make e2e-devices` run, whose harness then had the bug of leaving capture processes running. Restarting the user-level `CoreDeviceService` is the likely fix; the permission system refused that action, so it was not done. To clear it: quit and reopen Xcode's Device Hub, or run `killall CoreDeviceService`, or unplug and replug the devices. Device verification of tonight's fixes waits on this.
 - **Duo screens read as "still changing" when nothing moves (fixed and merged).** The refusal appeared once more on 10 November, in `PlaygroundDuoHardwareInterruptionTests` at a load average of about 40, and not when that suite was rerun alone. Cause and fix are described under Phase 8. Workaround on older builds: fold the Duo open and closed once.
 
 ## Commit log
 
-All 97 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
+All 100 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. This table is generated from `git log`, so the commit that updates this log is the one after the last row.
 
 | Commit | Subject |
 | --- | --- |
@@ -493,3 +516,6 @@ All 97 commits made on `v2` since `0aa6ed21b`, oldest first. None is pushed. Thi
 | `edbb353fe` | fix(selected): Word a failed wait instead of printing its Swift type |
 | `6463de619` | test(duo): Match three Duo suites to the audited output |
 | `c06e149e8` | test(duo): Read the held Home receipt under the button key |
+| `25dfab0ca` | docs(release): Correct the run counts and record the Duo triage and timing |
+| `2faeeedbc` | fix(gesture): Keep a default pinch radius inside the screen |
+| `ba8619661` | test(device): Rerun single device checks with AXE_E2E_CHECKS |
