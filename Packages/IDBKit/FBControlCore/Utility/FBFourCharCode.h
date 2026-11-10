@@ -18,10 +18,6 @@ NS_ASSUME_NONNULL_BEGIN
 
  This is a non-deprecated, drop-in replacement for `UTCreateStringForOSType`.
 
- @note When working in Swift code, prefer the `OSType.fourCharCodeString`
- computed property over this function. This C function exists solely so that
- Objective-C callers can share the same logic.
-
  @param code the FourCC / OSType to render.
  @return a string representation that is always safe to log.
  */

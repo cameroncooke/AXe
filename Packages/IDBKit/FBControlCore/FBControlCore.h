@@ -20,7 +20,6 @@
 #import <FBControlCore/FBFourCharCode.h>
 #import <FBControlCore/FBFuture.h>
 #import <FBControlCore/FBFuture+Sync.h>
-#import <FBControlCore/FBFutureContextManager.h>
 #import <FBControlCore/FBInstalledApplication.h>
 #import <FBControlCore/FBInstrumentsCommands.h>
 #import <FBControlCore/FBInstrumentsOperation.h>
@@ -32,7 +31,6 @@
 #import <FBControlCore/FBProcessTerminationStrategy.h>
 #import <FBControlCore/FBScreenshotCommands.h>
 #import <FBControlCore/FBSettingsCommands.h>
-#import <FBControlCore/FBSocketServer.h>
 #import <FBControlCore/FBSubprocess.h>
 #import <FBControlCore/FBVideoStream.h>
 #import <FBControlCore/FBVideoStreamConfiguration.h>
