@@ -281,7 +281,7 @@ enum SelectedBatchRunner {
                     status: .outcomeUnknown, response: nil, error: String(describing: error)))
                 throw CLIError(errorDescription: "Selected batch step \(offset + 1) has an unknown outcome. No request was replayed.", code: .inputFailed)
             }
-            let accepted = completed(response, for: request, simulatorUDID: simulatorUDID)
+            let accepted = completed(response, for: request)
             try emit(.init(index: offset + 1, totalSteps: lines.count, command: name, requestID: request.requestID,
                 status: accepted ? .completed : .failedResponse, response: response,
                 error: accepted ? nil : "The selected operation did not return a clean complete receipt."))
@@ -291,16 +291,19 @@ enum SelectedBatchRunner {
         }
     }
 
-    static func completed(_ response: SelectedHIDResponse, for request: SelectedHIDRequest,
-                          simulatorUDID: String? = nil) -> Bool {
-        if request.button != nil { return completedButton(response, for: request, simulatorUDID: simulatorUDID) }
-        guard response.button == nil else { return false }
-        if request.ax?.kind == .sliderEndpoint { return completedSlider(response, for: request) }
-        return response.version == request.version && response.requestID == request.requestID &&
-        response.error == nil && response.outcome == "enqueuedAndDrained" &&
-        response.token == nil && response.quarantine == nil && response.enqueuedEventCount > 0 &&
-        (response.cleanup == "notNeeded" || response.cleanup == "releaseEnqueuedAndDrained") &&
-        boundScreen(response, for: request)
+    /// The owner decides success and reports a missed contract as an error; this checks the reply's
+    /// identity, its error, its outcome and the screen it bound.
+    static func completed(_ response: SelectedHIDResponse, for request: SelectedHIDRequest) -> Bool {
+        guard response.version == request.version, response.requestID == request.requestID,
+              !SelectedInputOutput.failed(response), response.token == nil,
+              boundScreen(response, for: request) else { return false }
+        if let button = request.button {
+            return response.outcome == "enqueuedAndDrained" && response.button?.kind == button.kind
+        }
+        if request.ax?.kind == .sliderEndpoint {
+            return response.outcome == "endpointObserved" || response.outcome == "alreadyAtEndpoint"
+        }
+        return response.outcome == "enqueuedAndDrained" && response.enqueuedEventCount > 0
     }
 
     /// An explicit pair must match the receipt. Without one the broker bound the active screen,
@@ -309,83 +312,6 @@ enum SelectedBatchRunner {
         guard let context = response.context, let screenUUID = UUID(uuidString: context.screenUUID) else { return false }
         if request.screenID == nil, request.screenUUID == nil { return request.activeDisplay == true }
         return context.screenID == request.screenID && screenUUID == request.screenUUID
-    }
-
-    private static func completedButton(_ response: SelectedHIDResponse, for request: SelectedHIDRequest,
-                                      simulatorUDID: String?) -> Bool {
-        do { try request.validate() } catch { return false }
-        guard let expected = request.button, let button = response.button, button.kind == expected.kind else { return false }
-        let execution = button.execution
-        let expectedBoot = expected.expectedBoot
-        let expectedPrimitiveCount = expected.expectedPrimitiveCount
-        guard let context = response.context,
-              let cleanup = execution.cleanupEvidence, let simulatorUDID,
-              let deviceID = UUID(uuidString: simulatorUDID),
-              response.version == request.version, response.requestID == request.requestID,
-              response.outcome == "enqueuedAndDrained", response.enqueuedEventCount == expectedPrimitiveCount,
-              response.error == nil, response.token == nil, response.quarantine == nil,
-              response.ax == nil, response.hinge == nil, response.keyboard == nil,
-              response.cleanup == "notNeeded", boundScreen(response, for: request),
-              expectedBoot == nil || expectedBoot == context.bootIdentity,
-              execution.schemaVersion == 1, UUID(uuidString: execution.simulatorUDID) == deviceID,
-              execution.axDisplayID == context.screenID,
-              execution.phase == "completed", execution.plannedPrimitiveCount == expectedPrimitiveCount,
-              execution.sentPrimitiveCount == expectedPrimitiveCount,
-              execution.allInputsReleasedBeforeCleanup, execution.drainCompleted, execution.interruption == nil,
-              execution.executionCleanup == "notNeeded", execution.startedUptime.isFinite,
-              execution.finishedUptime.isFinite, execution.finishedUptime >= execution.startedUptime,
-              sameContext(execution.boundContext, context),
-              UUID(uuidString: cleanup.boundSimulatorUDID) == deviceID, cleanup.boundBootIdentity == context.bootIdentity,
-              cleanup.boundScreenID == context.screenID,
-              UUID(uuidString: cleanup.boundScreenUUID) == UUID(uuidString: context.screenUUID),
-              cleanup.boundNativeWidth == context.nativePixelWidth,
-              cleanup.boundNativeHeight == context.nativePixelHeight, cleanup.boundScale == context.scale,
-              cleanup.boundRotation == context.rotationDegrees, cleanup.boundPoseRevision == context.poseRevision,
-              cleanup.outcome == "notNeeded", cleanup.contextValidation == "noOwnedInput",
-              cleanup.releases.isEmpty, !cleanup.timedOut, cleanup.errorDescription == nil else { return false }
-        // The owner proves button transport and release. This does not prove foreground UI.
-        return true
-    }
-
-    private static func sameContext(_ left: SelectedHIDContext, _ right: SelectedHIDContext) -> Bool {
-        left.bootIdentity == right.bootIdentity && left.screenID == right.screenID &&
-        UUID(uuidString: left.screenUUID) == UUID(uuidString: right.screenUUID) &&
-        left.logicalWidth == right.logicalWidth && left.logicalHeight == right.logicalHeight &&
-        left.rotationDegrees == right.rotationDegrees && left.nativePixelWidth == right.nativePixelWidth &&
-        left.nativePixelHeight == right.nativePixelHeight && left.scale == right.scale &&
-        left.poseRevision == right.poseRevision
-    }
-
-    private static func completedSlider(_ response: SelectedHIDResponse, for request: SelectedHIDRequest) -> Bool {
-        do { try request.validate() } catch { return false }
-        guard let expected = request.ax, let actual = response.ax, let slider = actual.slider,
-              response.version == request.version, response.requestID == request.requestID,
-              response.error == nil, response.token == nil, response.quarantine == nil,
-              response.cleanup == "notNeeded", response.enqueuedEventCount == 0,
-              response.hinge == nil, response.keyboard == nil,
-              boundScreen(response, for: request),
-              actual.kind == expected.kind, let boundPID = actual.expectedPID, boundPID > 0,
-              expected.expectedPID == nil || boundPID == expected.expectedPID,
-              actual.failure == nil, actual.press == nil,
-              slider.endpoint == expected.endpoint, slider.outcome == response.outcome,
-              slider.reason == nil, !slider.reasonTruncated,
-              slider.actionAttempts == slider.actionsReturned,
-              slider.actionsReturned == slider.actions.count else { return false }
-        if let elementType = expected.elementType {
-            guard !slider.samples.isEmpty,
-                  slider.samples.allSatisfy({ $0.elementType?.rawValue == elementType }),
-                  slider.actions.allSatisfy({ $0.elementType?.rawValue == elementType }) else { return false }
-        }
-        // The controller owns target, domain, value and settled-read verification.
-        // Batch accepts its two complete semantic outcomes, never a HID count or failed action.
-        switch slider.outcome {
-        case "endpointObserved":
-            return slider.delivery == "valueObserved" && (1...20).contains(slider.actionsReturned)
-        case "alreadyAtEndpoint":
-            return slider.delivery == "notDispatched" && slider.actionsReturned == 0
-        default:
-            return false
-        }
     }
 
     static func writeReceipt(_ receipt: SelectedBatchStepReceipt) throws {

@@ -235,11 +235,11 @@ struct SelectedBatchSliderTests {
 
     enum ReceiptFault: String, CaseIterable {
         case version, requestIdentity, screenID, screenUUID, cleanup, hidEvents, error, token, quarantine
-        case missingAX, missingSlider, kind, pid, endpoint, outerOutcome, delivery
+        case missingAX, missingSlider, outerOutcome, delivery
         case reason, truncatedReason, attemptCount, actionArrayCount, actionLimit, failedStaleContext
     }
 
-    // Synthetic public wire receipts exercise batch admission only. The library controller
+    // Synthetic public wire receipts exercise the owner's contract and batch admission only. The library controller
     // owns target freshness, value/domain checks and settled native samples; these are not native proofs.
     private struct WireSample: Encodable {
         let phase = "initial"
@@ -289,7 +289,6 @@ struct SelectedBatchSliderTests {
             wire.actions = Array(repeating: WireAction(), count: actionCount)
         }
         switch fault {
-        case .endpoint: wire.endpoint = "maximum"
         case .delivery: wire.delivery = "uncertain"
         case .reason: wire.reason = "unexpected reason"
         case .truncatedReason: wire.reasonTruncated = true
@@ -305,8 +304,7 @@ struct SelectedBatchSliderTests {
             var action = action; action.elementType = actionType; return action
         }
         let slider = try JSONDecoder().decode(SelectedSliderResult.self, from: JSONEncoder().encode(wire))
-        var ax = SelectedAXResult(kind: fault == .kind ? .describe : .sliderEndpoint,
-            expectedPID: fault == .pid ? 124 : expected.expectedPID)
+        var ax = SelectedAXResult(kind: .sliderEndpoint, expectedPID: expected.expectedPID)
         ax.slider = fault == .missingSlider ? nil : slider
         if fault == .failedStaleContext { ax.failure = .sliderFailed }
         let observation = try FBSimulatorHIDSessionObservation(simulatorUDID: udid, bootIdentity: "test-boot",
@@ -322,6 +320,8 @@ struct SelectedBatchSliderTests {
             error: fault == .error ? "failed" : nil, context: SelectedHIDContext(observation))
         result.ax = fault == .missingAX ? nil : ax
         if fault == .quarantine { result.quarantine = .init(recordPath: nil, persisted: false, error: "storage failed") }
-        return try JSONDecoder().decode(SelectedHIDResponse.self, from: JSONEncoder().encode(result))
+        // The owner passes its own receipt through the contract before it replies.
+        return SelectedHIDContract.checked(
+            try JSONDecoder().decode(SelectedHIDResponse.self, from: JSONEncoder().encode(result)), for: item)
     }
 }

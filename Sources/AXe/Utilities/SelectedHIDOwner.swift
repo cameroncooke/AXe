@@ -36,7 +36,13 @@ final class SelectedHIDOwner {
         lastActivity = self.dependencies.now()
     }
 
+    /// The owner decides success: a result that misses its contract returns as a failure.
     func perform(_ incoming: SelectedHIDRequest, batchTap: (any AgentOwnedTapAdmission)? = nil) async -> SelectedHIDResponse {
+        SelectedHIDContract.checked(await performRequest(incoming, batchTap: batchTap), for: incoming)
+    }
+
+    private func performRequest(_ incoming: SelectedHIDRequest,
+                                batchTap: (any AgentOwnedTapAdmission)?) async -> SelectedHIDResponse {
         var request = incoming
         if incoming.activeDisplay == true {
             do {

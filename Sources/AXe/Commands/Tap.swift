@@ -364,11 +364,9 @@ struct Tap: PhysicalDeviceCommand {
             return
         }
         if selectedInput.mode == .selected {
-            let request = try selectedRequest()
-            let response = try SelectedHIDBroker.send(request, simulatorUDID: simulatorUDID)
-            // Report the result (or the full receipt with --verbose) before the readback check.
-            try SelectedHIDBroker.printResponse(response, verbose: selectedOutput.verbose)
-            if semanticPress { try requireSemanticReadback(response, request: request) }
+            // The broker confirms a semantic press's value change before it reports success.
+            try SelectedHIDBroker.printResponse(SelectedHIDBroker.send(selectedRequest(), simulatorUDID: simulatorUDID),
+                verbose: selectedOutput.verbose)
             return
         }
         let logger = AxeLogger()
@@ -424,34 +422,6 @@ struct Tap: PhysicalDeviceCommand {
 
         logger.info().log("Tap completed successfully")
         CLIOutput.message("✓ Tap at \(resolvedDescription) completed successfully")
-    }
-
-    private func requireSemanticReadback(_ response: SelectedHIDResponse, request: SelectedHIDRequest) throws {
-        // Without --expected-pid or a screen pair the broker binds the frontmost app and the active
-        // screen; the receipt then proves the target against what it bound.
-        guard response.outcome == "switchValueChangedObserved", response.enqueuedEventCount == 0,
-              response.cleanup == "notNeeded", let ax = response.ax, ax.kind == .semanticPress,
-              let boundPID = ax.expectedPID, boundPID > 0,
-              request.ax?.expectedPID == nil || request.ax?.expectedPID == boundPID, ax.failure == nil,
-              let press = ax.press, press.outcome == "switchValueChangedObserved",
-              press.delivery == "nativeReplyAccepted", press.failure == nil,
-              press.translatorCallAttempted, press.callbackCount == 1, press.sendCount == 1,
-              press.reply?.nativeResponsePresent == true, press.reply?.error == "0", press.reply?.value == true,
-              let before = press.stateBefore, let after = press.stateAfter, before != after,
-              let reads = press.readbackCount, (1...4).contains(reads),
-              let target = press.target, target.identifier == request.ax?.selectorValue,
-              target.pid == boundPID, target.contextID > 0, target.displayID > 0,
-              let objectID = UInt64(target.objectID), objectID > 0, String(objectID) == target.objectID,
-              let context = response.context,
-              request.screenID == nil || context.screenID == request.screenID,
-              request.screenUUID == nil || UUID(uuidString: context.screenUUID) == request.screenUUID,
-              [target.frame.minX, target.frame.minY, target.frame.width, target.frame.height].allSatisfy(\.isFinite),
-              target.frame.width > 0, target.frame.height > 0,
-              CGRect(x: 0, y: 0, width: context.logicalWidth, height: context.logicalHeight).contains(target.frame) else {
-            throw CLIOutputFailure(code: "semanticPressUnconfirmed",
-                message: "The switch value change was not confirmed. Check the switch before another action; --verbose prints the full receipt. The press was not repeated.")
-        }
-        try context.validate()
     }
 
     private func performLegacyTap(resolution: TapResolution, logger: AxeLogger) async throws {

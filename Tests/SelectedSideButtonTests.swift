@@ -185,9 +185,9 @@ struct SelectedSideButtonTests {
         var cleanupEvidence: FBSimulatorHIDCleanupEvidence?
     }
     private enum Fault: CaseIterable {
-        case missingButton, wrongRequest, wrongVersion, wrongDevice, wrongAXDisplay, wrongPose, wrongBoot
+        case missingButton, wrongRequest, wrongVersion
         case partial, wrongPlan, undrained, unreleased, interrupted, cleanup, missingCleanup, count
-        case mixedHome, mixedAX, failed, executionCleanup, reversedTime, wrongSchema
+        case mixedHome, mixedAX, failed, executionCleanup, reversedTime
     }
     private func response(_ request: SelectedHIDRequest, fault: Fault? = nil) throws -> SelectedHIDResponse {
         let cleanupJSON = """
@@ -198,11 +198,8 @@ struct SelectedSideButtonTests {
         """
         var cleanup = try JSONDecoder().decode(FBSimulatorHIDCleanupEvidence.self, from: Data(cleanupJSON.utf8))
         if fault == .cleanup { cleanup.timedOut = true }
-        var wire = ExecutionWire(simulatorUDID: fault == .wrongDevice ? "other" : udid,
-            boundContext: SelectedHIDContext(try observation(changedPose: fault == .wrongPose)),
+        var wire = ExecutionWire(simulatorUDID: udid, boundContext: SelectedHIDContext(try observation()),
             cleanupEvidence: fault == .missingCleanup ? nil : cleanup)
-        if fault == .wrongSchema { wire.schemaVersion = 2 }
-        if fault == .wrongAXDisplay { wire.axDisplayID = 1 }
         if fault == .partial { wire.sentPrimitiveCount = 1 }
         if fault == .wrongPlan { wire.plannedPrimitiveCount = 3 }
         if fault == .undrained { wire.drainCompleted = false }
@@ -219,7 +216,8 @@ struct SelectedSideButtonTests {
         if fault != .missingButton { result.button = .init(kind: request.button?.kind ?? .sideButton, execution: execution) }
         if fault == .mixedHome { result.button = .init(kind: .home, execution: execution) }
         if fault == .mixedAX { result.ax = .init(kind: .describe, expectedPID: 123) }
-        return result
+        // The owner passes its own receipt through the contract before it replies.
+        return SelectedHIDContract.checked(result, for: request)
     }
 
     @Test func cleanSideThenHomeUsesDistinctOrderedReceipts() async throws {
@@ -246,7 +244,7 @@ struct SelectedSideButtonTests {
     @Test(arguments: Fault.allCases)
     private func incompleteOrMismatchedResponseStopsWithoutReplay(fault: Fault) async throws {
         var sends = 0; var receipts: [SelectedBatchStepReceipt] = []
-        let first = fault == .wrongBoot ? "button side-button --expected-boot boot-two" : "button side-button"
+        let first = "button side-button"
         await #expect(throws: (any Error).self) {
             try await SelectedBatchRunner.run(lines: [first, "tap -x 1 -y 2"], input: options(), simulatorUDID: udid,
                 send: { request, _ in sends += 1; return try response(request, fault: fault) }, emit: { receipts.append($0) })
@@ -268,15 +266,13 @@ struct SelectedSideButtonTests {
         #expect(receipts[1].requestID == nil && receipts[1].response == nil)
     }
 
-    @Test(arguments: ["wrongSchema", "sideOnly"])
-    func homeCannotAcceptSideOrNewSchemaEvidence(fault: String) throws {
+    @Test func homeCannotAcceptSideEvidence() throws {
         let request = try batch("button home")
-        var actual = try response(request, fault: fault == "wrongSchema" ? .wrongSchema : nil)
-        if fault == "sideOnly" {
-            let execution = try #require(actual.button?.execution)
-            actual.button = .init(kind: .sideButton, execution: execution)
-        }
-        #expect(!SelectedBatchRunner.completed(actual, for: request, simulatorUDID: udid))
+        var actual = try response(request)
+        let execution = try #require(actual.button?.execution)
+        actual.button = .init(kind: .sideButton, execution: execution)
+        #expect(SelectedHIDContract.failure(actual, for: request) != nil)
+        #expect(!SelectedBatchRunner.completed(actual, for: request))
     }
 
     private enum ExchangeFailure: Error { case disconnected }

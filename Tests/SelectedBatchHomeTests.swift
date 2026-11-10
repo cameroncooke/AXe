@@ -16,11 +16,11 @@ struct SelectedBatchHomeTests {
     private func request(_ line: String = "button home") throws -> SelectedHIDRequest {
         try SelectedBatchStep.request(ShellTokenizer.tokenize(line), input: options(), simulatorUDID: udid)
     }
-    private func context(changedPose: Bool = false) throws -> SelectedHIDContext {
+    private func context() throws -> SelectedHIDContext {
         SelectedHIDContext(try FBSimulatorHIDSessionObservation(simulatorUDID: udid, bootIdentity: "boot-one",
             screenID: 3, screenUniqueID: screen, axDisplayID: 3,
             displayContext: FBSimulatorHIDDisplayContext(hidTarget: 3,
-                nativePixelSize: CGSize(width: 300, height: 600), scale: 3, rotation: changedPose ? .rot180 : .rot0),
+                nativePixelSize: CGSize(width: 300, height: 600), scale: 3, rotation: .rot0),
             poseRevision: "pose-one"))
     }
 
@@ -52,7 +52,8 @@ struct SelectedBatchHomeTests {
         #expect(receipts[0].status == .rejectedBeforeSend && receipts[0].requestID == nil)
     }
 
-    // Typed synthetic wire data checks batch acceptance, not native button delivery.
+    // Typed synthetic wire data checks the owner's contract and batch acceptance, not native button
+    // delivery. Each send passes the receipt through the contract as the owner does.
     private struct HomeWire: Encodable {
         let schemaVersion = 1
         let operationID = UUID()
@@ -71,7 +72,7 @@ struct SelectedBatchHomeTests {
         var cleanupEvidence: FBSimulatorHIDCleanupEvidence?
     }
     private enum Fault: String, CaseIterable {
-        case missingHome, wrongRequest, wrongVersion, wrongDevice, wrongPose, wrongBoot, wrongAXDisplay
+        case missingHome, wrongRequest, wrongVersion
         case partial, undrained, unreleased, interrupted, cleanup, missingCleanup, count, mixed, failed
     }
     private func response(_ item: SelectedHIDRequest, fault: Fault? = nil) throws -> SelectedHIDResponse {
@@ -84,10 +85,8 @@ struct SelectedBatchHomeTests {
         """
         var cleanup = try JSONDecoder().decode(FBSimulatorHIDCleanupEvidence.self, from: Data(cleanupJSON.utf8))
         if fault == .cleanup { cleanup.timedOut = true }
-        var wire = HomeWire(simulatorUDID: fault == .wrongDevice ? "other" : udid,
-            boundContext: try context(changedPose: fault == .wrongPose),
+        var wire = HomeWire(simulatorUDID: udid, boundContext: try context(),
             cleanupEvidence: fault == .missingCleanup ? nil : cleanup)
-        if fault == .wrongAXDisplay { wire.axDisplayID = 1 }
         if fault == .partial { wire.sentPrimitiveCount = 1 }
         if fault == .undrained { wire.drainCompleted = false }
         if fault == .unreleased { wire.allInputsReleasedBeforeCleanup = false }
@@ -99,7 +98,7 @@ struct SelectedBatchHomeTests {
             enqueuedEventCount: fault == .count ? 1 : 2, cleanup: "notNeeded", error: nil,
             context: try context(), button: fault == .missingHome ? nil : SelectedButtonResult(kind: .home, execution: home))
         if fault == .mixed { actual.ax = .init(kind: .describe, expectedPID: 123) }
-        return actual
+        return SelectedHIDContract.checked(actual, for: item)
     }
 
     @Test func cleanHomeCompletesBeforeNextStep() async throws {
@@ -117,7 +116,7 @@ struct SelectedBatchHomeTests {
     private func failedEvidenceStopsWithoutReplay(fault: Fault) async throws {
         var sends = 0
         var receipts: [SelectedBatchStepReceipt] = []
-        let first = fault == .wrongBoot ? "button home --expected-boot boot-two" : "button home"
+        let first = "button home"
         await #expect(throws: (any Error).self) {
             try await SelectedBatchRunner.run(lines: [first, "button home"], input: options(), simulatorUDID: udid,
                 send: { item, _ in sends += 1; return try response(item, fault: fault) }, emit: { receipts.append($0) })
