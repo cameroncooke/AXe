@@ -66,6 +66,12 @@ enum SelectedInputOutput {
                 message: "Device input is quarantined; nothing was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantine.recordPath))
         }
         if response.error == SelectedHIDFailure.busyWireDescription { return DeviceStateFailure.busy }
+        let sent = response.enqueuedEventCount == 0 && response.cleanup != "uncertain"
+            ? "No input was sent."
+            : CLIErrorMapping.someInputSent
+        if let code = response.errorCode, let message = response.error {
+            return CLIOutputFailure(code: code, message: CLIErrorMapping.sentence(message) + " " + sent)
+        }
         let code: String
         if let ax = response.ax?.failure {
             switch ax {
@@ -77,9 +83,6 @@ enum SelectedInputOutput {
         else if response.cleanup == "uncertain" { code = "cleanupUncertain" }
         else if response.enqueuedEventCount > 0 { code = "inputFailed" }
         else { code = "rejectedBeforeInput" }
-        let sent = response.enqueuedEventCount == 0 && response.cleanup != "uncertain"
-            ? "No input was sent."
-            : CLIErrorMapping.someInputSent
         let detail = CLIErrorMapping.readable(response.error)
             ?? (response.enqueuedEventCount == 0 ? "The input was refused." : "Input stopped.")
         return CLIOutputFailure(code: code, message: "\(detail) \(sent)")

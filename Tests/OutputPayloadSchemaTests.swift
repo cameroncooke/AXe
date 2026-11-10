@@ -74,7 +74,7 @@ struct OutputPayloadSchemaTests {
                       try encode(InitOutput(removed: [])), try encode(InitOutput(content: "# AXe"))]),
             ("tap", [completed, try encode(selected),
                      try encode(SemanticPressOutput(identifier: "switch", before: false, after: true))]),
-            ("slider", [completed]), ("type", [completed]), ("swipe", [completed]), ("drag", [completed]),
+            ("slider", [completed]), ("type", [completed]), ("swipe", [completed]), ("drag", [completed]), ("draw", [completed]),
             ("button", [completed]), ("key", [completed]), ("key-sequence", [completed]), ("key-combo", [completed]),
             ("touch", [try encode(selected)]), ("gesture", [completed]),
             ("hinge read", [try encode(HingeReadOutput(udid: Self.udid, hinge: hinge))]),

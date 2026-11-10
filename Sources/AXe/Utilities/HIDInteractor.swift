@@ -126,40 +126,11 @@ struct HIDInteractor {
             throw CLIError(errorDescription: "Drag hold durations must be non-negative.", code: .invalidArguments)
         }
 
-        let movePoints = try compositeDragMovePoints(from: start, to: end, steps: steps)
-        let stepDelay = duration / Double(steps)
-        var events: [FBSimulatorHIDEvent] = [
-            .touch(direction: .down, x: start.x, y: start.y),
-            .delay(initialHold)
-        ]
-
-        for point in movePoints {
-            events.append(.delay(stepDelay))
-            events.append(.touch(direction: .down, x: point.x, y: point.y))
-        }
-
-        events.append(.delay(finalHold))
-        events.append(.touch(direction: .up, x: end.x, y: end.y))
-
-        return .composite(events)
-    }
-
-    static func compositeDragMovePoints(
-        from start: (x: Double, y: Double),
-        to end: (x: Double, y: Double),
-        steps: Int
-    ) throws -> [(x: Double, y: Double)] {
-        guard steps > 0 else {
-            throw CLIError(errorDescription: "Drag steps must be greater than 0.", code: .invalidArguments)
-        }
-
-        return (1...steps).map { step in
-            let progress = Double(step) / Double(steps)
-            return (
-                x: start.x + ((end.x - start.x) * progress),
-                y: start.y + ((end.y - start.y) * progress)
-            )
-        }
+        // A drag is the two-point stroke.
+        return .composite(TouchStroke.primitives(
+            through: [CGPoint(x: start.x, y: start.y), CGPoint(x: end.x, y: end.y)],
+            duration: duration, moves: steps, initialHold: initialHold, finalHold: finalHold
+        ).map(\.event))
     }
 
     static func performCompositeDrag(

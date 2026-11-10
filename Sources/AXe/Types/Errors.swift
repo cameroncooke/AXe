@@ -88,6 +88,8 @@ enum CLIErrorMapping {
             case .selectionChanged: return CLIOutputFailure(code: "screenChanged", message: sentence(known.errorDescription))
             case .invalid(let message):
                 return CLIOutputFailure(code: "rejectedBeforeInput", message: sentence(message) + " No input was sent.")
+            case .coded(let code, let message):
+                return CLIOutputFailure(code: code, message: sentence(message) + " No input was sent.")
             }
         case is HIDBrokerAdmissionFailure:
             return DeviceStateFailure.busy

@@ -76,6 +76,9 @@ enum SelectedBatchStep {
         case "drag":
             let command = try parse(Drag.self, arguments)
             request = try command.selectedRequest()
+        case "draw":
+            let command = try parse(Draw.self, arguments)
+            request = try command.selectedRequest()
         case "gesture":
             let command = try parse(Gesture.self, arguments)
             guard !command.agentMode.enabled else {

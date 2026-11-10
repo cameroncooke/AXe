@@ -2,7 +2,7 @@ import Foundation
 
 /// A value-only path request. The owner resolves presets after it owns fresh display geometry.
 struct SelectedHIDPath: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case swipe, drag, preset }
+    enum Kind: String, Codable, Sendable { case swipe, drag, preset, draw }
     let kind: Kind
     var preset: GesturePreset? = nil
     var startX: Double? = nil
@@ -21,10 +21,31 @@ struct SelectedHIDPath: Codable, Sendable {
     /// content keeps decelerating for about two seconds; at rest it stops with the finger, moves
     /// the path distance, and the replacement read settles at once. Raw swipes stay linear.
     var endsAtRest: Bool? = nil
+    /// Draw only: every point of the stroke, in order. A drag is the two-point stroke of its endpoints.
+    var points: [SelectedHIDCompleteGesture.Point]? = nil
+
+    var strokePoints: [CGPoint] {
+        if let points { return points.map(\.cgPoint) }
+        return [CGPoint(x: startX ?? 0, y: startY ?? 0), CGPoint(x: endX ?? 0, y: endY ?? 0)]
+    }
 
     func validate() throws {
         guard endsAtRest != true || kind == .swipe else {
             throw SelectedHIDFailure.invalid("Only a swipe can end at rest")
+        }
+        guard (points != nil) == (kind == .draw) else {
+            throw SelectedHIDFailure.invalid("Only a draw carries a point list")
+        }
+        if kind == .draw {
+            guard preset == nil, edgeInset == nil, expectedWidth == nil, expectedHeight == nil,
+                  startX == nil, startY == nil, endX == nil, endY == nil, delta == nil, steps == nil,
+                  duration.isFinite, duration > 0, duration <= TouchStroke.maximumDuration,
+                  preDelay.isFinite, (0...10).contains(preDelay),
+                  postDelay.isFinite, (0...10).contains(postDelay) else {
+                throw SelectedHIDFailure.invalid("A draw takes its points, a duration in (0,30] and delays in [0,10] only")
+            }
+            try TouchStroke.validate(strokePoints)
+            return
         }
         guard duration.isFinite, duration > 0, duration <= 10,
               preDelay.isFinite, (0...10).contains(preDelay),
@@ -76,6 +97,17 @@ struct SelectedHIDPath: Codable, Sendable {
         if let expectedHeight, expectedHeight != logicalSize.height {
             throw SelectedHIDFailure.invalid("Supplied screen height does not match the selected display")
         }
+        if kind == .drag || kind == .draw {
+            let points = strokePoints
+            try TouchStroke.requireInside(points, width: logicalSize.width, height: logicalSize.height)
+            let moves = steps ?? TouchStroke.moveCount(duration: duration)
+            var result: [SelectedHIDPrimitive] = preDelay > 0 ? [.delay(preDelay)] : []
+            result += TouchStroke.primitives(through: points, duration: duration, moves: moves,
+                initialHold: Drag.initialHold, finalHold: Drag.finalHold)
+            if postDelay > 0 { result.append(.delay(postDelay)) }
+            // Geometry and complete contact lifecycle are preflighted by the owned V12 session.
+            return result
+        }
         let start: CGPoint
         let end: CGPoint
         if let preset {
@@ -103,7 +135,6 @@ struct SelectedHIDPath: Codable, Sendable {
         var result: [SelectedHIDPrimitive] = []
         if preDelay > 0 { result.append(.delay(preDelay)) }
         result.append(.touch(.down, x: start.x, y: start.y))
-        if kind == .drag { result.append(.delay(Drag.initialHold)) }
         for index in 1...count {
             result.append(.delay(duration / Double(count)))
             let linear = Double(index) / Double(count)
@@ -114,7 +145,6 @@ struct SelectedHIDPath: Codable, Sendable {
                 y: start.y + (end.y - start.y) * fraction)
             result.append(.touch(.down, x: point.x, y: point.y))
         }
-        if kind == .drag { result.append(.delay(Drag.finalHold)) }
         result.append(.touch(.up, x: end.x, y: end.y))
         if postDelay > 0 { result.append(.delay(postDelay)) }
         // Geometry and complete contact lifecycle are preflighted by the owned V12 session.

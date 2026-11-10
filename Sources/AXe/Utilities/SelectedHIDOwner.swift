@@ -549,7 +549,7 @@ final class SelectedHIDOwner {
         var hinge = request.hinge.map(SelectedHingeResult.init)
         if let readinessError = error as? FBSimulatorHingeReadinessError { hinge?.readinessPreflightFailure = readinessError }
         else if let error { hinge?.failure = SelectedHingeFailure(error) }
-        return SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID, brokerID: brokerID,
+        var result = SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID, brokerID: brokerID,
             outcome: outcome, token: includeToken ? admission.token : nil, enqueuedEventCount: count, cleanup: cleanup,
             error: error.map { String(describing: $0) }, context: observation.map(SelectedHIDContext.init), ax: ax,
             quarantine: quarantineReceipt, hinge: hinge,
@@ -557,5 +557,10 @@ final class SelectedHIDOwner {
             button: request.button.flatMap { payload in
                 buttonExecution.map { SelectedButtonResult(kind: payload.kind, execution: $0) }
             })
+        if case let .coded(code, message)? = error as? SelectedHIDFailure {
+            result.errorCode = code
+            result.error = message
+        }
+        return result
     }
 }

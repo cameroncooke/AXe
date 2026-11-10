@@ -35,6 +35,7 @@ struct Axe: AsyncParsableCommand {
             Type.self,
             Swipe.self,
             Drag.self,
+            Draw.self,
             Button.self,
             Key.self,
             KeySequence.self,
@@ -136,7 +137,7 @@ struct Axe: AsyncParsableCommand {
 
     /// Commands whose JSON success result is `SelectedInputSummary`'s shape on every route.
     static let inputCommands: [ParsableCommand.Type] = [
-        Tap.self, Slider.self, Type.self, Swipe.self, Drag.self, Button.self, Key.self,
+        Tap.self, Slider.self, Type.self, Swipe.self, Drag.self, Draw.self, Button.self, Key.self,
         KeySequence.self, KeyCombo.self, Touch.self, Gesture.self,
     ]
 

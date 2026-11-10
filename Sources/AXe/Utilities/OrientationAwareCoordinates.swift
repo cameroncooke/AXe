@@ -527,7 +527,7 @@ struct OrientationAwareCoordinates {
         return physical
     }
 
-    private static func applicationFrame(
+    static func applicationFrame(
         from roots: [AccessibilityElement]
     ) -> AccessibilityElement.Frame? {
         roots.first { $0.type == "Application" }?.frame

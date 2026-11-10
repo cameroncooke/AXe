@@ -173,6 +173,22 @@ extension Gesture: BatchConvertible {
     }
 }
 
+extension Draw: BatchConvertible {
+    var batchInputMode: SimulatorInputMode { selectedInput.mode }
+
+    /// One composite for the whole stroke, between its delays. A Duo batch owns the measured display.
+    func toBatchPrimitives(context: BatchContext, logger: AxeLogger) async throws -> [BatchPrimitive] {
+        let stroke: [CGPoint]
+        if let size = context.duoLogicalSize, context.duoOwner != nil {
+            try TouchStroke.requireInside(strokePoints, width: size.width, height: size.height)
+            stroke = strokePoints
+        } else {
+            stroke = try await Self.directPoints(strokePoints, simulatorUDID: context.simulatorUDID, logger: logger)
+        }
+        return [.hostSleep(preDelay ?? 0), .hidBarrier(directEvent(through: stroke)), .hostSleep(postDelay ?? 0)]
+    }
+}
+
 extension Touch: BatchConvertible {
     var batchInputMode: SimulatorInputMode { selectedInput.mode }
 

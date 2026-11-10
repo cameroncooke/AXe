@@ -57,6 +57,8 @@ enum PhysicalDeviceBatch {
                 throw AutomationTarget.unsupportedOnDevice("Physical batch gesture steps require a preset.")
             }
             try await command.runOnDevice(input)
+        case .draw:
+            try await parse(Draw.self, args).runOnDevice(input)
         case .touch:
             try await parse(Touch.self, args).runOnDevice(input, allowPartial: true)
         case .type:

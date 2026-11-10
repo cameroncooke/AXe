@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import FBSimulatorControl
 @testable import AXe
 
 @Suite("Drag Command Surface Tests")
@@ -36,23 +37,20 @@ struct DragCommandSurfaceTests {
         #expect(result.output.contains("Steps must be between 1 and 1000."))
     }
 
-    @Test("Composite drag plan includes move points between touch down and touch up")
+    @Test("Composite drag plan holds, moves evenly and releases at the end")
     @MainActor
     func compositeDragPlanIncludesMovePoints() throws {
-        let movePoints = try HIDInteractor.compositeDragMovePoints(
-            from: (x: 100, y: 200),
-            to: (x: 300, y: 600),
-            steps: 4
-        )
-
-        #expect(movePoints.count == 4)
-        #expect(movePoints.first?.x == 150)
-        #expect(movePoints.first?.y == 300)
-        #expect(movePoints.last?.x == 300)
-        #expect(movePoints.last?.y == 600)
-        #expect(movePoints.contains { point in
-            point.x > 100 && point.x < 300 && point.y > 200 && point.y < 600
-        })
+        let event = try HIDInteractor.makeCompositeDragEvent(from: (x: 100, y: 200), to: (x: 300, y: 600),
+            duration: 0.4, steps: 4, initialHold: 0.05, finalHold: 0.05)
+        let expected: [FBSimulatorHIDEvent] = [
+            .touch(direction: .down, x: 100, y: 200), .delay(0.05),
+            .delay(0.1), .touch(direction: .down, x: 150, y: 300),
+            .delay(0.1), .touch(direction: .down, x: 200, y: 400),
+            .delay(0.1), .touch(direction: .down, x: 250, y: 500),
+            .delay(0.1), .touch(direction: .down, x: 300, y: 600),
+            .delay(0.05), .touch(direction: .up, x: 300, y: 600),
+        ]
+        #expect(event.subEvents == expected)
     }
 }
 

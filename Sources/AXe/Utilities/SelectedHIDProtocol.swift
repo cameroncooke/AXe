@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 85
+    static let version = 86
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
     let version: Int
     let requestID: UUID
@@ -289,8 +289,10 @@ struct SelectedHIDResponse: Codable, Sendable {
     let token: UUID?
     let enqueuedEventCount: Int
     let cleanup: String
-    let error: String?
+    var error: String?
     let context: SelectedHIDContext?
+    /// The documented code of a coded refusal; `error` then holds its readable message.
+    var errorCode: String? = nil
     var ax: SelectedAXResult? = nil
     var quarantine: SelectedHIDQuarantine? = nil
     var hinge: SelectedHingeResult? = nil
@@ -348,9 +350,13 @@ enum SelectedHIDFailure: Error, LocalizedError {
     case busy
     case invalidToken
     case selectionChanged
+    /// A refusal before input with its own documented error code, such as `invalidArguments`.
+    /// The broker sends the code and message as separate reply fields.
+    case coded(code: String, message: String)
     var errorDescription: String? {
         switch self {
         case .invalid(let message): return message
+        case .coded(_, let message): return message
         case .busy: return "Simulator input is owned by another action or retained contact"
         case .invalidToken: return "Retained contact token is absent, expired or belongs to another broker"
         case .selectionChanged: return "Retained contact cannot change its selected display"

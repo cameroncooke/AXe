@@ -389,6 +389,9 @@
     "drag": {
       "$ref": "#/$defs/input"
     },
+    "draw": {
+      "$ref": "#/$defs/input"
+    },
     "button": {
       "$ref": "#/$defs/input"
     },
