@@ -113,7 +113,14 @@ Verification of the architecture wave (7 commits, Sources net 269 lines fewer):
 - Unit tests: 945 at the end of the wave. New tests pin the ordinary swipe, drag and draw events and limits; they passed on the old type before the change and unchanged after it. A unit test sends 60,000 characters through the broker's real read path and compares the events.
 - Benchmarks, old and new builds alternated, median in ms, on the iPhone simulator at load 11 to 14: tap 279 and 282, swipe 637 and 631, `key 40` 385 and 384, key-combo 456 and 441, type 729 and 734. On the Duo, 30 extra tap pairs at load 12: median paired difference −0.5 ms, new build faster in 15 of 30.
 - Playground groups on the final build: iPhone ordinary regression 8 of 8, input handover 3 of 3, raw keyboard broker 1 of 1; Duo raw long text 1 of 1, typing interruption 1 of 1, input handover 3 of 3, motion options 6 of 6, core 17 of 20 (the 3 failures were `simctl launch` exiting 3 under load).
-- Known failing: the Duo selected Home batch group, on the text of a refusal message (being fixed in the polish wave).
+- The Duo selected Home batch group failed on the text of a refusal message; fixed in the polish wave below.
+
+Polish wave (commits `4f266cec1`, `1a0584df9`, `20527d12c`, `e45b0d3db`; 958 unit tests pass):
+
+- Gesture presets on ordinary simulators used a fixed 390×844 screen (also in v1.8.0). They now use the size the ordinary broker route has already measured. On the iPad simulator `swipe-from-right-edge` starts at 800,590 and ends at 20,590; the previous build started at 370,422. `gesture scroll-down` on the iPhone, 7 alternating runs: 0.893 s before, 0.874 s after. Simulators without DTUHID and ordinary batch gesture steps outside the Duo keep 390×844, because no measured size is available there without an extra read.
+- A selected batch step that failed to parse printed a Swift value dump; it now prints the parser's sentence with code `rejectedBeforeInput`. The Home batch test now asserts the code and the two step receipts, and passed on the Duo.
+- README corrected: only selected-screen `bgra` streams print real dimensions, and `--follow-active-display` works on any simulator.
+- A display read failure during early boot now gives "The simulator reported an inconsistent screen layout. Try again." with code `displayUnavailable`; a unit test pins seven such errors to a sentence and a code.
 - Not verified: device routing on hardware; keys on a simulator without a shared owner.
 
 Merged state at 03:12: frameworks rebuilt after the IDBKit prune, `swift test --skip Playground` ran 952 tests with one failure, the load-sensitive stream backpressure test, which passed when rerun alone (load average 58 at the time).
@@ -210,6 +217,7 @@ Verification of the Playground screens (commit `2c7044ad1`), on the iPad simulat
 
 - [x] Baseline: full simulator end-to-end run of the merged branch before any fix (`make e2e` in a separate checkout at `6ab92d88d`): invalid, see below
 - [x] Second run on `v2` after the input-stack wave: iPhone 24 of 27 suites, iPad 5 of 5, Duo did not run
+- [~] Final run on `v2` at `e45b0d3db`, started 03:28 with one agent still working
 - [x] Triage of the three failing iPhone cases: none is a regression (see below)
 - [ ] Unit tests
 - [ ] Simulator end-to-end suites affected by the changes (iPhone, iPad, Duo)
