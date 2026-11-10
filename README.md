@@ -273,10 +273,13 @@ AXe keeps its own copy of the IDB frameworks it uses, `FBControlCore` and `FBSim
 ```bash
 make build      # rebuilds the IDBKit frameworks only when stale, then swift build
 make test       # unit tests
+make release-check   # quick release checks in one run; see below
 make e2e        # whole Playground suite on dedicated iPhone, iPad and iPhone Duo simulators
 make e2e-devices   # opt-in run on connected iPhones and iPads
 make bench-quick   # quick A/B timing of direct commands against a baseline payload
 ```
+
+`make release-check` runs everything short of the end-to-end suites and reports each check: released CHANGELOG sections unchanged against `origin/main`, the script tests, the two skill copies identical, the skill lint, no open items in `docs/release-readiness.md`, the release packaging dry run, and the unit tests. Every check runs even when one fails. `RELEASE_CHECK_SKIP="skill lint,packaging"` leaves checks out by name and `RELEASE_CHECK_BASE` changes the ref.
 
 `AXE_BUILD_ARCHS` defaults to `"arm64 x86_64"`; set `arm64` for local Duo work. `make e2e` creates missing simulators, needs Xcode 27.1 or later for the Playground's Duo hinge view, and exits 2 without an iPhone Duo runtime. `make e2e-devices` exits 1 before building when no device is paired. See [Playground testing](docs/playground-testing.md) for simulator overrides and rerunning single groups. To validate a release payload under another Xcode, build the test bundle with that Xcode, then run `AXE_BIN_PATH=/path/to/release/axe ./test-runner.sh --tests-only`.
 
