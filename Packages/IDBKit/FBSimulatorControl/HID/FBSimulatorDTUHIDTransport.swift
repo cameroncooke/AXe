@@ -149,10 +149,10 @@ actor FBSimulatorDTUHIDTransport: FBSimulatorHIDTransport, FBSimulatorHIDCleanup
   /// Local eligibility only. A later send still requires its normal host and guest proof.
   func acceptsInput() -> Bool { enqueueGate.acceptsInput }
 
-  /// Selected-session startup only. This confirms guest service progress before the first input;
-  /// it does not confirm UIKit readiness or change contact timing.
-  func prepareSelectedConnection() async throws {
-    try await enqueueGate.performInitialGuestBarrier {
+  /// Connection startup. This confirms guest service progress before the first input; it does
+  /// not confirm UIKit readiness or change contact timing. A failure closes the connection.
+  func prepareConnection(timeout: TimeInterval = 2) async throws {
+    try await enqueueGate.performInitialGuestBarrier(timeout: timeout) {
       connection.sendGuestBarrier(completion: $0)
     }
   }

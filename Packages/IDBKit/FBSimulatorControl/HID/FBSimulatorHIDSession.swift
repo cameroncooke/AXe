@@ -133,7 +133,7 @@ public actor FBSimulatorHIDSession {
             displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
           transport = opened
           do {
-            try await opened.prepareSelectedConnection()
+            try await opened.prepareConnection()
             break
           } catch is CancellationError {
             throw CancellationError()
