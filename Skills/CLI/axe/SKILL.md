@@ -131,8 +131,11 @@ Read [agent-reference.md](references/agent-reference.md) for exact limits, recei
 
 ## Outside agent mode
 
-Agent mode covers app reads and input on every simulator, including the iPhone Duo. Leave it only for work it does not do:
+Agent mode covers app reads and input on every simulator, including the iPhone Duo. For anything else, read the reference that covers it:
 
-- **A physical iPhone or iPad**, where agent mode is unavailable: follow [physical-device-reference.md](references/physical-device-reference.md). It covers readiness, direct input, accessibility readback, capture and recording.
-- **Commands with no UI target**, which run without `--agent`: `list-simulators`, `displays`, `screenshot`, `record-video`, `stream-video`, `button`, `shutdown` and `clipboard copy`. See [cli-quick-reference.md](references/cli-quick-reference.md), [recording-reference.md](references/recording-reference.md) and [clipboard-reference.md](references/clipboard-reference.md).
-- **Device state**: `axe displays --udid <UDID>` shows which screen is active, its size in points and its orientation, and the hinge angle on iPhone Duo. For iPhone Duo hinge and rotation, and for capture or input pinned to one display, read [device-reference.md](references/device-reference.md). For dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar overrides, read [settings-reference.md](references/settings-reference.md).
+- A physical iPhone or iPad, where agent mode is unavailable: [physical-device-reference.md](references/physical-device-reference.md).
+- iPhone Duo screens, hinge and rotation, or capture and input pinned to one display: [device-reference.md](references/device-reference.md).
+- Dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar: [settings-reference.md](references/settings-reference.md).
+- Commands with no UI target (`list-simulators`, `displays`, `screenshot`, `button`, `shutdown`) and gestures with no agent form: [cli-quick-reference.md](references/cli-quick-reference.md).
+- Video recording and streaming: [recording-reference.md](references/recording-reference.md).
+- Staging text on the clipboard: [clipboard-reference.md](references/clipboard-reference.md).
