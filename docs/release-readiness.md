@@ -7,7 +7,7 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. Last update 11 November, about 08:00.
+- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. The AXe-only agent benchmark was rerun on 11 November: Weather and Contacts are in line with 10 November, Reminders still shows the simulator state (Phase 13). Last update 11 November, about 09:10.
 - Simulators at `d0885cfa2`: unit tests 877 of 877; iPhone 36 of 36 end-to-end suites (245 tests); Duo 67 of 67 (534 tests); iPad 13 of 13 (93 tests), all in one run. No timing regression against the pre-audit build.
 - Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun; the owner decided on 11 November to skip it. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
@@ -644,6 +644,26 @@ Physical devices at `d0885cfa2`:
 - [x] iPhone 16 Pro Max: `make e2e-devices` passes 14 of 14 checks (`e2e-results/devices-20261111T073614Z` in the main checkout; the car: 163 strokes, 23 inks). The rotation check confirmed 3 of 4 turns with exact taps and reported the fourth as unconfirmed, which it allows.
 - iPad Pro: not rerun, and the owner decided on 11 November to skip it. It has been locked since the evening of 10 November (`passcodeRequired: true`) and only the owner can unlock it. Both devices were locked overnight; the iPhone was unlocked by 07:35. The iPad's last evidence is the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`. None of the three overnight commits touches device code: two change tests that run only on simulators, and the third changes the simulator's input session.
 
+Agent benchmark, AXe only (11 November, morning; `benchmarks/artifacts/20261111T083456Z-b658d8abc130`):
+
+The owner asked for the benchmark again, compared with the baseline and with the v1.8.0 release. Three repeats per app at `3e2ce1661` (v1.8.0-415; the code of `d0885cfa2`), model `claude-opus-4-7`, on the benchmark simulator about ten minutes after a fresh boot. Ranges over the repeats:
+
+| Task | Accepted baseline (v1.8.0-185) | 8 November (v1.8.0-257) | 10 November (v1.8.0-405) | This run (v1.8.0-415) |
+| --- | --- | --- | --- | --- |
+| Weather | 16 to 19 calls, 206 to 227 s, 7.0k to 7.7k tokens | 19 to 20 calls, 123 to 134 s, 9.1k to 10.6k tokens | 20 calls, 116 to 124 s, 8.9k to 9.7k tokens | 17 to 19 calls, 109 to 123 s, 7.6k to 9.3k tokens |
+| Contacts | 11 to 12 calls, 144 to 168 s, 8.4k to 9.0k tokens | 12 calls, 96 to 101 s, 10.5k to 10.9k tokens | 12 calls, 95 to 112 s, 9.7k to 10.0k tokens | 12 to 13 calls, 96 to 113 s, 9.8k to 10.5k tokens |
+| Reminders | 20 to 25 calls, 195 to 312 s, 8.6k to 10.3k tokens | 17 to 18 calls, 94 to 100 s, 11.4k to 11.7k tokens | 26 to 28 calls, 230 to 293 s, 12.2k to 13.0k tokens | 23 to 39 calls, 232 to 397 s, 11.6k to 16.2k tokens |
+
+- There is no v1.8.0 release figure and there cannot be one for this benchmark: v1.8.0 has no agent commands, which are what the benchmark measures. The oldest run in history is the accepted baseline, v1.8.0-185. A v1.8.0 comparison would be of single-command timing (`make bench-quick`), and that needs the release binary, which is not on this Mac; building the tag clones idb from GitHub.
+- The harness still gives no ranked comparison with the baseline (`comparable: false`): the skill, the harness and the Weather app source have changed since it was accepted. The figures are side by side.
+- Against the baseline: Weather and Contacts take about half to two thirds of the time for about the same number of calls, with about 10 to 20 percent more returned text. Against 10 November: Weather and Contacts are the same or slightly leaner. Reminders is no better than on 10 November and far from 8 November.
+- Grades as recorded: Weather passed 1 and unverified 2; Contacts passed 2 and failed 1; Reminders unverified 2 and failed 1. Read against the transcripts:
+  - Weather: the task checks pass in all three. The two unverified runs are the model checking its own build with `ls` and with `grep … | tail` before installing, which the grader flags for review. Nothing to do with AXe.
+  - Contacts: the contact was saved correctly in all three. In the failed run the model checked the saved card with `tap --label 'MCP Contact Benchmark'`, which taps the name on the card, and the task forbids input after saving. In the other two it tapped by reference from the list it had just been shown; AXe refused because the card was already on screen, and the refusal's capture is what the grader reads. The reply to the Done tap shows the list behind the closing form, not the card that follows it.
+  - [x] Reminders, the two unverified runs: the grader did not know AXe's plain screenshot receipt (`Screenshot saved to PATH`), so reading a screenshot counted as an unknown command. Fixed in the grader (`199606564`; 196 benchmark tests pass). Regraded, both runs pass every task check. The reports in history still say unverified.
+  - Reminders, the failed run, and the calls and time of all three: the state recorded in Phase 12. The first completion lands, the batch stops because the screen changed, the second completion is sent alone and the model then cannot tell whether it took, so it reads, takes screenshots and taps again. On 10 November a reboot had cleared it until a benchmark run brought it back. This time the simulator was shut down and booted before the run and the first Reminders job, the second job of the run, already showed it. So either a reboot no longer clears it or something early in a benchmark run switches it on; I have not separated the two. That the 8 November binary fails the same way still stands.
+- The benchmark simulator is shut down again, as it was before the run.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
@@ -682,7 +702,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 149 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 152 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -835,3 +855,6 @@ All 149 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `d0a22a5f3` | test(e2e): Press Siri again when the simulator's Siri closes itself as it opens |
 | `0fb3bb7ca` | test(e2e): Wait for the field to lose focus before the Duo selector comparison |
 | `d0885cfa2` | fix(hid): Wait for the guest to answer a new owned connection as long as a plain one |
+| `f7278726a` | docs(release): Record the three full end-to-end runs and the fixes they led to |
+| `3e2ce1661` | docs(release): Record the owner's decision to skip the iPad device rerun |
+| `199606564` | fix(bench): Accept the file an AXe screenshot was asked to write |
