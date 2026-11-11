@@ -64,14 +64,27 @@ started = time.monotonic()
 deadline = started + a.wait_seconds
 cli = a.cli.resolve(strict=True)
 developer = a.developer_directory.resolve(strict=True)
-root = Path(tempfile.gettempdir()).resolve() / ('axe-hid-' + str(os.getuid()))
+def hid_socket_path(filename):
+    # Mirror HIDBroker.endpointLocation: the per-user temporary directory (with Foundation's
+    # /private prefix removed) while the socket fits sun_path, otherwise /tmp (issue #83).
+    preferred = str(Path(tempfile.gettempdir()).resolve())
+    if preferred.startswith(('/private/var/', '/private/tmp/')):
+        preferred = preferred[len('/private'):]
+    for base in (preferred, '/tmp'):
+        path = Path(base) / ('axe-hid-' + str(os.getuid())) / filename
+        if len(str(path).encode()) < 104:
+            return path
+    raise RuntimeError('No AXe input socket path fits sun_path for ' + filename)
+
+
+root = hid_socket_path(fnv(udid) + '-' + fnv(str(developer)) + '-v3.sock').parent
 if os.path.lexists(root):
     info = root.lstat()
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise RuntimeError('The input namespace is not a private directory owned by this user.')
 
 def endpoint(directory, version):
-    return root / (fnv(udid) + '-' + fnv(directory) + '-v' + str(version) + '.sock')
+    return hid_socket_path(fnv(udid) + '-' + fnv(directory) + '-v' + str(version) + '.sock')
 
 raw3 = endpoint(developer, 3)
 raw2 = endpoint(developer, 2)

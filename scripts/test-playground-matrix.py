@@ -94,6 +94,19 @@ def reboot(run, name, axe, identifier):
                 seconds=round(time.time() - started, 2))
 
 
+def hid_socket_path(filename):
+    # Mirror HIDBroker.endpointLocation: the per-user temporary directory (with Foundation's
+    # /private prefix removed) while the socket fits sun_path, otherwise /tmp (issue #83).
+    preferred = str(Path(tempfile.gettempdir()).resolve())
+    if preferred.startswith(('/private/var/', '/private/tmp/')):
+        preferred = preferred[len('/private'):]
+    for base in (preferred, '/tmp'):
+        path = Path(base) / ('axe-hid-' + str(os.getuid())) / filename
+        if len(str(path).encode()) < 104:
+            return path
+    raise RuntimeError('No AXe input socket path fits sun_path for ' + filename)
+
+
 def require_input_clear(identifier):
     # Mirror the stable, per-device endpoint in HIDInputQuarantine.fileURL.
     # Inspect only: a prior failure, malformed record or symlink must remain in place.
@@ -102,14 +115,15 @@ def require_input_clear(identifier):
         for byte in value.encode('utf-8'):
             result = ((result ^ byte) * 1_099_511_628_211) & ((1 << 64) - 1)
         return format(result, 'x')
-    directory = Path(tempfile.gettempdir()).resolve() / ('axe-hid-' + str(os.getuid()))
+    socket = hid_socket_path(identity(identifier) + '-' + identity('/candidate-device-input') + '-v3.sock')
+    directory = socket.parent
     try:
         info = directory.lstat()
     except FileNotFoundError:
         return
     if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
         raise RuntimeError('Cannot inspect the private input quarantine directory: ' + str(directory))
-    record = directory / (identity(identifier) + '-' + identity('/candidate-device-input') + '-v3.sock.quarantine.json')
+    record = Path(str(socket) + '.quarantine.json')
     if os.path.lexists(record):
         raise RuntimeError('Device input quarantine is present. No input or recovery was attempted: ' + str(record))
 

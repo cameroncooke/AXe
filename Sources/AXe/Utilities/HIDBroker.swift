@@ -333,10 +333,6 @@ enum HIDBroker {
 
     static func endpointPath(simulatorUDID: String, developerDirectory: String, version: Int = protocolVersion) throws -> String {
         let uid = getuid()
-        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-            .resolvingSymlinksInPath()
-            .appendingPathComponent("axe-hid-\(uid)", isDirectory: true)
-        try ensurePrivateDirectory(root.path, uid: uid)
         let developerDirectory = URL(fileURLWithPath: developerDirectory, isDirectory: true)
             .standardizedFileURL
             .resolvingSymlinksInPath()
@@ -346,11 +342,28 @@ enum HIDBroker {
         // Version the endpoint so a running broker from an older wire protocol cannot intercept
         // a request before the current client completes its readiness handshake.
         let filename = "\(simulatorIdentity)-\(identity)-v\(version).sock"
-        let path = root.appendingPathComponent(filename).path
-        guard path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) else {
+        guard let location = endpointLocation(filename: filename, uid: uid, temporaryDirectory: NSTemporaryDirectory()) else {
             throw CLIError(errorDescription: "The AXe input service socket path is too long.", code: .inputUnavailable)
         }
-        return path
+        try ensurePrivateDirectory(location.directory, uid: uid)
+        return location.path
+    }
+
+    /// The per-user temporary directory is where every release has put the socket, and other AXe
+    /// versions find the shared input lease and the quarantine record by that path, so it stays
+    /// there whenever it fits `sun_path`. That directory is 48 bytes, which leaves room only for
+    /// uids of up to four digits (issue #83); longer uids use `/tmp/axe-hid-<uid>`, where
+    /// `ensurePrivateDirectory` still requires a 0700 directory owned by this user.
+    static func endpointLocation(filename: String, uid: uid_t, temporaryDirectory: String) -> (directory: String, path: String)? {
+        let preferred = URL(fileURLWithPath: temporaryDirectory, isDirectory: true).resolvingSymlinksInPath().path
+        for root in [preferred, "/tmp"] {
+            let directory = (root.hasSuffix("/") ? root : root + "/") + "axe-hid-\(uid)"
+            let path = directory + "/" + filename
+            if path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) {
+                return (directory, path)
+            }
+        }
+        return nil
     }
 
     private static func ensurePrivateDirectory(_ path: String, uid: uid_t) throws {

@@ -130,6 +130,43 @@ struct HIDBrokerTests {
         #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o700)
     }
 
+    // Issue #83: the per-user temporary directory is 48 bytes, so a five-digit uid pushed the
+    // socket to 104 bytes, past sun_path, and every input command failed.
+    private static let issue83TemporaryDirectory = "/var/folders/z6/14g3y9bx6635wxl4my_dw2q0001ks1/T/"
+    private static let fullLengthFilename = String(repeating: "a", count: 16) + "-" + String(repeating: "b", count: 16) + "-v3.sock"
+
+    @Test("A socket that fits stays in the per-user temporary directory, as in every earlier release")
+    func endpointStaysInTemporaryDirectoryWhenItFits() throws {
+        let location = try #require(HIDBroker.endpointLocation(
+            filename: Self.fullLengthFilename, uid: 501, temporaryDirectory: Self.issue83TemporaryDirectory))
+        #expect(location.directory == "/var/folders/z6/14g3y9bx6635wxl4my_dw2q0001ks1/T/axe-hid-501")
+        #expect(location.path == location.directory + "/" + Self.fullLengthFilename)
+        #expect(location.path.utf8.count == 102)
+    }
+
+    @Test("Users with long uids get a socket that fits sun_path (issue #83)", arguments: [52001, 4_294_967_294] as [uid_t])
+    func endpointFitsForLongUIDs(uid: uid_t) throws {
+        let location = try #require(HIDBroker.endpointLocation(
+            filename: Self.fullLengthFilename, uid: uid, temporaryDirectory: Self.issue83TemporaryDirectory))
+        #expect(location.path.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path))
+        #expect(location.directory == "/tmp/axe-hid-\(uid)")
+        #expect(location.path == location.directory + "/" + Self.fullLengthFilename)
+    }
+
+    @Test("The current user's endpoint is unchanged from earlier releases when it fits")
+    func endpointMatchesEarlierReleases() throws {
+        let path = try HIDBroker.endpointPath(simulatorUDID: "simulator-a", developerDirectory: "/candidate-device-input", version: 3)
+        let earlierRoot = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .resolvingSymlinksInPath()
+            .appendingPathComponent("axe-hid-\(getuid())", isDirectory: true)
+        let earlier = earlierRoot.appendingPathComponent(URL(fileURLWithPath: path).lastPathComponent).path
+        if earlier.utf8.count < MemoryLayout.size(ofValue: sockaddr_un().sun_path) {
+            #expect(path == earlier)
+        } else {
+            #expect(path.hasPrefix("/tmp/axe-hid-\(getuid())/"))
+        }
+    }
+
     @Test("Touch primitives preserve their wire values")
     func primitiveRoundTrip() throws {
         let primitives = [
