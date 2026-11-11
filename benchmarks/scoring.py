@@ -51,7 +51,8 @@ def find(captures, predicate):
 def latest_state(captures, identity, selector, accepted):
     """A later opposite state overrides earlier successful input."""
     for capture in reversed(captures):
-        nodes = selector(capture)
+        # A read that shows labels only says nothing about a state or value.
+        nodes = [node for node in selector(capture) if node.value_known]
         if nodes:
             passed = all(accepted(node) for node in nodes)
             return check(identity, passed, [witness(capture, nodes)],
@@ -118,11 +119,30 @@ def detail_entry(calls, captures, boundary):
                if action.kind == "tap" and action.label.startswith(("PRECIP.", "Precipitation"))]
     if entries:
         return entries[0]
+    # The one action of a call whose own reply first shows the detail screen made that transition.
+    own = [(number, index) for number, index, action in actions if number == boundary]
+    if len(own) == 1:
+        return own[0]
     # A single action followed by the detail screen proves its transition.
     # Several unlabelled actions cannot establish where read-only mode began.
     if len(actions) == 1:
         return actions[0][:2]
     return (boundary, math.inf) if not actions else None
+
+
+def changed_since_seen(row, calls, label, boundary):
+    """A failed state whose control was tapped after that observation is unverified, not failed.
+
+    The last read predates the agent's change, so it cannot show the outcome; only a later read can."""
+    if row["status"] != "failed" or not row["evidence"]:
+        return row
+    seen = row["evidence"][0].get("call", 0)
+    later = [c.number for c, a in action_rows(calls, after=seen)
+             if a.kind == "tap" and label in a.label and (boundary is None or c.number < boundary)]
+    if not later:
+        return row
+    return check(row["id"], False, row["evidence"] + [{"call": n, "tappedAfterObservation": label} for n in later],
+                 "The control was tapped after its last observed state and no later read shows the outcome.")
 
 
 def weather(calls, captures):
@@ -135,9 +155,10 @@ def weather(calls, captures):
                                    lambda c: [n for n in matches(c, name) if n.role == "button"],
                                    lambda n: n.selected or n.value.lower() == "selected"))
     for label, wanted in (("Atmospheric animations", False), ("Severe weather alerts", False), ("Reduce transparency", True)):
-        checks.append(latest_state(before, "settings." + label,
+        checks.append(changed_since_seen(latest_state(before, "settings." + label,
                                    lambda c: [n for n in matches(c, label) if n.role in ("switch", "checkbox")],
-                                   lambda n: n.value.lower() in (("1", "on", "true") if wanted else ("0", "off", "false"))))
+                                   lambda n: n.value.lower() in (("1", "on", "true") if wanted else ("0", "off", "false"))),
+                                   calls, label, boundary))
     typed = [{"call": c.number, "text": a.value} for c, a in action_rows(calls) if a.kind == "type" and a.value == "London"]
     main = [c for c in before if matches(c, "London") and (matches(c, "11°") or (matches(c, "11") and matches(c, "°")))]
     search = find(before, lambda c: [n for n in c.nodes if "London, England, United Kingdom" in n.label])
@@ -178,7 +199,9 @@ def contacts(calls, captures):
         ("saved.name", lambda n: n.label == "MCP Contact Benchmark"),
         ("saved.organization", lambda n: " ".join(n.label.split()).casefold() == "xcodebuildmcp benchmark"),
         ("saved.phone", lambda n: re.sub(r"\D", "", n.label) == "5550104242"),
-        ("saved.email", lambda n: n.label == "mcp.contact.benchmark@example.com"),
+        # A card row may carry its type, as the phone row does ("home, address").
+        ("saved.email", lambda n: n.label == "mcp.contact.benchmark@example.com"
+                                  or re.fullmatch(r"[^,]{1,24}, mcp\.contact\.benchmark@example\.com", n.label) is not None),
     ):
         evidence = find(cards, lambda c: [n for n in c.nodes if predicate(n)])
         checks.append(check(identity, bool(evidence), evidence, "Value must be visible on the saved card, not in an editor."))

@@ -18,6 +18,8 @@ class Node:
     value: str = ""
     identifier: str = ""
     selected: bool = False
+    # False when the read carries labels only (RocketSim's nav rows): no value was shown, not an empty one.
+    value_known: bool = True
 
 
 @dataclass
@@ -105,8 +107,22 @@ def split_row(row):
     return cells + ["".join(cell)]
 
 
+def rs_text(text):
+    """RocketSim's compact text snapshot: an `rs/1 <mode> key=value ...` header, then one row per line."""
+    lines = text.splitlines()
+    if not lines or not lines[0].startswith("rs/1 "):
+        return None
+    header = dict(part.split("=", 1) for part in lines[0].split()[2:] if "=" in part)
+    rows = [row for row in lines[1:] if row and not row.startswith("!")]
+    return {"rows": rows, "screen": header.get("screen", ""), "seq": header.get("seq", "")}
+
+
 def captures(value, call, line):
     output = []
+    if (isinstance(value, list) and value and all(isinstance(item, dict) for item in value)
+            and any("role" in item or "label" in item for item in value)):
+        # FlowDeck's session files hold the tree as a bare list of nodes.
+        value = {"accessibility": {"tree": value}}
     if not isinstance(value, dict):
         return output
     if value.get("schema") == "axe.output.agent-result":
@@ -135,15 +151,23 @@ def captures(value, call, line):
         nodes = []
         for row in raw.get("rows", []):
             cells = split_row(row) if isinstance(row, str) else []
-            if len(cells) >= 4 and not cells[0].startswith("!"):
-                nodes.append(Node(cells[0], cells[1].lower(), cells[2], cells[3], selected="selected" in cells[4:]))
+            # act rows are id|role|label|value[|flags]; nav rows, the skill's cheap read, are id|role|label.
+            if len(cells) >= 3 and not cells[0].startswith("!"):
+                nodes.append(Node(cells[0], cells[1].lower(), cells[2], cells[3] if len(cells) > 3 else "",
+                                  selected="selected" in cells[4:], value_known=len(cells) > 3))
         if nodes:
             key = str(raw.get("screen", "")) + ":" + str(raw.get("seq", "")) if raw.get("screen") else ""
             output.append(Capture(call, line, nodes, key, not raw.get("truncated", False)))
         if not nodes and isinstance(raw.get("steps"), list):
             for step in raw["steps"]:
-                if isinstance(step, dict) and step.get("kind") != "error" and isinstance(step.get("result"), dict):
-                    output.extend(captures({"rs": "1", "ok": True, "data": step["result"]}, call, line))
+                if not isinstance(step, dict) or step.get("kind") == "error":
+                    continue
+                result = step.get("result")
+                if isinstance(result, str):
+                    # A read inside `do` returns RocketSim's compact text form of the same rs/1 snapshot.
+                    result = rs_text(result)
+                if isinstance(result, dict):
+                    output.extend(captures({"rs": "1", "ok": True, "data": result}, call, line))
     elif value.get("schema") == "flowdeck.ui" or "accessibility" in value:
         raw = value.get("accessibility", {})
         nodes = []
@@ -434,7 +458,8 @@ def returned_paths(call):
     value = json_output(call.text)
     screenshot = "screenshot" in call.argv
     plain = re.sub(r"\x1b\[[0-9;]*m", "", call.text)
-    if not call.error and (screenshot or "--screenshot" in call.argv) and plain.startswith(("✓ Screen captured\n", "✓ Batch")):
+    if (not call.error and (screenshot or any(flag in call.argv for flag in ("--screenshot", "--output", "-o")))
+            and plain.startswith(("✓ Screen captured\n", "✓ Batch"))):
         for artifact in re.findall(r"^\s*Screenshot:\s*(/[^\n]+)\s*$", plain, re.M):
             if Path(artifact.strip()).suffix.lower() == ".png":
                 paths.add(artifact.strip())
@@ -462,6 +487,16 @@ def returned_paths(call):
                 walk(child, screenshot_context)
     walk(value)
     return {str(Path(path.strip()).resolve()) for path in paths if Path(path.strip()).is_absolute()}
+
+
+def session_files(call):
+    """Files a tool keeps updating with the current screen (FlowDeck's UI session)."""
+    value = json_output(call.text)
+    if not isinstance(value, dict):
+        return set()
+    keys = ("latest_tree", "latest_interactive_tree", "latest_screenshot")
+    return {str(Path(value[key]).resolve()) for key in keys
+            if isinstance(value.get(key), str) and Path(value[key]).is_absolute()}
 
 
 def plain_file_read(call):
@@ -500,7 +535,7 @@ def read_output(text):
 def read_transcript(file, tool, run_directory=None):
     calls, by_id, errors = [], {}, []
     previous = []
-    public_files, batch_files = {}, {}
+    public_files, batch_files, live_files = {}, {}, set()
     skill_root = None
     for number, line in enumerate(Path(file).read_text().splitlines(), 1):
         try:
@@ -571,7 +606,8 @@ def read_transcript(file, tool, run_directory=None):
                 if call.name == "Read" and resolved in public_files:
                     origin = public_files[resolved]
                     call.category = "image" if call.image_count else "publicOutput"
-                    call.evidence_call = origin.number
+                    # A live session file shows the screen when it is read, not when it was named.
+                    call.evidence_call = call.number if resolved in live_files else origin.number
                 elif call.category == "unknown" and shell_read in public_files:
                     # A tail, head or cat of a saved public output reads the same file as Read.
                     call.category = "publicOutput"
@@ -586,6 +622,7 @@ def read_transcript(file, tool, run_directory=None):
                 if call.category in ("ui", "setup", "help", "publicOutput"):
                     for path in returned_paths(call):
                         public_files[path] = call
+                    live_files.update(session_files(call))
     for call in calls:
         if not call.result_line:
             errors.append(f"Missing result for call {call.number}")
