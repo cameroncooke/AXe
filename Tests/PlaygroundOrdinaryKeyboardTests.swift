@@ -114,10 +114,22 @@ struct PlaygroundOrdinaryButtonTests {
     func siri() async throws {
         let app = try OrdinaryPlaygroundSession()
         let pid = try await app.launchApp()
-        try await app.run(["button", "siri", "--duration", "0.2"])
-        _ = try await app.waitForSystem("the Siri window") { roots in
-            UIStateParser.findElement(in: roots, withIdentifier: "siri-interface-window") != nil
+        // The simulator's Siri looks for nearby devices each time it opens, finds none and asks
+        // to be dismissed. That request usually lands before Siri is shown; when it lands just
+        // after, Siri closes within a few milliseconds of opening. A press that SpringBoard logged
+        // as received may therefore be repeated; a press it never received fails the test.
+        var opened = false
+        for _ in 1...3 where !opened {
+            let pressed = Date()
+            try await app.run(["button", "siri", "--duration", "0.2"])
+            opened = (try? await app.waitForSystem("the Siri window", timeout: 6) { roots in
+                UIStateParser.findElement(in: roots, withIdentifier: "siri-interface-window") != nil
+            }) != nil
+            if !opened {
+                try #require(try await app.siriReceivedPress(since: pressed), "Siri did not receive the button press.")
+            }
         }
+        try #require(opened, "Siri received three presses and stayed closed each time.")
         try await app.run(["button", "home"])
         _ = try await app.waitForSystem("Siri to close") { roots in
             UIStateParser.findElement(in: roots, withIdentifier: "siri-interface-window") == nil
@@ -175,8 +187,9 @@ extension OrdinaryPlaygroundSession {
     }
 
     @discardableResult
-    func waitForSystem(_ description: String, matches: ([UIElement]) -> Bool) async throws -> [UIElement] {
-        let deadline = Date().addingTimeInterval(20)
+    func waitForSystem(_ description: String, timeout: TimeInterval = 20,
+                       matches: ([UIElement]) -> Bool) async throws -> [UIElement] {
+        let deadline = Date().addingTimeInterval(timeout)
         var last = "No system tree was read."
         repeat {
             do {
@@ -195,6 +208,19 @@ extension OrdinaryPlaygroundSession {
         try await waitForSystem("the Playground to leave the foreground") { roots in
             !roots.contains { $0.type == "Application" && $0.label == "AxePlayground" }
         }
+    }
+
+    /// Whether SpringBoard logged a Siri button press at or after this time.
+    func siriReceivedPress(since start: Date) async throws -> Bool {
+        let format = DateFormatter()
+        format.locale = Locale(identifier: "en_US_POSIX")
+        format.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let received = "#activation buttonDownFromButtonIdentifier:SiriButtonIdentifierLongPressVoiceCommandButton"
+        let command = ["xcrun", "simctl", "spawn", udid, "log", "show", "--style", "compact",
+                       "--start", format.string(from: start.addingTimeInterval(-1)),
+                       "--predicate", "process == \"SpringBoard\" AND eventMessage CONTAINS \"\(received)\""]
+        let output = try await CommandRunner.run(command.map(shellQuote).joined(separator: " "), timeout: 60).output
+        return output.contains("SpringBoard[") && output.contains(received)
     }
 
     /// SpringBoard's own lock and screen-blank state, read through notifyutil in the simulator.
