@@ -8,7 +8,7 @@
       "name": "axe",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./agent-plugin"
       },
       "policy": {
         "installation": "AVAILABLE",

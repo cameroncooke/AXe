@@ -17,7 +17,7 @@ When reading issues:
 
 ## Tools
 - GitHub CLI for issues/PRs
-- When working on the skill sources in `Skills/CLI/axe/`, use the `skill-creator` skill workflow.
+- When working on the skill sources in `agent-plugin/skills/axe/`, use the `skill-creator` skill workflow.
 
 ## Build and test
 - `scripts/build.sh` (default, `dev`, `clean`) runs `rm -rf build_products build_derived_data`, and so does `scripts/build.sh frameworks-if-needed` (used by `make build`, `make test`, `make e2e`, `./test-runner.sh` and the benchmarks) whenever it rebuilds stale IDBKit frameworks. Never keep anything that must survive under `build_products/`.
@@ -38,7 +38,7 @@ When reading issues:
 - Technical prose only, be kind but direct (e.g., "Thanks @user" not "Thanks so much @user!")
 
 ## Docs
-- If modifying or adding/removing commands/options, update README.md and the skill in `Skills/CLI/axe/`.
+- If modifying or adding/removing commands/options, update README.md and the skill in `agent-plugin/skills/axe/`.
 
 ### Changelog
 Location: `CHANGELOG.md`

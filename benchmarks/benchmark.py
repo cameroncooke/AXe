@@ -67,7 +67,7 @@ def inputs(config):
         'scorerSHA256': tree_digest(HERE, ['scoring.py', 'transcript.py']),
         # AXe's official skill is in this repository. FlowDeck's and RocketSim's come with the
         # installed tool, so each report records the hash of the skill tree it actually received.
-        'guideSetSHA256': tree_digest(HERE.parent, ['Skills/CLI/axe']),
+        'guideSetSHA256': tree_digest(HERE.parent, ['agent-plugin/skills/axe']),
         'sharedRulesSHA256': digest(HERE / 'shared-rules.md'),
         'runnerSHA256': tree_digest(HERE, ['benchmark.py', 'suite.py', 'preparation.py',
                                          'environment.py', 'monitor.py', 'processes.py', 'adapters.py']),
@@ -204,11 +204,11 @@ def setup_policy(scenario):
 def official_skill(config, name, identity, env):
     """The tool's own agent skill, unedited, as its vendor ships it.
 
-    AXe: the skill `axe init` installs (Skills/CLI/axe). RocketSim: the skill in its app bundle.
+    AXe: the skill `axe init` installs (agent-plugin/skills/axe). RocketSim: the skill in its app bundle.
     FlowDeck: the pack `flowdeck ai install-skill` installs, fetched once per FlowDeck version into
     the ignored cache."""
     if name == 'axe':
-        return HERE.parent / 'Skills' / 'CLI' / 'axe'
+        return HERE.parent / 'agent-plugin' / 'skills' / 'axe'
     if name == 'rocketsim':
         skill = Path(config['tools']['rocketsim']['app']) / 'Contents/Resources/Agent-Skill/rocketsim'
         if not (skill / 'SKILL.md').is_file():

@@ -18,7 +18,7 @@ struct PluginManifestTests {
                 return String(line[line.index(line.startIndex, offsetBy: 5)..<end])
             }.first, "CHANGELOG.md has no released version heading")
 
-        for path in [".claude-plugin/plugin.json", ".codex-plugin/plugin.json"] {
+        for path in ["agent-plugin/.claude-plugin/plugin.json", "agent-plugin/.codex-plugin/plugin.json"] {
             let data = try Data(contentsOf: repository.appendingPathComponent(path))
             let manifest = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
             #expect(manifest["version"] as? String == released,
@@ -28,11 +28,11 @@ struct PluginManifestTests {
 
     @Test("Plugin manifests point at the shipped skill")
     func skillPaths() throws {
-        for (path, skills) in [(".claude-plugin/plugin.json", "./Skills/CLI/"), (".codex-plugin/plugin.json", "./Skills/CLI/axe")] {
+        for (path, skills) in [("agent-plugin/.claude-plugin/plugin.json", "./skills/"), ("agent-plugin/.codex-plugin/plugin.json", "./skills/axe")] {
             let data = try Data(contentsOf: repository.appendingPathComponent(path))
             let manifest = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
             #expect(manifest["skills"] as? String == skills)
         }
-        #expect(FileManager.default.fileExists(atPath: repository.appendingPathComponent("Skills/CLI/axe/SKILL.md").path))
+        #expect(FileManager.default.fileExists(atPath: repository.appendingPathComponent("agent-plugin/skills/axe/SKILL.md").path))
     }
 }

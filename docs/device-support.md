@@ -1,6 +1,6 @@
 # Physical device support
 
-How AXe drives a connected iPhone or iPad, what it supports and where it stops. Wire formats are in [device-protocols.md](device-protocols.md); usage is in the [physical device reference](../Skills/CLI/axe/references/physical-device-reference.md).
+How AXe drives a connected iPhone or iPad, what it supports and where it stops. Wire formats are in [device-protocols.md](device-protocols.md); usage is in the [physical device reference](../agent-plugin/skills/axe/references/physical-device-reference.md).
 
 ## Rules
 

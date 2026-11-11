@@ -15,7 +15,7 @@
     "automation",
     "accessibility"
   ],
-  "skills": "./Skills/CLI/axe",
+  "skills": "./skills/axe",
   "interface": {
     "displayName": "AXe",
     "shortDescription": "Automate iOS Simulators with AXe.",

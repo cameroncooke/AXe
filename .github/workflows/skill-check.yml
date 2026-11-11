@@ -3,12 +3,12 @@ name: Skill check
 on:
   pull_request:
     paths:
-      - 'Skills/**'
+      - 'agent-plugin/**'
   push:
     branches:
       - main
     paths:
-      - 'Skills/**'
+      - 'agent-plugin/**'
   workflow_dispatch:
 
 permissions:
@@ -31,5 +31,5 @@ jobs:
           node-version: 22
 
       - name: Lint the shipped skill
-        # Fix every error and warning: npx skill-check check Skills/CLI/axe
-        run: npx --yes skill-check@1.2.0 check Skills/CLI/axe --no-security-scan --fail-on-warning --format github
+        # Fix every error and warning: npx skill-check check agent-plugin/skills/axe
+        run: npx --yes skill-check@1.2.0 check agent-plugin/skills/axe --no-security-scan --fail-on-warning --format github

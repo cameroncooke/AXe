@@ -48,7 +48,7 @@ check() {
 
 skill_lint() {
     command -v npx >/dev/null 2>&1 || { echo "npx is not installed; the skill lint needs Node.js."; return 1; }
-    npx --yes skill-check@1.2.0 check Skills/CLI/axe --no-security-scan --fail-on-warning
+    npx --yes skill-check@1.2.0 check agent-plugin/skills/axe --no-security-scan --fail-on-warning
 }
 
 echo "Release checks at $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD)"
@@ -58,7 +58,7 @@ fi
 
 check "changelog" python3 -I scripts/check-changelog-released.py "$BASE"
 check "script tests" python3 -I -m unittest discover -s scripts/tests
-check "skill copies" diff -r Skills/CLI/axe Sources/AXe/Resources/skills/axe
+check "skill copies" diff -r agent-plugin/skills/axe Sources/AXe/Resources/skills/axe
 check "skill lint" skill_lint
 check "readiness log" python3 -I scripts/check-release-readiness.py
 check "packaging" scripts/release-dry-run.sh

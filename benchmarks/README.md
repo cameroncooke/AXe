@@ -158,7 +158,7 @@ Original save and read-only verification rules remain unchanged.
 Every tool runs with its own official agent skill, copied unedited, so the
 benchmark measures what each vendor tells agents to do:
 
-- AXe: the skill `axe init` installs, `Skills/CLI/axe/` with its references.
+- AXe: the skill `axe init` installs, `agent-plugin/skills/axe/` with its references.
 - FlowDeck: the pack `flowdeck ai install-skill --agent claude` installs for the
   installed FlowDeck version, fetched once into `.cache/skills/`.
 - RocketSim: the skill in its app bundle,

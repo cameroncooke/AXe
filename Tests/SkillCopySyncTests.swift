@@ -9,7 +9,7 @@ struct SkillCopySyncTests {
 
     @Test
     func bundledSkillMatchesSource() throws {
-        let source = repository.appendingPathComponent("Skills/CLI/axe")
+        let source = repository.appendingPathComponent("agent-plugin/skills/axe")
         let bundled = repository.appendingPathComponent("Sources/AXe/Resources/skills/axe")
         let sourceFiles = try files(under: source)
         let bundledFiles = try files(under: bundled)
@@ -31,8 +31,8 @@ struct SkillCopySyncTests {
         #expect(
             problems.isEmpty,
             """
-            Sources/AXe/Resources/skills/axe (installed by `axe init`) must be byte-identical to Skills/CLI/axe.
-            Edit Skills/CLI/axe, then copy it over: rsync -a --delete Skills/CLI/axe/ Sources/AXe/Resources/skills/axe/
+            Sources/AXe/Resources/skills/axe (installed by `axe init`) must be byte-identical to agent-plugin/skills/axe.
+            Edit agent-plugin/skills/axe, then copy it over: rsync -a --delete agent-plugin/skills/axe/ Sources/AXe/Resources/skills/axe/
             \(problems.joined(separator: "\n"))
             """
         )

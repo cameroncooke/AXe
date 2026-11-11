@@ -17,11 +17,11 @@ axe --help
 `axe init` installs the skill bundled with your AXe binary for the AI clients it detects (`--client claude|agents`, `--dest <dir>`, `--force`, `--uninstall`, `--print`). To keep the skill updated as releases ship, install it from this repository's marketplace instead, and keep the CLI on the latest release:
 
 ```bash
-claude plugin marketplace add cameroncooke/AXe && claude plugin install axe@axe
-codex plugin marketplace add cameroncooke/AXe && codex plugin add axe@axe
+claude plugin marketplace add cameroncooke/AXe --sparse .claude-plugin agent-plugin && claude plugin install axe@axe
+codex plugin marketplace add cameroncooke/AXe --sparse .agents --sparse agent-plugin && codex plugin add axe@axe
 ```
 
-The marketplace reads the case-sensitive `Skills/CLI` path; clients that require a lowercase `skills/` directory are unsupported.
+The plugin is the `agent-plugin` folder: its manifests and the skill in `agent-plugin/skills/axe`. `--sparse` fetches only the marketplace files and that folder, not the rest of the repository.
 
 ## Quick start
 
@@ -137,7 +137,7 @@ axe batch --udid "$UDID" --step "tap --id BackButton" --step "type 'hello'"
 axe batch --udid "$UDID" --file steps.txt         # one step per line
 ```
 
-Steps are `tap`, `swipe`, `gesture`, `draw`, `touch`, `type`, `button`, `key`, `key-sequence` and `key-combo`, plus `sleep <seconds>`. They run in order in one input session; a failure stops later steps, and earlier steps are not undone. On a simulator, `--continue-on-error` runs the remaining steps after a failed one; on the iPhone Duo it still stops after a context change or input failure. Success prints `✓ Batch completed successfully (N steps)`. Agent batches (`batch --agent`) take JSON instead; see the [batch reference](Skills/CLI/axe/references/batch-reference.md).
+Steps are `tap`, `swipe`, `gesture`, `draw`, `touch`, `type`, `button`, `key`, `key-sequence` and `key-combo`, plus `sleep <seconds>`. They run in order in one input session; a failure stops later steps, and earlier steps are not undone. On a simulator, `--continue-on-error` runs the remaining steps after a failed one; on the iPhone Duo it still stops after a context change or input failure. Success prints `✓ Batch completed successfully (N steps)`. Agent batches (`batch --agent`) take JSON instead; see the [batch reference](agent-plugin/skills/axe/references/batch-reference.md).
 
 ## Screenshots and video
 
@@ -149,7 +149,7 @@ axe stream-video --udid "$UDID" --fps 30 --format ffmpeg | \
   ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
 ```
 
-`stream-video` formats are `mjpeg` (multipart JPEG), `raw` (4-byte big-endian length, then a JPEG), `ffmpeg` (concatenated JPEGs) and `bgra` (packed pixels; a selected-screen stream prints its width and height on stderr, the ordinary simulator stream does not, so pass `--screen-id` and `--screen-uuid` when you need them). On a physical device `--format h264` streams native H.264 Annex B. Stream bytes go to stdout and diagnostics to stderr; keep them separate. `--fps` is an upper limit. On any simulator, `record-video --follow-active-display` follows the active screen through folds and rotations into one fixed-size movie, and `--screen-id` with `--screen-uuid` captures one screen and fails if it stops being active; see the [recording reference](Skills/CLI/axe/references/recording-reference.md).
+`stream-video` formats are `mjpeg` (multipart JPEG), `raw` (4-byte big-endian length, then a JPEG), `ffmpeg` (concatenated JPEGs) and `bgra` (packed pixels; a selected-screen stream prints its width and height on stderr, the ordinary simulator stream does not, so pass `--screen-id` and `--screen-uuid` when you need them). On a physical device `--format h264` streams native H.264 Annex B. Stream bytes go to stdout and diagnostics to stderr; keep them separate. `--fps` is an upper limit. On any simulator, `record-video --follow-active-display` follows the active screen through folds and rotations into one fixed-size movie, and `--screen-id` with `--screen-uuid` captures one screen and fails if it stops being active; see the [recording reference](agent-plugin/skills/axe/references/recording-reference.md).
 
 ## Displays, hinge and rotation
 
@@ -171,7 +171,7 @@ axe hinge set tabletop --udid "$UDID"     # 0...180, or closed, tabletop, open
 axe rotate left --udid "$UDID"
 ```
 
-`hinge read` returns `{udid, hinge: {degrees, mechanicalDegrees, posture}}`: `degrees` is the angle iOS senses, `mechanicalDegrees` the angle `hinge set` drives, and `posture` is `closed`, `partiallyOpen` or `open`. `hinge set` sends one request, waits up to 8 seconds for the screens to settle (`--no-wait` skips this) and returns `{udid, previousDegrees, hinge, activeScreen?}`. `rotate left|right` works on the Duo and on physical devices and returns `{udid, direction, previousRotation?, activeScreen?}`; it is not the two-finger `gesture rotate`. Read the UI again after any of them. Failures: `noHinge` (one-screen simulator), `bootChanged`, `hingeUnavailable`, `screensDidNotSettle`, `rotationFailed`, plus the common codes. Duo-specific input, selected-screen input and capture are in the [device reference](Skills/CLI/axe/references/device-reference.md).
+`hinge read` returns `{udid, hinge: {degrees, mechanicalDegrees, posture}}`: `degrees` is the angle iOS senses, `mechanicalDegrees` the angle `hinge set` drives, and `posture` is `closed`, `partiallyOpen` or `open`. `hinge set` sends one request, waits up to 8 seconds for the screens to settle (`--no-wait` skips this) and returns `{udid, previousDegrees, hinge, activeScreen?}`. `rotate left|right` works on the Duo and on physical devices and returns `{udid, direction, previousRotation?, activeScreen?}`; it is not the two-finger `gesture rotate`. Read the UI again after any of them. Failures: `noHinge` (one-screen simulator), `bootChanged`, `hingeUnavailable`, `screensDidNotSettle`, `rotationFailed`, plus the common codes. Duo-specific input, selected-screen input and capture are in the [device reference](agent-plugin/skills/axe/references/device-reference.md).
 
 ## Settings
 
@@ -226,7 +226,7 @@ axe batch --agent --udid "$UDID" --steps-json '{"snapshotID":"<SNAPSHOT_ID>","st
 
 Results are JSON by default; `--output text` prints the same result compactly. `--view navigation` lists controls, `reading` (the default) adds visible text, and `full` returns the complete schema version 1. A refusal sends no input and carries a typed code such as `screenChanged`, `targetCovered`, `keyboardCovered`, `busy` or `observationFailed`, usually with the current screen. AXe retries inside the call only when the screen or target changed and the target is the same control. Agent mode works on simulators only; a shut-down simulator reports `notBooted`. `AXE_TIMING=1` prints a phase table to stderr after each agent command.
 
-The [AXe skill](Skills/CLI/axe/SKILL.md) is the guide for agents; the [agent reference](Skills/CLI/axe/references/agent-reference.md) has every code, limit and output field. `--agent` needs no model or API key and is separate from `axe agent`.
+The [AXe skill](agent-plugin/skills/axe/SKILL.md) is the guide for agents; the [agent reference](agent-plugin/skills/axe/references/agent-reference.md) has every code, limit and output field. `--agent` needs no model or API key and is separate from `axe agent`.
 
 ## Autonomous agent command
 
@@ -251,7 +251,7 @@ axe record-video --udid "$DEVICE_UDID" --fps 3 --scale 0.5 --output device.mp4
 
 Pair the device in Xcode, enable Developer Mode and keep it unlocked; AXe never pairs, enables Developer Mode, mounts disk images or unlocks. `doctor` checks pairing, Developer Mode, connection, developer disk image, lock state and screenshot service, and a failed check ends with `Error: <name> is not ready.` (it also checks that a simulator is booted). Screenshots, video, accessibility reads, `rotate`, taps, swipes, drags, `draw`, gestures, `touch --down --up`, typing, keys, buttons, batches and `settings` (except the status bar) work with the hardware UDID.
 
-`button lock` needs `--allow-lock`. Agent mode, selected screens, `displays`, `shutdown`, `hinge`, `clipboard`, `slider`, side button, Apple Pay and the right-edge swipe preset return `unsupportedOnDevice`. Physical `record-video` prints the output path; JSON is `{path, pixelWidth, pixelHeight, frames}`, and `--verbose` prints the full receipt. A failed batch step keeps the step's own code. Device-specific codes include `deviceLocked`, `rotationLocked`, `rotationUnconfirmed`, `displayOrientationMismatch` and `deviceStreamReplaced`. Read the [physical device reference](Skills/CLI/axe/references/physical-device-reference.md) for input rules and video, and [docs/device-support.md](docs/device-support.md) for the design and limitations.
+`button lock` needs `--allow-lock`. Agent mode, selected screens, `displays`, `shutdown`, `hinge`, `clipboard`, `slider`, side button, Apple Pay and the right-edge swipe preset return `unsupportedOnDevice`. Physical `record-video` prints the output path; JSON is `{path, pixelWidth, pixelHeight, frames}`, and `--verbose` prints the full receipt. A failed batch step keeps the step's own code. Device-specific codes include `deviceLocked`, `rotationLocked`, `rotationUnconfirmed`, `displayOrientationMismatch` and `deviceStreamReplaced`. Read the [physical device reference](agent-plugin/skills/axe/references/physical-device-reference.md) for input rules and video, and [docs/device-support.md](docs/device-support.md) for the design and limitations.
 
 ## Simulator shutdown and clipboard
 
@@ -260,7 +260,7 @@ axe shutdown --udid "$UDID"
 printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid "$UDID"
 ```
 
-`shutdown` shuts down exactly one simulator by UUID through `simctl` and prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}`. `clipboard copy` stages 1 to 65,536 UTF-8 bytes in one booted simulator's clipboard, verifies them by readback and prints `Copied N bytes to the clipboard of <udid> (sha256 …)`; JSON is `{udid, bytes, sha256}`. It does not paste. Both report `actionOutcomeUnknown` when the effect could not be confirmed. See the [clipboard reference](Skills/CLI/axe/references/clipboard-reference.md).
+`shutdown` shuts down exactly one simulator by UUID through `simctl` and prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}`. `clipboard copy` stages 1 to 65,536 UTF-8 bytes in one booted simulator's clipboard, verifies them by readback and prints `Copied N bytes to the clipboard of <udid> (sha256 …)`; JSON is `{udid, bytes, sha256}`. It does not paste. Both report `actionOutcomeUnknown` when the effect could not be confirmed. See the [clipboard reference](agent-plugin/skills/axe/references/clipboard-reference.md).
 
 ## Xcode compatibility
 

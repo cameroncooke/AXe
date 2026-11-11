@@ -70,7 +70,7 @@ class SuitePermissionTests(unittest.TestCase):
 
     def test_axe_receives_the_shipped_skill_with_its_references(self):
         output, value = self.suite('axe')
-        shipped = Path(__file__).resolve().parent.parent / 'Skills' / 'CLI' / 'axe'
+        shipped = Path(__file__).resolve().parent.parent / 'agent-plugin' / 'skills' / 'axe'
         installed = output / 'skills' / 'axe'
         self.assertEqual(value['claude']['activateSkill'], 'axe')
         self.assertEqual(value['claude']['skillDirs'], [str(installed)])

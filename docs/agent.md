@@ -10,7 +10,7 @@ Use the returned page cursor for omitted controls. A compact display cell is lim
 
 Compact top-level and batch-step error messages are limited to 1024 Unicode scalars. Clipping keeps a prefix and suffix, with `messageTruncated` and `originalScalarLength` on the error object. Use typed error codes and recovery fields instead of parsing cause strings. Full view keeps the complete message; do not repeat input to expand diagnostics. Native cleanup, quarantine and context checks remain unchanged.
 
-Read the [agent output and readback contract](../Skills/CLI/axe/references/agent-reference.md#output-format) before parsing or acting on these results.
+Read the [agent output and readback contract](../agent-plugin/skills/axe/references/agent-reference.md#output-format) before parsing or acting on these results.
 
 ## Autonomous model command
 

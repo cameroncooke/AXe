@@ -16,5 +16,5 @@
     "automation",
     "accessibility"
   ],
-  "skills": "./Skills/CLI/"
+  "skills": "./skills/"
 }

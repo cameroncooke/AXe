@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "axe",
-      "source": "./",
+      "source": "./agent-plugin",
       "description": "Automate iOS Simulators with the AXe CLI",
       "category": "development"
     }

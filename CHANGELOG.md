@@ -30,7 +30,7 @@ axe hinge set tabletop --udid "$UDID"     # 0...180, or closed, tabletop, open
 axe rotate left --udid "$UDID"            # also works on physical devices
 ```
 
-`--input-mode selected` with `--screen-id` and `--screen-uuid` refuses to act if a different screen becomes active, and `record-video --follow-active-display` records one movie through folds and rotations. See [Displays, hinge and rotation](README.md#displays-hinge-and-rotation) and the [device reference](Skills/CLI/axe/references/device-reference.md).
+`--input-mode selected` with `--screen-id` and `--screen-uuid` refuses to act if a different screen becomes active, and `record-video --follow-active-display` records one movie through folds and rotations. See [Displays, hinge and rotation](README.md#displays-hinge-and-rotation) and the [device reference](agent-plugin/skills/axe/references/device-reference.md).
 
 ### Agent mode
 
@@ -42,7 +42,7 @@ axe tap --agent --snapshot-id "$SNAPSHOT_ID" --ref e9 --udid "$UDID"
 axe type 'Ada' --agent --focus --snapshot-id "$SNAPSHOT_ID" --ref e18 --udid "$UDID"
 ```
 
-`batch --agent` fills a form in one call, and a refusal sends no input and carries a typed code. Agent mode needs no model or API key. See [Agent mode](README.md#agent-mode) and the [agent reference](Skills/CLI/axe/references/agent-reference.md).
+`batch --agent` fills a form in one call, and a refusal sends no input and carries a typed code. Agent mode needs no model or API key. See [Agent mode](README.md#agent-mode) and the [agent reference](agent-plugin/skills/axe/references/agent-reference.md).
 
 ### Structured output and error codes
 

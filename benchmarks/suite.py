@@ -13,7 +13,7 @@ from adapters import allowed_tools, tool_matchers
 ROOT = Path(__file__).resolve().parent
 # Every tool runs with its own official agent skill, unedited: AXe the one `axe init` installs,
 # FlowDeck the pack `flowdeck ai install-skill` installs, RocketSim the one in its app bundle.
-SHIPPED_AXE_SKILL = ROOT.parent / 'Skills' / 'CLI' / 'axe'
+SHIPPED_AXE_SKILL = ROOT.parent / 'agent-plugin' / 'skills' / 'axe'
 
 
 def skill_name(tool):
