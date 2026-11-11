@@ -7,10 +7,10 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. The AXe-only agent benchmark was rerun on 11 November: Weather and Contacts are in line with 10 November, Reminders still shows the simulator state (Phase 13). Last update 11 November, about 09:10.
+- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. The AXe-only agent benchmark was rerun on 11 November: Weather and Contacts are in line with 10 November, Reminders still shows the simulator state (Phase 13). Last update 11 November, about 09:25.
 - Simulators at `d0885cfa2`: unit tests 877 of 877; iPhone 36 of 36 end-to-end suites (245 tests); Duo 67 of 67 (534 tests); iPad 13 of 13 (93 tests), all in one run. No timing regression against the pre-audit build.
 - Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun; the owner decided on 11 November to skip it. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
-- Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
+- Timing against the v1.8.0 release: every plain command is faster, by the figures recorded for the release binary on 6 November and today's build timed with the same script (Phase 13). Not verified: the v1.8.0 figures were not measured again today, because that binary is no longer on this Mac; timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
 - Correction: an earlier version of this log said the third end-to-end run of Phase 8 passed 96 of 101 suites. It ran 43. See Phase 8.
 - Nothing is pushed.
 - Commits made by this audit: see the commit log at the end.
@@ -654,7 +654,7 @@ The owner asked for the benchmark again, compared with the baseline and with the
 | Contacts | 11 to 12 calls, 144 to 168 s, 8.4k to 9.0k tokens | 12 calls, 96 to 101 s, 10.5k to 10.9k tokens | 12 calls, 95 to 112 s, 9.7k to 10.0k tokens | 12 to 13 calls, 96 to 113 s, 9.8k to 10.5k tokens |
 | Reminders | 20 to 25 calls, 195 to 312 s, 8.6k to 10.3k tokens | 17 to 18 calls, 94 to 100 s, 11.4k to 11.7k tokens | 26 to 28 calls, 230 to 293 s, 12.2k to 13.0k tokens | 23 to 39 calls, 232 to 397 s, 11.6k to 16.2k tokens |
 
-- There is no v1.8.0 release figure and there cannot be one for this benchmark: v1.8.0 has no agent commands, which are what the benchmark measures. The oldest run in history is the accepted baseline, v1.8.0-185. A v1.8.0 comparison would be of single-command timing (`make bench-quick`), and that needs the release binary, which is not on this Mac; building the tag clones idb from GitHub.
+- The agent benchmark has no v1.8.0 row: v1.8.0 has no agent commands, and the oldest run in history is the accepted baseline, v1.8.0-185. The v1.8.0 release is compared by single-command timing below. An earlier version of this entry said no v1.8.0 figure existed; that was wrong, and the owner pointed it out.
 - The harness still gives no ranked comparison with the baseline (`comparable: false`): the skill, the harness and the Weather app source have changed since it was accepted. The figures are side by side.
 - Against the baseline: Weather and Contacts take about half to two thirds of the time for about the same number of calls, with about 10 to 20 percent more returned text. Against 10 November: Weather and Contacts are the same or slightly leaner. Reminders is no better than on 10 November and far from 8 November.
 - Grades as recorded: Weather passed 1 and unverified 2; Contacts passed 2 and failed 1; Reminders unverified 2 and failed 1. Read against the transcripts:
@@ -664,9 +664,28 @@ The owner asked for the benchmark again, compared with the baseline and with the
   - Reminders, the failed run, and the calls and time of all three: the state recorded in Phase 12. The first completion lands, the batch stops because the screen changed, the second completion is sent alone and the model then cannot tell whether it took, so it reads, takes screenshots and taps again. On 10 November a reboot had cleared it until a benchmark run brought it back. This time the simulator was shut down and booted before the run and the first Reminders job, the second job of the run, already showed it. So either a reboot no longer clears it or something early in a benchmark run switches it on; I have not separated the two. That the 8 November binary fails the same way still stands.
 - The benchmark simulator is shut down again, as it was before the run.
 
+Single-command timing against the v1.8.0 release (11 November, about 09:20):
+
+The v1.8.0 figures were measured on 6 November against the release binary (`AXe-macOS-v1.8.0-universal.tar.gz`, fetched with `gh release download`, signature verified) and reported in that day's session; they are in its transcript, not in this repository. I ran the same script again today with the build of `3e2ce1661` on the same simulator (the benchmark iPhone 18 Pro, Xcode 27.2 beta 3), the same Playground screen and the Playground build installed then. Warm, seconds, three repeats each; every timing today came with its effect read back from the Playground (touch count, text, scroll position or pan count). Script and output: `e2e-results/v180-timing/`.
+
+| Command | v1.8.0 release (6 Nov) | v2 on 6 Nov | v2 today (v1.8.0-415) |
+| --- | --- | --- | --- |
+| `tap` | 0.85 to 1.28; in the 0.85 s runs it did not land | 0.15 | 0.08 to 0.09 |
+| `touch --down --up` | 1.05 to 1.18 | 0.25 | 0.19 |
+| `drag` (200 points) | 2.49 to 2.50 | 1.69 | 0.91 to 0.93 |
+| `swipe` (120 points) | 1.85 to 1.91 | 1.17 | 1.10 to 1.11 |
+| `gesture scroll-up` / `scroll-down` | 1.25 to 1.27 | 0.70 | 0.61 to 0.65 |
+| `type ab` | 0.32 to 0.33; no text appeared | 0.29 | 0.29 |
+| `key 42` | 0.29 to 0.31; no text appeared | 0.28 | 0.26 to 0.27 |
+| `describe-ui` | 1.08 to 1.85 | 0.54 | 0.30 to 0.36 |
+
+- [x] Every plain command is faster than the v1.8.0 release on this simulator: taps about ten times, touch about five times, drag, swipe and gesture presets about 1.7 to 2.7 times, `describe-ui` three times or more. `type` and `key` take about the same time, and in v1.8.0 they did not put text in the field on this Xcode.
+- Against 6 November: tap, touch, drag and `describe-ui` are faster again; swipe, presets, `type` and `key` are about the same.
+- Limits: one run of three repeats today, on a simulator booted about four minutes earlier; `describe-ui` was timed by the same script today and by separate calls on 6 November; the v1.8.0 column was not measured again today.
+
 ## Open items for the owner
 
-- Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
+- The v1.8.0 timings in Phase 13 are the ones measured on 6 November. The release binary was in an earlier session's scratch folder and is gone, so they were not measured again beside today's build, which is what `AGENTS.md` asks for. Doing that needs the release downloaded again (`gh release download v1.8.0`).
 - Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
 - A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, on plain connections since `cc39c8d49` and on owned ones since `d0885cfa2` (Phase 13), but the first command on each new connection is slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
@@ -702,7 +721,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 152 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 153 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -858,3 +877,4 @@ All 152 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `f7278726a` | docs(release): Record the three full end-to-end runs and the fixes they led to |
 | `3e2ce1661` | docs(release): Record the owner's decision to skip the iPad device rerun |
 | `199606564` | fix(bench): Accept the file an AXe screenshot was asked to write |
+| `b3a721fc0` | docs(release): Record the 11 November agent benchmark against the baseline |
