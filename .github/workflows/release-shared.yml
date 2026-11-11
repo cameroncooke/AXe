@@ -328,7 +328,7 @@ jobs:
         run: scripts/release-artifacts.sh smoke-test-archive --archive "${{ steps.create_archive.outputs.archive_name }}"
 
       - name: Smoke test Homebrew archive resources
-        run: scripts/release-artifacts.sh smoke-test-archive --archive "${{ steps.create_homebrew_archive.outputs.archive_name }}"
+        run: scripts/release-artifacts.sh smoke-test-archive --archive "${{ steps.create_homebrew_archive.outputs.archive_name }}" --adhoc-sign
 
       - name: Smoke test Homebrew install
         run: |

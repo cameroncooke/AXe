@@ -20,7 +20,7 @@ Usage:
   scripts/release-artifacts.sh create-universal-archive --stage-dir DIR --archive PATH
   scripts/release-artifacts.sh create-homebrew-archive --stage-dir DIR --archive PATH
   scripts/release-artifacts.sh smoke-test-stage --stage-dir DIR
-  scripts/release-artifacts.sh smoke-test-archive --archive PATH
+  scripts/release-artifacts.sh smoke-test-archive --archive PATH [--adhoc-sign]
 EOF
 }
 
@@ -163,8 +163,21 @@ smoke_test_stage() {
   echo "✅ Smoke-tested staged payload"
 }
 
+# Matches the Homebrew formula's post_install, which re-signs the stripped payload ad hoc.
+adhoc_sign_stage() {
+  local stage_dir="$1"
+  local framework_path
+
+  for framework_path in "$stage_dir"/Frameworks/*.framework; do
+    [[ -d "$framework_path" ]] || continue
+    codesign --force --sign - --timestamp=none "$framework_path"
+  done
+  codesign --force --sign - --timestamp=none "$stage_dir/axe"
+}
+
 smoke_test_archive() {
   local archive_path="$1"
+  local adhoc_sign="${2:-false}"
   local stage_dir
 
   [[ -f "$archive_path" ]] || fail "Archive not found: $archive_path"
@@ -172,6 +185,9 @@ smoke_test_archive() {
   stage_dir="$(mktemp -d "${TMPDIR:-/tmp}/axe-release-smoke.XXXXXX")"
 
   tar -xzf "$archive_path" -C "$stage_dir"
+  if [[ "$adhoc_sign" == "true" ]]; then
+    adhoc_sign_stage "$stage_dir"
+  fi
   smoke_test_stage "$stage_dir"
   rm -rf "$stage_dir"
   echo "✅ Smoke-tested archive: $archive_path"
@@ -184,6 +200,7 @@ package_zip=""
 build_output_dir=""
 stage_dir=""
 archive_path=""
+adhoc_sign=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -202,6 +219,10 @@ while [[ $# -gt 0 ]]; do
     --archive)
       archive_path="${2:-}"
       shift 2
+      ;;
+    --adhoc-sign)
+      adhoc_sign=true
+      shift
       ;;
     -h|--help)
       usage
@@ -244,7 +265,7 @@ case "$command_name" in
     ;;
   smoke-test-archive)
     require_arg --archive "$archive_path"
-    smoke_test_archive "$archive_path"
+    smoke_test_archive "$archive_path" "$adhoc_sign"
     ;;
   ''|-h|--help|help)
     usage
