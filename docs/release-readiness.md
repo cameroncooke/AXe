@@ -7,7 +7,7 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1), which the owner set aside. The Reminders benchmark failure was a defect in Apple's Reminders on the iOS 27.2 beta simulator, with no AXe change; the benchmark now closes Reminders' review gate before each job and Reminders passes 3 of 3 (Phase 13). The AXe-only agent benchmark was rerun on 11 November: Weather and Contacts are in line with 10 November, and Reminders, with the benchmark fix, is back to the 8 November profile. Last update 11 November, about 10:30.
+- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1), which the owner set aside. The Reminders benchmark failure was a defect in Apple's Reminders on the iOS 27.2 beta simulator, with no AXe change; the benchmark now closes Reminders' review gate before each job and Reminders passes 3 of 3 (Phase 13). The AXe-only agent benchmark was rerun on 11 November: Weather and Contacts are in line with 10 November, and Reminders, with the benchmark fix, is back to the 8 November profile. The final agent benchmark, with every tool on its official skill, is in Phase 13. Last update 11 November, about 12:00.
 - Simulators at `d0885cfa2`: unit tests 877 of 877; iPhone 36 of 36 end-to-end suites (245 tests); Duo 67 of 67 (534 tests); iPad 13 of 13 (93 tests), all in one run. No timing regression against the pre-audit build.
 - Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun; the owner decided on 11 November to skip it. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
 - Timing against the v1.8.0 release: every plain command is faster, by the figures recorded for the release binary on 6 November and today's build timed with the same script (Phase 13). Not verified: the v1.8.0 figures were not measured again today, because that binary is no longer on this Mac; timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
@@ -712,6 +712,45 @@ The owner asked for the underlying cause of the Reminders result, and not for a 
 - Not verified: FlowDeck and RocketSim under this condition (their figures are from 8 November, before the gate opened, so today's AXe Reminders figures are not comparable with them); whether the iOS 27.3 beta runtime has the defect; the exact length of the gate.
 - A mistake of mine during this, the same kind as on 10 November: after a relaunch my test script took the lists screen for the scratch list and added four reminders to the default list before its cap stopped it. I deleted them, and the script now requires the list's own title. The benchmark simulator is back as I found it, default list empty and the benchmark's own list in place, except that its Reminders first-opened date is now set by every Reminders job.
 
+Final agent benchmark: official skills, UI interaction only (11 November, 10:51 to 11:48):
+
+The owner asked for a comparison fair enough to publish. Two audits of the 8 November runs found it was not: AXe ran with its own shipped skill, while FlowDeck and RocketSim ran with short guides written for this suite that left out options their own skills document, and the grader misread parts of both tools' output. Changes, all applied to every tool alike (`15fa2cf68`, `ec2ed3e22`):
+
+- Every tool runs with its official agent skill, unedited: AXe the one `axe init` installs, FlowDeck the pack `flowdeck ai install-skill --agent claude` installs (1.34.0), RocketSim the one in its app bundle (16.8.0).
+- The harness builds, installs and launches the app before the clock, and every agent gets the same instructions: the benchmark measures UI interaction only and the app is already running. Weather no longer includes build time, so these results are not comparable with any earlier ones.
+- The model is `claude-sonnet-5-5` for every tool (it was `claude-opus-4-7`).
+- FlowDeck 1.34.0 and RocketSim 16.8.0 are both the latest releases (FlowDeck's updater, RocketSim's release feed and the App Store). AXe is `v1.8.0-422-g15fa2cf68`, built from a clean tree.
+- Grader fixes, each found in a transcript and covered by a test: FlowDeck's own tap receipts, batch targets and step results, session files (a bare JSON list, dated to the read), `screen --output` receipts and extra verbs; RocketSim's `focus`, `snapshot`, nav rows (labels only, so no value rather than an empty one), text snapshots inside `do`, and `/tmp` snapshot files its reference uses; help subcommands; a typed email row on the saved card, as the phone row already allowed; tapping the contact editor's title is not a second Add; a setting tapped after its last read is unverified, not failed; the action whose own reply first shows the details screen starts read-only verification. 216 benchmark tests pass. The run was graded by the scorer at `15fa2cf68` and regraded from its saved evidence by the scorer at `ec2ed3e22`; no AXe grade changed.
+
+Averages over three runs per tool and app, with the difference from AXe (`benchmarks/artifacts/20261111T105112Z-0eccd7187e9b`, kept in `e2e-results/benchmark-final/`):
+
+| Task | Measure | AXe | RocketSim 16.8.0 | FlowDeck 1.34.0 |
+| --- | --- | --- | --- | --- |
+| Weather | Time | 65 s | 100 s (+54%) | 129 s (+99%) |
+| Weather | Calls | 14.3 | 21.3 (+49%) | 34.7 (+142%) |
+| Weather | Returned text | 7.4k tokens | 14.0k (+88%) | 31.7k (+326%) |
+| Contacts | Time | 65 s | 158 s (+144%) | 181 s (+179%) |
+| Contacts | Calls | 10.0 | 30.0 (+200%) | 48.7 (+387%) |
+| Contacts | Returned text | 8.8k tokens | 14.4k (+64%) | 22.3k (+155%) |
+| Reminders | Time | 65 s | 97 s (+49%) | 87 s (+34%) |
+| Reminders | Calls | 17.0 | 17.3 (+2%) | 24.0 (+41%) |
+| Reminders | Returned text | 10.6k tokens | 10.5k (−1%) | 21.4k (+101%) |
+
+Grades, by the grader and by my review of every transcript:
+
+| Tool | Grader: passed | Unverified | Failed | Review |
+| --- | --- | --- | --- | --- |
+| AXe | 9 of 9 | 0 | 0 | All correct; no screenshots used |
+| RocketSim | 8 of 9 | 1 | 0 | All 9 correct. Contacts `d429ea450b23`: the saved name and company were read only from a screenshot |
+| FlowDeck | 6 of 9 | 3 | 0 | All 9 correct. All three Weather runs: FlowDeck's tree never exposes the visibility card (and in two runs not the precipitation card), so those facts were read from screenshots or `assert` steps; one run also read the details screen by screenshot |
+
+- Review method: every transcript through an audit script (commands run, files read and written, permission refusals, tool commands that change state), then each non-passing run by hand, including the screenshots the agent saw, extracted from the transcript. Script, output and screenshots: `e2e-results/benchmark-final/manual-review/`.
+- No run read app source, storage or preferences, used another tool, or ran a command outside its tool. FlowDeck's reads of its session files and temporary snapshots are files the tool wrote and named.
+- One FlowDeck Weather run (`25de0e165b46`) tapped `+` on the London result and saved London as a location. The task forbids changes only after the details screen, so it is not a rule break; later Weather runs still show London as not saved, so nothing carried over.
+- RocketSim's agent never passed `--udid`, though told to; RocketSim acts on the booted simulator and only the benchmark simulator was booted.
+- Disclosure: FlowDeck's official skill (`resources/ui.md`, and `batch --examples`) contains a worked example that is essentially the Weather task, with its control names and expected answers ("11°", "78%", "10.7 mm", "Lightning"). It was used unedited, as for every tool, but FlowDeck's Weather result is not a blind test.
+- Limits: three runs per tool and app; one model; one host and simulator (iPhone 18 Pro, iOS 27.2 beta, Xcode 27.2 beta 3); returned-text tokens exclude images, which FlowDeck and RocketSim used (6.7 and 4.0 images per run on Weather and Contacts) and AXe did not.
+
 ## Open items for the owner
 
 - Whether to report the Reminders defect to Apple; the log extracts in `e2e-results/benchmark-reminders/root-cause/` are enough for a report. The benchmark now works around it (Phase 13).
@@ -751,7 +790,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 156 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 159 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -911,3 +950,6 @@ All 156 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `b27781e98` | docs(release): Record single-command timing against the v1.8.0 release |
 | `56fd13315` | docs(release): Record the cause of the Reminders benchmark failure |
 | `b1fb805ca` | fix(bench): Close Reminders' review gate before each Reminders job |
+| `ca4249d40` | docs(release): Record the Reminders benchmark fix and its proof |
+| `15fa2cf68` | fix(bench): Measure every tool with its official skill on UI interaction only |
+| `ec2ed3e22` | fix(bench): Read FlowDeck and RocketSim output the way their skills produce it |
