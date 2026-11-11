@@ -33,6 +33,12 @@ enum OrdinaryBrokerInput {
         return true
     }
 
+    /// The measured route binds the built-in display by its UUID. A runtime before iOS 27 names
+    /// that display "PurpleMain" (measured on iOS 26.5 with Xcode 27), so it keeps the existing route.
+    static func runtimeHasMeasuredRoute(majorVersion: Int) -> Bool {
+        majorVersion >= 27
+    }
+
     /// Nil keeps the caller's existing route. Verified DTUHID rigid devices join the Duo only
     /// when the caller asks: their own guest connection costs about 0.6 s to open and 0.4 s to
     /// drain per command, which the broker's retained connection avoids.
@@ -78,6 +84,9 @@ enum OrdinaryBrokerInput {
         let boot = try HIDBroker.currentBootIdentity(simulatorUDID: simulator.udid)
         let dtuhidPID = FBProcessFetcher().subprocess(of: boot.processIdentifier, withName: "dtuhidd")
         guard dtuhidPID > 0, hasProfileMetadata(simulator) else { return false }
+        // dtuhidd is no proof of an iOS 27 runtime: it is registered in every simulator and starts
+        // on the first connection to it.
+        guard runtimeHasMeasuredRoute(majorVersion: simulator.osVersion.version.majorVersion) else { return false }
         return try FBSimulatorNativeContextReader.capability(for: simulator).hinge == .unsupported
     }
 
@@ -91,6 +100,7 @@ enum OrdinaryBrokerInput {
     ) async throws -> ActivePanelIdentity? {
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         let duo = isDuo(simulator)
+        guard duo || runtimeHasMeasuredRoute(majorVersion: simulator.osVersion.version.majorVersion) else { return nil }
         guard hasProfileMetadata(simulator) else {
             guard !duo else { throw SelectedHIDFailure.invalid("Duo device type metadata is unavailable") }
             return nil
