@@ -627,8 +627,11 @@ function remove_xcode_rpaths() {
     return
   fi
 
+  # Toolchain rpaths name the build machine: Xcode itself, or a toolchain such as the
+  # Metal toolchain that Xcode 27 mounts from a cryptex. otool lists each rpath once per
+  # architecture slice, and one delete removes it from every slice, so dedupe the list.
   local rpaths
-  rpaths=$(otool -l "$target" 2>/dev/null | awk 'BEGIN{r=0} /LC_RPATH/{r=1} r==1 && /path/{print $2; r=0}' | grep "/Applications/Xcode" || true)
+  rpaths=$(otool -l "$target" 2>/dev/null | awk 'BEGIN{r=0} /LC_RPATH/{r=1} r==1 && /path/{print $2; r=0}' | grep -E '^/Applications/Xcode|\.xctoolchain/' | sort -u || true)
   if [[ -n "$rpaths" ]]; then
     while IFS= read -r path; do
       install_name_tool -delete_rpath "$path" "$target" || true
