@@ -61,6 +61,19 @@ jobs:
             --run-number "${{ github.run_number }}" \
             >> "$GITHUB_OUTPUT"
 
+      - name: Check the changelog has this release's section
+        if: steps.context.outputs.notesMode == 'changelog'
+        run: |
+          # A production release needs its own CHANGELOG section. Without one the release
+          # notes would fall back to an older release's, so stop before building anything.
+          node scripts/generate-github-release-notes.mjs \
+            --channel "${{ steps.context.outputs.channel }}" \
+            --version "${{ steps.context.outputs.version }}" \
+            --fallback none \
+            --ref "${{ inputs.requested_ref }}" \
+            --commit-sha "${{ steps.context.outputs.commitSha }}" \
+            --out "$RUNNER_TEMP/release-notes-check.md"
+
       - name: Resolve IDBKit cache inputs
         id: idb_inputs
         run: |
@@ -352,7 +365,7 @@ jobs:
           node scripts/generate-github-release-notes.mjs \
             --channel "${{ steps.context.outputs.channel }}" \
             --version "${{ steps.context.outputs.version }}" \
-            --fallback newest-older \
+            --fallback "${{ steps.context.outputs.notesMode == 'changelog' && 'none' || 'newest-older' }}" \
             --ref "${{ inputs.requested_ref }}" \
             --commit-sha "${{ steps.context.outputs.commitSha }}" \
             --out github-release-body.md
