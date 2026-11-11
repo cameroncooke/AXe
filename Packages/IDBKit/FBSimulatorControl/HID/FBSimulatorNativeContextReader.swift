@@ -92,7 +92,7 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     let catalog = try Self.hostCatalog(await FBSimulatorDisplayDiscovery.displays(for: simulator),
       profileIDs: capability.integratedDigitizerIDs)
     guard let selected = catalog.first(where: { $0.screenID == screenID }),
-          selected.uniqueID.flatMap(UUID.init(uuidString:)) == screenUniqueID else {
+          selected.panelUUID == screenUniqueID else {
       throw FBSimulatorContextError.unavailable("Original cleanup target ID/UUID is absent")
     }
     let bootAfter = try Self.bootIdentity(simulator.udid)
@@ -119,7 +119,7 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     let beforeCatalog = try Self.hostCatalog(
       await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)
     guard let before = beforeCatalog.first(where: { $0.screenID == screenID }),
-          before.uniqueID.flatMap(UUID.init(uuidString:)) == screenUniqueID else {
+          before.panelUUID == screenUniqueID else {
       throw FBSimulatorContextError.unavailable("Requested selected pair is absent from the host catalog")
     }
     let hingeBefore = capability.hinge == .supported ? try await FBSimulatorHingeReader.read(for: simulator) : nil
@@ -231,8 +231,12 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     }
     let catalog = values.filter { profileIDs.contains($0.screenID) }.sorted { $0.screenID < $1.screenID }
     let pairs = catalog.compactMap { value -> ActivePanelIdentity? in
-      guard let uuid = value.uniqueID.flatMap(UUID.init(uuidString:)) else { return nil }
+      guard let uuid = value.panelUUID else { return nil }
       return ActivePanelIdentity(displayID: value.screenID, uniqueID: uuid)
+    }
+    // Only a single-panel profile can have the legacy display.
+    guard profileIDs.count == 1 || !catalog.contains(where: { $0.uniqueID == FBSimulatorLegacyDisplay.hostName }) else {
+      throw FBSimulatorContextError.unavailable("Host integrated catalog names a legacy display in a multi-panel profile")
     }
     guard catalog.count == profileIDs.count, pairs.count == catalog.count,
           Set(pairs.map(\.uniqueID)).count == pairs.count,
@@ -251,7 +255,7 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     }
     var pairs: [ActivePanelIdentity] = []
     for panel in host {
-      guard let uuid = panel.uniqueID.flatMap(UUID.init(uuidString:)),
+      guard let uuid = panel.panelUUID,
             let row = guest.first(where: { $0.displayId == panel.screenID }),
             UUID(uuidString: row.uniqueId) == uuid,
             row.bounds.x == 0, row.bounds.y == 0,
@@ -293,7 +297,7 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
   }
 
   private static func sameDisplay(_ a: FBSimulatorDisplayInfo, _ b: FBSimulatorDisplayInfo) -> Bool {
-    a.screenID == b.screenID && a.uniqueID.flatMap(UUID.init(uuidString:)) == b.uniqueID.flatMap(UUID.init(uuidString:)) && a.nativePixelSize == b.nativePixelSize &&
+    a.screenID == b.screenID && a.panelUUID == b.panelUUID && a.nativePixelSize == b.nativePixelSize &&
       a.scale == b.scale && a.rawUIOrientation == b.rawUIOrientation && a.rawPowerState == b.rawPowerState &&
       a.rawBacklightState == b.rawBacklightState && a.rawScreenType == b.rawScreenType
   }

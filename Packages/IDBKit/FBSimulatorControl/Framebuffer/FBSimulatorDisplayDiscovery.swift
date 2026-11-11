@@ -24,6 +24,25 @@ public struct FBSimulatorDisplayInfo: Sendable {
   public let backlightBrightnessFactor: Double?
 }
 
+/// A runtime before iOS 27 has one built-in display. The host names it "PurpleMain" where later
+/// runtimes give every display a UUID, and the guest display report gives it no uniqueId at all
+/// (measured on iOS 26.5 with Xcode 27 and CoreDevice 689.2). Both sides take this fixed UUID for
+/// that one display, so the same identity checks apply to it as to any other panel.
+public enum FBSimulatorLegacyDisplay {
+  public static let hostName = "PurpleMain"
+  public static let uuid = UUID(uuidString: "5E1F0B6A-26D5-4C0E-9A7B-3D2C1F0E9A26")!
+  /// The guest report has no backlight state to give for this display; "unknown" is all it says.
+  public static let backlightState = "notReported"
+}
+
+extension FBSimulatorDisplayInfo {
+  /// The display's UUID, or the fixed one for the legacy built-in display.
+  var panelUUID: UUID? {
+    guard let uniqueID else { return nil }
+    return UUID(uuidString: uniqueID) ?? (uniqueID == FBSimulatorLegacyDisplay.hostName ? FBSimulatorLegacyDisplay.uuid : nil)
+  }
+}
+
 /// Reads fresh runtime data. It does not infer a panel from its ID, size or hinge angle.
 public enum FBSimulatorDisplayDiscovery {
   public static func displays(for simulator: FBSimulator) async throws -> [FBSimulatorDisplayInfo] {

@@ -107,7 +107,7 @@ public actor FBSimulatorHIDSession {
       do { display = try await FBSimulatorDisplayDiscovery.display(for: simulator, screenID: observation.screenID) }
       catch is CancellationError { throw CancellationError() }
       catch { throw FBSimulatorHIDSessionError.invalidObservation("Runtime display lookup failed: \(error)") }
-      guard display.uniqueID == observation.screenUniqueID,
+      guard display.panelUUID?.uuidString == observation.screenUniqueID,
             display.nativePixelSize == observation.displayContext.nativePixelSize,
             display.scale == observation.displayContext.scale,
             UInt64(display.screenID) == observation.displayContext.hidTarget else {

@@ -463,7 +463,7 @@ actor FBSimulatorAXWorker {
     guard simulator.udid == observation.simulatorUDID else { throw FBSimulatorAXSnapshotError.wrongSimulator }
     try FBSimulatorAXSnapshot.requireSame(observation, try await provider.observation())
     let display = try await FBSimulatorDisplayDiscovery.display(for: simulator, screenID: observation.screenID)
-    guard display.uniqueID == observation.screenUniqueID,
+    guard display.panelUUID?.uuidString == observation.screenUniqueID,
           display.nativePixelSize == observation.displayContext.nativePixelSize,
           display.scale == observation.displayContext.scale else {
       throw FBSimulatorAXSnapshotError.invalidSelection
