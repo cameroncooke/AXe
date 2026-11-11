@@ -12,13 +12,13 @@ extension FBSimulatorHingeDisplayReadiness {
     let catalog = try FBSimulatorNativeContextReader.hostCatalog(
       await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)
     guard let panel = catalog.first(where: { $0.screenID == expected.screenID }),
-          panel.uniqueID.flatMap(UUID.init(uuidString:)) == expected.screenUUID else {
+          panel.panelUUID == expected.screenUUID else {
       throw FBSimulatorHingeReadinessError(.invalidRequest, "Expected display ID/UUID is absent from the verified host catalog")
     }
     _ = try NativeHingeReadinessBackend.validate(simulator, expectedBoot: expectedBootIdentity)
     try Task.checkCancellation()
     let identities = catalog.compactMap { panel -> ActivePanelIdentity? in
-      guard let uuid = panel.uniqueID.flatMap(UUID.init(uuidString:)) else { return nil }
+      guard let uuid = panel.panelUUID else { return nil }
       return ActivePanelIdentity(displayID: panel.screenID, uniqueID: uuid)
     }
     return FBSimulatorHingeDisplayReadiness(expected: expected, expectedBoot: expectedBootIdentity,
@@ -67,7 +67,7 @@ actor NativeHingeReadinessBackend: FBSimulatorHingeReadinessBackend {
         let refreshed = try FBSimulatorNativeContextReader.hostCatalog(
           await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)
         let identities = refreshed.compactMap { panel -> ActivePanelIdentity? in
-          guard let uuid = panel.uniqueID.flatMap(UUID.init(uuidString:)) else { return nil }
+          guard let uuid = panel.panelUUID else { return nil }
           return ActivePanelIdentity(displayID: panel.screenID, uniqueID: uuid)
         }
         guard identities == catalog else {

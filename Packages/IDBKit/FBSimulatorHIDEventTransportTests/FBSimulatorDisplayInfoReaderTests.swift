@@ -65,6 +65,33 @@ struct FBSimulatorDisplayInfoReaderTests {
     #expect(duoDecoded.allSatisfy { $0.backlightState == nil })
   }
 
+  /// iOS 26.5 with CoreDevice 689.2: no row has a uniqueId, and its one built-in display reports "unknown".
+  @Test func replyWithoutUniqueIDsGivesTheOneBuiltInDisplayTheLegacyIdentity() throws {
+    func withoutID(_ row: xpc_object_t) -> xpc_object_t {
+      let copy = xpc_dictionary_create(nil, nil, 0)
+      xpc_dictionary_apply(row) { key, value in
+        if String(cString: key) != "uniqueId" { xpc_dictionary_set_value(copy, key, value) }
+        return true
+      }
+      return copy
+    }
+    let rows = try FBSimulatorDisplayInfoReader.decode(
+      reply(([rigidRow(backlight: "unknown")] + virtualRows(startingAt: 2)).map(withoutID), deviceBacklight: "off"))
+    #expect(rows.first?.uniqueID == FBSimulatorLegacyDisplay.uuid)
+    #expect(rows.first?.backlightState == FBSimulatorLegacyDisplay.backlightState)
+    #expect(Set(rows.map(\.uniqueID)).count == rows.count)
+    let snapshot = try discover(rows, catalog: [entry(1, FBSimulatorLegacyDisplay.uuid, 1206, 2622)]).snapshot
+    #expect(snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
+    #expect(snapshot.activePanel.identity == .init(displayID: 1, uniqueID: FBSimulatorLegacyDisplay.uuid))
+
+    // Only a whole report without identities is a legacy one, and only with one built-in display.
+    let mixed = reply([rigidRow()] + virtualRows(startingAt: 2).map(withoutID))
+    let twoPanels = reply(duoRows(coverActive: true).map(withoutID))
+    for value in [mixed, twoPanels] {
+      #expect(throws: (any Error).self) { _ = try FBSimulatorDisplayInfoReader.decode(value) }
+    }
+  }
+
   @Test func duoReplyFollowsTheExplicitActiveFlagAndPerPanelRotation() throws {
     let rows = try FBSimulatorDisplayInfoReader.decode(reply(duoRows(coverActive: true)))
     let readback = try discover(rows, catalog: duoCatalog)

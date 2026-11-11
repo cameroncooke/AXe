@@ -290,6 +290,10 @@ public enum FBSimulatorDisplayInfoReader {
     }.count
     let deviceBacklight = integratedCount == 1
       ? xpc_dictionary_get_string(output, "backlightState").map { String(cString: $0) } : nil
+    let legacyReport = integratedCount == 1 && (0..<count).allSatisfy { index in
+      let row = xpc_array_get_value(displays, index)
+      return xpc_get_type(row) == XPC_TYPE_DICTIONARY && xpc_dictionary_get_value(row, "uniqueId") == nil
+    }
     return try (0..<count).map { index in
       let row = xpc_array_get_value(displays, index)
       guard xpc_get_type(row) == XPC_TYPE_DICTIONARY else { throw failure("Display row is not a dictionary") }
@@ -300,7 +304,13 @@ public enum FBSimulatorDisplayInfoReader {
       guard xpc_array_get_count(bounds) == 2 else { throw failure("Display bounds are malformed") }
       let origin = try pair(xpc_array_get_value(bounds, 0))
       let size = try pair(xpc_array_get_value(bounds, 1))
-      guard let uniqueID = UUID(uuidString: try string(row, "uniqueId")),
+      let integrated = xpc_dictionary_get_value(kind, "integrated") != nil
+      // A runtime before iOS 27 reports no uniqueId on any row. Its one built-in display takes the
+      // legacy UUID; an external row takes one that matches nothing, as it is never an input target.
+      let hasUniqueID = xpc_dictionary_get_value(row, "uniqueId") != nil
+      let legacy = integrated && legacyReport
+      let placeholder: UUID? = legacy ? FBSimulatorLegacyDisplay.uuid : (!integrated && legacyReport ? UUID() : nil)
+      guard let uniqueID = hasUniqueID ? UUID(uuidString: try string(row, "uniqueId")) : placeholder,
             let current = ActivePanelRotation(rawValue: try string(row, "currentOrientation")),
             let nativeOrientation = ActivePanelRotation(rawValue: try string(row, "nativeOrientation")) else {
         throw failure("Display row identity or orientation is malformed")
@@ -309,7 +319,6 @@ public enum FBSimulatorDisplayInfoReader {
       guard displayID <= UInt64(UInt32.max) else { throw failure("Display ID is out of range") }
       let active = xpc_dictionary_get_value(row, "active")
       if let active, xpc_get_type(active) != XPC_TYPE_BOOL { throw failure("Display active flag is not a Bool") }
-      let integrated = xpc_dictionary_get_value(kind, "integrated") != nil
       let rowBacklight = xpc_dictionary_get_string(row, "backlightState").map { String(cString: $0) }
       return FBSimulatorDisplayInfoRow(displayID: UInt32(displayID), uniqueID: uniqueID,
         integrated: integrated,
@@ -319,7 +328,8 @@ public enum FBSimulatorDisplayInfoReader {
         nativeWidth: native.0, nativeHeight: native.1, boundsX: origin.0, boundsY: origin.1,
         boundsWidth: size.0, boundsHeight: size.1,
         pointScale: Int(xpc_int64_get_value(try child(row, "pointScale", XPC_TYPE_INT64))),
-        backlightState: rowBacklight ?? (integrated ? deviceBacklight : nil))
+        backlightState: legacy ? FBSimulatorLegacyDisplay.backlightState
+          : rowBacklight ?? (integrated ? deviceBacklight : nil))
     }
   }
 

@@ -21,7 +21,7 @@ public enum ActivePanelReader {
         let before = try FBSimulatorNativeContextReader.hostCatalog(
             await FBSimulatorDisplayDiscovery.displays(for: simulator), profileIDs: capability.integratedDigitizerIDs)
         let catalog = try before.map { display -> ActivePanelCatalogEntry in
-            guard let uniqueID = display.uniqueID.flatMap(UUID.init(uuidString:)) else {
+            guard let uniqueID = display.panelUUID else {
                 throw ActivePanelValidationError.invalidExpectedCatalog
             }
             return ActivePanelCatalogEntry(identity: ActivePanelIdentity(displayID: display.screenID, uniqueID: uniqueID),
