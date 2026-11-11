@@ -30,6 +30,9 @@ jobs:
       - name: Run script checks
         run: python3 -I -m unittest discover -s scripts/tests
 
+      - name: Run benchmark checks (offline; no simulator or model)
+        run: python3 -I -m unittest discover -s benchmarks -p 'test_*.py'
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:

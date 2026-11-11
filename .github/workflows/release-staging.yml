@@ -1,10 +1,11 @@
 name: Release Staging
 
+# Pull requests run only the fast checks in test.yml (and release-dry-run.yml when release
+# scripts change). The full release build runs on main and on request.
 on:
   push:
     branches:
       - main
-  pull_request:
   workflow_dispatch:
     inputs:
       ref:
@@ -26,14 +27,14 @@ permissions:
 
 jobs:
   staging-validate:
-    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'validate')
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'validate'
     permissions:
       contents: read
       actions: read
     uses: ./.github/workflows/release-shared.yml
     with:
       mode: staging-validate
-      requested_ref: ${{ github.event_name == 'pull_request' && github.sha || github.event.inputs.ref }}
+      requested_ref: ${{ github.event.inputs.ref }}
 
   staging-publish:
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'publish')
