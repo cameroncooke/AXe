@@ -87,7 +87,7 @@ measured job. The suite continues other tools when a case cannot start.
 | --- | --- |
 | `run`, `cli.py`, `benchmark.py` | Stable commands and serial runner |
 | `scoring.py`, `transcript.py` | Task grading and returned-token measurements |
-| `adapters.py`, `suite.py`, `guides/` | Equivalent tool modes and model instructions; AXe runs use the shipped skill in `Skills/CLI/axe/` |
+| `adapters.py`, `suite.py` | Tool identity, permissions and the shared run instructions; each tool's official skill is copied in unedited |
 | `tasks/`, `shared-rules.md` | Original task requirements and allowed actions |
 | `preparation.py`, `environment.py`, `monitor.py`, `processes.py` | Starting-state checks, identity, resource samples and cleanup |
 | `baselines.py`, `baselines.json` | Explicit best-baseline selection and accepted results |
@@ -146,14 +146,26 @@ main/detail facts. Contacts requires one exact saved contact. Reminders requires
 one list with three exact reminders and their required completion states.
 Original save and read-only verification rules remain unchanged.
 
-AXe uses agent reading/navigation/full views. FlowDeck uses compact interactive
-JSON and a full view when needed. RocketSim uses its agent modes. AXe runs load
-the skill that `axe init` installs, `Skills/CLI/axe/` with its references, so the
-benchmark measures what users get; the run prompt tells the agent to run the
-assigned binary where the skill writes `axe`. FlowDeck and RocketSim keep generic
-guides in `guides/`. Skills and guides contain tool instructions, not app routes
-or answers. Reading the installed skill's files counts as a help call. No target
-app changes or app-specific production workarounds are part of this suite.
+Every tool runs with its own official agent skill, copied unedited, so the
+benchmark measures what each vendor tells agents to do:
+
+- AXe: the skill `axe init` installs, `Skills/CLI/axe/` with its references.
+- FlowDeck: the pack `flowdeck ai install-skill --agent claude` installs for the
+  installed FlowDeck version, fetched once into `.cache/skills/`.
+- RocketSim: the skill in its app bundle,
+  `RocketSim.app/Contents/Resources/Agent-Skill/rocketsim/`.
+
+The harness adds no tool-specific advice. Every run gets the same instructions,
+differing only in the tool's path and name: the benchmark measures UI interaction
+only, the app is already running, run the assigned binary where the skill writes
+the tool's name, and target the benchmark simulator. Each report records the
+skill's source path and a hash of the copied tree (`tool.guideSHA256`). Reading
+the installed skill's files counts as a help call. No target app changes or
+app-specific production workarounds are part of this suite.
+
+FlowDeck's official skill and its `batch --examples` include an example flow
+close to the Weather task (the settings button, °C, Reduce transparency, London).
+Results published from this suite disclose this.
 
 Each result records tool version, binary/runtime hashes, actual model and Claude
 version, task/app/guide/runner/grader hashes, Xcode, host OS, device runtime and
@@ -161,9 +173,12 @@ screen geometry. Matching conditions are required for ranked comparisons. Tool
 versions can differ; changes to the task, runner, grader or environment create a
 separate comparison group.
 
-Build, installation and launch calls required by the task remain inside its
-clock. Skill activation and approved preparation remain outside it. Each Weather
-run uses fresh DerivedData. Model choices vary; use repeated runs before claiming
+The harness builds and installs Weather, and launches the scenario's app, before
+the measured task; the clock covers UI interaction only, for every tool. A Weather
+build uses `.cache/weather-derived-data`. Skill activation and approved
+preparation remain outside the clock. Reports carry the setup policy
+`harness-build-install-launch-v1;official-tool-skill-v1`, so they are not ranked
+against earlier reports. Model choices vary; use repeated runs before claiming
 a stable speed improvement. This suite uses its original tasks and model runner, not a new XcodeBuildMCP tool
 comparison.
 

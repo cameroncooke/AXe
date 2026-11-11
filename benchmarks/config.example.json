@@ -1,7 +1,7 @@
 {
   "developerDir": "/Applications/Xcode.app/Contents/Developer",
   "simulator": "00000000-0000-0000-0000-000000000000",
-  "model": "claude-opus-4-7",
+  "model": "claude-sonnet-5-5",
   "tools": {
     "flowdeck": {
       "executable": "/absolute/path/to/flowdeck"

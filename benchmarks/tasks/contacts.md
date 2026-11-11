@@ -1,7 +1,7 @@
 # Contacts UI benchmark
 
 Task:
-1. Launch Contacts on the configured simulator.
+1. Contacts is already running on the configured simulator.
 2. Create exactly one new contact with these details:
    - First name: `MCP`
    - Last name: `Contact Benchmark`

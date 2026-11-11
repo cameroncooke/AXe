@@ -1,7 +1,7 @@
 # Reminders UI benchmark
 
 Task:
-1. Launch Reminders on the configured simulator.
+1. Reminders is already running on the configured simulator.
 2. Create a new list named `MCP Benchmark List`.
 3. Add exactly these reminders to `MCP Benchmark List`:
    - `Buy milk benchmark`

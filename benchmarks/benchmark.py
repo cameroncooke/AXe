@@ -65,8 +65,9 @@ def inputs(config):
             'src', 'benchmarks/claude-ui/parse_claude_conversation.py',
             'package.json', 'package-lock.json', 'provenance.json', 'verify-provenance.mjs']),
         'scorerSHA256': tree_digest(HERE, ['scoring.py', 'transcript.py']),
-        # The guide set is what agents receive: competitor guides and the shipped AXe skill.
-        'guideSetSHA256': tree_digest(HERE.parent, ['benchmarks/guides', 'Skills/CLI/axe']),
+        # AXe's official skill is in this repository. FlowDeck's and RocketSim's come with the
+        # installed tool, so each report records the hash of the skill tree it actually received.
+        'guideSetSHA256': tree_digest(HERE.parent, ['Skills/CLI/axe']),
         'sharedRulesSHA256': digest(HERE / 'shared-rules.md'),
         'runnerSHA256': tree_digest(HERE, ['benchmark.py', 'suite.py', 'preparation.py',
                                          'environment.py', 'monitor.py', 'processes.py', 'adapters.py']),
@@ -195,8 +196,59 @@ def reset_reminders_review_gate(config, env, output, now=None):
 
 
 def setup_policy(scenario):
-    policy = 'warm-device;normal-termination;exact-owned-record-cleanup;fresh-weather-build-in-clock-v1'
+    policy = ('warm-device;normal-termination;exact-owned-record-cleanup;harness-build-install-launch-v1;'
+              'official-tool-skill-v1')
     return policy + (';reminders-review-gate-closed-v1' if scenario == 'reminders' else '')
+
+
+def official_skill(config, name, identity, env):
+    """The tool's own agent skill, unedited, as its vendor ships it.
+
+    AXe: the skill `axe init` installs (Skills/CLI/axe). RocketSim: the skill in its app bundle.
+    FlowDeck: the pack `flowdeck ai install-skill` installs, fetched once per FlowDeck version into
+    the ignored cache."""
+    if name == 'axe':
+        return HERE.parent / 'Skills' / 'CLI' / 'axe'
+    if name == 'rocketsim':
+        skill = Path(config['tools']['rocketsim']['app']) / 'Contents/Resources/Agent-Skill/rocketsim'
+        if not (skill / 'SKILL.md').is_file():
+            raise RuntimeError('RocketSim does not ship an agent skill at ' + str(skill))
+        return skill
+    version = str(identity.get('version') or '')
+    if not re.fullmatch(r'[0-9][0-9A-Za-z.\-]*', version):
+        raise RuntimeError('FlowDeck reported no usable version for its skill pack')
+    cache = HERE / '.cache' / 'skills' / ('flowdeck-' + version)
+    skill = cache / '.claude' / 'skills' / 'flowdeck'
+    if not (skill / 'SKILL.md').is_file():
+        cache.mkdir(parents=True, exist_ok=True)
+        argv = [identity['executable'], 'ai', 'install-skill', '--agent', 'claude', '--mode', 'project']
+        result = subprocess.run(argv, cwd=cache, env=env, capture_output=True, text=True, timeout=300)
+        if result.returncode or not (skill / 'SKILL.md').is_file():
+            raise RuntimeError('FlowDeck did not install its skill pack: ' + (result.stderr or result.stdout)[-500:])
+    header = (skill / 'SKILL.md').read_text(encoding='utf-8')[:2000]
+    if re.search(r'^version:\s*"?' + re.escape(version) + r'"?\s*$', header, re.M) is None:
+        raise RuntimeError('The cached FlowDeck skill pack is not version ' + version)
+    return skill
+
+
+def install_weather(config, app, env, output):
+    """Build and install Weather before the measured task, outside the benchmark clock."""
+    derived = HERE / '.cache' / 'weather-derived-data'
+    xcodebuild = str(Path(config['developerDir']) / 'usr/bin/xcodebuild')
+    build = [xcodebuild, '-project', app['project'], '-scheme', app['scheme'], '-configuration', 'Debug',
+             '-sdk', 'iphonesimulator', '-destination', 'id=' + config['simulator'],
+             '-derivedDataPath', str(derived), 'build']
+    with (output / 'weather-build.log').open('w', encoding='utf-8') as log:
+        result = subprocess.run(build, env=env, stdout=log, stderr=subprocess.STDOUT, text=True, timeout=1800)
+    built = derived / 'Build/Products/Debug-iphonesimulator/Weather.app'
+    if result.returncode or not built.is_dir():
+        raise RuntimeError('The Weather build failed; see weather-build.log')
+    install = ['/usr/bin/xcrun', 'simctl', 'install', config['simulator'], str(built)]
+    installed = subprocess.run(install, env=env, capture_output=True, text=True, timeout=120)
+    save(output / 'weather-install.json', {'build': build, 'buildExitCode': result.returncode, 'install': install,
+                                           'installExitCode': installed.returncode, 'stderr': installed.stderr[-1000:]})
+    if installed.returncode:
+        raise RuntimeError('Installing Weather failed: ' + installed.stderr[-500:])
 
 
 def contract(config, scenario, host, app, hashes):
@@ -260,10 +312,15 @@ def run_case(config, scenario, name, output, env):
         lifecycle(config, app, env, output / 'terminate-ready.json')
         if scenario == 'reminders':
             result['reviewGate'] = reset_reminders_review_gate(config, env, output / 'review-gate.json')
-        suite =make_suite(config, scenario, name, result['tool'], app, output)
+        if scenario == 'weather':
+            install_weather(config, app, env, output)
+        skill_source = official_skill(config, name, result['tool'], env)
+        suite = make_suite(config, scenario, name, result['tool'], app, output, skill_source=skill_source)
         skill_dir = output / 'skills' / skill_name(name)
-        result['tool']['guideSHA256'] = (tree_digest(skill_dir) if name == 'axe'
-                                         else digest(skill_dir / 'SKILL.md'))
+        result['tool']['skillSource'] = str(skill_source)
+        result['tool']['guideSHA256'] = tree_digest(skill_dir)
+        # The app is running before the clock starts; the measured task is UI interaction only.
+        result['taskLaunch'] = {'pid': lifecycle(config, app, env, output / 'launch-task.json', launch=True)}
         tsx = Path(config['xcodebuildmcp']) / 'node_modules/.bin/tsx'
         if not tsx.is_file():
             raise RuntimeError('Run ./benchmarks/run setup to install the local benchmark dependencies')
@@ -284,7 +341,8 @@ def run_case(config, scenario, name, output, env):
         score = score_run(evidence, scenario, name,
                           expected_executable=result['tool']['executable'], expected_udid=config['simulator'],
                           expected_setup={**app, 'developerDir': config['developerDir'],
-                                          'udid': config['simulator'], 'runDirectory': str(runs[0].parent)})
+                                          'udid': config['simulator'], 'runDirectory': str(runs[0].parent),
+                                          'launchedByHarness': True})
         result.update({key: score[key] for key in ('status', 'correctness', 'metrics', 'warnings', 'transcriptSHA256')})
         result['observedRuntime'] = score['observedRuntime']
         result['contract']['modelVersion'] = score['observedRuntime'].get('model') or 'unobserved'

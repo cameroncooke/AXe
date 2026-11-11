@@ -77,7 +77,9 @@ def rescore(source_report, output, evidence_directory=None):
                       expected_executable=original['tool']['executable'],
                       expected_udid=environment['udid'],
                       expected_setup={**original['app'], 'developerDir': environment['developerDir'],
-                                      'udid': environment['udid'], 'runDirectory': archive['source']})
+                                      'udid': environment['udid'], 'runDirectory': archive['source'],
+                                      'launchedByHarness': 'harness-build-install-launch' in
+                                      original.get('contract', {}).get('setupPolicy', '')})
     if tree_digest(HERE, ['scoring.py', 'transcript.py']) != scorer_sha:
         raise ValueError('Scorer changed during the offline check')
     if digest(source) != original_sha or verify_evidence(evidence, original.get('transcriptSHA256'))[1] != archive_sha:

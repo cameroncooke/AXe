@@ -35,6 +35,7 @@ class Action:
     label: str = ""
     value: str = ""
     executed: bool | None = None
+    role: str = ""
 
 
 @dataclass
@@ -63,8 +64,8 @@ class Call:
     process_completed: bool | None = None
 
 
-READS = {"describe-ui", "elements", "screen", "screenshot", "get-value", "inspect", "find", "status", "list-simulators", "wait", "focused", "accessibility-audit"}
-INPUTS = {"tap", "type", "swipe", "drag", "gesture", "key", "key-combo", "key-sequence", "touch", "button", "slider", "scroll", "press", "home", "activate", "long-press"}
+READS = {"describe-ui", "elements", "screen", "screenshot", "snapshot", "get-value", "inspect", "find", "status", "list-simulators", "wait", "focused", "accessibility-audit", "assert", "session"}
+INPUTS = {"tap", "type", "swipe", "drag", "gesture", "key", "key-combo", "key-sequence", "touch", "button", "slider", "scroll", "press", "home", "activate", "long-press", "double-tap", "back", "hide-keyboard", "erase", "pinch", "rotate", "focus", "biometric"}
 VALUE_FLAGS = {"--udid", "--simulator", "-S", "--snapshot-id", "--ref", "--id", "--focus-id", "--label", "--screen", "--agent-mode", "--view", "--output", "--expected-pid", "--row-offset", "--point", "--geometry", "--duration", "--direction", "--distance", "--element-type", "--screen-id", "--screen-uuid", "--element", "--text"}
 
 
@@ -193,11 +194,20 @@ def positional(args):
     return result
 
 
+def step_target(step):
+    """FlowDeck batch steps name a control as `target`, an ID when `by_id` is set."""
+    target = step.get("target")
+    if not isinstance(target, str) or not target:
+        return None, None
+    return (target, None) if step.get("by_id") else (None, target)
+
+
 def resolve(args, previous, kind, step=None):
     step = step or {}
+    by_id, by_label = step_target(step)
     reference = step.get("ref") or option(args, "--ref")
-    identifier = step.get("id") or option(args, "--id") or option(args, "--focus-id")
-    label = step.get("label") or option(args, "--label")
+    identifier = step.get("id") or by_id or option(args, "--id") or option(args, "--focus-id")
+    label = step.get("label") or by_label or option(args, "--label")
     if reference or identifier:
         matches = [n for n in previous if n.ref == str(reference or identifier) or (identifier and n.identifier == identifier)]
         if len(matches) == 1:
@@ -206,6 +216,29 @@ def resolve(args, previous, kind, step=None):
         return str(label)
     pos = positional(args)
     return pos[0] if pos and kind in ("tap", "press") else ""
+
+
+def resolve_role(args, previous, step=None):
+    """The role of the snapshot node a reference or ID names, when exactly one matches."""
+    step = step or {}
+    by_id, _ = step_target(step)
+    reference = step.get("ref") or option(args, "--ref")
+    identifier = step.get("id") or by_id or option(args, "--id") or option(args, "--focus-id")
+    if reference or identifier:
+        matches = [n for n in previous if n.ref == str(reference or identifier) or (identifier and n.identifier == identifier)]
+        if len(matches) == 1:
+            return matches[0].role
+    return ""
+
+
+def tool_reported_target(text):
+    """The control a tool says it acted on, e.g. FlowDeck's "Tapped ref e1: San Francisco".
+
+    The tool's own receipt outranks resolving a ref against an earlier capture, which can use
+    a different numbering (FlowDeck's interactive-elements view)."""
+    plain = re.sub(r"\x1b\[[0-9;]*m", "", text or "")
+    match = re.search(r"Tapped (?:ref|id|element) [^:\n]+: ([^\n]+)", plain)
+    return match.group(1).strip() if match else None
 
 
 def action_receipt(value, error):
@@ -262,11 +295,18 @@ def classify(call, tool, previous, batch_files=None, run_directory=None):
         args = list(lexer)
     except ValueError:
         return
-    if run_directory and len(args) > 3 and Path(args[0]).name == "rocketsim" and args[1] == "screenshot" and args[-2] == ">":
+    if (run_directory and len(args) > 3 and Path(args[0]).name in ("axe", "flowdeck", "rocketsim")
+            and args[-2] == ">" and any(arg in READS for arg in args[1:-2])):
+        # A public read written once to a new file, then Read, is the same output; PNG for image
+        # commands, JSON or text for tree reads. The run directory, or the system temporary
+        # directory that a tool's own reference uses (RocketSim writes /tmp/rs-snap.json).
         try:
             target = Path(args[-1]).resolve()
-            target.relative_to(Path(run_directory).resolve())
-            if target.suffix.lower() == ".png":
+            if not any(target.is_relative_to(root) for root in
+                       (Path(run_directory).resolve(), Path("/tmp").resolve(), Path("/private/tmp"))):
+                raise ValueError("Redirect outside the run and temporary directories")
+            image = any(arg in ("screenshot", "snapshot") for arg in args[1:-2])
+            if target.suffix.lower() in ((".png",) if image else (".json", ".txt")):
                 call.screenshot_output = str(target)
                 args = args[:-2]
         except ValueError:
@@ -296,7 +336,8 @@ def classify(call, tool, previous, batch_files=None, run_directory=None):
         return
     if exe not in ("axe", "flowdeck", "rocketsim") or exe != tool:
         return
-    if "--help" in args or "-h" in args or "--version" in args or (tool == "flowdeck" and ("--examples" in args or "-e" in args)):
+    if ("--help" in args or "-h" in args or "--version" in args or (len(args) > 1 and args[1] == "help")
+            or (tool == "flowdeck" and ("--examples" in args or "-e" in args))):
         call.category = "help"
         return
     commands = READS | INPUTS | {"batch", "do"}
@@ -354,20 +395,34 @@ def classify(call, tool, previous, batch_files=None, run_directory=None):
             batch = value.get("data", {}).get("batch") or {}
             completed = batch.get("completedSteps")
             receipts = batch.get("steps", [])
+        elif tool == "flowdeck" and isinstance(value, dict) and isinstance(value.get("steps"), list):
+            # FlowDeck reports each step's own success; a missing entry proves nothing either way.
+            outcome = [r.get("success") if isinstance(r, dict) else None for r in value["steps"]]
         for index, step in enumerate(steps):
             if not isinstance(step, dict):
                 call.actions.append(Action("unknown", executed=None))
                 continue
             kind = str(step.get("action", "unknown"))
             sent = index < completed if isinstance(completed, int) else executed
+            if tool == "flowdeck" and isinstance(value, dict) and isinstance(value.get("steps"), list):
+                flag = outcome[index] if index < len(outcome) else None
+                sent = flag if isinstance(flag, bool) else None
             receipt = next((r.get("receipt") for r in receipts if r.get("index") == index + 1), None)
             if isinstance(receipt, dict) and receipt.get("enqueuedEventCount", 0) > 0:
                 sent = True
-            call.actions.append(Action(kind, resolve([], previous, kind, step), str(step.get("text", "")), sent))
+            call.actions.append(Action(kind, resolve([], previous, kind, step), str(step.get("text", "")), sent,
+                                       resolve_role([], previous, step)))
     else:
         pos = positional(tail)
         typed = option(tail, "--text") or (pos[0] if verb == "type" and pos else "")
-        call.actions.append(Action("tap" if verb == "activate" else verb, resolve(tail, previous, verb), typed, executed))
+        reported = tool_reported_target(call.text) if tool == "flowdeck" and not call.error else None
+        role = resolve_role(tail, previous)
+        if reported is not None:
+            # Use the node the tool reports, and its role when the earlier capture has a unique match.
+            named = [n for n in previous if n.label == reported]
+            role = named[0].role if len(named) == 1 else ""
+        call.actions.append(Action("tap" if verb == "activate" else verb, reported or resolve(tail, previous, verb), typed,
+                                   executed, role))
 
 
 def returned_paths(call):
@@ -379,7 +434,7 @@ def returned_paths(call):
     value = json_output(call.text)
     screenshot = "screenshot" in call.argv
     plain = re.sub(r"\x1b\[[0-9;]*m", "", call.text)
-    if not call.error and (screenshot or "--screenshot" in call.argv) and plain.startswith("✓ Screen captured\n"):
+    if not call.error and (screenshot or "--screenshot" in call.argv) and plain.startswith(("✓ Screen captured\n", "✓ Batch")):
         for artifact in re.findall(r"^\s*Screenshot:\s*(/[^\n]+)\s*$", plain, re.M):
             if Path(artifact.strip()).suffix.lower() == ".png":
                 paths.add(artifact.strip())
@@ -395,7 +450,9 @@ def returned_paths(call):
             for key, child in item.items():
                 if key == "screenshot" and isinstance(child, dict):
                     walk(child, screenshot_context=child.get("captured", True) is True)
-                elif key in ("screenshot_path", "screenshotPath", "output_file", "outputFile") or ((screenshot or screenshot_context) and key in ("path", "file", "filePath", "file_path")):
+                elif key in ("screenshot_path", "screenshotPath", "output_file", "outputFile", "latest_tree",
+                             "latest_interactive_tree", "latest_screenshot", "latestTree", "latestInteractiveTree",
+                             "latestScreenshot") or ((screenshot or screenshot_context) and key in ("path", "file", "filePath", "file_path")):
                     if isinstance(child, str) and Path(child).is_absolute():
                         paths.add(child)
                 elif isinstance(child, (dict, list)):

@@ -1,7 +1,7 @@
 # Weather UI benchmark
 
 Task:
-1. Build and run the Weather example app on the configured simulator.
+1. The Weather example app is already running on the configured simulator.
 2. Open the settings sheet.
 3. Change these settings:
    - Temperature: °C

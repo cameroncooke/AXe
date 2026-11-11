@@ -69,11 +69,12 @@ class RunnerTests(unittest.TestCase):
             'prepare': {'status': 'ready'}, 'archive_run': self.evidence,
             'score_run': deepcopy(self.score), 'digest': 'e' * 64, 'tree_digest': 'f' * 64,
             'run_monitored': {'exitCode': 0, 'stopReason': None},
+            'official_skill': self.root / 'official-skill', 'install_weather': None,
         }
         for name, value in values.items():
             self.mocks[name] = self.stack.enter_context(patch.object(benchmark, name, return_value=value))
 
-        def suite(config, scenario, name, identity, app, output):
+        def suite(config, scenario, name, identity, app, output, skill_source=None):
             skill = output / 'skills' / benchmark.skill_name(name)
             skill.mkdir(parents=True)
             (skill / 'SKILL.md').write_text('generic guide')
@@ -94,8 +95,15 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(self.report(), result)
         validate_result(result)
         self.assertEqual(self.mocks['run_monitored'].call_count, 1)
-        self.assertEqual(self.mocks['lifecycle'].call_count, 2)
-        self.assertFalse(any(call.kwargs.get('launch') for call in self.mocks['lifecycle'].call_args_list))
+        # Weather: terminate, terminate after preparation, then the harness builds, installs and
+        # launches the app before the measured task.
+        self.assertEqual([c.args[3].name for c in self.mocks['lifecycle'].call_args_list],
+                         ['terminate-before.json', 'terminate-ready.json', 'launch-task.json'])
+        self.assertTrue(self.mocks['lifecycle'].call_args_list[-1].kwargs.get('launch'))
+        self.assertEqual(self.mocks['install_weather'].call_count, 1)
+        self.assertIn('harness-build-install-launch-v1', result['contract']['setupPolicy'])
+        self.assertIn('official-tool-skill-v1', result['contract']['setupPolicy'])
+        self.assertTrue(self.mocks['score_run'].call_args.kwargs['expected_setup']['launchedByHarness'])
 
     def test_reminders_closes_review_gate_after_preparation_and_before_the_model(self):
         order = []
@@ -111,7 +119,8 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(reset.call_count, 1)
         self.assertEqual(result['reviewGate'], gate)
         self.assertEqual(order, [('lifecycle', 'terminate-before.json'), ('lifecycle', 'launch-preparation.json'),
-                                 ('lifecycle', 'terminate-ready.json'), ('gate', 'review-gate.json'), ('model',)])
+                                 ('lifecycle', 'terminate-ready.json'), ('gate', 'review-gate.json'),
+                                 ('lifecycle', 'launch-task.json'), ('model',)])
         self.assertTrue(result['contract']['setupPolicy'].endswith(';reminders-review-gate-closed-v1'))
         validate_result(result)
 

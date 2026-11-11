@@ -12,12 +12,8 @@ import subprocess
 
 
 TOOLS = ("axe", "flowdeck", "rocketsim")
-GUIDES = Path(__file__).resolve().parent / "guides"
-MODES = {
-    "axe": "--agent --view navigation; --view reading for visible text; --view full for base schema",
-    "flowdeck": "ui simulator screen --json --interactive-elements; omit --interactive-elements for visible text",
-    "rocketsim": "elements --agent --agent-mode act; nav for navigation; debug for missing semantics",
-}
+# Each tool is driven as its own official agent skill directs; the harness adds no tool-specific advice.
+MODES = {tool: "official agent skill, unedited" for tool in ("axe", "flowdeck", "rocketsim")}
 
 
 def _tool(tool: str) -> None:
@@ -130,16 +126,6 @@ def inspect_tool(tool: str, executable: str, app: str | None = None) -> dict[str
     if tool == 'axe' and _axe_runtime(binary)['runtimeSHA256'] != result['runtimeSHA256']:
         raise ValueError('AXe bundled runtime changed during metadata collection')
     return result
-
-
-def render_guide(tool: str, executable: str, udid: str) -> str:
-    """Render one generic skill. Scenarios and navigation routes are not embedded."""
-    _tool(tool)
-    binary = _executable(executable)
-    if not re.fullmatch(r"[A-Fa-f0-9]{8}(?:-[A-Fa-f0-9]{4}){3}-[A-Fa-f0-9]{12}", udid):
-        raise ValueError("A simulator UUID is required")
-    source = (GUIDES / (tool + ".md")).read_text(encoding="utf-8")
-    return source.replace("{{EXECUTABLE}}", shlex.quote(str(binary))).replace("{{UDID}}", udid)
 
 
 def _prefixes(executable: str) -> list[str]:

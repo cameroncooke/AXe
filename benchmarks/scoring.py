@@ -182,7 +182,9 @@ def contacts(calls, captures):
     ):
         evidence = find(cards, lambda c: [n for n in c.nodes if predicate(n)])
         checks.append(check(identity, bool(evidence), evidence, "Value must be visible on the saved card, not in an editor."))
-    adds = [(c, a) for c, a in action_rows(calls) if a.kind == "tap" and a.label in ("Add", "New Contact", "Create New Contact")]
+    # A heading or text that reads "New Contact" is the open editor's title, not the Add control.
+    adds = [(c, a) for c, a in action_rows(calls) if a.kind == "tap" and a.label in ("Add", "New Contact", "Create New Contact")
+            and a.role.casefold() not in ("heading", "header", "text", "statictext")]
     checks.append(check("creation.oneContact", len(adds) == 1 and len(saves) == 1 and bool(cards),
                         [{"call": c.number, "target": a.label} for c, a in adds + saves],
                         "One observed Add/editor/Done/saved-card flow is required; database cardinality is not inferred.", failed=len(adds) > 1 or len(saves) > 1))
@@ -276,6 +278,13 @@ def identity_checks(calls, expected_executable, expected_udid):
 
 
 def setup_checks(calls, scenario, expected):
+    if expected and expected.get("launchedByHarness"):
+        # The harness built, installed and launched the app before the clock; the agent does UI only.
+        ran = [{"call": c.number, "command": " ".join(c.argv[:3])} for c in calls
+               if c.category == "setup" and not setup_execution_denied(c)]
+        return [check("setup.byHarness", not ran, ran,
+                      "The app is prepared by the harness; the measured task must not build, install or launch apps.",
+                      failed=bool(ran))]
     required = ("bundleId", "udid", "runDirectory", "developerDir") + (("project", "scheme") if scenario == "weather" else ())
     if not expected or any(not expected.get(key) for key in required):
         return [check("setup.contract", False, reason="The runner must bind the measured setup commands to the app and simulator.")]
