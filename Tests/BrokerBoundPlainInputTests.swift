@@ -89,6 +89,14 @@ struct BrokerBoundPlainInputTests {
             quarantine: SelectedHIDQuarantine(recordPath: nil, persisted: false, error: nil))))
     }
 
+    @Test("A runtime before iOS 27 keeps the existing input route")
+    func measuredRouteRuntimes() {
+        #expect(!OrdinaryBrokerInput.runtimeHasMeasuredRoute(majorVersion: 18))
+        #expect(!OrdinaryBrokerInput.runtimeHasMeasuredRoute(majorVersion: 26))
+        #expect(OrdinaryBrokerInput.runtimeHasMeasuredRoute(majorVersion: 27))
+        #expect(OrdinaryBrokerInput.runtimeHasMeasuredRoute(majorVersion: 28))
+    }
+
     @Test("A complete touch is one contact with its hold, and a tap keeps its style")
     func contacts() throws {
         let held = OrdinaryBrokerInput.touchPrimitives(x: 5, y: 6, hold: 0.4)
