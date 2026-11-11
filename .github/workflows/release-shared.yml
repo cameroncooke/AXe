@@ -62,14 +62,21 @@ jobs:
             >> "$GITHUB_OUTPUT"
 
       - name: Check the changelog has this release's section
+        id: notes_source
         if: steps.context.outputs.notesMode == 'changelog'
         run: |
-          # A production release needs its own CHANGELOG section. Without one the release
-          # notes would fall back to an older release's, so stop before building anything.
+          # A production release needs its own CHANGELOG section, or a tag that records a
+          # deliberate reuse of older notes (scripts/release.sh --reuse-previous-notes).
+          # Otherwise stop before building anything.
+          TAG="${{ steps.context.outputs.releaseTag }}"
+          git fetch --force --no-tags origin "refs/tags/$TAG:refs/tags/$TAG"
+          NOTES_FROM=$(scripts/release-notes-from.sh "$TAG")
+          echo "notes_from=$NOTES_FROM" >> "$GITHUB_OUTPUT"
           node scripts/generate-github-release-notes.mjs \
             --channel "${{ steps.context.outputs.channel }}" \
             --version "${{ steps.context.outputs.version }}" \
             --fallback none \
+            ${NOTES_FROM:+--notes-from "$NOTES_FROM"} \
             --ref "${{ inputs.requested_ref }}" \
             --commit-sha "${{ steps.context.outputs.commitSha }}" \
             --out "$RUNNER_TEMP/release-notes-check.md"
@@ -362,10 +369,12 @@ jobs:
       - name: Generate release notes
         if: steps.context.outputs.notesMode != 'none'
         run: |
+          NOTES_FROM="${{ steps.notes_source.outputs.notes_from }}"
           node scripts/generate-github-release-notes.mjs \
             --channel "${{ steps.context.outputs.channel }}" \
             --version "${{ steps.context.outputs.version }}" \
-            --fallback "${{ steps.context.outputs.notesMode == 'changelog' && 'none' || 'newest-older' }}" \
+            --fallback none \
+            ${NOTES_FROM:+--notes-from "$NOTES_FROM"} \
             --ref "${{ inputs.requested_ref }}" \
             --commit-sha "${{ steps.context.outputs.commitSha }}" \
             --out github-release-body.md

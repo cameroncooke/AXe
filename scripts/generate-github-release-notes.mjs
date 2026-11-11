@@ -31,6 +31,7 @@ function parseArgs(argv) {
     channel: 'production',
     commitSha: '',
     fallback: 'none',
+    notesFrom: '',
     out: '',
     ref: '',
     version: '',
@@ -75,6 +76,13 @@ function parseArgs(argv) {
       continue;
     }
 
+    if (arg === '--notes-from') {
+      if (!next) throw new Error('Missing value for --notes-from');
+      args.notesFrom = next;
+      i += 1;
+      continue;
+    }
+
     if (arg === '--ref') {
       if (!next) throw new Error('Missing value for --ref');
       args.ref = next;
@@ -114,6 +122,8 @@ Options:
   --version <version>          Required release version
   --channel <production|staging>
   --fallback <none|newest-older>
+  --notes-from <version>      Older version whose notes a deploy-only release reuses on
+                              purpose, used only when <version> has no section of its own
   --ref <git ref>             Staging source ref label
   --commit-sha <sha>          Staging source commit
   --changelog <path>          Changelog path (default: CHANGELOG.md)
@@ -186,6 +196,20 @@ function extractChangelogSection(changelog, version, fallbackMode) {
   };
 }
 
+// A deploy-only release may reuse an older version's notes when that was chosen on purpose
+// (scripts/release.sh --reuse-previous-notes records it in the tag). Its own section still wins.
+function extractDeliberateReuse(changelog, version, notesFrom) {
+  try {
+    return extractChangelogSection(changelog, version, 'none');
+  } catch (error) {
+    if (!String(error && error.message).startsWith('Missing CHANGELOG section')) throw error;
+  }
+  if (compareVersions(normalizeVersion(notesFrom), normalizeVersion(version)) >= 0) {
+    throw new Error(`--notes-from ${notesFrom} must be older than ${version}`);
+  }
+  return extractChangelogSection(changelog, notesFrom, 'none');
+}
+
 function buildInstallSection(version) {
   const normalizedVersion = normalizeVersion(version);
   const tag = `v${normalizedVersion}`;
@@ -252,7 +276,7 @@ function buildStagingReleaseBody({ version, ref, commitSha }) {
 
 async function main() {
   try {
-    const { changelog, channel, commitSha, fallback, out, ref, version } = parseArgs(process.argv.slice(2));
+    const { changelog, channel, commitSha, fallback, notesFrom, out, ref, version } = parseArgs(process.argv.slice(2));
 
     let body = '';
 
@@ -262,7 +286,9 @@ async function main() {
       const changelogContent = await readFile(changelog, 'utf8').catch(() => {
         throw new Error(`Could not read CHANGELOG.md at ${changelog}`);
       });
-      const { resolvedVersion, section } = extractChangelogSection(changelogContent, version, fallback);
+      const { resolvedVersion, section } = notesFrom
+        ? extractDeliberateReuse(changelogContent, version, notesFrom)
+        : extractChangelogSection(changelogContent, version, fallback);
       body = buildProductionReleaseBody(version, section, resolvedVersion);
     }
 

@@ -36,7 +36,8 @@ ARGUMENTS:
 OPTIONS:
     --dry-run            Preview without executing
     --reuse-previous-notes
-                         Reuse previous version's release notes if target notes are missing
+                         Reuse previous version's release notes if target notes are missing.
+                         The tag records this, so the release workflow accepts it
     --no-notes-fallback  Disable fallback to previous version notes
     -h, --help           Show this help
 
@@ -536,6 +537,13 @@ rm -f "$RELEASE_NOTES_TMP"
 # --- Release notes (tag annotation) ---
 
 RELEASE_NOTES="Release $TAG_NAME"
+if [[ "$RELEASE_NOTES_SOURCE_VERSION" != "$VERSION" ]]; then
+  # The release workflow stops a tag that has no CHANGELOG section of its own unless the tag
+  # says, as here, that reusing an older version's notes was chosen on purpose.
+  RELEASE_NOTES="$RELEASE_NOTES
+
+Release-Notes-From: v$RELEASE_NOTES_SOURCE_VERSION"
+fi
 
 # --- Commit, tag, and push ---
 
