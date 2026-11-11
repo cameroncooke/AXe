@@ -1,141 +1,137 @@
 ---
 name: axe
-description: Drives iOS Simulator apps through the AXe CLI's agent mode. Capture the screen as compact rows with refs, then tap, type, swipe, scroll, set sliders and batch several same-screen actions in one call, and verify from the screen each action returns. Use when you need to operate, test or check an app in an iOS Simulator with AXe, for example "use AXe", "tap/type/swipe in the simulator", "fill in this form in the app", "toggle these settings", "check what is on screen" or "take a simulator screenshot", even when agent mode is not named. Also checks physical iPhones and iPads, captures their screens, reads accessibility and sends direct input. Also sets device-wide dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar.
+description: Official skill for the AXe CLI. Gives you eyes and hands on iOS apps, to see and operate their UI on iOS Simulators and on iPhones and iPads. Use when you need to check, test or validate an iOS app you built or changed, or to see or drive its UI.
 ---
 
-# AXe for agents
+# AXe
 
-Drive the simulator with AXe's agent mode (`--agent`). Each agent call reads the screen natively, checks that your target is still the control you saw, sends the input, and returns the settled screen as compact rows with refs. One call does the action and the re-read, and nothing is sent if the screen changed under you.
+Use agent mode (`--agent`) for every app read and input. An agent call checks the target is still the control you saw, sends the input and returns the settled screen; if the screen changed, it sends nothing. The same commands without `--agent` are for scripts written by people: no target check, no returned screen. Never add `sleep`, `--pre-delay` or `--post-delay`.
 
-Use `--agent` for every UI read and input. The same commands without it exist for fixed scripts written by people: they do not check targets, do not return the new screen, and can hit the wrong control after a layout change, so do not use them to operate an app. Do not add `sleep`, `--pre-delay` or `--post-delay`; agent actions return once the screen has settled, so a fixed wait only adds time.
-
-## 0. Check AXe is installed
+## Step 1: Ensure AXe exists
 
 ```bash
 axe describe-ui --help | grep -- --agent
 ```
 
-If `axe` is not found, install it with Homebrew: `brew install cameroncooke/axe/axe`. If it is installed but the help does not list `--agent`, it predates agent mode (AXe 2.0); upgrade with `brew upgrade cameroncooke/axe/axe`. Ask the user first if you may not install software. AXe needs macOS with Xcode installed.
+- Not found: `brew install cameroncooke/axe/axe`.
+- Found but no `--agent` (older than AXe 2.0): `brew upgrade cameroncooke/axe/axe`.
+- Ask the user first if you may not install software. AXe needs macOS with Xcode.
 
-## 1. Find the simulator and look
+## Step 2: Find the simulator and capture
 
 ```bash
 axe list-simulators
 axe describe-ui --agent --view navigation --udid <UDID>
 ```
 
-Pick a booted simulator's UDID from the list. The capture in `data.capture` has a `snapshotID` and rows `ref|actions|role|label|value`, for example `e12|tap|button|Save|`. Use only the actions a row advertises (`tap`, `typeText`, `swipe`, `sliderEndpoint`, `pinchWithin`). Refs belong to that snapshot and expire after 60 seconds. After Home or switching apps, capture again; refs never carry over to another app.
+- Use a booted simulator's UDID.
+- `data.capture` has a `snapshotID` and rows `ref|actions|role|label|value`, for example `e12|tap|button|Save|`.
+- Use only the actions a row advertises: `tap`, `typeText`, `swipe`, `sliderEndpoint`, `pinchWithin`.
+- Refs belong to one snapshot and expire after 60 seconds. After Home or an app switch, capture again; refs never carry over to another app.
+- `--view navigation`: controls and values, for operating the app. `--view reading` (default): adds visible text, for reading or verifying. `--view full`: complete schema with IDs; large, rarely needed.
+- `--view` works on `describe-ui`, `tap`, `type`, `swipe` and `batch`. Put `--view reading` on the action whose result you will check instead of reading again.
 
-Choose the view for what you need next:
-
-- `--view navigation`: controls and their values. Use it while operating the app.
-- `--view reading` (the default): adds visible text. Use it to read or verify facts.
-- `--view full`: the complete base schema with IDs. Large; rarely needed.
-
-`--view` works on `describe-ui`, `tap`, `type`, `swipe` and `batch`. Put `--view reading` on the action whose result you need to check, rather than reading again afterwards.
-
-## 2. Act, then use the returned screen
+## Step 3: Act and use the returned screen
 
 ```bash
 axe tap --agent --view navigation --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e12
 ```
 
-A successful action returns the new screen in `data.capture`, with a new `snapshotID` that replaces the old one. Plan the next action from it. Do not run `describe-ui` just to see the result: the reply already is that read. Read again only when the reply has no capture, `data.cache.requiresRefresh` is true, or you need rows the capture does not show (see section 5).
+- Success returns the new screen in `data.capture` with a new `snapshotID`. Plan the next action from it; do not run `describe-ui` to see the result.
+- Read again only when the reply has no capture, `data.cache.requiresRefresh` is true, or you need rows it does not show (Step 6).
 
-## 3. Batch planned actions on one screen
+## Step 4: Batch same-screen actions
 
-Batching is the biggest speed-up, because every separate call costs a full agent turn. When you have already decided two or more taps or types on controls that are all in the current capture, and you do not need to look at the screen between them, send them in one batch. Typical cases are filling the fields of a form, toggling several switches, choosing units or options in a settings sheet, and picking several items in a list.
+Every call costs a turn, so batch. When you have decided two or more taps or types on controls in the current capture and need not look between them (form fields, several switches, options in a settings sheet, several list items), send one batch:
 
 ```bash
 axe batch --agent --view navigation --udid <UDID> --steps-json '{"snapshotID":"<SNAPSHOT_ID>","steps":[{"action":"type","ref":"e7","text":"Ada","focus":true},{"action":"type","ref":"e9","text":"Lovelace","focus":true},{"action":"tap","ref":"e12"}]}'
 ```
 
-- Send 1 to 8 `tap` or `type` steps, with all refs from that one snapshot.
-- Add `"focus": true` to a type step to tap its field first, as `type --focus` does; its ref is the field row that advertises `tap`. Without it, a type step needs a field that is already focused and advertises `typeText`.
-- A focus step's keyboard can move the screen. Later steps still run when their controls only moved; a control that changed, disappeared or is now covered stops the batch.
-- The last step may leave the screen, for example Close, Save or Next. Any other step that changes the layout (a new screen or sheet) stops the later steps, which is why only same-screen steps belong together.
-- The reply lists the completed steps and returns the current screen. If the batch stopped early, plan the remaining steps from that capture. Never resend a batch: completed steps are not undone and would run twice.
+- 1 to 8 `tap` or `type` steps, all refs from that snapshot.
+- `"focus": true` taps a type step's field first, as `type --focus` does; its ref is the field row that advertises `tap`. Without it, the field must already be focused and advertise `typeText`.
+- Steps whose controls only moved (for example under a keyboard) still run; a control that changed, disappeared or is covered stops the batch.
+- Only the last step may leave the screen (Close, Save, Next). Any other layout change stops the later steps.
+- The reply lists completed steps and the current screen. If it stopped early, plan the rest from that capture. Never resend a batch: completed steps would run twice.
+- Use separate calls when you must see one result before choosing the next action. Full contract: [batch-reference.md](references/batch-reference.md).
 
-Use separate calls when you need to see one action's result before choosing the next. Read [batch-reference.md](references/batch-reference.md) for the full contract.
-
-## 4. Type text
+## Step 5: Type
 
 ```bash
 axe type 'London' --agent --view navigation --focus --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e7
 ```
 
-`--focus` taps the field, checks that it took focus and types, in one call. Without `--focus`, the field must already be focused. To fill several fields on one screen, use one batch of focus steps instead (section 3). Typing does not clear existing text. Text is limited to 256 UTF-8 bytes per call and uses the US keyboard mapping. For Return, Backspace and shortcuts on a focused field, use `key 40`, `key 42`, `key-sequence --keycodes ...` or `key-combo` with `--agent --snapshot-id <SNAPSHOT_ID> --ref <FIELD_REF>`; [cli-quick-reference.md](references/cli-quick-reference.md#common-keycodes) lists common HID codes.
+- `--focus` taps the field, checks it took focus and types. Without it, the field must already be focused. Several fields on one screen: one batch of focus steps.
+- Typing does not clear existing text. At most 256 UTF-8 bytes per call, US keyboard mapping.
+- Return, Backspace and shortcuts on a focused field: `key 40`, `key 42`, `key-sequence --keycodes ...` or `key-combo`, with `--agent --snapshot-id <SNAPSHOT_ID> --ref <FIELD_REF>`. Codes: [cli-quick-reference.md](references/cli-quick-reference.md#common-keycodes).
+- Fill every field the task needs before Save or Done. Never tap Done just to hide the keyboard: it can commit the form.
 
-Before a Save or Done that leaves a form, complete every field the task needs. An app's Done can commit the form, so do not tap it just to hide the keyboard.
+## Step 6: Scroll, page and read exact text
 
-## 5. Scroll, page and read exact text
+- Scroll: swipe a row that advertises `swipe` (also listed under `capture.areas`): `axe swipe --agent --view navigation --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e30 --direction up --distance 0.6`. Direction is finger motion, so `up` reveals content below. Swipe the innermost scroll area that holds the target.
+- Page when something you need is missing and `capture.page.nextOffset` is present: `axe describe-ui --agent --view <VIEW> --snapshot-id <SNAPSHOT_ID> --row-offset <NEXT_OFFSET> --udid <UDID>`. Copy the offset; never compute it. No `nextOffset` means no more rows.
+- Clipped cells (160 characters at most) or IDs: `axe describe-ui --agent --snapshot-id <SNAPSHOT_ID> --read-ref e12 --text-field label --udid <UDID>`; `--text-field` also takes `value` and `id`.
+- Reading view of the current snapshot without a new capture: `axe describe-ui --agent --view reading --snapshot-id <SNAPSHOT_ID> --row-offset 0 --udid <UDID>`.
+- Check for a change: `axe describe-ui --agent --since-screen-hash <SCREEN_HASH> --udid <UDID>` returns `unchanged: true` while the screen matches that capture's `screenHash`.
 
-- **Scroll** by swiping a scroll-area ref, a row that advertises `swipe` (compact captures can also list some under `capture.areas`): `axe swipe --agent --view navigation --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e30 --direction up --distance 0.6`. Direction is finger motion, so `up` reveals content further down. The reply carries the settled screen. Swipe the innermost scroll area that holds your target.
-- **Page** when a control or fact you need is missing and `capture.page.nextOffset` is present: `axe describe-ui --agent --view <VIEW> --snapshot-id <SNAPSHOT_ID> --row-offset <NEXT_OFFSET> --udid <UDID>`. Copy the offset; never compute it from row counts. No `nextOffset` means there are no more rows.
-- **Read exact fields** when a cell is clipped (cells show at most 160 characters) or you need an ID: `axe describe-ui --agent --snapshot-id <SNAPSHOT_ID> --read-ref e12 --text-field label --udid <UDID>`. `--text-field` also takes `value` and `id`.
-- **Switch the current snapshot to reading** without a new capture: `axe describe-ui --agent --view reading --snapshot-id <SNAPSHOT_ID> --row-offset 0 --udid <UDID>`.
-- **Check for a change** without fetching rows again: `axe describe-ui --agent --since-screen-hash <SCREEN_HASH> --udid <UDID>` returns `unchanged: true` while the screen matches that capture's `screenHash`.
+## Step 7: Targets that survive movement
 
-## 6. Choose targets that survive movement
+- Refs are exact. Use them on a stable screen and for anonymous or duplicate controls.
+- For a named control that may move (a scrolling list, after an animation), use a selector, which finds it on the current screen: `axe tap --agent --view navigation --udid <UDID> --label 'Save' --element-type Button`.
+- Selectors: exact `--id`, `--label` or `--value`, or `--label-contains` and `--label-regex '^(Save|Done)$'`, narrowed with `--element-type` and `--frame 'minY=400'`. A selector must match exactly one control. Use only IDs and labels seen in a capture.
 
-Refs are exact. Use them on a stable screen and for anonymous or duplicate controls. For a named button that may move, such as one in a scrolling list or after an animation, a selector finds it on the current screen instead:
+## Step 8: Handle refusals
 
-```bash
-axe tap --agent --view navigation --udid <UDID> --label 'Save' --element-type Button
-```
+A refusal sent nothing: the reply has no `action`, or `action.outcome` is `failedBeforeInput` with `enqueuedEventCount: 0`. Plan from the capture it usually carries. If the screen or target changed but it is still the same control, AXe already re-read and retried (`action.retried: true`); `targetCovered` and `busy` are not retried. The identical command gets the same answer, so change something first:
 
-Selectors are exact `--id`, `--label` or `--value`, or `--label-contains` and `--label-regex '^(Save|Done)$'`, optionally narrowed with `--element-type` and `--frame 'minY=400'`. A selector must match exactly one control. Use only IDs and labels you have seen in a capture.
+- `screenChanged`, `targetChanged`, `snapshotMissing`, `unsupportedReference`: use refs from the returned capture, or capture again.
+- `keyboardCovered`: a tap would press a key. Scroll the control above the keyboard (the message names the scroll area) or dismiss the keyboard with the app's control for that. Never use the form's Cancel, Close or Done to hide it.
+- `targetCovered`: an overlay or a presenting sheet is in the way; find it in the capture.
+- `busy`: act again from a current capture once the other input has finished.
+- `targetMissing`: the selector matched none or several; narrow it or use a ref.
 
-## 7. When AXe refuses
+Also:
 
-A refusal sent nothing: the reply has no `action`, or `action.outcome` is `failedBeforeInput` with `enqueuedEventCount: 0`. The reply usually carries the current screen; plan from it. When the screen or target changed and the target is still the same control, AXe has already re-read and retried inside the call (`action.retried: true`); a covered target or `busy` is not retried. Sending the identical command again gets the same answer. Change something first:
+- After Save, Done, Back or opening an item, the capture can show the screen mid-transition. If it is not what you expected, run `describe-ui` before tapping.
+- Never repeat input whose outcome is uncertain or that delivered events: `failedNoReplay`, a lost reply, or a batch that stopped after completed steps. Read the screen and decide from what happened.
 
-- **The screen or target changed** (`screenChanged`, `targetChanged`, `snapshotMissing`, `unsupportedReference`): use the refs from the returned capture, or capture again if there is none.
-- **The keyboard covers the control** (`keyboardCovered`): a tap there would press a key. Scroll the form until the control is above the keyboard (the message names its scroll area), or dismiss the keyboard with a control the app shows for that, then tap its new ref. Never use the form's Cancel, Close or Done buttons to hide the keyboard: they can discard or save the form.
-- **Something else covers the control** (`targetCovered`), such as an overlay or a sheet still presenting: use the returned capture to find what is in the way.
-- **Another input is still running** (`busy`): act again from a current capture once it has finished.
-- **A selector matched nothing or several controls** (`targetMissing`): narrow it, or use a ref.
+## Step 9: Verify
 
-After an action that changes screens (Save, Done, Back, opening an item), the returned capture can show the screen mid-transition: a list can appear for a moment before the item you opened slides in. If the capture is not the screen you expected, run `describe-ui` before tapping anything.
+- Success proves delivery, not the app effect. Check the effect in the returned capture or a reading view.
+- When verification must be read-only, use `describe-ui` and screenshots only, no taps.
+- For visual facts the accessibility tree lacks: `axe screenshot --udid <UDID> --output shot.png`, then open the PNG.
 
-Never repeat input whose outcome is uncertain or that reports delivered events: a `failedNoReplay` outcome, a lost reply, or a batch that stopped after completed steps. Read the screen and decide from what actually happened.
+## Coordinates (fallback)
 
-## 8. Verify from the screen
-
-A successful reply proves the input was delivered, not that the app did what you wanted. Check the effect in the returned capture or a reading view. When a task makes verification read-only, verify with `describe-ui` and screenshots only, with no taps.
-
-For visual facts the accessibility tree does not expose, take a screenshot and open the PNG it writes: `axe screenshot --udid <UDID> --output shot.png`.
-
-## 9. Fallback: coordinates
-
-If a control you can see has no usable ref or selector, for example a custom-drawn view without an accessibility element, tap it by position with the current snapshot:
+For a visible control with no usable ref or selector, such as a custom-drawn view:
 
 ```bash
 axe tap --agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> -x 201 -y 640
 ```
 
-Use logical points, not screenshot pixels: `capture.screen` is `[screenID, width, height, rotation]`. Measure from a fresh screenshot of the same screen, and take a new capture and screenshot after any layout change. Coordinates skip the target check, so use them only as a deliberate choice for that control, never as an automatic retry for a refused ref. Coordinate swipes take `--start-x`, `--start-y`, `--end-x` and `--end-y` with `--agent --snapshot-id`.
-
-Two gestures have no agent form: drawing a path (`axe draw 100,400 300,400 300,600 --close --udid <UDID>`) and pinching where no ref advertises `pinchWithin` (`axe gesture pinch --scale 2 --udid <UDID>`; `--scale 0.5` zooms out). They skip the target check and return no capture, so capture again afterwards. See [cli-quick-reference.md](references/cli-quick-reference.md#gestures-and-drawing).
+- Logical points, not screenshot pixels: `capture.screen` is `[screenID, width, height, rotation]`. Measure from a fresh screenshot of the same screen; capture and screenshot again after any layout change.
+- Coordinates skip the target check. Use them deliberately for that control, never as an automatic retry for a refused ref.
+- Coordinate swipes take `--start-x`, `--start-y`, `--end-x` and `--end-y` with `--agent --snapshot-id`.
+- No agent form: drawing a path (`axe draw 100,400 300,400 300,600 --close --udid <UDID>`) and pinching where no row advertises `pinchWithin` (`axe gesture pinch --scale 2 --udid <UDID>`; `--scale 0.5` zooms out). They return no capture, so capture again. See [cli-quick-reference.md](references/cli-quick-reference.md#gestures-and-drawing).
 
 ## More agent actions
 
 Each takes `--agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref <REF>`:
 
-- Slider to an end: `slider ... --endpoint minimum` or `maximum`, on rows that advertise `sliderEndpoint`. For a percentage, read [slider-reference.md](references/slider-reference.md).
-- Long press: `touch ... --down --up --delay 0.7`.
-- Drag a control: `drag ... --end-x <X> --end-y <Y>`.
-- Double tap: `gesture double-tap ...`. Pinch: `gesture pinch ... --radius 24 --scale 1.5`, on rows that advertise `pinchWithin`.
+- Slider to an end: `slider --endpoint minimum` or `maximum`, on `sliderEndpoint` rows. Percentages: [slider-reference.md](references/slider-reference.md).
+- Long press: `touch --down --up --delay 0.7`.
+- Drag a control: `drag --end-x <X> --end-y <Y>`.
+- Double tap: `gesture double-tap`. Pinch: `gesture pinch --radius 24 --scale 1.5`, on `pinchWithin` rows.
 
-Read [agent-reference.md](references/agent-reference.md) for exact limits, receipts and output fields.
+Limits, receipts and output fields: [agent-reference.md](references/agent-reference.md).
 
-## Outside agent mode
+## References
 
-Agent mode covers app reads and input on every simulator, including the iPhone Duo. For anything else, read the reference that covers it:
+Agent mode covers app reads and input on every simulator, including the iPhone Duo. For anything else, read:
 
-- A physical iPhone or iPad, where agent mode is unavailable: [physical-device-reference.md](references/physical-device-reference.md).
+- Physical iPhone or iPad (no agent mode): [physical-device-reference.md](references/physical-device-reference.md).
 - iPhone Duo screens, hinge and rotation, or capture and input pinned to one display: [device-reference.md](references/device-reference.md).
-- Dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar: [settings-reference.md](references/settings-reference.md).
+- Dark mode, text size, accessibility display settings, VoiceOver, location, status bar: [settings-reference.md](references/settings-reference.md).
 - Commands with no UI target (`list-simulators`, `displays`, `screenshot`, `button`, `shutdown`) and gestures with no agent form: [cli-quick-reference.md](references/cli-quick-reference.md).
 - Video recording and streaming: [recording-reference.md](references/recording-reference.md).
-- Staging text on the clipboard: [clipboard-reference.md](references/clipboard-reference.md).
+- Clipboard staging: [clipboard-reference.md](references/clipboard-reference.md).

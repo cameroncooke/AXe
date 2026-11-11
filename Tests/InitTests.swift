@@ -7,7 +7,7 @@ struct InitTests {
     func printOutputsSkill() async throws {
         let result = try await TestHelpers.runAxeCommand("init --print")
         #expect(result.output.contains("name: axe"))
-        #expect(result.output.contains("Drives iOS Simulator apps through the AXe CLI's agent mode"))
+        #expect(result.output.contains("Official skill for the AXe CLI"))
     }
 
     @Test("installs skill to custom destination")
