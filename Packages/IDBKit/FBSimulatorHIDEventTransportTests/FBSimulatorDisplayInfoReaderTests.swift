@@ -37,6 +37,29 @@ struct FBSimulatorDisplayInfoReaderTests {
     }
   }
 
+  /// iOS 27.0 (Xcode 27.0) reports backlightState for the device, not on the display row.
+  @Test func rigidReplyTakesTheDeviceBacklightWhenTheRowHasNone() throws {
+    let rows = try FBSimulatorDisplayInfoReader.decode(
+      reply([rigidRow(backlight: nil)] + virtualRows(startingAt: 2), deviceBacklight: "activeOn"))
+    let snapshot = try discover(rows, catalog: [entry(1, rigid, 1206, 2622)]).snapshot
+    #expect(snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
+    #expect(snapshot.activePanel.backlightState == "activeOn")
+
+    let ownState = try FBSimulatorDisplayInfoReader.decode(reply([rigidRow(backlight: "off")], deviceBacklight: "activeOn"))
+    #expect(ownState.first?.backlightState == "off")
+
+    let duo = duoRows(coverActive: true).map { row in
+      let copy = xpc_dictionary_create(nil, nil, 0)
+      xpc_dictionary_apply(row) { key, value in
+        if String(cString: key) != "backlightState" { xpc_dictionary_set_value(copy, key, value) }
+        return true
+      }
+      return copy
+    }
+    let duoDecoded = try FBSimulatorDisplayInfoReader.decode(reply(duo, deviceBacklight: "activeOn"))
+    #expect(duoDecoded.allSatisfy { $0.backlightState == nil })
+  }
+
   @Test func duoReplyFollowsTheExplicitActiveFlagAndPerPanelRotation() throws {
     let rows = try FBSimulatorDisplayInfoReader.decode(reply(duoRows(coverActive: true)))
     let readback = try discover(rows, catalog: duoCatalog)
@@ -186,11 +209,12 @@ struct FBSimulatorDisplayInfoReaderTests {
 
   private func copy(_ source: xpc_object_t) -> xpc_object_t { xpc_copy(source)! }
 
-  private func reply(_ rows: [xpc_object_t]) -> xpc_object_t {
+  private func reply(_ rows: [xpc_object_t], deviceBacklight: String? = nil) -> xpc_object_t {
     let displays = xpc_array_create(nil, 0)
     rows.forEach { xpc_array_append_value(displays, $0) }
     let output = xpc_dictionary_create(nil, nil, 0)
     xpc_dictionary_set_bool(output, "current", true)
+    if let deviceBacklight { xpc_dictionary_set_string(output, "backlightState", deviceBacklight) }
     xpc_dictionary_set_value(output, "displays", displays)
     let result = xpc_dictionary_create(nil, nil, 0)
     xpc_dictionary_set_value(result, "CoreDevice.output", output)
