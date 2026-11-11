@@ -7,11 +7,11 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the plain-input change (SEL-17, narrower form) is in at `d4b9952fd` and its suites pass in isolated runs on the three simulators at `4ac61b349`. The agent benchmark found one regression, `type --focus` on a slow-focus field, fixed at `1c5c3eeba` with the agent typing suites passing on the iPhone and Duo simulators. The device checks last passed at `c96e375c9`. The full end-to-end suite has not been run since `e9cb2485c` and waits for the owner's go-ahead. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build. Last update 10 November, about 21:15.
-- Simulators: unit tests 877 of 877; iPhone 34 of 34 end-to-end suites; Duo 64 of 64 (8 only on an isolated rerun); iPad 11 of 11 at earlier commits. No timing regression against the pre-audit build.
-- Devices: 23 of 23 checks pass on the iPhone 16 Pro Max and iPad Pro (the pinch check after a fix).
-- Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass.
-- Correction: an earlier version of this log said the third end-to-end run passed 96 of 101 suites. It ran 43. See Phase 8.
+- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. Last update 11 November, about 07:50.
+- Simulators at `d0885cfa2`: unit tests 877 of 877; iPhone 36 of 36 end-to-end suites (245 tests); Duo 67 of 67 (534 tests); iPad 13 of 13 (93 tests), all in one run. No timing regression against the pre-audit build.
+- Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
+- Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
+- Correction: an earlier version of this log said the third end-to-end run of Phase 8 passed 96 of 101 suites. It ran 43. See Phase 8.
 - Nothing is pushed.
 - Commits made by this audit: see the commit log at the end.
 - Blockers: none open. The devices were unreachable through CoreDevice from about 22:45 until 09:35, and the iPad again from about 12:30 until the owner restarted `CoreDeviceService` at about 13:38.
@@ -609,11 +609,46 @@ The owner asked for the benchmark against the last run and the baseline, without
 - A first run, straight after I booted the benchmark simulator, is in history but not in the table: Weather's first three reads failed with `observationFailed` for 25 seconds after launch, which is the freshly booted simulator.
 - `./benchmarks/run doctor` fails with `'setupAxe'` when `build_products/axe` does not exist. A run builds it; doctor should say so. Not fixed.
 
+## Phase 13: full end-to-end runs and the fixes they led to (10 to 11 November, overnight)
+
+The owner approved the full suite on the evening of 10 November, then asked for any failures to be fixed and checked in isolation, with one more full run once nothing was left to fix. Three full runs, each `scripts/run-e2e.sh` from a clean checkout on the dedicated iPhone, iPad and Duo simulators, Xcode 27.2 beta 3, about 175 minutes each:
+
+| Run | Commit | iPhone | Duo | iPad |
+| --- | --- | --- | --- | --- |
+| `e2e-results/20261110T210529Z` | `95415b39e` | 35 of 36 suites (245 tests, 1 failed) | 67 of 67 (534 tests) | 13 of 13 (93 tests) |
+| `e2e-results/20261111T001748Z` | `d0a22a5f3` | 35 of 36 (1 failed) | 66 of 67 (1 failed) | 13 of 13 |
+| `e2e-results/20261111T043856Z` | `d0885cfa2` | 36 of 36 (245 tests) | 67 of 67 (534 tests) | 13 of 13 (93 tests) |
+
+- [x] The third run is the release evidence for simulators: 116 suites and 872 tests, none failed, at the commit that holds every fix below. The payload was unchanged by the run and every process the run started had stopped at its end.
+- The three failures were three different things. Two were tests that raced the simulator; one was a fault in AXe.
+
+Run 1, iPhone, `PlaygroundOrdinaryButtonTests`: the Siri check timed out waiting for the Siri window.
+
+- [x] Not AXe. The press arrived: SpringBoard logged it. On this simulator Siri's device arbitration finds no other device on every press and asks for Siri to be dismissed. That request normally lands before Siri starts to appear and does nothing. In the failing run it landed about 30 ms after, and Siri closed as it opened. The unchanged test then passed 3 times of 3 alone (`e2e-results/siri-rerun-1` to `-3`).
+- [x] The test now presses again, up to three times, and only when SpringBoard's log shows that the press before it arrived, so a press AXe failed to deliver still fails the test (`d0a22a5f3`). 3 of 3 alone (`siri-fix-1` to `-3`), and it passed in runs 2 and 3. The Duo's Siri check has the same exposure and has not failed; it is unchanged.
+
+Run 2, Duo, `PlaygroundDuoSelectedTargetTests`: a comparison of the screen before and after a command saw the text field lose focus.
+
+- [x] Not AXe. The test dismisses the keyboard with a tap and then records the screen. The tap ends before the field gives up focus, so the next command appeared to cause the focus change. Plain taps are about 60 ms quicker since `d4b9952fd`, which is what brought the test to that moment. The test now waits for the field to lose focus before recording (`0fb3bb7ca`).
+
+Run 2, iPhone, `PlaygroundColdInputHandoverTests`: `The input was refused. No input was sent.`
+
+- [x] A fault in AXe, in code new in v2. The first command sent through a new owned input connection waits for the simulator to answer before any input goes out. It waited 2 s, twice. The iPhone simulator, three hours into the run, answered after 3.5 to 4.3 s (under 1 s on a fresh one), so both tries ran out and the command was refused. The plain connection has waited 10 s for the same answer since `cc39c8d49`; the owned one now waits as long, with its one fresh try kept (`d0885cfa2`).
+- The refusal was honest: no input was sent and the reply said so. What it hid was the reason (`DTUHID initial guest barrier timed out`), which the error text filter drops because it looks like a dump.
+- Before the fix, on the simulator as the run left it: the two handover suites failed in 5 of 6 isolated runs of the run's build (`cold-rerun-1` to `-6`) and in 4 of 9 with a build that logged the wait (`cold-diag-1` to `-9`). With the change: 6 of 6 (`cand-1` to `-6`). With the committed build: 3 of 3 on the iPhone for the two handover suites and the agent touch suite, and 3 of 3 on the Duo for the selected target, retained input and retained pair suites (`e2e-results/barrier-fix/`).
+- Unit tests at `d0885cfa2`: 877 of 877. `make release-check`: 6 checks pass; the seventh is this log's own two open items.
+- No changelog entry: the owned connection does not exist in v1.8.0.
+
+Physical devices at `d0885cfa2`:
+
+- [x] iPhone 16 Pro Max: `make e2e-devices` passes 14 of 14 checks (`e2e-results/devices-20261111T073614Z` in the main checkout; the car: 163 strokes, 23 inks). The rotation check confirmed 3 of 4 turns with exact taps and reported the fourth as unconfirmed, which it allows.
+- [ ] iPad Pro: not rerun. It has been locked since the evening of 10 November (`passcodeRequired: true`) and only the owner can unlock it. Both devices were locked overnight; the iPhone was unlocked by 07:35. The iPad's last evidence is the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`. None of the three overnight commits touches device code: two change tests that run only on simulators, and the third changes the simulator's input session.
+
 ## Open items for the owner
 
 - Timing has not been compared against the v1.8.0 release binary, which `AGENTS.md` requires; there is none on this Mac. The comparison in Phase 8 is against the pre-audit build.
 - Interior slider values spawn a child process per read and take about 13 s; under load they fail. A redesign (reads in-process) is the fix.
-- A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, but back-to-back `button` presses are slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
+- A simulator that has taken input for hours answers new input connections 3 to 4 s late (Xcode 27.2 beta 3). AXe now waits instead of failing, on plain connections since `cc39c8d49` and on owned ones since `d0885cfa2` (Phase 13), but the first command on each new connection is slow there until the simulator is rebooted. On the same simulator the ordinary-suite agent also saw typed text gain doubled spaces (`Hello,   x`), which cleared after a reboot; I could not reproduce it and have not investigated it.
 - Ordinary `stream-video --format bgra` output cannot be decoded reliably: it ignores `--scale`, pads rows and has no frame boundaries. Unchanged from v1.8.0; no end-to-end case covers it.
 - The selected input path stops input when its display or motion feed is more than 0.5 s old. That tripped twice on the Duo: the display feed (0.57 s) at a load average above 100, with input quarantined, and the motion feed (0.51 s) at a load average of about 40, released cleanly. The limit is deliberate; it needs a decision on whether busy machines get more margin.
 - The early-boot accessibility wedge ("No translation object" or every read timing out until reboot) hit three Duo suites on 10 November. The matrix's boot gate does not catch it; a rerun on a fresh boot passes.
@@ -647,7 +682,7 @@ Decisions made without the owner, with the reason.
 
 ## Commit log
 
-All 145 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
+All 149 commits made on `v2` since `0aa6ed21b` before the one that last updated this log, oldest first. None is pushed. This table is generated from `git log`.
 
 | Commit | Subject |
 | --- | --- |
@@ -796,3 +831,7 @@ All 145 commits made on `v2` since `0aa6ed21b` before the one that last updated 
 | `d0f87e0e0` | docs(release): Record the agent benchmark against the last run and the baseline |
 | `0a9b7f215` | docs(release): Record what the Reminders benchmark failure is and what is still unknown |
 | `1c5c3eeba` | fix(agent): Send the typing phase again while the keyboard catches up with a focus tap |
+| `95415b39e` | docs(release): Record the type --focus regression, its fix and its evidence |
+| `d0a22a5f3` | test(e2e): Press Siri again when the simulator's Siri closes itself as it opens |
+| `0fb3bb7ca` | test(e2e): Wait for the field to lose focus before the Duo selector comparison |
+| `d0885cfa2` | fix(hid): Wait for the guest to answer a new owned connection as long as a plain one |
