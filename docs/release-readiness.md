@@ -7,9 +7,9 @@ Status key: `[x]` done and verified, `[~]` in progress, `[ ]` not started, `[!]`
 
 ## Summary
 
-- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. Last update 11 November, about 07:50.
+- State: the full end-to-end suite passes on the three simulators at `d0885cfa2` (run 3 of Phase 13, 11 November): 116 suites, 872 tests, none failed. Two earlier full runs that night found three failures: two tests that raced the simulator, fixed in the tests, and one fault in AXe's new owned input connection, fixed in `d0885cfa2`. The device suite passes on the iPhone at the same commit; the iPad was locked and was not rerun. Open: the slider on percentage sliders (B1) and the Reminders benchmark failure, which is a state of the benchmark simulator and not of the build; the owner set both aside. Last update 11 November, about 08:00.
 - Simulators at `d0885cfa2`: unit tests 877 of 877; iPhone 36 of 36 end-to-end suites (245 tests); Duo 67 of 67 (534 tests); iPad 13 of 13 (93 tests), all in one run. No timing regression against the pre-audit build.
-- Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
+- Devices: iPhone 16 Pro Max 14 of 14 checks at `d0885cfa2`. iPad Pro: last passed the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`, and it was locked overnight so it was not rerun; the owner decided on 11 November to skip it. The commands changed since then take their device branch before the changed code, by inspection, and the iPhone run exercises that same device code at the final commit.
 - Not verified: timing against the v1.8.0 release binary (none on this Mac); timing on the Duo and on devices in this pass; the iPad Pro at the final commit.
 - Correction: an earlier version of this log said the third end-to-end run of Phase 8 passed 96 of 101 suites. It ran 43. See Phase 8.
 - Nothing is pushed.
@@ -642,7 +642,7 @@ Run 2, iPhone, `PlaygroundColdInputHandoverTests`: `The input was refused. No in
 Physical devices at `d0885cfa2`:
 
 - [x] iPhone 16 Pro Max: `make e2e-devices` passes 14 of 14 checks (`e2e-results/devices-20261111T073614Z` in the main checkout; the car: 163 strokes, 23 inks). The rotation check confirmed 3 of 4 turns with exact taps and reported the fourth as unconfirmed, which it allows.
-- [ ] iPad Pro: not rerun. It has been locked since the evening of 10 November (`passcodeRequired: true`) and only the owner can unlock it. Both devices were locked overnight; the iPhone was unlocked by 07:35. The iPad's last evidence is the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`. None of the three overnight commits touches device code: two change tests that run only on simulators, and the third changes the simulator's input session.
+- iPad Pro: not rerun, and the owner decided on 11 November to skip it. It has been locked since the evening of 10 November (`passcodeRequired: true`) and only the owner can unlock it. Both devices were locked overnight; the iPhone was unlocked by 07:35. The iPad's last evidence is the full device suite at `25dfab0ca` and the two changed checks at `c96e375c9`. None of the three overnight commits touches device code: two change tests that run only on simulators, and the third changes the simulator's input session.
 
 ## Open items for the owner
 
