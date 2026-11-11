@@ -140,7 +140,9 @@ if (stagingValidate.publishRelease !== 'false' || stagingValidate.uploadArtifact
 }
 NODE
 
-grep -q '^  pull_request:$' .github/workflows/release-staging.yml
+# Pull requests run only fast checks; the staging build runs on main and on request.
+! grep -q '^  pull_request:$' .github/workflows/release-staging.yml
+grep -q '^  workflow_dispatch:$' .github/workflows/release-staging.yml
 grep -q "description: 'Exact ref to build for staging (branch, tag, or SHA)'" .github/workflows/release-staging.yml
 grep -q '^        required: true$' .github/workflows/release-staging.yml
 grep -q '^        default: validate$' .github/workflows/release-staging.yml
@@ -148,7 +150,8 @@ grep -q '^  staging-validate:$' .github/workflows/release-staging.yml
 grep -q '^  staging-publish:$' .github/workflows/release-staging.yml
 grep -q "mode: staging-validate" .github/workflows/release-staging.yml
 grep -q "mode: staging-publish" .github/workflows/release-staging.yml
-grep -q "github.event_name == 'pull_request' && github.sha" .github/workflows/release-staging.yml
+grep -q "if: github.event_name == 'workflow_dispatch' && github.event.inputs.intent == 'validate'" .github/workflows/release-staging.yml
+grep -q 'requested_ref: ${{ github.event.inputs.ref }}' .github/workflows/release-staging.yml
 ! grep -q 'defaults to main' .github/workflows/release-staging.yml
 ! grep -q "github.event_name == 'pull_request' && github.event.pull_request.head.sha" .github/workflows/release-staging.yml
 
