@@ -78,6 +78,10 @@ enum OrdinaryBrokerInput {
         let boot = try HIDBroker.currentBootIdentity(simulatorUDID: simulator.udid)
         let dtuhidPID = FBProcessFetcher().subprocess(of: boot.processIdentifier, withName: "dtuhidd")
         guard dtuhidPID > 0, hasProfileMetadata(simulator) else { return false }
+        // Xcode 27 starts dtuhidd for every simulator, whatever its runtime. A runtime before 27
+        // identifies its built-in display as "PurpleMain", not a UUID, so the measured route
+        // cannot bind it; those simulators keep their existing route.
+        guard simulator.osVersion.version.majorVersion >= 27 else { return false }
         return try FBSimulatorNativeContextReader.capability(for: simulator).hinge == .unsupported
     }
 
