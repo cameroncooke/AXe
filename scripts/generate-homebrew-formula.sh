@@ -53,28 +53,36 @@ if [[ -z "$FORMULA_CLASS" || -z "$HOMEPAGE" || -z "$VERSION" || -z "$URL" || -z 
   exit 1
 fi
 
+# Homebrew reads a release version from the URL; staging URLs need it stated.
+VERSION_LINE="  version \"${VERSION}\"
+"
+if [[ "$URL" == *"v${VERSION}.tar.gz" ]]; then
+  VERSION_LINE=""
+fi
+
 cat <<EOF
 class ${FORMULA_CLASS} < Formula
   desc "${DESCRIPTION}"
   homepage "${HOMEPAGE}"
-  license "${LICENSE_NAME}"
-  version "${VERSION}"
-  depends_on macos: :sonoma
-
   url "${URL}"
-  sha256 "${SHA256}"
+${VERSION_LINE}  sha256 "${SHA256}"
+  license "${LICENSE_NAME}"
+
+  depends_on macos: :sonoma
 
   def install
     libexec.install "axe", "Frameworks", "AXe_AXe.bundle"
     bin.write_exec_script libexec/"axe"
   end
 
-  def post_install
-    Dir.glob("#{libexec}/Frameworks/*.framework").each do |framework|
-      system "codesign", "--force", "--sign", "-", "--timestamp=none", framework
-    end
-
-    system "codesign", "--force", "--sign", "-", "--timestamp=none", libexec/"axe"
+  # The archive ships unsigned; sign the frameworks, then the executable that loads them.
+  post_install_steps do
+    run "/usr/bin/codesign", args: [
+      "--force", "--sign", "-", "--timestamp=none",
+      "{{libexec}}/Frameworks/FBControlCore.framework",
+      "{{libexec}}/Frameworks/FBSimulatorControl.framework",
+      "{{libexec}}/axe"
+    ]
   end
 
   test do
