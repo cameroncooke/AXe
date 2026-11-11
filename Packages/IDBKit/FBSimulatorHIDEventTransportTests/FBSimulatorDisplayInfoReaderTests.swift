@@ -37,8 +37,13 @@ struct FBSimulatorDisplayInfoReaderTests {
     }
   }
 
-  /// iOS 27.0 (Xcode 27.0) reports backlightState for the device, not on the display row.
+  /// A host with CoreDevice 642.16 (Xcode 27.0) gets backlightState for the device, not on the display row.
   @Test func rigidReplyTakesTheDeviceBacklightWhenTheRowHasNone() throws {
+    // A device that has not started yet is still refused.
+    let starting = try FBSimulatorDisplayInfoReader.decode(reply([rigidRow(backlight: nil)], deviceBacklight: "unknown"))
+    #expect(starting.first?.backlightState == "unknown")
+    #expect(failure { try discover(starting, catalog: [entry(1, rigid, 1206, 2622)]) } == .missingActiveFlag)
+
     let rows = try FBSimulatorDisplayInfoReader.decode(
       reply([rigidRow(backlight: nil)] + virtualRows(startingAt: 2), deviceBacklight: "activeOn"))
     let snapshot = try discover(rows, catalog: [entry(1, rigid, 1206, 2622)]).snapshot

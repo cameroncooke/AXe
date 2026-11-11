@@ -278,8 +278,10 @@ public enum FBSimulatorDisplayInfoReader {
     let displays = try child(output, "displays", XPC_TYPE_ARRAY)
     let count = xpc_array_get_count(displays)
     guard count > 0, count <= 32 else { throw failure("Display info has an invalid display count") }
-    // iOS 27.0 reports backlightState once for the device instead of on each display row.
-    // That value can only describe a sole integrated panel; several panels must report their own.
+    // The reply depends on the host's CoreDevice, not on the simulator runtime. With CoreDevice
+    // 642.16 (Xcode 27.0) backlightState is reported once for the device and no display row has
+    // one; with 689.2 (Xcode 27.3 beta) each row has its own. Measured on the same iOS 27.0 runtime.
+    // The device value can only describe a sole integrated panel; several panels must report their own.
     let integratedCount = (0..<count).filter { index in
       let row = xpc_array_get_value(displays, index)
       guard xpc_get_type(row) == XPC_TYPE_DICTIONARY,

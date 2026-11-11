@@ -5,12 +5,6 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Fixed
-
-- Fixed agent mode and `axe displays` failing on every iPhone and iPad simulator running iOS 27.0, where the runtime reports the backlight state for the device instead of for each display ([#84](https://github.com/cameroncooke/AXe/pull/84) by [@dishanest](https://github.com/dishanest)).
-
 ## [v2.0.0]
 
 ### Physical iPhone and iPad support
