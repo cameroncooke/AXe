@@ -69,6 +69,9 @@ struct PlaygroundDuoSelectedTargetTests {
             _ = try await app.app.run(["type", "AXe selected value"])
             _ = try await app.documents.waitFor("exact text readback") { $0.text == "AXe selected value" }
             try await app.show("feature.dismissKeyboard")
+            // The touch ends before the field gives up focus. Read the state only once it has,
+            // or the next comparison sees the focus change as an effect of its own command.
+            _ = try await app.documents.waitFor("the keyboard to be dismissed") { !$0.textFocused && $0.activeWindowTouches == 0 }
             for batch in [false, true] {
                 let before = try app.documents.read()
                 let arguments = ["tap", "--value", "AXe selected value", "--element-type", "TextField", "--expected-pid", String(app.pid)]
@@ -80,6 +83,9 @@ struct PlaygroundDuoSelectedTargetTests {
                 let focused = try await app.documents.waitFor("exact-value selector focused the unchanged text") { $0.textFocused && $0.activeWindowTouches == 0 }
                 try #require(focused.text == before.text && focused.count("textChanged") == before.count("textChanged"))
                 try await app.show("feature.dismissKeyboard")
+                // The touch ends before the field gives up focus. Read the state only once it has,
+                // or the next comparison sees the focus change as an effect of its own command.
+                _ = try await app.documents.waitFor("the keyboard to be dismissed") { !$0.textFocused && $0.activeWindowTouches == 0 }
             }
             for selector in [["--value", "AXe absent value", "--element-type", "TextField"], ["--id", "feature.text", "--element-type", "Button"]] {
                 let before = try app.documents.read()
