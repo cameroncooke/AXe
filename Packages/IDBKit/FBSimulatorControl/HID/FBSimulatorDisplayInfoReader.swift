@@ -278,6 +278,18 @@ public enum FBSimulatorDisplayInfoReader {
     let displays = try child(output, "displays", XPC_TYPE_ARRAY)
     let count = xpc_array_get_count(displays)
     guard count > 0, count <= 32 else { throw failure("Display info has an invalid display count") }
+    // The reply depends on the host's CoreDevice, not on the simulator runtime. With CoreDevice
+    // 642.16 (Xcode 27.0) backlightState is reported once for the device and no display row has
+    // one; with 689.2 (Xcode 27.3 beta) each row has its own. Measured on the same iOS 27.0 runtime.
+    // The device value can only describe a sole integrated panel; several panels must report their own.
+    let integratedCount = (0..<count).filter { index in
+      let row = xpc_array_get_value(displays, index)
+      guard xpc_get_type(row) == XPC_TYPE_DICTIONARY,
+            let kind = xpc_dictionary_get_value(row, "type"), xpc_get_type(kind) == XPC_TYPE_DICTIONARY else { return false }
+      return xpc_dictionary_get_value(kind, "integrated") != nil
+    }.count
+    let deviceBacklight = integratedCount == 1
+      ? xpc_dictionary_get_string(output, "backlightState").map { String(cString: $0) } : nil
     return try (0..<count).map { index in
       let row = xpc_array_get_value(displays, index)
       guard xpc_get_type(row) == XPC_TYPE_DICTIONARY else { throw failure("Display row is not a dictionary") }
@@ -297,15 +309,17 @@ public enum FBSimulatorDisplayInfoReader {
       guard displayID <= UInt64(UInt32.max) else { throw failure("Display ID is out of range") }
       let active = xpc_dictionary_get_value(row, "active")
       if let active, xpc_get_type(active) != XPC_TYPE_BOOL { throw failure("Display active flag is not a Bool") }
+      let integrated = xpc_dictionary_get_value(kind, "integrated") != nil
+      let rowBacklight = xpc_dictionary_get_string(row, "backlightState").map { String(cString: $0) }
       return FBSimulatorDisplayInfoRow(displayID: UInt32(displayID), uniqueID: uniqueID,
-        integrated: xpc_dictionary_get_value(kind, "integrated") != nil,
+        integrated: integrated,
         active: active.map { xpc_bool_get_value($0) },
         primary: xpc_bool_get_value(try child(row, "primary", XPC_TYPE_BOOL)),
         currentOrientation: current, nativeOrientation: nativeOrientation,
         nativeWidth: native.0, nativeHeight: native.1, boundsX: origin.0, boundsY: origin.1,
         boundsWidth: size.0, boundsHeight: size.1,
         pointScale: Int(xpc_int64_get_value(try child(row, "pointScale", XPC_TYPE_INT64))),
-        backlightState: xpc_dictionary_get_string(row, "backlightState").map { String(cString: $0) })
+        backlightState: rowBacklight ?? (integrated ? deviceBacklight : nil))
     }
   }
 
