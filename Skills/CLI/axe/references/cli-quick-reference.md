@@ -1,6 +1,6 @@
 # AXe commands outside agent mode
 
-These commands have no UI target, so they run without `--agent`. For app reads and input, use the agent commands in SKILL.md. Simulator commands require `--udid <UDID>` unless noted.
+No UI target, so no `--agent`; app reads and input use the agent commands in SKILL.md. Simulator commands need `--udid <UDID>` unless noted.
 
 ## Contents
 
@@ -24,7 +24,11 @@ axe --output json list-simulators
 axe --output json screenshot --udid <UDID> --output shot.png
 ```
 
-Without a format, state commands print their state in a few lines, input commands print nothing (`tap`, `slider` and `batch` print a `✓` line), media commands print the path and failures print `Error: <message>` to stderr. `--output json` returns one command envelope, also on failure, with a nonzero exit; `--verbose` adds detail but never changes the exit status or code. Put the format before the command. Screenshot and movie `--output` after the command remains a file path. `stream-video` rejects explicit format selection before capture. See [output fields](agent-reference.md#output-format).
+- Format goes before the command; `--output` after `screenshot` or `record-video` is a file path.
+- No format: state commands print a few lines of state; input commands print nothing (`tap`, `slider`, `batch` print a `✓` line); media commands print the path; failures print `Error: <message>` to stderr.
+- `--output json`: one envelope, also on failure (nonzero exit). `--verbose` adds detail, never changes exit status or code.
+- `stream-video` rejects explicit format selection before capture.
+- [Output fields](agent-reference.md#output-format).
 
 ## Simulator discovery
 
@@ -32,7 +36,8 @@ Without a format, state commands print their state in a few lines, input command
 axe list-simulators
 ```
 
-No `--udid` needed. Lists all available simulators with their UDIDs and boot state. Supply a real UDID to other commands; an empty value never selects a device.
+- No `--udid`. Lists available simulators with UDID and boot state.
+- Pass a real UDID elsewhere; an empty value never selects a device.
 
 ## Screens
 
@@ -40,7 +45,9 @@ No `--udid` needed. Lists all available simulators with their UDIDs and boot sta
 axe displays --udid <UDID>
 ```
 
-Waits for a fold or rotation to finish, then shows each screen: which one is active, its role (`outer`, `inner` or `main`), its size in logical points, scale and orientation, and on iPhone Duo the hinge angle. Use these points for coordinates. Pass the active screen's `id` and `uuid` to `--screen-id` and `--screen-uuid` when a command must refuse to act on any other screen. [device-reference.md](device-reference.md#screens-hinge-and-rotation) has the output fields.
+- Waits for a fold or rotation to finish, then lists each screen: active or not, role (`outer`, `inner`, `main`), size in logical points (use for coordinates), scale, orientation, and hinge angle on iPhone Duo.
+- Pass the active screen's `id` and `uuid` to `--screen-id` and `--screen-uuid` to make a command refuse any other screen.
+- Fields: [device-reference.md](device-reference.md#screens-hinge-and-rotation).
 
 ## Device settings
 
@@ -49,17 +56,17 @@ axe settings show --udid <UDID>
 axe settings set --udid <UDID> --appearance dark
 ```
 
-Simulators and physical devices. Also text size, accessibility display settings, VoiceOver, location and status bar. Read [settings-reference.md](settings-reference.md).
+- Simulators and physical devices. Also text size, accessibility display settings, VoiceOver, location, status bar: [settings-reference.md](settings-reference.md).
 
 ## Screenshot
 
 ```bash
-axe screenshot --udid <UDID> --output shot.png         # Specific file
-axe screenshot --udid <UDID> --output ~/Desktop/       # Directory (auto-named)
-axe screenshot --udid <UDID>                           # Auto-named in the current directory
+axe screenshot --udid <UDID> --output shot.png     # file
+axe screenshot --udid <UDID> --output ~/Desktop/   # directory, auto-named
+axe screenshot --udid <UDID>                       # auto-named in the current directory
 ```
 
-The command prints the PNG path. Open it to read visual facts the accessibility tree does not expose.
+- Prints the PNG path; open it for visual facts the accessibility tree lacks.
 
 ## Video recording
 
@@ -68,7 +75,7 @@ axe record-video --udid <UDID> --fps 15 --output recording.mp4
 axe record-video --udid <UDID> --fps 10 --quality 60 --scale 0.5 --output low-bw.mp4
 ```
 
-Press `Ctrl+C` to stop recording. AXe finalises the MP4 before exiting. Read the [recording contract](recording-reference.md) for display modes and limits.
+- `Ctrl+C` stops; AXe finalises the MP4 before exiting. Modes and limits: [recording-reference.md](recording-reference.md).
 
 ## Video streaming
 
@@ -84,31 +91,42 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UDID>
 ```
 
-Stages 1...65536 valid UTF-8 bytes with exact private CoreDevice readback. JSON reports hash/length, `verified: true` and `inserted: false`; it does not insert text. It replaces a shared clipboard and has no agent/selected/batch options, automatic Paste, restore or retry. Preserve failures. Get fresh UI refs and verify app insertion separately. Read [Clipboard staging](clipboard-reference.md).
+- Stages 1...65536 valid UTF-8 bytes, with exact private CoreDevice readback. JSON: hash/length, `verified: true`, `inserted: false`; it never inserts text.
+- Replaces a shared clipboard. No agent/selected/batch options, automatic Paste, restore or retry.
+- Preserve failures. Get fresh UI refs and verify app insertion separately. [clipboard-reference.md](clipboard-reference.md).
 
 ## Gestures and drawing
 
+Only for gestures with no agent form. Taps, long presses, double taps, drags, scrolls and pinches on a control use the agent commands in SKILL.md.
+
 ```bash
-axe draw 100,400 300,400 --udid <UDID>                            # a line
-axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid <UDID>  # a triangle
-axe gesture pinch --scale 2 --udid <UDID>                         # zoom in at the screen centre
+axe draw 100,400 300,400 --udid <UDID>                                 # line
+axe draw 200,300 300,480 100,480 --close --duration 1.5 --udid <UDID>  # triangle
+axe gesture pinch --scale 2 --udid <UDID>                              # zoom in at screen centre
 axe gesture pinch -x 200 -y 400 --radius 60 --scale 0.5 --udid <UDID>  # zoom out
 ```
 
-Use these only for gestures agent mode has no form for; taps, long presses, double taps, drags, scrolls and pinches on a control use the agent commands in SKILL.md. Points are logical points in the current orientation. `draw` takes 2 to 1,000 `x,y` points, one finger, `--duration` 1 second by default (at most 30), and refuses a point outside the screen with `invalidArguments` before input. `pinch` without `-x/-y` uses the screen centre, without `--radius` a quarter of the shorter side, reduced when needed so both ends stay 16 points inside the screen. Edge and corner presets (`swipe-from-left|right|top|bottom-edge`, `swipe-from-top-right-corner` for Control Centre) use the measured screen; a simulator without DTUHID assumes 390×844 unless `--screen-width`/`--screen-height` are passed. `rotate`, `two-finger-tap`, `two-finger-hold` and `two-finger-swipe` take explicit points; see `axe gesture --help`. None of these returns a capture or proves that the app recognised the gesture: capture again afterwards.
+- Logical points, current orientation.
+- `draw`: 2 to 1,000 `x,y` points, one finger, `--duration` 1 s default, 30 max. A point off screen fails with `invalidArguments` before input.
+- `pinch`: no `-x/-y` = screen centre; no `--radius` = a quarter of the shorter side, reduced so both ends stay 16 points inside the screen.
+- Edge and corner presets (`swipe-from-left|right|top|bottom-edge`, `swipe-from-top-right-corner` for Control Centre) use the measured screen; a simulator without DTUHID assumes 390×844 unless given `--screen-width`/`--screen-height`.
+- `rotate`, `two-finger-tap`, `two-finger-hold`, `two-finger-swipe` take explicit points: `axe gesture --help`.
+- None returns a capture or proves the app recognised the gesture; capture again.
 
 ## Hardware buttons
 
 ```bash
 axe button home --udid <UDID>
 axe button lock --udid <UDID>
-axe button lock --duration 3.0 --udid <UDID>    # Long press
+axe button lock --duration 3.0 --udid <UDID>    # long press
 axe button side-button --udid <UDID>
 axe button siri --udid <UDID>
 axe button apple-pay --udid <UDID>
 ```
 
-A button acts on the whole device. After Home or any button that changes the foreground app, take a new agent capture before more input. Receipts confirm transport, not Siri, payment UI, secure lock, wake or power. Do not replay uncertain input. For display-selected buttons on the iPhone Duo, read [device-reference.md](device-reference.md#selected-device-buttons).
+- Acts on the whole device. After Home or any button that changes the foreground app, take a new agent capture before more input.
+- Receipts confirm transport, not Siri, payment UI, secure lock, wake or power. Never replay uncertain input.
+- Display-selected buttons on iPhone Duo: [device-reference.md](device-reference.md#selected-device-buttons).
 
 ## Simulator shutdown
 
@@ -116,7 +134,7 @@ A button acts on the whole device. After Home or any button that changes the for
 axe shutdown --udid <UDID>
 ```
 
-Shuts down one simulator; see [device-reference.md](device-reference.md#simulator-shutdown).
+- Shuts down one simulator; see [device-reference.md](device-reference.md#simulator-shutdown).
 
 ## Common keycodes
 

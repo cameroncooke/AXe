@@ -1,33 +1,60 @@
-# Selected slider percentages
+# Slider percentages
 
-Use exactly one of `--endpoint minimum|maximum` or `--value <0...100>`. Values must be finite. No-flag interior percentages on the Duo, and on other simulators for a slider with a stable accessibility ID, use the measured native value-feedback route with the existing final raw AX verification; no-flag 0 and 100 there use the semantic endpoint route. Other no-flag cases keep the existing direct drag.
-
-## Selected command
-
-`axe slider --input-mode selected --udid <UDID> --id <ID> --value 63.25`
-
-The screen pair and `--expected-pid` are optional guards; without them AXe binds the active screen and the frontmost app when the command starts ([device-reference.md](device-reference.md#selected-input)). Use exactly one ID or label. Labels match case-sensitively after trimming whitespace and newlines from the query and native label. A label can select a Slider without an ID. Duplicate matches reject before optional `--element-type` filtering; the filter cannot hide duplicates. Type matching is exact and case-sensitive, without trimming or aliases. Empty or whitespace-only filters reject. The native Slider role, bound PID, current display, positive finite frame and numeric domain must match. Each owned-handle read must match the root target itself, not a matching child. Non-default wait/poll settings reject.
+- Use exactly one of `--endpoint minimum|maximum` or `--value <0...100>`; values must be finite.
+- No-flag (plain `axe slider`) interior percentages, on the Duo and on other simulators for a slider with a stable accessibility ID, use the measured native value-feedback route with the existing final raw AX verification; no-flag 0 and 100 there use the semantic endpoint route. Other no-flag cases keep the direct drag.
 
 ## Agent command
 
-`axe slider --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF> --value 63.25`
+```bash
+axe slider --agent --udid <UDID> --expected-pid <PID> --snapshot-id <UUID> --ref <REF> --value 63.25
+```
 
-Use the existing current `sliderEndpoint` row. This adds no new row token or tap/drag eligibility. The current snapshot, native target, inherited visibility, PID, screen, value and domain are checked before input. Explicit selectors, type overrides, non-default polling and batch use reject. Use the replacement capture or refresh after input. Never reuse an old reference after a change.
+- Use a current `sliderEndpoint` row. Adds no row token and no tap or drag eligibility.
+- Checked before input: current snapshot, native target, inherited visibility, PID, screen, value, domain.
+- Rejected: explicit selectors, type overrides, non-default polling, batch use.
+- After input, use the replacement capture or refresh. Never reuse an old ref after a change.
+
+## Selected command
+
+```bash
+axe slider --input-mode selected --udid <UDID> --id <ID> --value 63.25
+```
+
+- Optional guards: the screen pair (`--screen-id` with `--screen-uuid`) and `--expected-pid`. Without them AXe binds the active screen and frontmost app at command start ([device-reference.md](device-reference.md#selected-input)).
+- Exactly one `--id` or `--label`. Labels match case-sensitively after trimming whitespace and newlines from query and native label. A label can select a Slider without an ID.
+- Duplicates reject before optional `--element-type` filtering, so the filter cannot hide them. Type matching is exact and case-sensitive, with no trimming or aliases. Empty or whitespace-only filters reject.
+- Must match: native Slider role, bound PID, current display, positive finite frame, numeric domain. Each owned-handle read must match the root target itself, not a matching child.
+- Non-default wait/poll settings reject.
 
 ## Value and input rules
 
-Native slider reads keep their separate identity session and current target/PID/domain checks; no cached coordinates replace them.
+- Native slider reads keep their separate identity session and current target/PID/domain checks; no cached coordinates replace them.
+- Value = `minimum + (maximum - minimum) * percentage / 100` of the native domain.
+- 0 and 100 take the existing minimum or maximum semantic route before input (not a fallback after a physical failure). Receipt `slider` (`action.slider` in agent mode). Endpoint behaviour and its 20-action/15-second bounds are unchanged.
 
-A percentage maps to the native domain: `minimum + (maximum - minimum) * percentage / 100`. Numeric 0 and 100 select the existing minimum or maximum semantic route before input. Their receipt is `slider` (`action.slider` in agent mode). This is not a fallback after a physical failure. Endpoint behavior and its 20-action/15-second bounds remain unchanged.
+Interior values:
 
-Interior values require horizontal native scrubber geometry that increases from left to right on the current selected display. The measured display context maps logical points to that screen and orientation; there is no fixed display-ID or rotation requirement. Unsupported geometry still rejects before DOWN. The command verifies native parent and point evidence before it picks up the thumb. The last point/parent checks run inside the native input admission guard; the live display revision is checked again before DOWN.
+- Need horizontal native scrubber geometry increasing left to right on the current selected display. The measured display context maps logical points to that screen and orientation; no fixed display ID or rotation is required.
+- Unsupported geometry rejects before DOWN. Native parent and point evidence are verified before the thumb is picked up. The last point/parent checks run inside the native input admission guard; the live display revision is checked again before DOWN.
+- Bounds: 1 contact, 15-second action budget, at most 6 correction paths of at most 12 moves, tolerance 0.07 percent of the native domain.
+- After DOWN, it steps one native pixel at a time toward the target until the value follows the contact (on iOS 27.2 the value holds still for about the first 10 points of a contact). Then come the correction paths, and two one-pixel moves before release so the slider keeps the held value when the contact ends.
+- It reads fresh native values while the contact is held; a held value is settled after 400 ms unchanged. Each correction moves toward the requested value within the previous path's length.
+- Toward the target, held moves can pass the slider frame by at most the lead measured on this contact, the slider's height and the admitted application frame.
+- No endpoint seek to calibrate movement. Native value stability and final readback decide completion; app state is not a control input.
+- Unreachable values or exhausted bounds fail without a second gesture.
 
-The physical route uses at most one contact and a 15-second action budget. After DOWN it steps one native pixel at a time toward the target until the value follows the contact; an iOS 27.2 slider value holds still for about the first 10 points of a contact. It then uses at most six paths of at most 12 moves each, and two one-pixel moves before release so the slider keeps the held value when the contact ends. It reads fresh native values while the contact is held; a held value counts as settled after 400 ms unchanged. Each correction moves toward the requested value within the previous path's length. Toward the target, held moves can pass the slider frame by at most the lead measured on this contact, the slider's height and the admitted application frame. It does not seek an endpoint to calibrate movement. Native value stability and final readback decide completion; app state is not a control input. Unreachable values or exhausted bounds fail without a second gesture. The tolerance is 0.07 percent of the native domain.
+Receipt and failure:
 
-The receipt is `sliderValue` (`action.sliderValue` in agent mode). It records the requested percentage, native target/domain/value, move count, delivery and cleanup. A native result does not prove every intermediate app callback. Check the visible app value and callback separately. Context changes stop input and release the owned contact. Uncertain release keeps the input owner and quarantine; there is no replay or automatic recovery. These sequential checks do not lock the app layout or guarantee one recipient throughout the gesture.
+- Receipt `sliderValue` (`action.sliderValue` in agent mode): requested percentage, native target/domain/value, move count, delivery, cleanup.
+- A native result does not prove every intermediate app callback; check the visible app value and callback separately.
+- Context changes stop input and release the owned contact. Uncertain release keeps the input owner and quarantine; no replay or automatic recovery.
+- The sequential checks do not lock the app layout or guarantee one recipient throughout the gesture.
 
-Percentage requests are standalone only, including numeric 0 and 100. Selected endpoint batch steps keep their behavior. Raw legacy batch slider remains unsupported. Older requests reject; use the matching native frameworks with guarded retained DOWN and physical value feedback.
+Batches:
+
+- Percentage requests are standalone only, including 0 and 100. Selected endpoint batch steps keep their behaviour; raw legacy batch slider stays unsupported.
+- Older requests reject; use the matching native frameworks with guarded retained DOWN and physical value feedback.
 
 ## Limits
 
-RTL, custom and vertical Sliders remain unproved. No smooth motion, all-callback history or general slider-domain claim is made.
+RTL, custom and vertical Sliders are unproved. No claim of smooth motion, all-callback history or general slider-domain support.

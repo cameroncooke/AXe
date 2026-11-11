@@ -1,8 +1,13 @@
 # iPhone Duo, display-selected input and device commands
 
-Read this only for work the agent path in SKILL.md does not cover: iPhone Duo hinge and rotation,
-input or capture on one explicitly selected display, device buttons and simulator shutdown.
-For ordinary app automation, use `--agent` as SKILL.md describes.
+Open only for Duo hinge and rotation, input or capture pinned to one display, device buttons and simulator shutdown. App automation uses `--agent` (SKILL.md).
+
+Rules for every command here:
+
+- Never replay failed or uncertain input automatically: a failure can follow partial input or an effect.
+- Receipts prove transport (delivery, cleanup), not the app effect. Verify the effect separately.
+- Read the UI again after a fold, rotation or hinge change, before input.
+- Selected requests need matching CLI, broker and native framework versions; incompatible or older requests reject.
 
 ## Contents
 
@@ -20,7 +25,12 @@ For ordinary app automation, use `--agent` as SKILL.md describes.
 
 ## Simulator shutdown
 
-Use `axe shutdown --udid <UUID>` for one simulator. It prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}` with `shutDown` only after state readback, or `alreadyShutDown` without a request. Names/all aliases reject. This is simulator shutdown, not guest lock or power-button input. It has a 60-second budget; inspect state after failure. Do not use agent/batch options.
+`axe shutdown --udid <UDID>`
+
+- One simulator by UDID; names and aliases (such as `booted`) reject. No agent or batch options.
+- Simulator shutdown, not guest lock or power-button input.
+- Prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`. JSON `{udid, initialState, outcome}`: `shutDown` only after state readback; `alreadyShutDown` sends no request.
+- 60-second budget; after a failure, inspect the state.
 
 ## Screens, hinge and rotation
 
@@ -36,11 +46,24 @@ Off     outer  466×678 pt @3x
         id 1   85D7C4CD-0F9F-422B-94DA-658B4164694D
 ```
 
-Sizes are logical points, the units every AXe coordinate uses. The active screen's size is oriented, as in an agent capture's `capture.screen`; other screens are unrotated. The role is `outer` or `inner` (the smaller or larger built-in screen), or `main` on a one-screen device, which has no Hinge line. `axe --output json displays --udid <UDID>` returns `data.result` as `{udid, name, hinge?: {degrees, mechanicalDegrees, posture}, activeScreen: {id, uuid, role, width, height, scale, rotation, orientation, state}, otherScreens: [{id, uuid, role, width, height, scale, state}]}`. `state` is `on`, `locked`, `off`, `starting` or `unknown`, from the display's backlight state. The result is an observation, not a lease: selected input and capture still check the screen again.
+- Sizes are logical points, the unit of all AXe coordinates. The active size is oriented (like `capture.screen`); other screens are unrotated.
+- Role: `outer` (smaller built-in screen), `inner` (larger), `main` (one-screen device; no Hinge line).
+- `axe --output json displays --udid <UDID>` → `data.result`: `{udid, name, hinge?: {degrees, mechanicalDegrees, posture}, activeScreen: {id, uuid, role, width, height, scale, rotation, orientation, state}, otherScreens: [{id, uuid, role, width, height, scale, state}]}`.
+- `state` (from backlight): `on`, `locked`, `off`, `starting`, `unknown`.
+- An observation, not a lease: selected input and capture check the screen again.
 
-`axe hinge read --udid <UDID>` prints `Hinge 113.8°, partially open`; JSON is `{udid, hinge: {degrees, mechanicalDegrees, posture}}`, the `hinge` of `displays`. `degrees` is the angle iOS senses, rounded to 0.1, and is the true pose. `mechanicalDegrees` is the angle `hinge set` drives; at rest the two can differ by several degrees (mechanical 120, sensed 113.8). `posture` is `closed` (sensed at most 0.5°), `partiallyOpen` or `open` (at least 179.5°). On a one-screen simulator hinge commands fail with `noHinge`.
+`axe hinge read --udid <UDID>` prints `Hinge 113.8°, partially open`; JSON `{udid, hinge: {degrees, mechanicalDegrees, posture}}` (the `hinge` of `displays`).
 
-`axe hinge set <0-180|closed|tabletop|open> --udid <UDID>` moves the hinge. Names are case-sensitive and mean 0, 90 and 180; fractions are valid. It sends one request, never repeats it, and fails with `bootChanged` if the simulator restarts. By default it waits up to 8 seconds for the screens to settle and prints the new angle and active screen:
+- `degrees`: angle iOS senses, rounded to 0.1; the true pose.
+- `mechanicalDegrees`: angle `hinge set` drives; at rest can differ by several degrees (mechanical 120, sensed 113.8).
+- `posture`: `closed` (sensed ≤ 0.5°), `partiallyOpen`, `open` (≥ 179.5°).
+- One-screen simulator: hinge commands fail with `noHinge`.
+
+`axe hinge set <0-180|closed|tabletop|open> --udid <UDID>`
+
+- Names are case-sensitive: 0, 90, 180. Fractions valid.
+- Sends one request, never repeats it; `bootChanged` if the simulator restarts.
+- By default waits up to 8 s for the screens to settle and prints:
 
 ```
 Hinge 180°, open (was 113.8°)
@@ -48,63 +71,108 @@ Active  inner  951×669 pt @3x  landscape
         id 3   0DFCB507-C4AA-4CB8-8575-8E2D0DB7C6B9
 ```
 
-JSON is `{udid, previousDegrees, hinge: {degrees, mechanicalDegrees, posture}, activeScreen?}`. `--no-wait` returns once the hinge reaches the angle, without `activeScreen`. `--tolerance` (0...1 degrees, default 0.5) and `--timeout` (0.5...15 seconds, default 8) bound the mechanical move. On iOS 27.2 closing settled in about 3 s and opening in about 0.6 s. Read the UI again before input.
+- JSON `{udid, previousDegrees, hinge: {degrees, mechanicalDegrees, posture}, activeScreen?}`. `--no-wait` returns once the hinge reaches the angle, without `activeScreen`.
+- Bounds on the mechanical move: `--tolerance` 0...1 degrees (default 0.5), `--timeout` 0.5...15 s (default 8).
+- iOS 27.2: closing settled in about 3 s, opening in about 0.6 s.
 
-`axe rotate left|right --udid <UDID>` turns the Duo and prints `Rotated left` (or right) with the active screen; JSON is `{udid, direction, previousRotation, activeScreen}`. Without `--screen-id` and `--screen-uuid` it rotates the screen that is active when it starts; with the pair it refuses unless that screen is active. It fails with `bootChanged` if the simulator restarts. This device-wide action uses the common input lock and rejects held touches. It sends one request, observes two matching positions, and checks that the position remains after the connection closes. `--timeout` sets the observation budget (0.5...15 seconds, default 8); native reads have separate bounds. The Duo supports all four inner positions and skips upside-down portrait on the outer screen. Read the UI again before input; app layout readiness is not guaranteed. Do not replay a failed or uncertain request. An uncertain send holds the input lock and saves a recovery record. This command is separate from the two-finger `gesture rotate` and is not a batch step.
+`axe rotate left|right --udid <UDID>`
 
-These commands fail with one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `displayUnavailable` (the simulator has not reported a consistent set of screens, as in the first seconds after boot; read again), `rotationFailed` or `quarantined`.
+- Prints `Rotated left` (or right) and the active screen; JSON `{udid, direction, previousRotation, activeScreen}`.
+- Rotates the screen active at start; with `--screen-id` and `--screen-uuid`, refuses unless that screen is active. `bootChanged` if the simulator restarts.
+- Device-wide: takes the common input lock, rejects held touches.
+- Sends one request, observes two matching positions, checks the position remains after the connection closes. `--timeout`: observation budget, 0.5...15 s, default 8; native reads have separate bounds.
+- Duo: all four inner positions; the outer screen skips upside-down portrait.
+- App layout readiness is not guaranteed.
+- An uncertain send holds the input lock and saves a recovery record.
+- Not the two-finger `gesture rotate`; not a batch step.
+
+Failures carry one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `displayUnavailable` (no consistent set of screens yet, as in the first seconds after boot; read again), `rotationFailed`, `quarantined`.
 
 ## App input on the iPhone Duo
 
-Use the agent commands in SKILL.md on the Duo too. An agent capture binds the active screen, and a fold, rotation or hinge change makes its refs stale, so capture again after any of them. The plain `tap`, `touch`, `swipe`, `drag` and `type` also run on the Duo with logical points and measured pose checks, but they check no target or app; do not use them to operate an app. Do not request more than 100,000 movement steps on the Duo; AXe rejects these paths before event allocation.
+- Use the agent commands. An agent capture binds the active screen; a fold, rotation or hinge change makes its refs stale, so capture again.
+- Plain `tap`, `touch`, `swipe`, `drag` and `type` run on the Duo with logical points and measured pose checks but check no target or app: never use them to operate an app.
+- At most 100,000 movement steps on the Duo; larger paths reject before event allocation.
 
 ## Selected input
 
-Use selected mode only when input must refuse to run on any screen but one, or when a command has no agent form; for app input, use agent mode. AXe supports explicit display input on `describe-ui`, `tap`, `slider`, `touch`, `swipe`, `drag`, `gesture`, `type`, `key`, `key-sequence`, `key-combo`, `button` and `batch` with `--input-mode selected`. `--screen-id <ID> --screen-uuid <UUID>` is an optional guard: without it the broker binds the screen that is active when it admits the request; with it, from `axe displays`, the command refuses unless that screen is active. A retained touch keeps its original screen, so a fold since `touch --down` fails instead of retargeting. `--expected-pid <PID>` is optional too where AXe reads accessibility (`describe-ui`, selector `tap`, `slider`, keyboard commands); `touch`, `swipe` and `drag` accept it only with `--agent`. Without it the broker binds the app that is frontmost when the command starts, and every later target, hit and frontmost check requires that PID, so an app change fails before input. Selected keyboard commands still require `--focus-id`. Read the UI again after folding or rotation.
+Use `--input-mode selected` only when input must refuse every screen but one, or the command has no agent form.
 
-By default a selected command prints what the plain command prints: selected `describe-ui`, including `--point`, prints the accessibility tree JSON (the `roots`); a retained `touch --down` prints `Contact token: <uuid>`; other successful input prints nothing. With `axe --output json`, the result is `{outcome: "completed", screen: {id, uuid, width, height, rotation}, pid, token?}`. A failure is one error with a code, either the accessibility failure (such as `targetRejected`) or `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `quarantined`, `timeout` or `busy`, and says whether any input was sent. Ordinary and physical input return `{outcome: "completed"}`. `--verbose` prints the full broker receipt, also for ordinary input the broker owns on the Duo and DTUHID simulators.
+- Commands: `describe-ui`, `tap`, `slider`, `touch`, `swipe`, `drag`, `gesture`, `type`, `key`, `key-sequence`, `key-combo`, `button`, `batch`.
+- `--screen-id <ID> --screen-uuid <UUID>` (from `axe displays`), optional: refuses unless that screen is active. Without it, the broker binds the screen active when it admits the request.
+- A retained touch keeps its screen: a fold since `touch --down` fails, never retargets.
+- `--expected-pid <PID>`, optional where AXe reads accessibility (`describe-ui`, selector `tap`, `slider`, keyboard); `touch`, `swipe`, `drag` accept it only with `--agent`. Without it, the broker binds the app frontmost at start; every later target, hit and frontmost check requires that PID, so an app change fails before input.
+- Keyboard commands require `--focus-id`.
 
-Selected AX reads go to the device directly; a short-lived accessibility bootstrap runs only after a direct read returns an empty tree or a point read fails. Native slider and semantic-switch identity sessions remain separate from physical HID input. Use matching CLI, broker and native framework versions. Incompatible requests reject.
+Output:
 
-Selected `describe-ui --point X,Y` uses oriented logical display points. It reads one direct native element. The foreground app before/after and the point result must match the bound PID; foreign or hosted-process results are rejected. It sends no input and returns no retained tap target.
+- Default as the plain command: `describe-ui` (also `--point`) prints the accessibility tree JSON (`roots`); retained `touch --down` prints `Contact token: <uuid>`; other input prints nothing.
+- `axe --output json`: `{outcome: "completed", screen: {id, uuid, width, height, rotation}, pid, token?}`. Ordinary and physical input: `{outcome: "completed"}`.
+- Failure: one error code, either the accessibility failure (such as `targetRejected`) or `rejectedBeforeInput`, `inputFailed`, `cleanupUncertain`, `quarantined`, `timeout`, `busy`; it says whether any input was sent.
+- `--verbose`: full broker receipt, also for ordinary input the broker owns on the Duo and DTUHID simulators.
 
-Ordinary selected `tap --id`, `tap --label` or `tap --value` accepts optional `--element-type <Type>`. Read the type from a fresh description, for example `Button`. Matching is exact and case-sensitive, without aliases or type-name trimming; empty or whitespace-only types reject. The filter applies before uniqueness and again to the final target before input. If a proved StaticText child is the hit for a Button, filter the Button target rather than its child. The bound screen, bound PID and all hit checks still apply. Coordinates and `--semantic-press` reject the filter and polling. AXe validates the final target and sends one tap; a failed validation or send is never retried. Selected requests require a matched CLI and broker; incompatible requests reject. Tap routes on other devices are unchanged.
+Reads:
 
-Selected `tap --value <text>` compares the element's value as text, case-sensitively after trimming surrounding whitespace: `true` differs from `TRUE`, and `1.0` does not match `1`. It cannot be combined with coordinates, another selector or `--semantic-press`.
+- AX reads go to the device directly; a short-lived accessibility bootstrap runs only after a direct read returns an empty tree or a point read fails.
+- Native slider and semantic-switch identity sessions stay separate from physical HID input.
+- `describe-ui --point X,Y`: oriented logical display points; reads one direct native element. Foreground app before and after, and the point result, must match the bound PID; foreign or hosted-process results reject. Sends no input; returns no retained tap target.
 
-Selected selector taps use HID and strict target validation. A rejected hit sends nothing; do not bypass a selected rejection by sending plain input.
+Selector taps (HID, strict target validation):
 
-For native `CheckBox` only, use `tap --semantic-press --id <ID>` with selected options. Coordinates, labels, values, delays and explicit styles reject. The inspected host image is required; no HID/mouse fallback occurs. Success is `switchValueChangedObserved` after fresh same-target Boolean change within the original eight-second budget. Reply/delivery stay separate. Verify app callbacks; zero AXe HID does not mean zero guest touches. Never replay.
+- A rejected hit sends nothing. Never bypass a selected rejection with plain input.
+- AXe validates the final target and sends one tap; a failed validation or send is never retried.
+- Optional `--element-type <Type>` on `tap --id|--label|--value`: take the type from a fresh description (for example `Button`). Exact, case-sensitive, no aliases or trimming; empty or whitespace-only rejects. Applied before uniqueness and again to the final target. If a proved StaticText child is the hit for a Button, filter the Button. Bound screen, PID and hit checks still apply. Coordinates and `--semantic-press` reject the filter and polling.
+- `tap --value <text>`: case-sensitive text match after trimming surrounding whitespace (`true` ≠ `TRUE`, `1.0` ≠ `1`). Not with coordinates, another selector or `--semantic-press`.
+- Tap routes on other devices are unchanged.
 
-`type`, `key`, `key-sequence` and `key-combo` also accept selected options with `--focus-id <exact-field-ID>` and optional `--expected-pid <PID>`. First focus that field explicitly and inspect it. It must be an enabled, visible, focused `TextField`. AXe checks it before every key down; key-up cleanup does not require focus. Text input keeps the existing US keyboard mapping and is capped at 256 UTF-8 bytes. Complete sequences allow at most 1024 events and 20 seconds of requested delay, within a shared eight-second admission budget. This is not atomic OS recipient control. Input can be partial on failure; never replay it automatically.
+Semantic press, native `CheckBox` only: `tap --semantic-press --id <ID>` with selected options.
 
-Selected slider operations require exactly one ID or label and exactly one `--endpoint minimum|maximum` or finite `--value <0...100>`. Interior values require horizontal native scrubber geometry that increases from left to right on the current measured screen. RTL, custom and vertical Sliders remain unproved. Numeric 0 and 100 use the existing semantic endpoint route before input. Read [slider selection, input limits and receipts](slider-reference.md) before use. Non-default polling and percentage batch steps reject. Explicit selected retained touch operations require the token that `touch --down` prints, passed as `--contact-token`; use `touch --help` for complete/retained forms.
+- Coordinates, labels, values, delays and explicit styles reject. Needs the inspected host image; no HID or mouse fallback.
+- Success: `switchValueChangedObserved`, a fresh same-target Boolean change within the original 8-second budget. Reply and delivery stay separate.
+- Verify app callbacks: zero AXe HID does not mean zero guest touches.
 
-Coordinate gestures (`pinch`, `double-tap`, `rotate`, `two-finger-tap`, `two-finger-hold` and standalone `two-finger-swipe`) use this owned route without the flag too; with it, the screen pair can guard the screen. Use `axe gesture --help`. Their receipts confirm input delivery and cleanup, not application recognition. Verify the app effect separately.
+Keyboard (`type`, `key`, `key-sequence`, `key-combo`) with `--focus-id <exact-field-ID>` and optional `--expected-pid`:
 
-Use `two-finger-swipe` with starts `-x/-y`, `--x2/--y2` and endpoints `--end-x/--end-y/--end-x2/--end-y2`. Keep selected logical points, shared duration/delta and existing gesture bounds. Either finger may stay still. Reject simultaneous coincident contacts, including between samples; spatial crossings at different times are allowed. Batch and agent mode reject it.
+- First focus the field explicitly and inspect it: an enabled, visible, focused `TextField`.
+- Checked before every key down; key-up cleanup needs no focus.
+- Text: US keyboard mapping, at most 256 UTF-8 bytes. Sequences: at most 1024 events and 20 s requested delay, within a shared 8-second admission budget.
+- Not atomic OS recipient control.
 
-For `swipe-from-left-edge`, `swipe-from-right-edge`, `swipe-from-top-edge` and `swipe-from-bottom-edge`, `--edge-inset <points>` changes only the start distance from that edge. Use a finite positive value that leaves an inward path. The opposite endpoint stays 20 logical points from its edge. Defaults remain start inset 20, duration 0.3 seconds and delta 50. On a 951-point-wide display, left-edge inset 1 gives x=1 to x=931. Plain and selected commands and batch steps support this option; scroll and complete multi-touch gestures reject it. Selected bounds are read fresh. This is explicit geometry, not an automatic Back action or fallback. Inspect the visible app and verify its effect separately; do not replay a failed gesture automatically.
+Slider:
+
+- Exactly one ID or label, and exactly one of `--endpoint minimum|maximum` or finite `--value <0...100>`.
+- Interior values need horizontal native scrubber geometry increasing left to right on the current measured screen; RTL, custom and vertical sliders are unproved. 0 and 100 use the semantic endpoint route before input.
+- Non-default polling and percentage batch steps reject. Read [slider selection, input limits and receipts](slider-reference.md) first.
+
+Retained touch: pass the token `touch --down` prints as `--contact-token`. Forms: `touch --help`.
+
+Gestures:
+
+- Coordinate gestures (`pinch`, `double-tap`, `rotate`, `two-finger-tap`, `two-finger-hold`, standalone `two-finger-swipe`) use this owned route even without the flag; with it, the screen pair can guard the screen. See `axe gesture --help`. Receipts do not prove app recognition.
+- `two-finger-swipe`: starts `-x/-y`, `--x2/--y2`; ends `--end-x/--end-y`, `--end-x2/--end-y2`. Selected logical points, shared duration and delta, existing gesture bounds. Either finger may stay still. Simultaneous coincident contacts reject, including between samples; crossings at different times are allowed. Batch and agent mode reject it.
+- `swipe-from-left-edge|right-edge|top-edge|bottom-edge --edge-inset <points>`: changes only the start distance from that edge; finite, positive, leaving an inward path. The opposite endpoint stays 20 logical points from its edge. Defaults: start inset 20, duration 0.3 s, delta 50. Example: 951-point-wide display, left inset 1 → x=1 to x=931. Plain, selected and batch steps support it; scroll and complete multi-touch gestures reject it. Selected bounds are read fresh. Explicit geometry, not an automatic Back action or fallback; inspect the visible app.
 
 ## Selected Home button
 
-Use standalone `axe button home --udid <UDID> --input-mode selected`, with the optional active-screen pair from `axe displays`. Home acts on the whole device; the pair guards context and does not route Home to one display or app. Omitted `--duration` means down/up with no requested hold. Explicit duration must be finite and greater than zero, up to 10 seconds; positive fractions such as `0.2` are supported.
+`axe button home --udid <UDID> --input-mode selected`, optional active-screen pair.
 
-With `--verbose`, when available, receipt `home` fields record execution phase, planned/sent counts, release/drain flags, interruption and cleanup release evidence. No execution evidence means no `home` result. These are transport records, not an OS held-button inventory or visible Home proof. Inspect the effect separately. Home can act before an unchanged final-pose guard reports failure; preserve that failure and do not replay it automatically.
-
-Selected batches also accept `button home` through the same request and guards. The other selected device buttons are described below.
+- Home acts on the whole device; the pair guards context, it does not route Home to one display or app.
+- `--duration` omitted: down/up, no requested hold. Explicit: finite, > 0, ≤ 10 s; fractions such as `0.2` work.
+- `--verbose`, when available: receipt `home` fields (execution phase, planned/sent counts, release/drain flags, interruption, cleanup release evidence). No execution evidence, no `home` result. Transport records only, not an OS held-button inventory or visible-Home proof.
+- Home can act before an unchanged final-pose guard reports failure; preserve that failure.
+- Also a selected batch step, same request and guards.
 
 ## Selected device buttons
 
-Use `axe button <side-button|siri|lock|apple-pay> --udid <UDID> --input-mode selected`, with the optional active-screen pair. The pair guards context; buttons act on the whole device. Omitted duration has no requested hold; explicit duration is finite, greater than zero and at most 10 seconds.
+`axe button <side-button|siri|lock|apple-pay> --udid <UDID> --input-mode selected`, optional active-screen pair (guards context; buttons act on the whole device).
 
-Typed `button.kind` and execution/cleanup evidence (printed with `--verbose`) confirm transport only. Siri, Lock and side-button use two primitives. Apple Pay uses the existing native two-side-press adaptation: four primitives, a 0.15-second gap, and half the supplied duration per hold. Home keeps its `home` result. No receipt proves Siri, payment UI, secure lock, wake or power state. Final context failure can follow an effect; never replay uncertain input or use a fallback button.
-
-Selected batch steps use the same names, guards and exact count/release checks. Raw routes stay unchanged. Selected requests use a separate broker endpoint; older requests reject. Receipts do not prove Siri or Wallet UI.
+- Duration as Home: omitted, no hold; explicit finite, > 0, ≤ 10 s.
+- Typed `button.kind` and execution/cleanup evidence (`--verbose`) confirm transport only. No receipt proves Siri, Wallet or payment UI, secure lock, wake or power state.
+- Siri, Lock, side-button: two primitives. Apple Pay (native two-side-press): four primitives, 0.15 s gap, half the supplied duration per hold. Home keeps its `home` result.
+- A final context failure can follow an effect; never use a fallback button.
+- Batch steps: same names, guards and exact count/release checks. Raw routes unchanged. Selected requests use a separate broker endpoint.
 
 ## Selected batch steps
-
-Set the UDID, input mode and optional screen pair at batch level. Without the pair, each step binds the screen that is active when the broker admits it. Put `--focus-id` on each keyboard step, and `--expected-pid` on a step only to refuse a different app; without it each step binds the app that is frontmost when it starts. Selector taps keep the normal IDB accessibility-readiness check; slider endpoints keep native semantic control and keyboard steps keep their existing focus checks:
 
 ```bash
 axe batch --udid <UDID> --input-mode selected \
@@ -112,58 +180,96 @@ axe batch --udid <UDID> --input-mode selected \
   --step 'type --focus-id <FIELD_ID> -- hello'
 ```
 
-ID/label/value tap steps accept `--element-type` through the same builder and final target checks as standalone selected tap. The field must already have focus before the type step. Each input step resolves its current context and target. Supported steps are complete taps, slider endpoints, swipes, drags, draws, gestures, touch down/up pairs, literal/file/stdin text, keys, key sequences, key combinations and `button home|side-button|siri|lock|apple-pay`. Batch does not support `gesture two-finger-swipe`, `tap --semantic-press` or retained-token chains.
+- Batch level: UDID, input mode, optional screen pair. Without the pair, each step binds the screen active when the broker admits it.
+- Per step: `--focus-id` on each keyboard step (field already focused); `--expected-pid` only to refuse another app, otherwise each step binds the app frontmost when it starts. Keep per-step options on the step.
+- Each input step resolves its current context and target. Selector taps keep the IDB accessibility-readiness check; slider endpoints keep native semantic control; keyboard steps keep focus checks.
+- After a fold, rotation or app change, a step with the pair or its own `--expected-pid` refuses; one without binds the new screen and app.
+- No whole-batch lease or transition wait. Use separate commands when the next step needs a fresh inspection.
+- Supported: complete taps, slider endpoints, swipes, drags, draws, gestures, touch down/up pairs, literal/file/stdin text, keys, key sequences, key combinations, `button home|side-button|siri|lock|apple-pay`, `sleep`. Not supported: `gesture two-finger-swipe`, `tap --semantic-press`, retained-token chains. Batch-level tap-style, polling and continue-on-error reject.
+- ID/label/value tap steps accept `--element-type` with the standalone builder and final target checks.
+- Success prints `✓ Batch completed successfully (N steps)`. `--verbose`: one JSON line per attempted step (index, request ID, status, full response when available).
+- Any failure, including output failure, stops later steps; earlier effects remain; nothing is replayed.
 
-Selected batch `type --stdin` reads the process standard input once at that ordered step, before sending its keyboard request. Supply the step list with batch `--step` or `--file`, then pipe the text to AXe and close the pipe. The text must contain 1–256 UTF-8 bytes and use the existing US keyboard mapping; bytes and newlines are not trimmed or truncated. The synchronous read waits for EOF, has no deadline and cannot observe task cancellation while blocked. AXe checks task cancellation again after the read and before send. The normal current PID, focus and per-key checks still apply. Invalid or empty input stops later steps; earlier effects remain and input is not replayed. Batch-level `--stdin` consumes the same stream as the step list first, so a nested `type --stdin` sees EOF and rejects empty text. A second stdin text step also sees EOF after the first successful read; there is no separate text stream.
+`type --stdin`:
 
-Selected batch `drag` accepts `--start-x`, `--start-y`, `--end-x`, `--end-y`, `--duration`, `--steps`, `--pre-delay` and `--post-delay`. Defaults match standalone selected drag: 0.6-second movement and 60 steps. Use fresh oriented logical coordinates; the owner checks the complete path against current selected bounds before input. Drag does not accept selectors or `--expected-pid` and does not prove the recipient app. Verify the real app effect separately.
+- Reads process stdin once at that step, before its keyboard request. Give steps with `--step` or `--file`, pipe the text, close the pipe.
+- 1–256 UTF-8 bytes, US keyboard mapping; bytes and newlines are not trimmed or truncated.
+- The synchronous read waits for EOF with no deadline and cannot observe cancellation while blocked; cancellation is checked after the read and before send. Normal PID, focus and per-key checks apply.
+- Invalid or empty input stops later steps.
+- Batch-level `--stdin` consumes the stream first, so a nested `type --stdin` sees EOF and rejects empty text. A second stdin step also sees EOF after the first successful read; there is no separate text stream.
 
-Selected batch `slider` requires exactly one `--id` or `--label` and `--endpoint minimum|maximum`; `--expected-pid` is optional. The screen selection comes from the batch. The step uses native semantic control and sends zero HID events. A clean `endpointObserved` receipt confirms endpoint value readback; `alreadyAtEndpoint` completes without a new action. Do not treat these as touch-release receipts or app callback proof. Optional `--element-type` uses the standalone builder and native checks. Filtered completion requires matching bounded native type evidence for the recorded samples and actions. Label steps use the same trimmed, case-sensitive matching and duplicate-before-type checks as standalone selected slider, including targets without an ID. Percentage `--value` and non-default wait/poll options are rejected. Legacy batch slider remains unsupported. A failure can follow a semantic action; retain the receipt and do not replay it.
+`drag`:
 
-For selected batch `button home`, use the same request, duration rules and typed completion evidence as [Selected Home button](#selected-home-button). Use a matched CLI and broker. The batch supplies the screen selection. Keep per-step options on the step. Stop later steps after failure; never replay uncertain input.
+- Options `--start-x`, `--start-y`, `--end-x`, `--end-y`, `--duration`, `--steps`, `--pre-delay`, `--post-delay`. Defaults as standalone selected drag: 0.6 s, 60 steps.
+- Fresh oriented logical coordinates; the whole path is checked against current selected bounds before input.
+- No selectors or `--expected-pid`; does not prove the recipient app.
 
-Selected `sleep <seconds>` waits on the host with no input lease or broker request. It accepts every finite non-negative Double duration, including zero, with no total cap. AXe measures monotonic elapsed time and uses bounded cancellable waits; this is not a readiness or exact timing guarantee. The JSON step receipt has a `hostWait` object with `requestedSeconds`, `elapsedSeconds`, `outcome` and an error when present; request ID and broker response are absent. A completed wait has status `completed`; interruption or wait-owner failure has `waitInterrupted` or `waitFailed` and stops later steps. SIGINT/SIGTERM handling applies only during the wait, cancels and awaits the owned wait task, then restores prior signal dispositions. This is not whole-batch signal handling or an atomic signal-boundary guarantee. Output failure also stops the batch. The next input step uses its normal fresh context/target/focus guards; sleep does not preserve or prove device state, reserve the device or inspect other processes' held input.
+`slider`:
 
-On success, plain text prints `✓ Batch completed successfully (N steps)`. With `--verbose`, each attempted step prints one JSON line with its index, request ID, status and full response when available. Failure stops later steps; earlier effects remain. No input is replayed. Batch-level tap-style and polling settings and continue-on-error are rejected. There is no whole-batch lease or automatic transition wait. After a fold, rotation or app change, a step with the screen pair or its own `--expected-pid` refuses; a step without them binds the new screen and app. Use separate commands when the next step needs a fresh inspection.
+- Exactly one `--id` or `--label`, plus `--endpoint minimum|maximum`; optional `--expected-pid`. Screen selection from the batch.
+- Native semantic control, zero HID events. `endpointObserved` (clean) confirms endpoint value readback; `alreadyAtEndpoint` completes without a new action. Neither is a touch-release receipt or callback proof.
+- Optional `--element-type` uses the standalone builder and native checks; filtered completion needs matching bounded native type evidence for the recorded samples and actions.
+- Label steps: same trimmed, case-sensitive matching and duplicate-before-type checks as standalone selected slider, including targets without an ID.
+- Percentage `--value` and non-default wait/poll options reject. Legacy batch slider is unsupported.
+- A failure can follow a semantic action; keep the receipt.
+
+`button home`: same request, duration rules and typed completion evidence as [Selected Home button](#selected-home-button); the batch supplies the screen selection.
+
+`sleep <seconds>`:
+
+- Host wait; no input lease or broker request. Any finite non-negative Double, including 0; no total cap.
+- Monotonic elapsed time, bounded cancellable waits; not a readiness or exact timing guarantee.
+- JSON step receipt `hostWait`: `requestedSeconds`, `elapsedSeconds`, `outcome`, error when present; no request ID or broker response. Status `completed`; `waitInterrupted` or `waitFailed` (interruption, wait-owner failure) stops later steps.
+- SIGINT/SIGTERM handling only during the wait: cancels and awaits the wait task, then restores prior signal dispositions. Not whole-batch signal handling or an atomic signal-boundary guarantee.
+- The next input step runs its normal fresh guards. Sleep does not preserve or prove device state, reserve the device or inspect other processes' held input.
 
 ## Selected PNG screenshots
-
-For the measured active panel, use the active screen's `id` and `uuid` from `axe displays`:
 
 ```bash
 axe screenshot --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --output selected.png
 ```
 
-Both screen options are required. Do not add `--input-mode` or `--expected-pid` to this command. An inactive panel, invalid selection or changed context fails without display or legacy fallback. Existing output files are not replaced.
-
-Success writes a PNG and prints its path; `--verbose` prints a JSON receipt with the path, pixel size, before/after context and capture child receipt. Surface identity and frame presentation time are unavailable. The context checks bound capture; they do not prove an atomic frame/context observation. Without the screen pair, legacy capture and path-only stdout stay unchanged.
-
-For selected capture, `SIGINT` and `SIGTERM` request cancellation. AXe waits for the operation to return, including its cleanup path. Cancellation accepted before output publication produces no PNG. A late signal can arrive after publication. Unconfirmed cleanup remains an error; this does not guarantee cleanup after parent termination or `SIGKILL`.
+- Both options required: the measured active screen's `id` and `uuid` from `axe displays`. No `--input-mode` or `--expected-pid`.
+- An inactive panel, invalid selection or changed context fails, with no display or legacy fallback. Existing files are not replaced.
+- Success writes the PNG and prints its path. `--verbose`: JSON receipt with path, pixel size, before/after context, capture child receipt.
+- No surface identity or frame presentation time. Context checks bound the capture but do not prove an atomic frame/context observation.
+- `SIGINT`/`SIGTERM` request cancellation; AXe waits for the operation and its cleanup to return. Cancellation accepted before output publication writes no PNG; a late signal can arrive after publication. Unconfirmed cleanup stays an error. Cleanup after parent termination or `SIGKILL` is not guaranteed.
+- Without the pair, legacy capture and path-only stdout are unchanged.
 
 ## Selected video recording
 
-Use the paired `--screen-id`/`--screen-uuid` options for a fixed panel, or `--follow-active-display` for a fixed-canvas movie that follows measured display changes on one boot. Do not combine these modes. Read the [recording contract](recording-reference.md) for options, bounded transition recovery, stop/publication rules and limits.
+Fixed panel: `--screen-id`/`--screen-uuid`. Fixed-canvas movie following measured display changes on one boot: `--follow-active-display`. Never combine them. Options, bounded transition recovery, stop/publication rules and limits: [recording contract](recording-reference.md).
 
 ## Selected video streams
 
-Use `axe stream-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --format raw` with the active screen's pair from `axe displays`. Do not add `--input-mode` or `--expected-pid`.
+```bash
+axe stream-video --udid <UDID> --screen-id <ID> --screen-uuid <UUID> --format raw
+```
 
-Keep stdout for stream bytes only and capture stderr separately. It carries dimensions, layout, frame counts and the final summary. Use the decoder for the chosen format:
+- Active screen's pair from `axe displays`. No `--input-mode` or `--expected-pid`.
+- stdout: stream bytes only. Capture stderr separately: dimensions, layout, frame counts, final summary.
 
-- `raw`: four-byte unsigned big-endian JPEG length, then exactly that JPEG.
-- `ffmpeg`: concatenated standalone JPEG images; no ffmpeg process is started.
-- `mjpeg`: boundary `mjpegstream` is declared without delimiter hyphens; parts use `--mjpegstream`, Content-Length and JPEG bytes. Normal completion includes the closing delimiter.
-- `bgra`: packed top-to-bottom BGRA with premultiplied alpha, no row padding, `width * 4` row bytes and `width * height * 4` frame bytes. Use stderr dimensions. Quality does not change raw BGRA.
+| Format | stdout bytes |
+|---|---|
+| `raw` | 4-byte unsigned big-endian JPEG length, then exactly that JPEG |
+| `ffmpeg` | concatenated standalone JPEGs; no ffmpeg process starts |
+| `mjpeg` | boundary `mjpegstream` declared without delimiter hyphens; parts use `--mjpegstream`, Content-Length, JPEG bytes; normal completion includes the closing delimiter |
+| `bgra` | packed top-to-bottom BGRA, premultiplied alpha, no row padding, `width * 4` row bytes, `width * height * 4` frame bytes; dimensions from stderr; quality has no effect |
 
-Scaling uses upright PNG dimensions rounded down to at least one pixel. Every frame must keep the initial boot, panel, geometry, scale, orientation and hinge pose. A context or capture failure stops without retargeting or retry. The lease covers each capture only. FPS is a requested maximum; achieved FPS uses host output times, not display presentation times. Surface identity and atomic frame/context proof are unavailable. Do not claim continuous rotation or fold coverage.
-
-Stop normally with SIGINT or SIGTERM and await the actual exit. Capture cleanup is awaited. A started packet must finish within its existing five-second output deadline or fail; successful MJPEG also needs its closing delimiter. Errors or task cancellation can leave partial bytes. Preserve them as incomplete; never retry by appending. A summary alone is not success if final exit or cleanup fails. The deadline bounds userspace backpressure waits, not all native/kernel calls or encoding. Parent termination and SIGKILL cleanup are not guaranteed. Legacy streaming without the screen pair stays unchanged.
+- Scaling: upright PNG dimensions, rounded down, minimum one pixel.
+- Every frame must keep the initial boot, panel, geometry, scale, orientation and hinge pose; a context or capture failure stops, no retargeting or retry. The lease covers each capture only.
+- FPS is a requested maximum; achieved FPS uses host output times, not display presentation times.
+- No surface identity or atomic frame/context proof. Never claim continuous rotation or fold coverage.
+- Stop with SIGINT or SIGTERM and await the real exit; capture cleanup is awaited.
+- A started packet must finish within the 5-second output deadline or fail; successful MJPEG also needs its closing delimiter. The deadline bounds userspace backpressure waits, not all native/kernel calls or encoding.
+- Errors or cancellation can leave partial bytes: keep them as incomplete; never retry by appending. A summary alone is not success if the final exit or cleanup fails.
+- Cleanup after parent termination or SIGKILL is not guaranteed.
+- Without the pair, legacy streaming is unchanged.
 
 ## Automation and testing
 
-Test suites that need a fixed boot, a specific destination screen or the full broker evidence can use options hidden from `--help`:
+Options hidden from `--help`, for test suites needing a fixed boot, a specific destination screen or full broker evidence:
 
-- `--expected-boot <PID:SECONDS:MICROSECONDS>` refuses unless the simulator boot matches. It works on `hinge read`, `hinge set`, `rotate`, selected `button` and its batch steps, and on `screenshot`, `record-video` and `stream-video` with the screen pair or `--follow-active-display`. Read the identity from `bootIdentity` in `axe displays --verbose`. Without it, `hinge set` and `rotate` pin the boot they read at start.
-- `hinge set --wait-for-screen-id <ID> --wait-for-screen-uuid <UUID>` also requires that screen to become active after the move. Pass both; `--readiness-timeout <seconds>` (0.5...15, default 8) bounds the wait. `--no-wait` rejects them.
-
-`--verbose` prints full JSON instead of the short result: the display measurements on `displays` (pixels, native orientation, primary display, `bootIdentity`, `readInterval` and source fields), the broker reply on `hinge read`, `hinge set` and `rotate`, and the broker receipt on every selected input command. On a selected `batch` it prints one JSON line per attempted step. It only adds detail: the exit status, the error code and every check are the same with and without it. Parse it only when a check needs context, target-check or cleanup evidence.
+- `--expected-boot <PID:SECONDS:MICROSECONDS>`: refuses unless the boot matches. On `hinge read`, `hinge set`, `rotate`, selected `button` and its batch steps, and `screenshot`, `record-video`, `stream-video` with the screen pair or `--follow-active-display`. Identity: `bootIdentity` in `axe displays --verbose`. Without it, `hinge set` and `rotate` pin the boot they read at start.
+- `hinge set --wait-for-screen-id <ID> --wait-for-screen-uuid <UUID>`: also requires that screen to become active after the move. Pass both. `--readiness-timeout <seconds>` (0.5...15, default 8) bounds the wait. `--no-wait` rejects them.
+- `--verbose` prints full JSON instead of the short result: display measurements on `displays` (pixels, native orientation, primary display, `bootIdentity`, `readInterval`, source fields); the broker reply on `hinge read`, `hinge set`, `rotate`; the broker receipt on every selected input command (one JSON line per attempted step on `batch`). Exit status, error code and checks are identical without it. Parse it only when a check needs context, target-check or cleanup evidence.
