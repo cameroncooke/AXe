@@ -102,6 +102,15 @@ These are dependencies, local settings, run history, transcripts, images and
 build outputs. The application code, grading rules, app fixture and baseline
 registry are not stored under `build_products`.
 
+## Published results
+
+- [11 November 2026: AXe, RocketSim and FlowDeck with their official skills](results/2026-11-11-official-skills/README.md)
+
+Each published result commits its report, per-run figures and checksums under
+`results/`. Transcripts, screenshots and raw reports stay out of Git (they run to
+hundreds of megabytes) and are matched by the checksums in that result's
+`results.json`.
+
 ## Results and history
 
 Each run creates a unique directory under `benchmarks/artifacts/`. Use

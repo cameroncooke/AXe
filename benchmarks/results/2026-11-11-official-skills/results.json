@@ -1,0 +1,1258 @@
+{
+  "schema": "axe.agent-benchmark.published-result",
+  "schemaVersion": 1,
+  "artifactRun": "20261111T105112Z-0eccd7187e9b",
+  "repositoryCommitMeasured": "15fa2cf68",
+  "scorerCommitRegraded": "ec2ed3e22",
+  "repeats": 3,
+  "contract": {
+    "model": "claude-sonnet-5-5",
+    "claudeVersion": "2.1.281 (Claude Code)",
+    "runtimeVersion": "27.2 (24B5110a)",
+    "deviceType": "com.apple.CoreSimulator.SimDeviceType.iPhone-18-Pro",
+    "screenWidth": 402.0,
+    "screenHeight": 874.0,
+    "xcodeVersion": "Xcode 27.2\nBuild version 27B5038j",
+    "hostOS": "26.6.2",
+    "hostBuild": "25G83",
+    "hostModel": "Mac17,7",
+    "hostArchitecture": "arm64",
+    "nodeVersion": "v24.19.0",
+    "tokenizer": "o200k_base",
+    "tokenizerVersion": "0.12.0",
+    "tokenScope": "all-returned-tool-text;images-separate",
+    "maxClaudeSeconds": 900,
+    "harnessSHA256": "06fc2f8ac84c562458b5925f0760e91edf37e1224fb1f18a2d6d9f1e3087fe70",
+    "scorerSHA256": "def11569bd1dac158013541d857f99dbc33db35002aa428697a1362fe4cbbbc5",
+    "runnerSHA256": "2da52004545966d09581ea98c853817bdc964202daa60a485496470783d37e88",
+    "sharedRulesSHA256": "87cd23f8c5a3a0d6792b84bd11dd719573e6d1e2c656e097e7a1e8f94611fbd9",
+    "guideSetSHA256": "0ef79e833f6b75333dbc7f75af73e9291e23f05613c9c35109f6a8f58520131d",
+    "setupPolicy": {
+      "weather": "warm-device;normal-termination;exact-owned-record-cleanup;harness-build-install-launch-v1;official-tool-skill-v1",
+      "contacts": "warm-device;normal-termination;exact-owned-record-cleanup;harness-build-install-launch-v1;official-tool-skill-v1",
+      "reminders": "warm-device;normal-termination;exact-owned-record-cleanup;harness-build-install-launch-v1;official-tool-skill-v1;reminders-review-gate-closed-v1"
+    },
+    "taskSHA256": {
+      "weather": "037bff384e9673cbf9335515d643fac23f89d65acc75ecc88bef89ee8903be59",
+      "contacts": "690f8a276c978b831242a7947b2326b47975bf15f03172a89da511efc0530f91",
+      "reminders": "fbf9aea2b6371f14de6dfd578ebdf507fe015c63fe7b4db22340ffc48b28696b"
+    }
+  },
+  "summary": {
+    "weather": {
+      "axe": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 64.61,
+          "totalCalls": 14.33,
+          "returnedTextTokens": 7445.33,
+          "imageCount": 0,
+          "errorCalls": 0.33,
+          "helpCalls": 0
+        },
+        "range": {
+          "elapsedSeconds": [
+            63.70532375,
+            65.795821542
+          ],
+          "totalCalls": [
+            14,
+            15
+          ],
+          "returnedTextTokens": [
+            7148,
+            7629
+          ]
+        },
+        "differenceFromAXePercent": null,
+        "gradesAsRun": {
+          "passed": 3
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      },
+      "rocketsim": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 99.79,
+          "totalCalls": 21.33,
+          "returnedTextTokens": 13974.33,
+          "imageCount": 0,
+          "errorCalls": 3,
+          "helpCalls": 0.33
+        },
+        "range": {
+          "elapsedSeconds": [
+            95.170423458,
+            108.525604916
+          ],
+          "totalCalls": [
+            18,
+            26
+          ],
+          "returnedTextTokens": [
+            12839,
+            14736
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 54.4,
+          "totalCalls": 48.8,
+          "returnedTextTokens": 87.7
+        },
+        "gradesAsRun": {
+          "passed": 2,
+          "unverified": 1
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      },
+      "flowdeck": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 128.76,
+          "totalCalls": 34.67,
+          "returnedTextTokens": 31735.33,
+          "imageCount": 6.67,
+          "errorCalls": 2.33,
+          "helpCalls": 2.67
+        },
+        "range": {
+          "elapsedSeconds": [
+            113.236616042,
+            139.170133292
+          ],
+          "totalCalls": [
+            32,
+            38
+          ],
+          "returnedTextTokens": [
+            18371,
+            39663
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 99.3,
+          "totalCalls": 141.9,
+          "returnedTextTokens": 326.2
+        },
+        "gradesAsRun": {
+          "unverified": 2,
+          "failed": 1
+        },
+        "gradesRegraded": {
+          "unverified": 3
+        }
+      }
+    },
+    "contacts": {
+      "axe": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 64.86,
+          "totalCalls": 10,
+          "returnedTextTokens": 8756.33,
+          "imageCount": 0,
+          "errorCalls": 1.67,
+          "helpCalls": 0
+        },
+        "range": {
+          "elapsedSeconds": [
+            62.66264125,
+            66.675991375
+          ],
+          "totalCalls": [
+            9,
+            11
+          ],
+          "returnedTextTokens": [
+            7865,
+            9538
+          ]
+        },
+        "differenceFromAXePercent": null,
+        "gradesAsRun": {
+          "passed": 3
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      },
+      "rocketsim": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 158.41,
+          "totalCalls": 30,
+          "returnedTextTokens": 14393.67,
+          "imageCount": 4,
+          "errorCalls": 1.67,
+          "helpCalls": 0.33
+        },
+        "range": {
+          "elapsedSeconds": [
+            128.332048667,
+            183.981555291
+          ],
+          "totalCalls": [
+            23,
+            37
+          ],
+          "returnedTextTokens": [
+            12225,
+            17789
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 144.2,
+          "totalCalls": 200.0,
+          "returnedTextTokens": 64.4
+        },
+        "gradesAsRun": {
+          "passed": 2,
+          "unverified": 1
+        },
+        "gradesRegraded": {
+          "passed": 2,
+          "unverified": 1
+        }
+      },
+      "flowdeck": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 180.96,
+          "totalCalls": 48.67,
+          "returnedTextTokens": 22308,
+          "imageCount": 10,
+          "errorCalls": 1,
+          "helpCalls": 3.33
+        },
+        "range": {
+          "elapsedSeconds": [
+            160.518936,
+            193.726006458
+          ],
+          "totalCalls": [
+            44,
+            53
+          ],
+          "returnedTextTokens": [
+            21487,
+            23057
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 179.0,
+          "totalCalls": 386.7,
+          "returnedTextTokens": 154.8
+        },
+        "gradesAsRun": {
+          "unverified": 3
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      }
+    },
+    "reminders": {
+      "axe": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 65.23,
+          "totalCalls": 17,
+          "returnedTextTokens": 10648.67,
+          "imageCount": 0,
+          "errorCalls": 2,
+          "helpCalls": 0
+        },
+        "range": {
+          "elapsedSeconds": [
+            61.925729708,
+            66.906081541
+          ],
+          "totalCalls": [
+            16,
+            18
+          ],
+          "returnedTextTokens": [
+            10303,
+            11054
+          ]
+        },
+        "differenceFromAXePercent": null,
+        "gradesAsRun": {
+          "passed": 3
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      },
+      "rocketsim": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 97.46,
+          "totalCalls": 17.33,
+          "returnedTextTokens": 10499.33,
+          "imageCount": 0,
+          "errorCalls": 0.67,
+          "helpCalls": 0
+        },
+        "range": {
+          "elapsedSeconds": [
+            88.149297375,
+            102.899492125
+          ],
+          "totalCalls": [
+            15,
+            19
+          ],
+          "returnedTextTokens": [
+            8855,
+            12625
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 49.4,
+          "totalCalls": 2.0,
+          "returnedTextTokens": -1.4
+        },
+        "gradesAsRun": {
+          "passed": 2,
+          "unverified": 1
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      },
+      "flowdeck": {
+        "runs": 3,
+        "mean": {
+          "elapsedSeconds": 87.18,
+          "totalCalls": 24,
+          "returnedTextTokens": 21411.33,
+          "imageCount": 0,
+          "errorCalls": 1,
+          "helpCalls": 1
+        },
+        "range": {
+          "elapsedSeconds": [
+            84.908175833,
+            89.010592458
+          ],
+          "totalCalls": [
+            23,
+            25
+          ],
+          "returnedTextTokens": [
+            21202,
+            21787
+          ]
+        },
+        "differenceFromAXePercent": {
+          "elapsedSeconds": 33.7,
+          "totalCalls": 41.2,
+          "returnedTextTokens": 101.1
+        },
+        "gradesAsRun": {
+          "passed": 3
+        },
+        "gradesRegraded": {
+          "passed": 3
+        }
+      }
+    }
+  },
+  "runs": [
+    {
+      "runId": "axe-bench-contacts-axe-18bf5c3f22f5",
+      "scenario": "contacts",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:40:08.706Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 66.675991375,
+        "totalCalls": 11,
+        "uiCalls": 11,
+        "helpCalls": 0,
+        "errorCalls": 3,
+        "returnedTextTokens": 9538,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "e892429225aec2cf11c2b3ebfd8b1d4224fbbb4319f726ab1b26ee324b5de62d",
+        "regradedReport": "ba61399bc7ce12afd32c2816efc0b4d2f15987eca6faf84085e9f88f96a796db",
+        "transcript": "1e5503dc7d780e47003e760ba1582c2ec5b244af96591edaaa9a1b68aea2554c"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-axe-745b655afb4b",
+      "scenario": "contacts",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:21:33.503Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 65.23257125,
+        "totalCalls": 9,
+        "uiCalls": 9,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 7865,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "fa6eb2b2221a6f831e3a00a46e8458ef66ce6944f5bc4853b0679d90b5b8b88b",
+        "regradedReport": "3e848cd5919734d5029af7b73222e32ea8a9037140fbc13e2b7787fe273292e5",
+        "transcript": "39c9b776e5c8151bb762642345e704bc7d8d6dcc4bac71987005d713e12bf67d"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-axe-ea6e7faf561b",
+      "scenario": "contacts",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:02:39.790Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 62.66264125,
+        "totalCalls": 10,
+        "uiCalls": 10,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 8866,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "110f4b5cc2d42d1173f2b58ee38b77bfcbe561e46d044a79f7913844d33cf4cf",
+        "regradedReport": "f5dd909bb7a63c034128285d66471c9d2dce926f3b7064bc3c130994759a5b0c",
+        "transcript": "cd664548e5bf658ace2d9e31cf5d9c4334c54716d681499585fb713108aefa16"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-flowdeck-5a3e6e24bee3",
+      "scenario": "contacts",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:41:50.662Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 160.518936,
+        "totalCalls": 44,
+        "uiCalls": 30,
+        "helpCalls": 2,
+        "errorCalls": 1,
+        "returnedTextTokens": 23057,
+        "imageCount": 11,
+        "imageBytes": 895903
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "87feb2bc9d91a0c4db1b7021d42caa88ad6ef9634eb02444c6fc276b352cf5df",
+        "regradedReport": "2cf00fff858ad3c0890e8fbe35e434a04a5ed89e8a122b4aaf1903b232be7c8a",
+        "transcript": "a1aa43bbb0118d5ba1964cc3eab801ee621fb188e0a5bcc044d872e3f74aa55c"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-flowdeck-88e1ea4342ce",
+      "scenario": "contacts",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:23:14.179Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 188.638184875,
+        "totalCalls": 49,
+        "uiCalls": 40,
+        "helpCalls": 3,
+        "errorCalls": 1,
+        "returnedTextTokens": 21487,
+        "imageCount": 6,
+        "imageBytes": 630740
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "c16802c2f880716e74c67e035b3a8ad4121a033dbd4b342c2b416f8d0caa0114",
+        "regradedReport": "6f8fc4e5a98ad51fcb82a83b4eb812c4dc55a9d6907080790d8d2003852f9cdc",
+        "transcript": "4ec24d4f3a4b56f8c23b3a6e724ca423424a2983f489039b615746d844160fd2"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-flowdeck-d6074656d50b",
+      "scenario": "contacts",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:04:17.527Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 193.726006458,
+        "totalCalls": 53,
+        "uiCalls": 35,
+        "helpCalls": 5,
+        "errorCalls": 1,
+        "returnedTextTokens": 22380,
+        "imageCount": 13,
+        "imageBytes": 1488061
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "0490b0a0e02e6b3930923f96808c4d58c5b164078fd9fc550d5e33900b2e69ee",
+        "regradedReport": "f39f0b01ee24ca97a9c1e688afc54e506271cdbcd3f2c04515ae46abbe62449b",
+        "transcript": "06d4e4a0dfd3a5c9e010fa72ec0ef8c0ad7ba4c3e3f266db6ad0db108e2b943c"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-rocketsim-53d882519e1d",
+      "scenario": "contacts",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:08:05.314Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 162.904599958,
+        "totalCalls": 30,
+        "uiCalls": 28,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 17789,
+        "imageCount": 2,
+        "imageBytes": 729271
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "499e772d846cd02fa1d4cf41942157eb25d9365e79197d8ff681c316971bf3cb",
+        "regradedReport": "0aab7043605503e2159a22c6f68f6fc071a3023f94d8f9d8d7364ec7758e667e",
+        "transcript": "5cb60ceaad59f895a2517f81bf9e226868fc22c596bce68b8d410bc249b04402"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-rocketsim-d429ea450b23",
+      "scenario": "contacts",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:45:05.508Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 183.981555291,
+        "totalCalls": 37,
+        "uiCalls": 29,
+        "helpCalls": 1,
+        "errorCalls": 2,
+        "returnedTextTokens": 12225,
+        "imageCount": 7,
+        "imageBytes": 2220525
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "unverified",
+      "checksNotPassedRegraded": [
+        {
+          "id": "saved.name",
+          "status": "unverified"
+        },
+        {
+          "id": "saved.organization",
+          "status": "unverified"
+        },
+        {
+          "id": "saved.phone",
+          "status": "unverified"
+        },
+        {
+          "id": "saved.email",
+          "status": "unverified"
+        },
+        {
+          "id": "creation.oneContact",
+          "status": "unverified"
+        }
+      ],
+      "sha256": {
+        "report": "4b4d0e6cb7122e79cfea5d170233aa1b9c67eb21d1852a3f59a35e718b15fc50",
+        "regradedReport": "b1cf1daa4533c06c6e428f9fac1455946f4a4a532244eab3b3d8e7e91d9b4b97",
+        "transcript": "dda94e1e583ae8ae781e340d5ba8a78c2104c48f8fd3d85b9da4ca3ef9b8049e"
+      }
+    },
+    {
+      "runId": "axe-bench-contacts-rocketsim-fd85e789440f",
+      "scenario": "contacts",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:26:57.544Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 128.332048667,
+        "totalCalls": 23,
+        "uiCalls": 20,
+        "helpCalls": 0,
+        "errorCalls": 2,
+        "returnedTextTokens": 13167,
+        "imageCount": 3,
+        "imageBytes": 1138391
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "e2ba9efa48c76a4f38bc9376a3d7119bac7d357c3d8569fa88ce2e9eef0e7083",
+        "regradedReport": "462edbfebc35e5790d662038977267dc3d32398cb063bb073f757aa36fa251bb",
+        "transcript": "81c43e02bb1cb5bee58d4bf45b6d0f337e10146241685e62594192597f8cb59a"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-axe-66b95766dbe3",
+      "scenario": "reminders",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:34:50.834Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 66.906081541,
+        "totalCalls": 18,
+        "uiCalls": 18,
+        "helpCalls": 0,
+        "errorCalls": 2,
+        "returnedTextTokens": 11054,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "5ff8dad24b184fad12f139d49bba14a1e265bf1fe56d7c1e0abb84e4214f3747",
+        "regradedReport": "eb3b3e4a2a2914e5e099f8135f9658c2d4b609430184384e849e635bbe9282a7",
+        "transcript": "77ddc09b33d355731ae6e413a415f273b1e532f8d443af8e09d3d9aff4379cf0"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-axe-9a8e36aa4aef",
+      "scenario": "reminders",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T10:57:18.978Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 61.925729708,
+        "totalCalls": 16,
+        "uiCalls": 16,
+        "helpCalls": 0,
+        "errorCalls": 2,
+        "returnedTextTokens": 10303,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "502d24ec9c308dde648833bda8b0817ac6c349f91e756296c2c5132521c4c05c",
+        "regradedReport": "7ca0625d4a7e2cc32a4892eba33a7209cd459576a966d28df3737040ff90763e",
+        "transcript": "69b4870fa4b21cb738921728c5468709429eda3f3e9a35b3edbc3d0cf72b6646"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-axe-e3890cc2c71e",
+      "scenario": "reminders",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:16:25.019Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 66.847551834,
+        "totalCalls": 17,
+        "uiCalls": 17,
+        "helpCalls": 0,
+        "errorCalls": 2,
+        "returnedTextTokens": 10589,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "44c2458543a9632baa17eb0c13e91aa4c9998be0f57c633f7d22e12c125a0517",
+        "regradedReport": "8a74b9cfae6ac1c46fb75befcb1b35fa4e7b5c9114a5a423c6ded819f4e1c209",
+        "transcript": "009dfb574a5ef13194a11c9d7066e558fc6964289462e91f3715b829ed199c55"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-flowdeck-04165a3f733c",
+      "scenario": "reminders",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:17:47.296Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 87.629157875,
+        "totalCalls": 23,
+        "uiCalls": 23,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 21245,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "8328c16d9a6d0b5fe78ca075b4319b73485f166f35f312fed07bd1817028395a",
+        "regradedReport": "4e7805b1ac0d6e4dcc28d34fbd36e95ee929c5c58c3f6b93831561c185b25608",
+        "transcript": "2a8c86184dbd98ecd36420f23525ffe62642c32174bc27704a9fc1466b2b39d9"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-flowdeck-42f9643ddddf",
+      "scenario": "reminders",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T10:58:37.203Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 89.010592458,
+        "totalCalls": 25,
+        "uiCalls": 24,
+        "helpCalls": 1,
+        "errorCalls": 1,
+        "returnedTextTokens": 21202,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "b42390d46fced8ce261979c3a7651a9b278b873840f3a1fa713d904be1380f66",
+        "regradedReport": "805c4a763b2a72701d0b47b4617a914e875ba1a8ab15bf50522ef2e70428927a",
+        "transcript": "e04a443f5bab9b9b1fc8db8c6903eb39aa19145e6cb764bf8f8caf542ceef87f"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-flowdeck-af37c49094c7",
+      "scenario": "reminders",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:36:12.734Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 84.908175833,
+        "totalCalls": 24,
+        "uiCalls": 22,
+        "helpCalls": 2,
+        "errorCalls": 1,
+        "returnedTextTokens": 21787,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "f32b20df4e63b51dabae3d27ad907a7b57afdb01ddfb7fd6716800ffb39e1be8",
+        "regradedReport": "dc288d47464fb8f8983984cb25d87dcfb2507511b0e378ac7c130c5803da6773",
+        "transcript": "44bff3594d72f94f3ebeb6b5cc46aa129d8829f068f35352f05fd144bde4f2d2"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-rocketsim-0005a43a31ea",
+      "scenario": "reminders",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:19:31.076Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 88.149297375,
+        "totalCalls": 15,
+        "uiCalls": 15,
+        "helpCalls": 0,
+        "errorCalls": 0,
+        "returnedTextTokens": 8855,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "8285e2fe01291d9be4dd6cc3d61ba07746d3192f013556a5327bf7e00e6110f5",
+        "regradedReport": "1157909fb31f5af8834cb7f1d6faa6ce3d61cac271ac55cb9bb24db4600e8903",
+        "transcript": "1d0582166cef505f3141ca0a1366198e3da57e3171a6a4b512c5f7f92201dba9"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-rocketsim-bc77e561bcf9",
+      "scenario": "reminders",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:37:53.939Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 101.328683833,
+        "totalCalls": 18,
+        "uiCalls": 18,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 10018,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "027e5752b11d21758f393d49bd811a8228daa2ca07d31c2b63083c95cb7f9927",
+        "regradedReport": "f12051759608b4eea1d2ac8f12a29433c67ca3b13fa1e63289c41768f86d7502",
+        "transcript": "585c275b80dabbc6ac77c4cbc3b881ab5508bec7a2662f895a774c336261b801"
+      }
+    },
+    {
+      "runId": "axe-bench-reminders-rocketsim-ff11b0fcac3c",
+      "scenario": "reminders",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:00:22.267Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 102.899492125,
+        "totalCalls": 19,
+        "uiCalls": 19,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 12625,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "0e0a1e586387283ec31d74a6bcaf0c46c0220c698e03fd9a9db5448cb4d59647",
+        "regradedReport": "fabdc756041added5304a2361df7381110ec88a3dd3e3fbecd03f0115c82426d",
+        "transcript": "beaeae16935d8f1445162ce0278f9b0d17e04be8db0ae29b12374a72e2d4b731"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-axe-a72555b18551",
+      "scenario": "weather",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T10:52:09.130Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 65.795821542,
+        "totalCalls": 15,
+        "uiCalls": 15,
+        "helpCalls": 0,
+        "errorCalls": 0,
+        "returnedTextTokens": 7148,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "22e6c2af441c2ebc7fdba11ced383d4f41100a06db5d47d77591bb5f629c9420",
+        "regradedReport": "2b8d344854ef5502c30deb97a6e3fd3b57019509cb8e30be5cbee4ee2655d7ac",
+        "transcript": "f66561f5cc2fd2f147c8a9407196019f1dc339dfa5598de961b17b6382b977b8"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-axe-ae88cb080592",
+      "scenario": "weather",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:29:13.310Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 64.323470958,
+        "totalCalls": 14,
+        "uiCalls": 14,
+        "helpCalls": 0,
+        "errorCalls": 0,
+        "returnedTextTokens": 7629,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "53550bfdd4eda2e6abd184e124f7e93dc4b2af4866ae481754760ed03b145ab4",
+        "regradedReport": "c566d00237c0c3d0e209e21b15013fafafbe796b2fcec0034e05a632cafea486",
+        "transcript": "7df25a9ae14cfef8a357046de87f86312bd0a4211d55d2536b17b4623634f356"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-axe-cf555f966741",
+      "scenario": "weather",
+      "tool": "axe",
+      "toolVersion": "v1.8.0-422-g15fa2cf68",
+      "startedAt": "2026-11-11T11:10:55.439Z",
+      "skill": {
+        "source": "Skills/CLI/axe (axe init)",
+        "sha256": "96bbbc1949c5b3f3ceaabc1529c67481fb9e748884723527d78856e833bed4da"
+      },
+      "binarySHA256": "1c506ee789d8e30a757e702484baee0a5ca02905c3b5afebbb3e23e8e4b40a6b",
+      "metrics": {
+        "elapsedSeconds": 63.70532375,
+        "totalCalls": 14,
+        "uiCalls": 14,
+        "helpCalls": 0,
+        "errorCalls": 1,
+        "returnedTextTokens": 7559,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "997ab79f351c5b99d77feee9045482f2e1bc57fc842bc7ca2af5b4893b54897f",
+        "regradedReport": "b337da0e2487745a6176a5975a0b5ad53ed2f12456b3ac73e9aa06f4a7342552",
+        "transcript": "150cff80842255eaca788a54715d7d71de1c654cf922c7620690ba65c2c7d962"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-flowdeck-25de0e165b46",
+      "scenario": "weather",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:12:08.511Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 139.170133292,
+        "totalCalls": 34,
+        "uiCalls": 25,
+        "helpCalls": 4,
+        "errorCalls": 0,
+        "returnedTextTokens": 39663,
+        "imageCount": 5,
+        "imageBytes": 979838
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "unverified",
+      "checksNotPassedRegraded": [
+        {
+          "id": "search.exactLondonAndSelection",
+          "status": "unverified"
+        },
+        {
+          "id": "main.temperature",
+          "status": "unverified"
+        },
+        {
+          "id": "main.visibility",
+          "status": "unverified"
+        },
+        {
+          "id": "detail.chance",
+          "status": "unverified"
+        },
+        {
+          "id": "detail.total",
+          "status": "unverified"
+        },
+        {
+          "id": "detail.hours",
+          "status": "unverified"
+        },
+        {
+          "id": "detail.distance",
+          "status": "unverified"
+        },
+        {
+          "id": "detail.lightning",
+          "status": "unverified"
+        },
+        {
+          "id": "procedure.noInputAfterDetails",
+          "status": "unverified"
+        }
+      ],
+      "sha256": {
+        "report": "3a245e6d97914f4f49020b62b9d3afb9302b011991cef53473142e9744a135dc",
+        "regradedReport": "7446f44ee6749949df9172a8d590de6015c79031020daaab00e633c21c580356",
+        "transcript": "8e6e45773c4d8e36fdd06e271d8d064f3570e79e613c08b6bc74473765e99f22"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-flowdeck-6e27f47590ec",
+      "scenario": "weather",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T10:53:24.568Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 113.236616042,
+        "totalCalls": 32,
+        "uiCalls": 17,
+        "helpCalls": 1,
+        "errorCalls": 3,
+        "returnedTextTokens": 18371,
+        "imageCount": 7,
+        "imageBytes": 173843
+      },
+      "gradeAsRun": "failed",
+      "gradeRegraded": "unverified",
+      "checksNotPassedRegraded": [
+        {
+          "id": "settings.Reduce transparency",
+          "status": "unverified"
+        },
+        {
+          "id": "main.precipitation",
+          "status": "unverified"
+        },
+        {
+          "id": "main.visibility",
+          "status": "unverified"
+        }
+      ],
+      "sha256": {
+        "report": "bfc6bfc06bb5b6f6831344e5f33052f84ffcf5f0692ea595f92615e20b1d8769",
+        "regradedReport": "13ac4d3f20005d4fc690835185dfd805c649f034d7402dd40a3adb50baec9657",
+        "transcript": "7ee2689bc4322acf12426c338bb93bca4f84991981ae51fd6233f3efb37d9239"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-flowdeck-fc895e1b7766",
+      "scenario": "weather",
+      "tool": "flowdeck",
+      "toolVersion": "1.34.0",
+      "startedAt": "2026-11-11T11:30:27.223Z",
+      "skill": {
+        "source": "flowdeck ai install-skill --agent claude",
+        "sha256": "c6a8994b8c475748c1f02b943ecc064555c4ed1aca7ab446db7c13541e0714d2"
+      },
+      "binarySHA256": "45d8f09ce59ec816424cc2d8762a4da4d9343cb2885abdc0e6d7168791917fd6",
+      "metrics": {
+        "elapsedSeconds": 133.88267425,
+        "totalCalls": 38,
+        "uiCalls": 21,
+        "helpCalls": 3,
+        "errorCalls": 4,
+        "returnedTextTokens": 37172,
+        "imageCount": 8,
+        "imageBytes": 426713
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "unverified",
+      "checksNotPassedRegraded": [
+        {
+          "id": "main.precipitation",
+          "status": "unverified"
+        },
+        {
+          "id": "main.visibility",
+          "status": "unverified"
+        }
+      ],
+      "sha256": {
+        "report": "fcf5962e1eddf5f5a268a10aa398cdf901e93d8051c5a4f92c1689035f8e65b7",
+        "regradedReport": "1a92cba3dcf60a845b697f831f462f9e66cd7ec0c6817239e0dac3727e272c90",
+        "transcript": "d87c263594f7e43670d7acf44b2b28a885bbf4606a3f3d1aab42218af5fc6d90"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-rocketsim-62ec7d573acf",
+      "scenario": "weather",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:14:35.764Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 95.66001575,
+        "totalCalls": 20,
+        "uiCalls": 20,
+        "helpCalls": 0,
+        "errorCalls": 2,
+        "returnedTextTokens": 12839,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "0c2b64d1a04259b27f17bc2be1b487baf6184328afe41aa2b1e9f95e548cb7b5",
+        "regradedReport": "610f9d682c3b90935a4e0e6d03d7b49d149bb29beed710ceef0d5e84faf7f563",
+        "transcript": "2cee1ffdcdc64089607a0d976a04d16d61a80b9b372ebf2ea4fb2967020eb1d5"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-rocketsim-cd30c0e8163c",
+      "scenario": "weather",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T11:32:48.309Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 108.525604916,
+        "totalCalls": 26,
+        "uiCalls": 25,
+        "helpCalls": 1,
+        "errorCalls": 4,
+        "returnedTextTokens": 14736,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "passed",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "a8946e6934d5933d089ddc7c951aab11610941f2d514f9f7d9ee5315c3d4588b",
+        "regradedReport": "017b01c24e9192f1775e23a278413093193218451cdf7cb0ccce7f72b311ec02",
+        "transcript": "cfbe21576777cf9fd58e4dbdf2e560e5e33fea3a5fa89b8bde386bf8c01c95cc"
+      }
+    },
+    {
+      "runId": "axe-bench-weather-rocketsim-f3bd041c8adc",
+      "scenario": "weather",
+      "tool": "rocketsim",
+      "toolVersion": "16.8.0",
+      "startedAt": "2026-11-11T10:55:27.115Z",
+      "skill": {
+        "source": "RocketSim.app/Contents/Resources/Agent-Skill/rocketsim",
+        "sha256": "33943b61eddd33231ea230bf8f001b43205849e152832f975f43092649c07edc"
+      },
+      "binarySHA256": "a3452ce017bff17225d2fbdd8e068c8155ecbf333f636c9421b01506d7d189bc",
+      "metrics": {
+        "elapsedSeconds": 95.170423458,
+        "totalCalls": 18,
+        "uiCalls": 18,
+        "helpCalls": 0,
+        "errorCalls": 3,
+        "returnedTextTokens": 14348,
+        "imageCount": 0,
+        "imageBytes": 0
+      },
+      "gradeAsRun": "unverified",
+      "gradeRegraded": "passed",
+      "checksNotPassedRegraded": [],
+      "sha256": {
+        "report": "77e6f631a5b8c4398c0a76d95219868d7e29a9e396ce83148e0cd6903eb5bc0d",
+        "regradedReport": "ec3a48be775557269615a5aab9315aaf4b997ab5ce1ec26d139a9a981981efa1",
+        "transcript": "c9091bbd52f8c89460b8d80a278c0ed0b878274cd9e13a9fb4bdca2c79a1ec9f"
+      }
+    }
+  ]
+}
