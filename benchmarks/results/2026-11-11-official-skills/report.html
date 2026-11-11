@@ -1,0 +1,230 @@
+<title>AXe Agent UI Benchmark</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one reading column; results as to-scale bar groups per app, then grades, disclosures, method and reproduction. */
+:root {
+  --bg: #f6f8fa;
+  --surface: #ffffff;
+  --fg: #16202b;
+  --muted: #586776;
+  --line: #d9e0e7;
+  --accent: #1f5fd1;
+  --axe: #1f5fd1;
+  --rocket: #c06a12;
+  --flow: #7a4fc4;
+  --good: #1d7a4a;
+  --warn: #9a6a00;
+  --note-bg: #fff7e6;
+  --note-line: #e9c674;
+  --display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151c; --surface: #16202a; --fg: #e6edf3; --muted: #9aa8b6; --line: #2a3644;
+    --accent: #6aa1ff; --axe: #6aa1ff; --rocket: #f0a050; --flow: #b293f0;
+    --good: #5fd08f; --warn: #e8bf5a; --note-bg: #2a2412; --note-line: #7a6326; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151c; --surface: #16202a; --fg: #e6edf3; --muted: #9aa8b6; --line: #2a3644;
+  --accent: #6aa1ff; --axe: #6aa1ff; --rocket: #f0a050; --flow: #b293f0;
+  --good: #5fd08f; --warn: #e8bf5a; --note-bg: #2a2412; --note-line: #7a6326; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 64px;
+}
+main { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: 44px; }
+h1, h2, h3 { font-family: var(--display); line-height: 1.2; text-wrap: balance; margin: 0; }
+h1 { font-size: 2.1rem; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.35rem; font-weight: 600; }
+h3 { font-size: 1.02rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+a { color: var(--accent); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+section { display: flex; flex-direction: column; gap: 16px; }
+header { display: flex; flex-direction: column; gap: 14px; }
+.lede { font-size: 1.08rem; }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--muted); font-size: 0.86rem; }
+.facts span strong { color: var(--fg); font-weight: 600; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.86rem; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; }
+.app { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.metric { display: flex; flex-direction: column; gap: 6px; }
+.metric .name { font-size: 0.8rem; color: var(--muted); letter-spacing: 0.04em; text-transform: uppercase; }
+.bar { display: grid; grid-template-columns: 76px 1fr; align-items: center; gap: 8px; font-size: 0.82rem; }
+.bar .who { color: var(--muted); }
+.track { position: relative; height: 18px; }
+.fill { height: 100%; border-radius: 3px; }
+.val { position: absolute; top: 0; left: 0; height: 18px; line-height: 18px; font-family: var(--mono); font-size: 0.76rem; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--fg); padding-left: 6px; }
+.axe { background: var(--axe); } .rocket { background: var(--rocket); } .flow { background: var(--flow); }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+th { font-weight: 600; font-size: 0.8rem; color: var(--muted); letter-spacing: 0.03em; }
+td.num { font-family: var(--mono); font-size: 0.84rem; white-space: nowrap; }
+td .d { color: var(--muted); }
+.pill { display: inline-block; font-family: var(--mono); font-size: 0.75rem; padding: 1px 8px; border-radius: 99px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--good); } .pill.uv { color: var(--warn); }
+.note { background: var(--note-bg); border: 1px solid var(--note-line); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; }
+ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 8px; max-width: 72ch; }
+pre { margin: 0; overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-family: var(--mono); font-size: 0.82rem; }
+dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; font-size: 0.9rem; }
+dt { color: var(--muted); } dd { margin: 0; min-width: 0; }
+footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 520px) { h1 { font-size: 1.7rem; } dl { grid-template-columns: 1fr; gap: 2px 0; } dd { margin-bottom: 8px; } }
+</style>
+
+<main>
+  <header>
+    <div class="eyebrow">Benchmark · 11 November 2026</div>
+    <h1>AXe, RocketSim and FlowDeck driving iOS apps with an AI agent</h1>
+    <p class="lede">An agent (Claude Code with Sonnet 5.5) completed three UI tasks on an iOS simulator, three times with each tool. Each tool ran with its own official agent skill, unedited, and only UI interaction was timed. AXe was the fastest on every app, used the fewest calls, and passed 9 of 9 runs.</p>
+    <div class="facts">
+      <span><strong>27</strong> runs</span>
+      <span><strong>3</strong> apps × <strong>3</strong> tools × <strong>3</strong> repeats</span>
+      <span>Model <strong>claude-sonnet-5-5</strong></span>
+      <span>iPhone 18 Pro · iOS 27.2</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="results">
+    <h2 id="results">Results</h2>
+    <p>Averages of three runs. Bars are drawn to scale within each measure; shorter is better.</p>
+    <div class="legend">
+      <span><i class="axe"></i>AXe v1.8.0-422</span>
+      <span><i class="rocket"></i>RocketSim 16.8.0</span>
+      <span><i class="flow"></i>FlowDeck 1.34.0</span>
+    </div>
+    <div class="apps" id="apps"></div>
+  </section>
+
+  <section aria-labelledby="table">
+    <h2 id="table">Figures and differences from AXe</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>App</th><th>Measure</th><th>AXe</th><th>RocketSim</th><th>FlowDeck</th></tr></thead>
+        <tbody>
+          <tr><td rowspan="3">Weather</td><td>Time</td><td class="num">65 s</td><td class="num">100 s <span class="d">+54%</span></td><td class="num">129 s <span class="d">+99%</span></td></tr>
+          <tr><td>Calls</td><td class="num">14.3</td><td class="num">21.3 <span class="d">+49%</span></td><td class="num">34.7 <span class="d">+142%</span></td></tr>
+          <tr><td>Returned text</td><td class="num">7.4k</td><td class="num">14.0k <span class="d">+88%</span></td><td class="num">31.7k <span class="d">+326%</span></td></tr>
+          <tr><td rowspan="3">Contacts</td><td>Time</td><td class="num">65 s</td><td class="num">158 s <span class="d">+144%</span></td><td class="num">181 s <span class="d">+179%</span></td></tr>
+          <tr><td>Calls</td><td class="num">10.0</td><td class="num">30.0 <span class="d">+200%</span></td><td class="num">48.7 <span class="d">+387%</span></td></tr>
+          <tr><td>Returned text</td><td class="num">8.8k</td><td class="num">14.4k <span class="d">+64%</span></td><td class="num">22.3k <span class="d">+155%</span></td></tr>
+          <tr><td rowspan="3">Reminders</td><td>Time</td><td class="num">65 s</td><td class="num">97 s <span class="d">+49%</span></td><td class="num">87 s <span class="d">+34%</span></td></tr>
+          <tr><td>Calls</td><td class="num">17.0</td><td class="num">17.3 <span class="d">+2%</span></td><td class="num">24.0 <span class="d">+41%</span></td></tr>
+          <tr><td>Returned text</td><td class="num">10.6k</td><td class="num">10.5k <span class="d">−1%</span></td><td class="num">21.4k <span class="d">+101%</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Returned text is tokens (o200k_base) of everything the tool gave back to the agent. Images are not counted as tokens: FlowDeck read 6.7 images per run on Weather and 10.0 on Contacts, RocketSim 4.0 on Contacts, and AXe none.</p>
+  </section>
+
+  <section aria-labelledby="grades">
+    <h2 id="grades">Grades</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Tool</th><th>Grader</th><th>Manual review</th></tr></thead>
+        <tbody>
+          <tr><td>AXe</td><td><span class="pill ok">9 passed</span></td><td>All 9 correct. No screenshots needed.</td></tr>
+          <tr><td>RocketSim</td><td><span class="pill ok">8 passed</span> <span class="pill uv">1 unverified</span></td><td>All 9 correct. In one Contacts run the saved name and company were confirmed only in a screenshot.</td></tr>
+          <tr><td>FlowDeck</td><td><span class="pill ok">6 passed</span> <span class="pill uv">3 unverified</span></td><td>All 9 correct. FlowDeck's accessibility tree never contains the Weather app's visibility card, so its three Weather runs confirmed it from screenshots.</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The grader accepts a fact only when the tool's returned UI state shows it. A screenshot or the agent's own claim does not count. That rule is the same for every tool. "Unverified" means the result was right but only a screenshot proved it. No run failed.</p>
+  </section>
+
+  <section aria-labelledby="disclosures">
+    <h2 id="disclosures">Disclosures</h2>
+    <div class="note">
+      <h3>FlowDeck's official skill contains the Weather task</h3>
+      <p>FlowDeck's skill (<code>resources/ui.md</code>) and its <code>batch --examples</code> include a worked example that matches this Weather task, with its control names and the expected answers ("11°", "78%", "10.7 mm", "Lightning"). It was used unedited, like every skill, so FlowDeck's Weather result is not a blind test.</p>
+    </div>
+    <ul>
+      <li><strong>The grader was corrected after the run</strong>, while the transcripts were being audited, so that it reads FlowDeck's and RocketSim's documented output correctly. Every fix applies to all three tools and has a test. All runs were regraded from their saved transcripts, and no AXe grade changed.</li>
+      <li><strong>This benchmark is AXe's own.</strong> It lives in the AXe repository, and AXe's maintainers wrote the grader. The tasks and the model runner are the original ones.</li>
+      <li><strong>One FlowDeck run saved London as a location</strong>, which the task allows before the details screen. Later runs show it did not carry over.</li>
+      <li><strong>RocketSim's agent never passed the simulator ID</strong>, though told to. Only the benchmark simulator was booted, so it acted on the right device.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="method">
+    <h2 id="method">Method</h2>
+    <ul>
+      <li><strong>Tasks:</strong> change seven settings in Weather, search for London and read its precipitation details; create one exact contact in Contacts; create a list with three reminders in Reminders and complete two. Each task ends with a read-only check of the result.</li>
+      <li><strong>Skills:</strong> AXe's from <code>axe init</code>, FlowDeck's from <code>flowdeck ai install-skill --agent claude</code>, and RocketSim's from its app bundle. Each report records the hash of the skill the agent received.</li>
+      <li><strong>Instructions:</strong> identical for every tool apart from its name and path: test UI interaction only, the app is already running, and target the benchmark simulator.</li>
+      <li><strong>Setup outside the clock:</strong> the harness builds, installs and launches each app before the agent starts, and removes the previous run's record through the app's own UI.</li>
+      <li><strong>Order:</strong> runs alternate AXe, FlowDeck, RocketSim on each app, three times over.</li>
+      <li><strong>Review:</strong> every transcript went through an audit script, and every run that did not pass was read by hand, screenshots included. No run read app source or storage, used another tool, or ran a command outside its tool.</li>
+    </ul>
+  </section>
+
+  <section aria-labelledby="environment">
+    <h2 id="environment">Environment</h2>
+    <dl>
+      <dt>Agent</dt><dd>Claude Code 2.1.281, <span class="mono">claude-sonnet-5-5</span>, 900 s limit per task</dd>
+      <dt>AXe</dt><dd><span class="mono">v1.8.0-422-g15fa2cf68</span>, built from a clean checkout</dd>
+      <dt>FlowDeck</dt><dd>1.34.0 (build 815522), the latest release</dd>
+      <dt>RocketSim</dt><dd>16.8.0 (build 339), the latest release</dd>
+      <dt>Simulator</dt><dd>iPhone 18 Pro, iOS 27.2 (24B5110a), 402 × 874 points</dd>
+      <dt>Xcode</dt><dd>27.2 beta 3 (27B5038j)</dd>
+      <dt>Host</dt><dd>Mac17,7, macOS 26.6.2, Apple silicon</dd>
+    </dl>
+  </section>
+
+  <section aria-labelledby="repeat">
+    <h2 id="repeat">Running it yourself</h2>
+    <p>Everything needed is in the AXe repository under <code>benchmarks/</code>. The published record, with every run's figures, both grades and checksums of each transcript, is in <code>benchmarks/results/2026-11-11-official-skills/</code>. Set up, configure the paths to your Xcode, simulator, FlowDeck and RocketSim in <code>benchmarks/config.local.json</code>, open RocketSim, then run:</p>
+    <pre>./benchmarks/run setup
+./benchmarks/run run --tools axe flowdeck rocketsim --repeat 3 --rerun-competitors</pre>
+    <p>Model output varies, so expect different figures from run to run. A different host, runtime or tool version makes a separate comparison.</p>
+  </section>
+
+  <footer>Limits: three runs per tool and app, one model, one Mac and one simulator runtime. The transcripts (about 570 MB) are kept outside the repository and match the checksums in <span class="mono">results.json</span>.</footer>
+</main>
+
+<script>
+(function () {
+  var data = [
+    { app: "Weather", m: [["Time", "s", [65, 100, 129]], ["Calls", "", [14.3, 21.3, 34.7]], ["Returned text", "k tokens", [7.4, 14.0, 31.7]]] },
+    { app: "Contacts", m: [["Time", "s", [65, 158, 181]], ["Calls", "", [10.0, 30.0, 48.7]], ["Returned text", "k tokens", [8.8, 14.4, 22.3]]] },
+    { app: "Reminders", m: [["Time", "s", [65, 97, 87]], ["Calls", "", [17.0, 17.3, 24.0]], ["Returned text", "k tokens", [10.6, 10.5, 21.4]]] }
+  ];
+  var tools = [["AXe", "axe"], ["RocketSim", "rocket"], ["FlowDeck", "flow"]];
+  var root = document.getElementById("apps");
+  data.forEach(function (d) {
+    var card = document.createElement("div"); card.className = "app";
+    var h = document.createElement("h3"); h.textContent = d.app; card.appendChild(h);
+    d.m.forEach(function (m) {
+      var max = Math.max.apply(null, m[2]);
+      var box = document.createElement("div"); box.className = "metric";
+      var n = document.createElement("div"); n.className = "name"; n.textContent = m[0]; box.appendChild(n);
+      m[2].forEach(function (v, i) {
+        var row = document.createElement("div"); row.className = "bar";
+        var who = document.createElement("span"); who.className = "who"; who.textContent = tools[i][0];
+        var track = document.createElement("div"); track.className = "track";
+        var fill = document.createElement("div"); fill.className = "fill " + tools[i][1];
+        var pct = v / max * 62; fill.style.width = pct + "%";
+        var val = document.createElement("span"); val.className = "val";
+        val.style.left = pct + "%";
+        val.textContent = (m[1] === "s" ? v + " s" : m[1] ? v.toFixed(1) + "k" : v.toFixed(1));
+        track.appendChild(fill); track.appendChild(val);
+        row.appendChild(who); row.appendChild(track); box.appendChild(row);
+      });
+      card.appendChild(box);
+    });
+    root.appendChild(card);
+  });
+})();
+</script>

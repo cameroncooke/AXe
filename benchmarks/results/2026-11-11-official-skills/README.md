@@ -99,5 +99,6 @@ Model output varies between runs, so expect different figures from run to run. A
   - this report;
   - [`results.json`](results.json), with every run's metrics, both grades, the checks that did not pass, the skill hash, and SHA-256 checksums of its report, regraded report and transcript;
   - [`manual-review.md`](manual-review.md);
+  - [`report.html`](report.html), the source of the published results page;
   - the two review scripts.
 - **Not committed:** the transcripts, screenshots, raw reports and built binaries, about 570 MB. They are kept outside the repository in `e2e-results/benchmark-final/` and match the checksums in `results.json`. FlowDeck's skill pack is not redistributed; its SHA-256 identifies the copy used.
