@@ -7,7 +7,15 @@ description: Drives iOS Simulator apps through the AXe CLI's agent mode. Capture
 
 Drive the simulator with AXe's agent mode (`--agent`). Each agent call reads the screen natively, checks that your target is still the control you saw, sends the input, and returns the settled screen as compact rows with refs. One call does the action and the re-read, and nothing is sent if the screen changed under you.
 
-Use `--agent` for every UI read and input. Commands without it are for fixed scripts: they do not check targets, do not return the new screen, and can hit the wrong control after a layout change. Do not add `sleep`, `--pre-delay` or `--post-delay`; agent actions return once the screen has settled, so a fixed wait only adds time.
+Use `--agent` for every UI read and input. The same commands without it exist for fixed scripts written by people: they do not check targets, do not return the new screen, and can hit the wrong control after a layout change, so do not use them to operate an app. Do not add `sleep`, `--pre-delay` or `--post-delay`; agent actions return once the screen has settled, so a fixed wait only adds time.
+
+## 0. Check AXe is installed
+
+```bash
+axe describe-ui --help | grep -- --agent
+```
+
+If `axe` is not found, install it with Homebrew: `brew install cameroncooke/axe/axe`. If it is installed but the help does not list `--agent`, it predates agent mode (AXe 2.0); upgrade with `brew upgrade cameroncooke/axe/axe`. Ask the user first if you may not install software. AXe needs macOS with Xcode installed.
 
 ## 1. Find the simulator and look
 
@@ -108,7 +116,7 @@ axe tap --agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> -x 201 -y 640
 
 Use logical points, not screenshot pixels: `capture.screen` is `[screenID, width, height, rotation]`. Measure from a fresh screenshot of the same screen, and take a new capture and screenshot after any layout change. Coordinates skip the target check, so use them only as a deliberate choice for that control, never as an automatic retry for a refused ref. Coordinate swipes take `--start-x`, `--start-y`, `--end-x` and `--end-y` with `--agent --snapshot-id`.
 
-To draw a shape or pinch where no ref advertises `pinchWithin`, use the coordinate commands without `--agent`: `axe draw 100,400 300,400 300,600 --close --udid <UDID>` moves one finger through the points, and `axe gesture pinch --scale 2 --udid <UDID>` zooms in at the centre of the screen (`--scale 0.5` zooms out; `-x/-y` and `--radius` place it). They do not return a capture, so capture again afterwards. See [cli-quick-reference.md](references/cli-quick-reference.md#gestures-and-drawing).
+Two gestures have no agent form: drawing a path (`axe draw 100,400 300,400 300,600 --close --udid <UDID>`) and pinching where no ref advertises `pinchWithin` (`axe gesture pinch --scale 2 --udid <UDID>`; `--scale 0.5` zooms out). They skip the target check and return no capture, so capture again afterwards. See [cli-quick-reference.md](references/cli-quick-reference.md#gestures-and-drawing).
 
 ## More agent actions
 
@@ -123,6 +131,8 @@ Read [agent-reference.md](references/agent-reference.md) for exact limits, recei
 
 ## Outside agent mode
 
-For a physical iPhone or iPad, follow [physical-device-reference.md](references/physical-device-reference.md). It covers readiness, direct input, accessibility readback, capture and recording.
+Agent mode covers app reads and input on every simulator, including the iPhone Duo. Leave it only for work it does not do:
 
-Commands with no UI target run without `--agent`: `list-simulators`, `displays`, `screenshot`, `record-video`, `stream-video`, `button`, `shutdown` and `clipboard copy`. See [cli-quick-reference.md](references/cli-quick-reference.md), [recording-reference.md](references/recording-reference.md) and [clipboard-reference.md](references/clipboard-reference.md). `axe displays --udid <UDID>` shows which screen is active, its size in points and its orientation, and the hinge angle on iPhone Duo. For iPhone Duo hinge and rotation, and for input or capture on one explicitly selected display, read [device-reference.md](references/device-reference.md). For dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar overrides, read [settings-reference.md](references/settings-reference.md).
+- **A physical iPhone or iPad**, where agent mode is unavailable: follow [physical-device-reference.md](references/physical-device-reference.md). It covers readiness, direct input, accessibility readback, capture and recording.
+- **Commands with no UI target**, which run without `--agent`: `list-simulators`, `displays`, `screenshot`, `record-video`, `stream-video`, `button`, `shutdown` and `clipboard copy`. See [cli-quick-reference.md](references/cli-quick-reference.md), [recording-reference.md](references/recording-reference.md) and [clipboard-reference.md](references/clipboard-reference.md).
+- **Device state**: `axe displays --udid <UDID>` shows which screen is active, its size in points and its orientation, and the hinge angle on iPhone Duo. For iPhone Duo hinge and rotation, and for capture or input pinned to one display, read [device-reference.md](references/device-reference.md). For dark mode, text size, accessibility display settings, VoiceOver, simulated location and status bar overrides, read [settings-reference.md](references/settings-reference.md).
