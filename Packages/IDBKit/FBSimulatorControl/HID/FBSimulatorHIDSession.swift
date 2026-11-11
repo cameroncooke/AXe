@@ -125,15 +125,17 @@ public actor FBSimulatorHIDSession {
       }
       let reused = transport != nil
       if transport == nil {
-        // The initial guest barrier carries no input. On Xcode 27.2 a new connection opened soon
-        // after an earlier owned session can go unanswered for its whole timeout; the guest then
-        // answers a fresh connection. Try one, after the context check, before any input.
+        // The initial guest barrier carries no input. On Xcode 27.2 the guest answers a new
+        // connection opened soon after an earlier owned session late: under 1 s on a healthy
+        // simulator, 3.5 to 4.3 s on one that has taken input for hours. Wait as long as a plain
+        // connection does, because a connection abandoned early adds to the guest's backlog. A
+        // connection that is never answered gets one fresh try, after the context check.
         for attempt in 0..<2 {
           let opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
             displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
           transport = opened
           do {
-            try await opened.prepareConnection()
+            try await opened.prepareConnection(timeout: FBSimulatorHID.connectionReadyTimeout)
             break
           } catch is CancellationError {
             throw CancellationError()

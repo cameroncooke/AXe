@@ -71,11 +71,12 @@ public final class FBSimulatorHID: CustomStringConvertible, @unchecked Sendable 
     self.init(transport: transport, transportType: resolvedTransportType, purple: FBSimulatorPurpleHID(), simulator: simulator)
   }
 
-  /// How long a new plain connection waits for the guest service before any input is sent.
+  /// How long a new connection waits for the guest service before any input is sent.
   /// Measured on Xcode 27.2: the guest serves a connection opened straight after another one's
   /// Home press 0.7 to 1 s late, and 3.1 to 3.3 s late on a simulator that had taken input for
-  /// hours. Input sent on a connection that is closed before the guest reaches it is lost.
-  static let plainConnectionReadyTimeout: TimeInterval = 10
+  /// hours; after an owned session that held a contact it was 3.5 to 4.3 s late there. Input sent
+  /// on a connection that is closed before the guest reaches it is lost.
+  static let connectionReadyTimeout: TimeInterval = 10
 
   /// Opens the default transport and, on DTUHID, waits for the guest service to answer a request
   /// that carries no input, so the caller's first input is not sent to a service that has not
@@ -84,7 +85,7 @@ public final class FBSimulatorHID: CustomStringConvertible, @unchecked Sendable 
   public static func ready(for simulator: FBSimulator) async throws -> FBSimulatorHID {
     let hid = try FBSimulatorHID(for: simulator)
     if let dtuhid = hid.transport as? FBSimulatorDTUHIDTransport {
-      try await dtuhid.prepareConnection(timeout: plainConnectionReadyTimeout)
+      try await dtuhid.prepareConnection(timeout: connectionReadyTimeout)
     }
     return hid
   }
