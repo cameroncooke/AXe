@@ -2,6 +2,21 @@
 
 These commands have no UI target, so they run without `--agent`. For app reads and input, use the agent commands in SKILL.md. Simulator commands require `--udid <UDID>` unless noted.
 
+## Contents
+
+- [Output format](#output-format)
+- [Simulator discovery](#simulator-discovery)
+- [Screens](#screens)
+- [Device settings](#device-settings)
+- [Screenshot](#screenshot)
+- [Video recording](#video-recording)
+- [Video streaming](#video-streaming)
+- [Clipboard staging](#clipboard-staging)
+- [Gestures and drawing](#gestures-and-drawing)
+- [Hardware buttons](#hardware-buttons)
+- [Simulator shutdown](#simulator-shutdown)
+- [Common keycodes](#common-keycodes)
+
 ## Output format
 
 ```bash

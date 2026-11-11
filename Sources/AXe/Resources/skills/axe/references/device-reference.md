@@ -4,6 +4,20 @@ Read this only for work the agent path in SKILL.md does not cover: iPhone Duo hi
 input or capture on one explicitly selected display, device buttons and simulator shutdown.
 For ordinary app automation, use `--agent` as SKILL.md describes.
 
+## Contents
+
+- [Simulator shutdown](#simulator-shutdown)
+- [Screens, hinge and rotation](#screens-hinge-and-rotation)
+- [App input on the iPhone Duo](#app-input-on-the-iphone-duo)
+- [Selected input](#selected-input)
+- [Selected Home button](#selected-home-button)
+- [Selected device buttons](#selected-device-buttons)
+- [Selected batch steps](#selected-batch-steps)
+- [Selected PNG screenshots](#selected-png-screenshots)
+- [Selected video recording](#selected-video-recording)
+- [Selected video streams](#selected-video-streams)
+- [Automation and testing](#automation-and-testing)
+
 ## Simulator shutdown
 
 Use `axe shutdown --udid <UUID>` for one simulator. It prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}` with `shutDown` only after state readback, or `alreadyShutDown` without a request. Names/all aliases reject. This is simulator shutdown, not guest lock or power-button input. It has a 60-second budget; inspect state after failure. Do not use agent/batch options.

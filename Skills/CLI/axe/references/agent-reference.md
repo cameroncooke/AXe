@@ -2,6 +2,25 @@
 
 Numeric keyboard evidence is heuristic. It requires complete native identity metadata, one focused editable field, a verified OS keyplane, all ten digits and Delete. Docked occlusion uses the measured native keyboard ancestor, not fixed coordinates. Full keyboard signals include optional `numericKeyCount` only when that evidence is verified; alphabetic output keeps its current shape. This evidence clips planning bounds and grants no input authority.
 
+## Contents
+
+- [Output format](#output-format)
+- [Agent mode workflow](#agent-mode-workflow)
+- [Native object references](#native-object-references)
+- [Read custom-action names](#read-custom-action-names)
+- [Change view on the current snapshot](#change-view-on-the-current-snapshot)
+- [Read complete fields and page controls](#read-complete-fields-and-page-controls)
+- [Drag a control by its agent reference](#drag-a-control-by-its-agent-reference)
+- [Press and hold a control by its agent reference](#press-and-hold-a-control-by-its-agent-reference)
+- [Focus a field and type in one command](#focus-a-field-and-type-in-one-command)
+- [Press one key on a focused field reference](#press-one-key-on-a-focused-field-reference)
+- [Send a modifier shortcut to a focused field reference](#send-a-modifier-shortcut-to-a-focused-field-reference)
+- [Send a key sequence to a focused field reference](#send-a-key-sequence-to-a-focused-field-reference)
+- [Move a slider to its minimum or maximum](#move-a-slider-to-its-minimum-or-maximum)
+- [Double-tap a control by its agent reference](#double-tap-a-control-by-its-agent-reference)
+- [Pinch inside an area by its agent reference](#pinch-inside-an-area-by-its-agent-reference)
+- [Run a small ordered agent batch](#run-a-small-ordered-agent-batch)
+
 ## Output format
 
 `--agent` returns one `axe.output.agent-result` JSON envelope by default. Use the root `--output text|json` option for its representation and the agent-only `--view` option for its content:

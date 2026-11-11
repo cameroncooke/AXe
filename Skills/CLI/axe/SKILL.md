@@ -1,6 +1,6 @@
 ---
 name: axe
-description: Official skill for the AXe CLI. Gives you eyes and hands on iOS apps, to see and operate their UI on iOS Simulators and on iPhones and iPads. Use when you need to check, test or validate an iOS app you built or changed, or to see or drive its UI.
+description: Official skill for the AXe CLI, which gives agents eyes and hands on iOS apps. Sees and operates app UI, takes screenshots and changes device settings on iOS Simulators and physical iPhones and iPads. Use when checking, testing or validating an iOS app after building or changing it, or whenever an iOS app's screen needs to be seen or driven.
 ---
 
 # AXe
@@ -123,15 +123,18 @@ Each takes `--agent --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref <REF>`:
 - Drag a control: `drag --end-x <X> --end-y <Y>`.
 - Double tap: `gesture double-tap`. Pinch: `gesture pinch --radius 24 --scale 1.5`, on `pinchWithin` rows.
 
-Limits, receipts and output fields: [agent-reference.md](references/agent-reference.md).
-
 ## References
 
-Agent mode covers app reads and input on every simulator, including the iPhone Duo. For anything else, read:
+Agent mode covers app reads and input on every simulator, including the iPhone Duo.
 
-- Physical iPhone or iPad (no agent mode): [physical-device-reference.md](references/physical-device-reference.md).
-- iPhone Duo screens, hinge and rotation, or capture and input pinned to one display: [device-reference.md](references/device-reference.md).
-- Dark mode, text size, accessibility display settings, VoiceOver, location, status bar: [settings-reference.md](references/settings-reference.md).
-- Commands with no UI target (`list-simulators`, `displays`, `screenshot`, `button`, `shutdown`) and gestures with no agent form: [cli-quick-reference.md](references/cli-quick-reference.md).
-- Video recording and streaming: [recording-reference.md](references/recording-reference.md).
-- Clipboard staging: [clipboard-reference.md](references/clipboard-reference.md).
+| Open when you need to... | Read |
+|---|---|
+| check exact agent limits, receipts, output fields or refusal codes | [agent-reference.md](references/agent-reference.md) |
+| check the full batch contract | [batch-reference.md](references/batch-reference.md) |
+| set a slider to a percentage | [slider-reference.md](references/slider-reference.md) |
+| work on a physical iPhone or iPad (no agent mode) | [physical-device-reference.md](references/physical-device-reference.md) |
+| use iPhone Duo screens, hinge and rotation, or pin capture or input to one display | [device-reference.md](references/device-reference.md) |
+| set dark mode, text size, accessibility display settings, VoiceOver, location or status bar | [settings-reference.md](references/settings-reference.md) |
+| run a command with no UI target (`list-simulators`, `displays`, `screenshot`, `button`, `shutdown`) or a gesture with no agent form | [cli-quick-reference.md](references/cli-quick-reference.md) |
+| record or stream video | [recording-reference.md](references/recording-reference.md) |
+| stage text on the clipboard | [clipboard-reference.md](references/clipboard-reference.md) |
