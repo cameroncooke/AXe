@@ -18,5 +18,19 @@ class PlainScreenshotTests(unittest.TestCase):
             self.assertEqual(returned_paths(call), set())
 
 
+    def test_axe_saved_receipt_authorizes_the_requested_png_only(self):
+        command = "/candidate/axe screenshot --udid device --output /run/state.png"
+        for text, error, expected in (
+                ("Screenshot saved to /run/state.png\n/run/state.png", False, {"/run/state.png"}),
+                ("Screenshot saved to /run/other.png\n/run/other.png", False, set()),
+                ("Screenshot saved to /run/state.png\n/run/state.png", True, set())):
+            call = Call(1, "id", "Bash", command, {}, 1, text=text, error=error)
+            classify(call, "axe", [])
+            self.assertEqual(returned_paths(call), expected)
+        call = Call(1, "id", "Bash", "/candidate/axe screenshot --udid device --output /source/app.swift", {}, 1,
+                    text="Screenshot saved to /source/app.swift\n/source/app.swift")
+        classify(call, "axe", [])
+        self.assertEqual(returned_paths(call), set())
+
 if __name__ == "__main__":
     unittest.main()

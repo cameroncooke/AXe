@@ -383,6 +383,13 @@ def returned_paths(call):
         for artifact in re.findall(r"^\s*Screenshot:\s*(/[^\n]+)\s*$", plain, re.M):
             if Path(artifact.strip()).suffix.lower() == ".png":
                 paths.add(artifact.strip())
+    # AXe's plain screenshot prints "Screenshot saved to PATH" and then the path. Accept it only
+    # when it names the file the command was asked to write.
+    if not call.error and screenshot and "--output" in call.argv[:-1]:
+        requested = call.argv[call.argv.index("--output") + 1]
+        saved = re.findall(r"^Screenshot saved to (/[^\n]+?)\s*$", plain, re.M)
+        if Path(requested).is_absolute() and Path(requested).suffix.lower() == ".png" and requested in saved:
+            paths.add(requested)
     def walk(item, screenshot_context=False):
         if isinstance(item, dict):
             for key, child in item.items():
