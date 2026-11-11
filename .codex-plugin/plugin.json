@@ -1,6 +1,6 @@
 {
   "name": "axe",
-  "version": "1.8.0",
+  "version": "2.0.0",
   "description": "Agent-ready AXe CLI guidance for iOS Simulator automation.",
   "author": {
     "name": "Cameron Cooke",
