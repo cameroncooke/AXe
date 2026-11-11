@@ -1,0 +1,19 @@
+{
+ "file": "car-device.mp4",
+ "a": 3.0,
+ "b": 344.0,
+ "strokes": 163,
+ "log": [
+  "Watercolor",
+  "Crayon Medium",
+  "Fountain Pen Medium",
+  "Watercolor",
+  "Monoline Very Heavy",
+  "Monoline Very Heavy",
+  "Monoline Very Heavy",
+  "Fountain Pen Medium",
+  "Monoline Medium",
+  "Pencil"
+ ],
+ "painted": "PAINTED strokes=163 inks=23 tools=crayon,fountainpen,monoline,pencil,watercolor commands=303 seconds=341 picture=sketch-car.png"
+}
