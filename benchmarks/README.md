@@ -182,6 +182,18 @@ after matching fields. Unknown or partial records stop that case. If Contacts
 restores an ordinary saved card, use Back, then Home and relaunch outside a run
 to save its list position. Do not change the ordinary contact.
 
+Before each Reminders job, after preparation and with Reminders stopped, the
+suite sets the date Reminders records as its first foreground
+(`firstTimeAppForegroundingDate` in `group.com.apple.reminders`) to the current
+time, through `simctl spawn … defaults`, and reads it back. About seven days
+after that date, Reminders on the iOS 27.2 simulator runtime asks `remindd` for
+a review count after each completion; `remindd` rejects it and closes the
+connection the list refresh uses, so completed rows stay on screen and the task
+cannot pass for any tool. The value set is in `review-gate.json` beside the
+report and in its `reviewGate` field, and Reminders reports carry
+`reminders-review-gate-closed-v1` in their setup policy. Evidence and the
+investigation are in Phase 13 of `docs/release-readiness.md`.
+
 One heavy job runs at a time. CPU, process RSS and lock state are sampled.
 Identified benchmark processes must finish cleanup before the next case starts.
 Normal Ctrl+C/SIGTERM forwards to the owned runner and waits for its cleanup.

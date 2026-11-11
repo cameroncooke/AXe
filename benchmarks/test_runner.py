@@ -97,6 +97,40 @@ class RunnerTests(unittest.TestCase):
         self.assertEqual(self.mocks['lifecycle'].call_count, 2)
         self.assertFalse(any(call.kwargs.get('launch') for call in self.mocks['lifecycle'].call_args_list))
 
+    def test_reminders_closes_review_gate_after_preparation_and_before_the_model(self):
+        order = []
+        self.mocks['lifecycle'].side_effect = lambda *a, **k: order.append(('lifecycle', a[3].name)) or (
+            12345 if k.get('launch') else None)
+        self.mocks['run_monitored'].side_effect = lambda *a, **k: order.append(('model',)) or {
+            'exitCode': 0, 'stopReason': None}
+        gate = {'value': '2026-11-11 10:30:00 +0000', 'previous': '2026-11-03 01:43:59 +0000'}
+        with patch.object(benchmark, 'reset_reminders_review_gate',
+                          side_effect=lambda *a, **k: order.append(('gate', a[2].name)) or gate) as reset:
+            result = benchmark.run_case(self.config, 'reminders', 'axe', self.output, {})
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual(reset.call_count, 1)
+        self.assertEqual(result['reviewGate'], gate)
+        self.assertEqual(order, [('lifecycle', 'terminate-before.json'), ('lifecycle', 'launch-preparation.json'),
+                                 ('lifecycle', 'terminate-ready.json'), ('gate', 'review-gate.json'), ('model',)])
+        self.assertTrue(result['contract']['setupPolicy'].endswith(';reminders-review-gate-closed-v1'))
+        validate_result(result)
+
+    def test_other_scenarios_leave_reminders_and_their_setup_policy_alone(self):
+        with patch.object(benchmark, 'reset_reminders_review_gate') as reset:
+            for scenario in ('weather', 'contacts'):
+                output = self.root / ('other-' + scenario)
+                result = benchmark.run_case(self.config, scenario, 'axe', output, {})
+                self.assertNotIn('reviewGate', result)
+                self.assertNotIn('review-gate', result['contract']['setupPolicy'])
+        reset.assert_not_called()
+
+    def test_reminders_job_is_blocked_when_the_gate_cannot_be_closed(self):
+        with patch.object(benchmark, 'reset_reminders_review_gate',
+                          side_effect=RuntimeError('The Reminders first-opened date was not set: x')):
+            result = benchmark.run_case(self.config, 'reminders', 'axe', self.output, {})
+        self.assertEqual(result['status'], 'blocked')
+        self.mocks['run_monitored'].assert_not_called()
+
     def test_preparation_receives_launched_pid(self):
         self.mocks['lifecycle'].return_value = 12345
         result = benchmark.run_case(self.config, 'contacts', 'axe', self.output, {})
@@ -233,6 +267,49 @@ class LifecycleTests(unittest.TestCase):
                         'data': {'rocket_sim_running': running, 'ipc_reachable': reachable}}))):
                 result = benchmark.service_ready({'name': 'rocketsim', 'executable': '/rocketsim'}, {})
                 self.assertEqual(result['status'], expected)
+
+    def test_review_gate_writes_now_through_the_simulator_and_reads_it_back(self):
+        group = '/Users/u/Library/Developer/CoreSimulator/Devices/device/data/Containers/Shared/AppGroup/G'
+        domain = group + '/Library/Preferences/group.com.apple.reminders'
+        now = benchmark.datetime(2026, 11, 11, 10, 30, 5, 123, tzinfo=benchmark.timezone.utc)
+        value = '2026-11-11 10:30:05 +0000'
+
+        def runner(stored):
+            def run(argv, **kwargs):
+                if argv[2] == 'get_app_container':
+                    return SimpleNamespace(returncode=0, stdout=group + '\n', stderr='')
+                if argv[5] == 'read':
+                    return SimpleNamespace(returncode=0, stdout=stored[0] + '\n', stderr='')
+                stored[0] = argv[-1]
+                return SimpleNamespace(returncode=0, stdout='', stderr='')
+            return run
+
+        with tempfile.TemporaryDirectory() as folder:
+            receipt = Path(folder) / 'gate.json'
+            stored = ['2026-11-03 01:43:59 +0000']
+            with patch('benchmark.subprocess.run', side_effect=runner(stored)) as run:
+                gate = benchmark.reset_reminders_review_gate({'simulator': 'device'}, {}, receipt, now=now)
+            self.assertEqual(gate, {'value': value, 'previous': '2026-11-03 01:43:59 +0000'})
+            write = [c.args[0] for c in run.call_args_list if 'write' in c.args[0]][0]
+            self.assertEqual(write, ['/usr/bin/xcrun', 'simctl', 'spawn', 'device', 'defaults', 'write', domain,
+                                     'firstTimeAppForegroundingDate', '-date', value])
+            self.assertEqual(json.loads(receipt.read_text())['value'], value)
+
+            # A read-back that does not match leaves the job blocked.
+            def ignored(argv, **kwargs):
+                if argv[2] == 'get_app_container':
+                    return SimpleNamespace(returncode=0, stdout=group, stderr='')
+                return SimpleNamespace(returncode=0, stdout='2026-11-03 01:43:59 +0000', stderr='')
+            with patch('benchmark.subprocess.run', side_effect=ignored), \
+                    self.assertRaisesRegex(RuntimeError, 'first-opened date was not set'):
+                benchmark.reset_reminders_review_gate({'simulator': 'device'}, {}, receipt, now=now)
+
+            # A container outside this simulator is refused before any write.
+            with patch('benchmark.subprocess.run', return_value=SimpleNamespace(
+                    returncode=0, stdout='/elsewhere/AppGroup/G', stderr='')) as run, \
+                    self.assertRaisesRegex(RuntimeError, 'app group container was not found'):
+                benchmark.reset_reminders_review_gate({'simulator': 'device'}, {}, receipt, now=now)
+            self.assertEqual(run.call_count, 1)
 
     def test_launch_requires_exact_bundle_and_positive_pid(self):
         with tempfile.TemporaryDirectory() as folder:

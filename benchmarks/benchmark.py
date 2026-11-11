@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
+from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
@@ -153,6 +154,51 @@ def lifecycle(config, app, env, output, launch=False):
     return None
 
 
+REMINDERS_GROUP = 'group.com.apple.reminders'
+REMINDERS_FIRST_OPENED_KEY = 'firstTimeAppForegroundingDate'
+
+
+def reset_reminders_review_gate(config, env, output, now=None):
+    """Set the date Reminders records as its first foreground to now, so every job starts with its review gate closed.
+
+    About seven days after that date, Reminders on the iOS 27.2 simulator runtime asks remindd for a review count
+    two seconds after each completion. remindd rejects the request and closes the connection that the list refresh
+    is also using, so the completed row stays on screen and later completions read as stale
+    (docs/release-readiness.md, Phase 13). Run after Reminders is terminated, outside the benchmark clock. The
+    write goes through the simulator's preferences daemon, which the app reads, and is read back before the job."""
+    when = (now or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(microsecond=0)
+    text = when.strftime('%Y-%m-%d %H:%M:%S +0000')
+    udid = config['simulator']
+    locate = ['/usr/bin/xcrun', 'simctl', 'get_app_container', udid, 'com.apple.reminders', REMINDERS_GROUP]
+    found = subprocess.run(locate, env=env, capture_output=True, text=True, timeout=30)
+    group = Path(found.stdout.strip())
+    if found.returncode or not group.is_absolute() or group.name == '' or udid not in group.parts:
+        raise RuntimeError('The Reminders app group container was not found: ' + found.stderr[-500:])
+    domain = str(group / 'Library/Preferences' / REMINDERS_GROUP)
+
+    def defaults(*arguments):
+        argv = ['/usr/bin/xcrun', 'simctl', 'spawn', udid, 'defaults', *arguments]
+        result = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=30)
+        return {'argv': argv, 'exitCode': result.returncode,
+                'stdout': result.stdout.strip(), 'stderr': result.stderr.strip()[-500:]}
+
+    before = defaults('read', domain, REMINDERS_FIRST_OPENED_KEY)
+    write = defaults('write', domain, REMINDERS_FIRST_OPENED_KEY, '-date', text)
+    after = defaults('read', domain, REMINDERS_FIRST_OPENED_KEY)
+    receipt = {'domain': domain, 'key': REMINDERS_FIRST_OPENED_KEY, 'value': text,
+               'previous': before['stdout'] if before['exitCode'] == 0 else None,
+               'calls': [before, write, after]}
+    save(output, receipt)
+    if write['exitCode'] or after['exitCode'] or after['stdout'] != text:
+        raise RuntimeError('The Reminders first-opened date was not set: ' + (write['stderr'] or after['stdout']))
+    return {'value': text, 'previous': receipt['previous']}
+
+
+def setup_policy(scenario):
+    policy = 'warm-device;normal-termination;exact-owned-record-cleanup;fresh-weather-build-in-clock-v1'
+    return policy + (';reminders-review-gate-closed-v1' if scenario == 'reminders' else '')
+
+
 def contract(config, scenario, host, app, hashes):
     fields = ('claudeVersion', 'deviceType', 'runtimeVersion', 'screenWidth', 'screenHeight',
               'rotation', 'hostOS', 'hostBuild', 'hostArchitecture', 'hostModel', 'xcodeVersion', 'nodeVersion')
@@ -162,7 +208,7 @@ def contract(config, scenario, host, app, hashes):
             'initialInventorySHA256': hashlib.sha256(json.dumps(
                 config.get('preparationProfiles', {}).get(scenario) if scenario != 'weather' else None,
                 sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
-            'setupPolicy': 'warm-device;normal-termination;exact-owned-record-cleanup;fresh-weather-build-in-clock-v1',
+            'setupPolicy': setup_policy(scenario),
             'tokenizer': 'o200k_base', 'tokenScope': 'all-returned-tool-text;images-separate',
             'maxClaudeSeconds': config['maxClaudeSeconds']}
 
@@ -212,7 +258,9 @@ def run_case(config, scenario, name, output, env):
         if prep['status'] != 'ready':
             raise RuntimeError('Preparation: ' + prep.get('reason', 'not ready'))
         lifecycle(config, app, env, output / 'terminate-ready.json')
-        suite = make_suite(config, scenario, name, result['tool'], app, output)
+        if scenario == 'reminders':
+            result['reviewGate'] = reset_reminders_review_gate(config, env, output / 'review-gate.json')
+        suite =make_suite(config, scenario, name, result['tool'], app, output)
         skill_dir = output / 'skills' / skill_name(name)
         result['tool']['guideSHA256'] = (tree_digest(skill_dir) if name == 'axe'
                                          else digest(skill_dir / 'SKILL.md'))
