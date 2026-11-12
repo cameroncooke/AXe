@@ -100,7 +100,7 @@ enum CLIOutput {
             Swift.print(String(decoding: data, as: UTF8.self))
             return
         }
-        context.append(try JSONDecoder().decode(CLIOutputValue.self, from: data))
+        context.append(try CLIOutputValue.decodingJSON(data))
     }
 
     static func writeJSONText(_ text: String) throws {
