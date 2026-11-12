@@ -95,13 +95,51 @@ struct Screenshot: AsyncParsableCommand {
             return
         }
 
-        let outputURL = try prepareOutputURL(targetName: targetSimulator.name)
+        // An existing file is replaced only once the new image is complete.
+        let outputURL = try prepareOutputURL(targetName: targetSimulator.name, existingFile: .atomicReplacement)
 
-        let screenshotData = try await VideoFrameUtilities.captureScreenshotData(from: targetSimulator)
+        let screenshotData: Data
+        if let active = try await captureActiveDisplay(of: targetSimulator) {
+            screenshotData = active
+        } else {
+            screenshotData = try await VideoFrameUtilities.captureScreenshotData(from: targetSimulator)
+        }
 
-        try screenshotData.write(to: outputURL)
+        try screenshotData.write(to: outputURL, options: .atomic)
 
         try reportSaved(screenshotData, to: outputURL)
+    }
+
+    /// The simulator's default screenshot is always the Duo's inner display, which is off and
+    /// black while the device is folded (measured on iOS 27.2). A plain screenshot of a Duo
+    /// captures the active display instead. When the displays cannot be read, it keeps the
+    /// default capture and says so.
+    @MainActor
+    private func captureActiveDisplay(of simulator: FBSimulator) async throws -> Data? {
+        guard OrdinaryBrokerInput.isDuo(simulator) else { return nil }
+        var png: Data?
+        try await SelectedScreenshotSignals.run {
+            // A plain screenshot has always worked beside running input, so a busy or quarantined
+            // lease does not stop it. The capture still checks the display before and after.
+            let lease = try? HIDInputLease.acquire(simulatorUDID: simulator.udid)
+            defer { withExtendedLifetime(lease) {} }
+            let discovery: ActivePanelDiscoveryResult
+            do {
+                discovery = try await DisplayTransition.settledDiscovery(for: simulator)
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                try Task.checkCancellation()
+                FileHandle.standardError.write(Data(
+                    "Warning: AXe could not tell which display is active, so this is the inner display, which is black while the device is folded.\n".utf8))
+                return
+            }
+            let panel = discovery.readback.snapshot.activePanel.identity
+            png = try await FBSimulatorSelectedScreenshotCapture.png(for: simulator,
+                screenID: panel.displayID, screenUniqueID: panel.uniqueID,
+                expectedBootIdentity: discovery.bootIdentity).png
+        }
+        return png
     }
 
     @MainActor
