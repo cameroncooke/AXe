@@ -169,7 +169,7 @@ enum FBSimulatorHIDHingeWire {
       let valid = try child(item, "isAngleValid", XPC_TYPE_BOOL)
       let velocityValid = try child(item, "isVelocityValid", XPC_TYPE_BOOL)
       guard xpc_bool_get_value(valid), xpc_bool_get_value(velocityValid) else {
-        throw failure("Motion sample reports invalid angle or velocity")
+        throw failure("Motion sample reports invalid angle or velocity (\(invalidSampleDetail(item)))")
       }
       let timestamp = try number(item, "timestamp")
       let received = ProcessInfo.processInfo.systemUptime
@@ -190,6 +190,15 @@ enum FBSimulatorHIDHingeWire {
       accepted.append(observation)
     }
     return accepted
+  }
+
+  /// What a refused sample carried, so a report from another runtime shows which flag and values it sent.
+  static func invalidSampleDetail(_ item: xpc_object_t) -> String {
+    var parts = ["isAngleValid", "isVelocityValid"].map { "\($0)=\(xpc_dictionary_get_bool(item, $0))" }
+    for (key, unit) in [("angle", "°"), ("mechanicalAngle", "°"), ("velocity", "°/s"), ("minAngle", "°"), ("maxAngle", "°")] {
+      parts.append("\(key)=\((try? quantity(item, key, unit: unit)).map { String($0) } ?? "unreadable")")
+    }
+    return parts.joined(separator: ", ")
   }
 
   static func quantity(_ object: xpc_object_t, _ key: String, unit expected: String) throws -> Double {
