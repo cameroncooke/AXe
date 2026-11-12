@@ -312,6 +312,16 @@ final class SelectedHIDOwner {
         } else { clear() }
     }
 
+    /// A keep-alive sends nothing and changes nothing but the idle clock, so a client that is still
+    /// running (`axe serve`) keeps the broker and its connection for its next input.
+    func keepAlive(_ request: SelectedHIDRequest) -> SelectedHIDResponse {
+        do { try request.validate() }
+        catch { return response(request, outcome: "rejectedBeforeInput", error: error) }
+        guard !shouldStop else { return response(request, outcome: "rejectedBeforeInput", error: SelectedHIDFailure.busy) }
+        lastActivity = dependencies.now()
+        return response(request, outcome: "keptAlive")
+    }
+
     func rejectBusy(_ request: SelectedHIDRequest) -> SelectedHIDResponse {
         var result = response(request, outcome: "rejectedBeforeInput",
             error: quarantined ? SelectedHIDFailure.invalid("Device input is quarantined; no input was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantineReceipt?.recordPath)) : SelectedHIDFailure.busy,

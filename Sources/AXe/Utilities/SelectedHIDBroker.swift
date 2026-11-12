@@ -41,6 +41,16 @@ enum SelectedHIDBroker {
         return try exchange(data, requestID: request.requestID, descriptor: descriptor)
     }
 
+    /// Keeps an already-running broker from shutting down while idle. Starts nothing: with no broker
+    /// running it returns false, and the next input starts one as usual.
+    @discardableResult
+    static func keepAliveIfRunning(simulatorUDID: String) -> Bool {
+        let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+            screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .keepAlive)
+        guard let response = try? sendToRunningBroker(request, simulatorUDID: simulatorUDID) else { return false }
+        return response.error == nil && response.outcome == "keptAlive"
+    }
+
     /// Raw keyboard has no whole-command deadline. Cancellation closes this owned exchange, never replays it.
     static func sendOrdinaryKeyboard(_ request: SelectedHIDRequest, simulatorUDID: String) async throws -> SelectedHIDResponse {
         guard request.ordinaryKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
@@ -188,7 +198,11 @@ enum SelectedHIDBroker {
                         }
                         var response: SelectedHIDResponse
                         let timer = request.timing == true ? PhaseTimer() : nil
-                        if rejectedWhileBusy || agentController.isBusy {
+                        if request.isKeepAlive {
+                            // Never queued behind input and never refused as busy: input in flight
+                            // already keeps the broker alive.
+                            response = owner.keepAlive(request)
+                        } else if rejectedWhileBusy || agentController.isBusy {
                             response = request.agent == nil && request.agentBatch == nil ? owner.rejectBusy(request) : agentController.reject(request)
                         } else if request.agentBatch != nil {
                             response = await SelectedHIDClientLifetime.run(descriptor: client) {

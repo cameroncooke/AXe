@@ -35,7 +35,8 @@ struct AccessibilityFetcher {
         for simulatorUDID: String,
         point: AccessibilityPoint? = nil,
         logger: AxeLogger,
-        recoveryDependencies: AccessibilityRecoveryDependencies = .live
+        recoveryDependencies: AccessibilityRecoveryDependencies = .live,
+        keys: Set<FBAXKeys> = accessibilityRequestKeys
     ) async throws -> Data {
         let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
         
@@ -66,17 +67,17 @@ struct AccessibilityFetcher {
                 return try await readingDirectlyFirst(direct: {
                     let handle = try await element(false)
                     defer { handle.close() }
-                    return try serializedAccessibilityData(from: handle)
+                    return try serializedAccessibilityData(from: handle, keys: keys)
                 }, isUsable: { try !isTransientPointFallback(in: $0, at: point) },
-                    bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point) { try await element(true) } })
+                    bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point, keys: keys) { try await element(true) } })
             }
             return try await retryingMissingTranslation(logger: logger) {
                 try await readingDirectlyFirst(direct: {
                     let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
                     defer { element.close() }
-                    return try serializedAccessibilityData(from: element)
+                    return try serializedAccessibilityData(from: element, keys: keys)
                 }, isUsable: containsAccessibilityDescendant,
-                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target) })
+                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target, keys: keys) })
             }
         }
     }
@@ -179,12 +180,13 @@ struct AccessibilityFetcher {
 
     private static func fetchAccessibilityInfoJSONData(
         at point: AccessibilityPoint,
+        keys: Set<FBAXKeys>,
         element: @MainActor () async throws -> FBAccessibilityElement
     ) async throws -> Data {
         try await retryingTransientPointFallback(at: point) {
             let accessibilityElement = try await element()
             defer { accessibilityElement.close() }
-            return try serializedAccessibilityData(from: accessibilityElement)
+            return try serializedAccessibilityData(from: accessibilityElement, keys: keys)
         }
     }
 
@@ -225,7 +227,8 @@ struct AccessibilityFetcher {
         return latestData
     }
 
-    private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator) async throws -> Data {
+    private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator,
+                                                                keys: Set<FBAXKeys>) async throws -> Data {
         var latestData: Data?
         for attempt in 0..<5 {
             // IDB's former `accessibilityElements(withNestedFormat:)` API also serialized the
@@ -233,7 +236,7 @@ struct AccessibilityFetcher {
             let accessibilityElement = try await target.accessibilityElementForFrontmostApplication()
             let data: Data
             do {
-                data = try serializedAccessibilityData(from: accessibilityElement)
+                data = try serializedAccessibilityData(from: accessibilityElement, keys: keys)
                 accessibilityElement.close()
             } catch {
                 accessibilityElement.close()
@@ -384,11 +387,12 @@ struct AccessibilityFetcher {
         process.waitUntilExit()
     }
 
-    private static func serializedAccessibilityData(from accessibilityElement: FBAccessibilityElement) throws -> Data {
+    private static func serializedAccessibilityData(from accessibilityElement: FBAccessibilityElement,
+                                                    keys: Set<FBAXKeys>) throws -> Data {
         let response = try accessibilityElement.serialize(
             with: FBAccessibilityRequestOptions(
                 nestedFormat: true,
-                keys: accessibilityRequestKeys
+                keys: keys
             )
         )
         return try serializeAccessibilityInfo(addingCompatibilityDefaults(to: response.elements))
@@ -518,7 +522,7 @@ struct AccessibilityFetcher {
     }
 
     // This key set preserves AXe's legacy public JSON schema; update it only with explicit schema coverage.
-    static let accessibilityOutputKeys: Set<FBAXKeys> = [
+    nonisolated static let accessibilityOutputKeys: Set<FBAXKeys> = [
         .label,
         .frame,
         .value,
@@ -540,5 +544,11 @@ struct AccessibilityFetcher {
     // AXe's former IDB serializer did not return traits. Xcode 27's private nested serializer also
     // returns an empty hierarchy when `.traits` is requested, so retain the existing public value
     // as an empty compatibility placeholder after requesting the safe subset on every Xcode version.
-    static let accessibilityRequestKeys = accessibilityOutputKeys.subtracting([.traits])
+    nonisolated static let accessibilityRequestKeys = accessibilityOutputKeys.subtracting([.traits])
+
+    /// `describe-ui --minimal-keys`: what UI-test drivers read. Every attribute is one read into the
+    /// simulator per element, so leaving the rest out shortens the read (about 20% on Settings).
+    nonisolated static let minimalRequestKeys: Set<FBAXKeys> = [
+        .label, .frameDict, .value, .uniqueID, .type, .role, .roleDescription, .enabled,
+    ]
 }

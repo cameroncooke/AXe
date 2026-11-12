@@ -82,9 +82,10 @@ Feature-specific codes are listed in their sections. JSON Schema (2020-12) files
 ```bash
 axe describe-ui --udid "$UDID"                 # the whole tree as JSON
 axe describe-ui --point 200,400 --udid "$UDID" # the element at one point
+axe describe-ui --minimal-keys --udid "$UDID"  # fewer fields, faster
 ```
 
-For agents, `describe-ui --agent` returns compact rows with refs instead; see [Agent mode](#agent-mode).
+`--minimal-keys` reads only each element's label, identifier, value, frame, role, role description, type and enabled state (plus an empty `traits` list), which made a read of the Settings screen about 30 ms faster. For agents, `describe-ui --agent` returns compact rows with refs instead; see [Agent mode](#agent-mode).
 
 ## Taps, typing and keys
 
@@ -138,6 +139,24 @@ axe batch --udid "$UDID" --file steps.txt         # one step per line
 ```
 
 Steps are `tap`, `swipe`, `gesture`, `draw`, `touch`, `type`, `button`, `key`, `key-sequence` and `key-combo`, plus `sleep <seconds>`. They run in order in one input session; a failure stops later steps, and earlier steps are not undone. On a simulator, `--continue-on-error` runs the remaining steps after a failed one; on the iPhone Duo it still stops after a context change or input failure. Success prints `✓ Batch completed successfully (N steps)`. Agent batches (`batch --agent`) take JSON instead; see the [batch reference](agent-plugin/skills/axe/references/batch-reference.md).
+
+## Serve: one process for many commands
+
+Every `axe` command starts a process, loads the simulator frameworks and finds the simulator before it does any work. A test harness that sends hundreds of commands can keep one process open instead:
+
+```bash
+axe serve --udid "$UDID"
+```
+
+Write one command per line to its standard input, as you would type it after `axe` but without `--udid`. Each command gets one line on standard output: the JSON that `axe --output json <command>` prints, in order. serve prints a ready line first and exits when its standard input closes; logs go to standard error.
+
+```text
+describe-ui --minimal-keys
+tap --label General
+ping
+```
+
+Commands are `describe-ui`, `displays`, `screenshot`, `tap`, `swipe`, `drag`, `draw`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `touch`, `gesture`, `slider`, `rotate` and `hinge`; `ping` answers without touching the simulator. A failed or refused line gets its error reply and serve carries on. Each command takes the same route as the one-off command, so taps still go through the shared input broker, and other `axe` commands can use the simulator while serve runs. While serve waits for its next line it keeps a running broker from shutting down, so a tap after a long pause is as quick as any other. On an iPhone 17 Pro simulator with Settings open, reading the screen and then tapping took about 176 ms through serve, or 146 ms with `describe-ui --minimal-keys`, against about 290 ms with one-off commands.
 
 ## Screenshots and video
 

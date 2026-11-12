@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 90
+    static let version = 91
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
 
     /// What a request asks the owner to do. A request carries exactly one, so a mixed request
@@ -23,6 +23,9 @@ struct SelectedHIDRequest: Codable, Sendable {
         case agentBatch(AgentBatchRequest)
         case ordinaryTouch(OrdinaryBrokerTouch)
         case ordinaryKeyboard(OrdinaryBrokerKeyboard)
+        /// No input: tells an idle broker a client still needs it, so it does not shut down.
+        /// `axe serve` sends it while waiting for its next command.
+        case keepAlive
     }
 
     // Header: which protocol, which request, which screen and which contact.
@@ -72,6 +75,7 @@ struct SelectedHIDRequest: Codable, Sendable {
     var agentBatch: AgentBatchRequest? { if case .agentBatch(let value) = payload { return value }; return nil }
     var ordinaryTouch: OrdinaryBrokerTouch? { if case .ordinaryTouch(let value) = payload { return value }; return nil }
     var ordinaryKeyboard: OrdinaryBrokerKeyboard? { if case .ordinaryKeyboard(let value) = payload { return value }; return nil }
+    var isKeepAlive: Bool { if case .keepAlive = payload { return true }; return false }
 
     /// The same agent action on a new snapshot and reference, for a retry after the screen moved on.
     /// Any other request is returned unchanged.
@@ -93,6 +97,13 @@ struct SelectedHIDRequest: Codable, Sendable {
 
     func validate() throws {
         guard version == Self.version else { throw SelectedHIDFailure.invalid("Protocol version mismatch") }
+        if isKeepAlive {
+            guard isComplete, screenID == nil, screenUUID == nil, activeDisplay == nil, expectedContext == nil,
+                  agentAdmission == nil, plainRoute == nil else {
+                throw SelectedHIDFailure.invalid("A keep-alive request carries no screen, context or input")
+            }
+            return
+        }
         if activeDisplay != nil {
             let bindsAScreen: Bool
             switch payload {
@@ -199,7 +210,7 @@ struct SelectedHIDRequest: Codable, Sendable {
             throw SelectedHIDFailure.invalid("Selected screen operations require both screen ID and UUID, or the active screen")
         }
         switch payload {
-        case .agent, .agentBatch, .hinge:
+        case .agent, .agentBatch, .hinge, .keepAlive:
             return      // handled above
         case .ordinaryTouch(let touch):
             try touch.validate()
