@@ -16,6 +16,20 @@ struct PlaygroundDuoMediaTests {
         try await session.requireUnchanged(before)
     }
 
+    @Test("A plain PNG is the active display, like the selected one", arguments: [false, true])
+    func plainScreenshot(inner: Bool) async throws {
+        let session = try MediaPlaygroundSession(name: "png-plain")
+        let before = try await session.open(inner: inner, rotation: inner ? 90 : 270)
+        let selectedURL = session.directory.appendingPathComponent("selected.png")
+        let plainURL = session.directory.appendingPathComponent("plain.png")
+        try await session.command(["screenshot", "--output", selectedURL.path] + session.selection(before.catalogue))
+        try await session.command(["screenshot", "--output", plainURL.path])
+        let selected = try PlaygroundMediaAssertions.image(Data(contentsOf: selectedURL), type: "public.png")
+        let plain = try PlaygroundMediaAssertions.image(Data(contentsOf: plainURL), type: "public.png")
+        try #require(plain.width == selected.width && plain.height == selected.height)
+        try await session.requireUnchanged(before)
+    }
+
     @Test("Malformed, inactive, wrong-boot and existing PNG outputs are refused")
     func screenshotRefusals() async throws {
         let session = try MediaPlaygroundSession(name: "png-refusals")

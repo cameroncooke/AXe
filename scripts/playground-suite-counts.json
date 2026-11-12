@@ -38,7 +38,7 @@
   "PlaygroundSimulatorLifecycleTests": 1,
   "PlaygroundDuoKeyboardInterruptionTests": 4,
   "PlaygroundDuoHingeWindowTests": 7,
-  "PlaygroundDuoMediaTests": 18,
+  "PlaygroundDuoMediaTests": 20,
   "PlaygroundWindowTests": 1,
   "PlaygroundOrdinaryRegressionTests": 8,
   "PlaygroundAgentSelectorTests": 9,
