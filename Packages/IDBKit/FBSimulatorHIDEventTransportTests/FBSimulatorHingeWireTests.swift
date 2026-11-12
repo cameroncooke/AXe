@@ -34,17 +34,26 @@ struct FBSimulatorHingeWireTests {
     #expect(samples.map(\.sensedDegrees) == [90])
   }
 
+  @Test("A valid angle with an invalid velocity, as iOS 27.1 reports it, reads as at rest")
+  func invalidVelocity() throws {
+    let channel = UUID()
+    let samples = try FBSimulatorHIDHingeWire.samples(
+      event(channel: channel, angleValid: true, velocityValid: false, velocity: quantity(37, "°/s")), channel: channel, notBefore: 0)
+    #expect(samples.map(\.sensedDegrees) == [90])
+    #expect(samples.map(\.velocityDegreesPerSecond) == [0])
+  }
+
   @Test("A refused sample names the flags and values it carried")
   func refusedSampleDetail() {
     let channel = UUID()
-    let refused = event(channel: channel, angleValid: true, velocityValid: false, velocity: nil)
+    let refused = event(channel: channel, angleValid: false, velocityValid: false, velocity: nil)
     do {
       _ = try FBSimulatorHIDHingeWire.samples(refused, channel: channel, notBefore: 0)
       Issue.record("The sample was accepted")
     } catch {
       let text = "\(error)"
       #expect(text.contains("Motion sample reports invalid angle or velocity"))
-      #expect(text.contains("isAngleValid=true, isVelocityValid=false, angle=90.0, mechanicalAngle=90.0, velocity=unreadable, minAngle=0.0, maxAngle=180.0"))
+      #expect(text.contains("isAngleValid=false, isVelocityValid=false, angle=90.0, mechanicalAngle=90.0, velocity=unreadable, minAngle=0.0, maxAngle=180.0"))
     }
   }
 }

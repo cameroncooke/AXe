@@ -167,8 +167,8 @@ enum FBSimulatorHIDHingeWire {
         throw failure("Motion sample is not a dictionary")
       }
       let valid = try child(item, "isAngleValid", XPC_TYPE_BOOL)
-      let velocityValid = try child(item, "isVelocityValid", XPC_TYPE_BOOL)
-      guard xpc_bool_get_value(valid), xpc_bool_get_value(velocityValid) else {
+      let velocityValid = xpc_bool_get_value(try child(item, "isVelocityValid", XPC_TYPE_BOOL))
+      guard xpc_bool_get_value(valid) else {
         throw failure("Motion sample reports invalid angle or velocity (\(invalidSampleDetail(item)))")
       }
       let timestamp = try number(item, "timestamp")
@@ -179,7 +179,11 @@ enum FBSimulatorHIDHingeWire {
       let maximum = try quantity(item, "maxAngle", unit: "°")
       let mechanical = try quantity(item, "mechanicalAngle", unit: "°")
       let sensed = try quantity(item, "angle", unit: "°")
-      let velocity = try quantity(item, "velocity", unit: "°/s")
+      // The iOS 27.1 Duo runtime marks every velocity invalid, at rest or not, while its angles are
+      // valid (reported against CoreDevice 651.32). AXe never relies on velocity alone: each check that
+      // wants a hinge at rest (`FBSimulatorLitInactivePolicy`, `FBSimulatorHingeDisplayReadiness`) also
+      // proves the angle stayed the same across reads. An unreported velocity is therefore read as 0.
+      let velocity = velocityValid ? try quantity(item, "velocity", unit: "°/s") : 0
       guard minimum <= maximum, (minimum...maximum).contains(mechanical), (minimum...maximum).contains(sensed) else {
         throw failure("Hinge sample is outside its reported range")
       }
