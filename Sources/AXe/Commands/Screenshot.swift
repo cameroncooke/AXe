@@ -95,7 +95,8 @@ struct Screenshot: AsyncParsableCommand {
             return
         }
 
-        let outputURL = try prepareOutputURL(targetName: targetSimulator.name)
+        // An existing file is replaced only once the new image is complete.
+        let outputURL = try prepareOutputURL(targetName: targetSimulator.name, existingFile: .atomicReplacement)
 
         let screenshotData: Data
         if let active = try await captureActiveDisplay(of: targetSimulator) {
@@ -104,7 +105,7 @@ struct Screenshot: AsyncParsableCommand {
             screenshotData = try await VideoFrameUtilities.captureScreenshotData(from: targetSimulator)
         }
 
-        try screenshotData.write(to: outputURL)
+        try screenshotData.write(to: outputURL, options: .atomic)
 
         try reportSaved(screenshotData, to: outputURL)
     }
@@ -118,7 +119,9 @@ struct Screenshot: AsyncParsableCommand {
         guard OrdinaryBrokerInput.isDuo(simulator) else { return nil }
         var png: Data?
         try await SelectedScreenshotSignals.run {
-            let lease = try HIDInputLease.acquire(simulatorUDID: simulator.udid)
+            // A plain screenshot has always worked beside running input, so a busy or quarantined
+            // lease does not stop it. The capture still checks the display before and after.
+            let lease = try? HIDInputLease.acquire(simulatorUDID: simulator.udid)
             defer { withExtendedLifetime(lease) {} }
             let discovery: ActivePanelDiscoveryResult
             do {
