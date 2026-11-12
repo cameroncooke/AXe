@@ -178,6 +178,14 @@ struct CLIOutputJSONDecodingTests {
         try expectSameAsDecoder(Data("[\"caf\u{e9}\", 1.5]".utf16.flatMap { [UInt8($0 & 0xFF), UInt8($0 >> 8)] }))
     }
 
+    /// A raw U+FEFF at the start of a string is a character, not a byte-order mark to drop.
+    @Test("Strings and keys that start with U+FEFF keep it", arguments: [
+        "[\"\u{FEFF}A\"]", "[\"\u{FEFF}\"]", "{\"\u{FEFF}key\": \"caf\u{e9}\"}", "[\"\u{FEFF}\u{FEFF}caf\u{e9}\"]",
+    ])
+    func leadingZeroWidthNoBreakSpaceIsKept(input: String) throws {
+        try expectSameAsDecoder(Data(input.utf8))
+    }
+
     private func expectSameAsDecoder(_ data: Data, sourceLocation: SourceLocation = #_sourceLocation) throws {
         let expected = Result { try JSONDecoder().decode(CLIOutputValue.self, from: data) }
         let actual = Result { try CLIOutputValue.decodingJSON(data) }

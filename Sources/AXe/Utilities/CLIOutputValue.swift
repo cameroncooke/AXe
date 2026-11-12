@@ -259,11 +259,14 @@ private struct CLIOutputJSONParser {
         return value
     }
 
-    /// Invalid UTF-8 goes to the decoder.
+    /// Invalid UTF-8 goes to the decoder. Valid UTF-8 round-trips byte for byte; invalid bytes come
+    /// back as U+FFFD and do not. Foundation's `String(bytes:encoding:)` would drop a leading U+FEFF,
+    /// which the decoder keeps, and `String(validating:as:)` needs macOS 15.
     private func utf8(_ range: Range<Int>, ascii: Bool) -> String? {
         let slice = UnsafeBufferPointer(rebasing: bytes[range])
-        if ascii { return String(decoding: slice, as: UTF8.self) }
-        return String(bytes: slice, encoding: .utf8)
+        let text = String(decoding: slice, as: UTF8.self)
+        if ascii { return text }
+        return text.utf8.elementsEqual(slice) ? text : nil
     }
 
     /// Integers and non-integral finite numbers take the same values `init(from:)` gives them;
