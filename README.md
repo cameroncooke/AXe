@@ -98,6 +98,7 @@ axe tap --id Map --count 2 --udid "$UDID"                # double tap
 axe tap --id Canvas --touches 2 --udid "$UDID"           # two-finger tap
 axe type 'Hello' --udid "$UDID"
 printf 'line one\nline two' | axe type --stdin --udid "$UDID"
+axe type 'Grüße an @alle' --layout de --udid "$UDID"     # German hardware keyboard
 axe key 40 --udid "$UDID"                                 # Return
 axe key-sequence --keycodes 42,42 --udid "$UDID"          # two Backspaces
 axe key-combo --modifiers 227 --key 4 --udid "$UDID"      # Cmd+A
@@ -106,7 +107,7 @@ axe touch -x 100 -y 200 --down --up --delay 1.0 --udid "$UDID"   # long press
 axe slider --id volume --value 75 --udid "$UDID"
 ```
 
-`tap` selectors are `--id`, `--label` or `--value`, optionally narrowed with `--element-type`. On a point or an element, `--hold <seconds>` makes a long press, `--count 2` a double tap and `--touches 2` a two-finger tap (two contacts 40 points apart); these three send real touches and need plain input, without `--agent` or `--input-mode selected`. `--tap-style` chooses `automatic` (the default: a touch for switches, a simulator tap otherwise), `simulator` or `physical`. `type` uses the US keyboard layout; characters outside it, such as `é` or `£`, fail with `invalidArguments` before anything is typed. Keys take HID usage codes. Buttons are `home`, `lock`, `side-button`, `siri` and `apple-pay`.
+`tap` selectors are `--id`, `--label` or `--value`, optionally narrowed with `--element-type`. On a point or an element, `--hold <seconds>` makes a long press, `--count 2` a double tap and `--touches 2` a two-finger tap (two contacts 40 points apart); these three send real touches and need plain input, without `--agent` or `--input-mode selected`. `--tap-style` chooses `automatic` (the default: a touch for switches, a simulator tap otherwise), `simulator` or `physical`. `type` sends key positions, so `--layout` must match the simulator's hardware keyboard: `us` (the default), `de` (German QWERTZ, without dead keys) or `auto` (reads the simulator's active keyboard). Characters outside the layout, such as `é` or `£` on `us`, fail with `invalidArguments` before anything is typed. `--agent` and physical devices take only `us`. Keys take HID usage codes. Buttons are `home`, `lock`, `side-button`, `siri` and `apple-pay`.
 
 ## Swipes, gestures and drawing
 

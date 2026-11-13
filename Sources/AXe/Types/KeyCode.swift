@@ -3,6 +3,7 @@ import Foundation
 struct KeyEvent {
     let keyCode: Int
     let shift: Bool
+    var option: Bool = false
 }
 
 extension KeyEvent {

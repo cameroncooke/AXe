@@ -49,6 +49,7 @@ axe batch --agent --view navigation --udid <UDID> --steps-json '{"snapshotID":"<
 ```
 
 - 1 to 8 `tap` or `type` steps, all refs from that snapshot.
+- `type` steps use the US keyboard mapping. On a simulator with a German hardware keyboard, type each field with a separate non-agent call (Step 5).
 - `"focus": true` taps a type step's field first, as `type --focus` does; its ref is the field row that advertises `tap`. Without it, the field must already be focused and advertise `typeText`.
 - Steps whose controls only moved (for example under a keyboard) still run; a control that changed, disappeared or is covered stops the batch.
 - Only the last step may leave the screen (Close, Save, Next). Any other layout change stops the later steps.
@@ -61,8 +62,8 @@ axe batch --agent --view navigation --udid <UDID> --steps-json '{"snapshotID":"<
 axe type 'London' --agent --view navigation --focus --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e7
 ```
 
-- `--focus` taps the field, checks it took focus and types. Without it, the field must already be focused. Several fields on one screen: one batch of focus steps.
-- Typing does not clear existing text. At most 256 UTF-8 bytes per call, US keyboard mapping.
+- `--focus` taps the field, checks it took focus and types. Without it, the field must already be focused. Several fields on one screen: one batch of focus steps, except on a German hardware keyboard.
+- Typing does not clear existing text. At most 256 UTF-8 bytes per call, US keyboard mapping. For a simulator with a German hardware keyboard, type without `--agent` and pass `--layout de` or `--layout auto`.
 - Return, Backspace and shortcuts on a focused field: `key 40`, `key 42`, `key-sequence --keycodes ...` or `key-combo`, with `--agent --snapshot-id <SNAPSHOT_ID> --ref <FIELD_REF>`. Codes: [cli-quick-reference.md](references/cli-quick-reference.md#common-keycodes).
 - Fill every field the task needs before Save or Done. Never tap Done just to hide the keyboard: it can commit the form.
 

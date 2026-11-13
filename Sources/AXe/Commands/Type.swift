@@ -5,14 +5,15 @@ import FBSimulatorControl
 
 struct Type: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Type text using the US keyboard layout.",
+        abstract: "Type text using the simulator's hardware keyboard layout (US by default).",
         discussion: """
-        Pass the text as an argument, with --stdin or with --file. AXe sends key presses to the focused field; characters outside the US layout, such as é or £, fail before anything is typed. Physical devices and selected input take at most 256 UTF-8 bytes. With --agent, --focus taps the --ref field before typing.
+        Pass the text as an argument, with --stdin or with --file. AXe sends key presses to the focused field; characters outside the --layout (us by default; de for German QWERTZ, without dead keys; auto reads the simulator's keyboard), such as é or £, fail before anything is typed. Physical devices and selected input take at most 256 UTF-8 bytes. With --agent, --focus taps the --ref field before typing.
 
         Examples:
           axe type 'Hello, world!' --udid <UDID>
           printf 'line one\\nline two' | axe type --stdin --udid <UDID>
           axe type --file message.txt --udid <UDID>
+          axe type 'Grüße an @alle' --layout de --udid <UDID>
         """
     )
     
@@ -36,8 +37,14 @@ struct Type: PhysicalDeviceCommand {
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions
     @OptionGroup var agentMode: AgentModeOptions
 
+    @Option(name: .customLong("layout"), help: "Hardware keyboard layout active in the simulator: us (default), de, or auto (read the active iOS keyboard).")
+    var layoutChoice: KeyboardLayoutChoice = .us
+
     func validate() throws {
         try agentMode.validate()
+        if agentMode.enabled, layoutChoice != .us {
+            throw ValidationError("--layout supports only us with --agent.")
+        }
         if focusBeforeTyping {
             guard agentMode.enabled, agentMode.snapshotID != nil, agentMode.elementRef != nil,
                   selectedKeyboard.focusID == nil else {
@@ -89,12 +96,16 @@ struct Type: PhysicalDeviceCommand {
             input = try SelectedKeyboardOptions.readText(from: handle)
         default: throw ValidationError("Select one text input source.")
         }
-        return try selectedKeyboard.request(input: selectedInput, event: SelectedKeyboardRequest.textEvent(input))
+        return try selectedKeyboard.request(input: selectedInput, event: SelectedKeyboardRequest.textEvent(input,
+            layout: layoutChoice.resolve(simulatorUDID: simulatorUDID)))
     }
 
     func validateOnDevice(inBatch: Bool) throws {
         try selectedInput.refuseOnDevice(agent: agentMode.enabled,
             "Physical typing sends keys to the current focus without agent or selected display options.")
+        guard layoutChoice == .us else {
+            throw ValidationError("--layout supports only us on physical devices.")
+        }
         // Literal text is checked here; text from standard input or a file is read only once, in `runOnDevice`.
         if let text { _ = try Self.physicalKeySteps(for: text) }
     }
@@ -175,18 +186,20 @@ struct Type: PhysicalDeviceCommand {
             throw ValidationError("Invalid input configuration.")
         }
         
+        let layout = try layoutChoice.resolve(simulatorUDID: simulatorUDID)
+        logger.info().log("Using keyboard layout '\(layout.rawValue)'")
+
         // Validate text first
-        guard TextToHIDEvents.validateText(inputText) else {
+        guard TextToHIDEvents.validateText(inputText, layout: layout) else {
             // Find unsupported characters for detailed error message
             let unsupportedChars = inputText.compactMap { char in
-                let keyEvent = KeyEvent.keyCodeForString(String(char))
+                let keyEvent = layout.keyEvent(for: String(char))
                 return keyEvent.keyCode == 0 ? char : nil
             }
             let errorMessage = """
                 Unsupported characters found: \(unsupportedChars.map { "'\($0)'" }.joined(separator: ", "))
                 
-                Only US keyboard characters are supported via HID keycodes.
-                Supported: A-Z, a-z, 0-9, and symbols: !@#$%^&*()_+-={}[]|\\:";'<>?,./`~
+                These characters have no key in the '\(layout.rawValue)' keyboard layout.
                 """
             logger.error().log(errorMessage)
             throw TextToHIDEvents.TextConversionError.unsupportedCharacter(unsupportedChars.first!)
@@ -195,7 +208,7 @@ struct Type: PhysicalDeviceCommand {
         // Convert text to HID events using the new utility
         let hidEvents: [FBSimulatorHIDEvent]
         do {
-            hidEvents = try TextToHIDEvents.convertTextToHIDEvents(inputText)
+            hidEvents = try TextToHIDEvents.convertTextToHIDEvents(inputText, layout: layout)
             logger.info().log("Successfully converted text to \(hidEvents.count) HID events")
         } catch let error as TextToHIDEvents.TextConversionError {
             logger.error().log("Text conversion failed: \(error.localizedDescription)")
