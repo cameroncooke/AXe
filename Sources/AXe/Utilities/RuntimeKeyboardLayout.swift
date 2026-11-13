@@ -38,7 +38,7 @@ struct RuntimeKeyboardLayout: Sendable {
         guard let found = Self.find(name, runtimeRoot: runtimeRoot) else {
             let near = Self.names(like: name, runtimeRoot: runtimeRoot)
             let hint = near.isEmpty ? "" : " Similar names: \(near.joined(separator: ", "))."
-            throw CLIError(errorDescription: "The simulator's runtime has no hardware keyboard layout named '\(name)'.\(hint)", code: .invalidArguments)
+            throw CLIError(errorDescription: "iOS has no hardware keyboard layout named '\(name)'.\(hint)", code: .invalidArguments)
         }
         guard let data = try? Data(contentsOf: found.file), let layout = RuntimeKeyboardLayout(name: found.name, uchr: data) else {
             throw CLIError(errorDescription: "The simulator runtime's '\(found.name)' hardware keyboard layout could not be read.")

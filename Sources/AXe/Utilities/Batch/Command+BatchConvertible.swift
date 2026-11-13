@@ -277,7 +277,7 @@ extension Type: BatchConvertible {
             throw CLIError(errorDescription: "Invalid input configuration.", code: .invalidArguments)
         }
 
-        let hidEvents = try TypingLayout.resolve(layout, simulatorUDID: context.simulatorUDID) { logger.info().log($0) }
+        let hidEvents = try TypingLayout.resolve(layout ?? TypingLayout.automatic, simulatorUDID: context.simulatorUDID) { logger.info().log($0) }
             .events(for: inputText)
         guard !hidEvents.isEmpty else {
             return []

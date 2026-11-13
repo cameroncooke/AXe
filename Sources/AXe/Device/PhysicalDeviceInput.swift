@@ -3,6 +3,8 @@ import Foundation
 
 struct PhysicalDeviceInput: Sendable {
     private let client: PhysicalDeviceBrokerClient
+    /// The device's system version from CoreDevice, such as `27.2`.
+    let osVersion: String?
 
     @MainActor
     static func withSession<T: Sendable>(
@@ -21,7 +23,7 @@ struct PhysicalDeviceInput: Sendable {
                 throw CLIOutputFailure(code: "targetNotReady", message: "The device has no hardware UDID.")
             }
             let client = try await PhysicalDeviceBrokerClient.connect(udid: udid)
-            let input = PhysicalDeviceInput(client: client)
+            let input = PhysicalDeviceInput(client: client, osVersion: device.osVersion)
             let result: Result<T, Error>
             do {
                 result = .success(try await work(input))
