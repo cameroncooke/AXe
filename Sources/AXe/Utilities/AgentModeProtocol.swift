@@ -16,6 +16,8 @@ struct AgentModeRequest: Codable, Sendable {
     var tapSelector: AgentModeTapSelector? = nil
     var elementType: String? = nil
     var text: String? = nil
+    /// The keyboard layout `text` is typed on. Nil is the fixed US table.
+    var layout: TypingLayout? = nil
     var keyEvents: [SelectedKeyboardPrimitive]? = nil
     var direction: RuntimeSwipeDirection? = nil
     var distance: Double = 1
@@ -47,7 +49,7 @@ struct AgentModeRequest: Codable, Sendable {
                 throw AgentModeFailure("invalidFocusAndType", "Focus and type requires one snapshot/ref and text, without other targets, actions or timing options.")
             }
             // Validate all text before a focus tap, including private broker callers.
-            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
+            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text, layout: layout))
             try KeyboardPrimitives.validate(events, limits: .selected)
         }
         if kind == .read {

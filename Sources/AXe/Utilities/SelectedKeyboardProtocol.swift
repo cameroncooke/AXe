@@ -50,11 +50,11 @@ struct SelectedKeyboardRequest: Codable, Sendable {
 
     var event: FBSimulatorHIDEvent { .composite(events.map(\.event)) }
 
-    static func textEvent(_ text: String) throws -> FBSimulatorHIDEvent {
+    static func textEvent(_ text: String, layout: TypingLayout? = nil) throws -> FBSimulatorHIDEvent {
         guard !text.isEmpty, text.utf8.count <= maximumTextBytes else {
             throw SelectedHIDFailure.invalid("Selected text requires 1...256 UTF-8 bytes")
         }
-        return .composite(try TextToHIDEvents.convertTextToHIDEvents(text))
+        return .composite(try (layout ?? .us).events(for: text))
     }
 }
 

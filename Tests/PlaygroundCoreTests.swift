@@ -49,6 +49,35 @@ struct PlaygroundCoreTests {
         try await app.waitForValue("word-count", equals: "3")
     }
 
+    @Test("Type on a German simulator keyboard, and with US positions on request")
+    func typeOnGermanKeyboard() async throws {
+        let app = try CorePlaygroundSession()
+        let saved = await app.keyboardSettings()
+        do {
+            // An app takes the simulator's keyboard when it first types, so set it before the launch.
+            try await app.setKeyboardSettings(.init(keyboards: ["de_DE@sw=QWERTZ-German;hw=German"], expanded: true,
+                lastUsed: "de_DE@sw=QWERTZ-German;hw=German"))
+            _ = try await app.open("text-input", readyID: "text-input-field")
+            try await app.run(["tap", "--id", "text-input-field", "--element-type", "TextField"])
+            _ = try await app.waitFor("active text input") { state in
+                UIStateParser.findElement(in: state) { $0.label?.contains("Typing active") == true } != nil
+            }
+
+            // QWERTZ letters, Option-layer symbols, an umlaut and a dead-key character.
+            let text = "Grüße @ [yz] é€"
+            try await app.run(["type", text])
+            try await app.waitForValue("text-input-field", equals: text)
+
+            // US positions on a German keyboard arrive as the German keys in those positions.
+            try await app.run(["type", "yz", "--layout", "us"])
+            try await app.waitForValue("text-input-field", equals: text + "zy")
+        } catch {
+            try? await app.setKeyboardSettings(saved)
+            throw error
+        }
+        try await app.setKeyboardSettings(saved)
+    }
+
     @Test("Scroll the real list and select a newly visible row")
     func scrollList() async throws {
         let app = try CorePlaygroundSession()
@@ -194,6 +223,49 @@ struct CorePlaygroundSession {
             return try await CommandRunner.run(command, timeout: 30).output
         } catch {
             throw TestError.commandError("\(command)\n\(error)")
+        }
+    }
+
+    /// The simulator settings that decide its hardware keyboard layout. Nil means not set.
+    struct KeyboardSettings {
+        var keyboards: [String]?
+        var expanded: Bool?
+        var lastUsed: String?
+    }
+
+    func keyboardSettings() async -> KeyboardSettings {
+        func exported(_ domain: String) async -> [String: Any] {
+            let command = "xcrun simctl spawn \(shellQuote(udid)) defaults export \(domain) - 2>/dev/null"
+            guard let output = try? await CommandRunner.run(command, allowFailure: true, timeout: 30).output,
+                  let plist = try? PropertyListSerialization.propertyList(from: Data(output.utf8), format: nil) else { return [:] }
+            return plist as? [String: Any] ?? [:]
+        }
+        let global = await exported("-g")
+        let keyboard = await exported("com.apple.keyboard.preferences")
+        return KeyboardSettings(keyboards: global["AppleKeyboards"] as? [String], expanded: global["AppleKeyboardsExpanded"] as? Bool,
+            lastUsed: keyboard["KeyboardLastUsed"] as? String)
+    }
+
+    func setKeyboardSettings(_ settings: KeyboardSettings) async throws {
+        func defaults(_ arguments: [String]) async throws {
+            let command = (["xcrun", "simctl", "spawn", udid, "defaults"] + arguments).map(shellQuote).joined(separator: " ")
+            // Deleting a key that is not set fails, and leaves the wanted state.
+            _ = try await CommandRunner.run(command, allowFailure: arguments.first == "delete", timeout: 30)
+        }
+        if let keyboards = settings.keyboards {
+            try await defaults(["write", "-g", "AppleKeyboards", "-array"] + keyboards)
+        } else {
+            try await defaults(["delete", "-g", "AppleKeyboards"])
+        }
+        if let expanded = settings.expanded {
+            try await defaults(["write", "-g", "AppleKeyboardsExpanded", "-bool", expanded ? "YES" : "NO"])
+        } else {
+            try await defaults(["delete", "-g", "AppleKeyboardsExpanded"])
+        }
+        if let lastUsed = settings.lastUsed {
+            try await defaults(["write", "com.apple.keyboard.preferences", "KeyboardLastUsed", "-string", lastUsed])
+        } else {
+            try await defaults(["delete", "com.apple.keyboard.preferences", "KeyboardLastUsed"])
         }
     }
 

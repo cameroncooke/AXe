@@ -114,11 +114,12 @@ struct PlaygroundFocusTypeCheck {
             try #require(beforeDocument.text.isEmpty && !beforeDocument.focused
                 && beforeDocument.activeWindowTouches == 0 && beforeDocument.windowTraceDropped == 0)
         }
-        let rejected = try await command("invalid-text", ["type", "£", "--agent", "--focus",
+        // No hardware keyboard layout has a key for 日, whatever keyboard the simulator is set to.
+        let rejected = try await command("invalid-text", ["type", "日", "--agent", "--focus",
             "--snapshot-id", first.body.snapshotID.uuidString, "--ref", try reference(first)], allowFailure: true)
         let refusal = try PlaygroundFocusEnvelope.decode(rejected.output)
         try #require(rejected.exitCode != 0 && refusal.didError && refusal.error?.code == "invalidArguments")
-        try #require(refusal.error?.message.contains("No keycode found for character: '£'") == true)
+        try #require(refusal.error?.message.contains("'日'") == true)
         try #require(refusal.data.action == nil && refusal.data.batch == nil)
         let unchanged = try await native("after-invalid-text", context: context)
         try #require(unchanged.fieldStates == beforeRead.fieldStates, "Invalid text changed actual fields before dispatch.")

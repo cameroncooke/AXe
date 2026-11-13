@@ -5,6 +5,8 @@ struct AgentBatchRequest: Codable, Sendable {
     let expectedPID: Int32?
     var snapshotID: UUID? = nil
     let steps: [AgentBatchStep]
+    /// The keyboard layout every type step is typed on. Nil is the fixed US table.
+    var layout: TypingLayout? = nil
 
     var usesReferences: Bool { steps.contains { $0.ref != nil } }
 
@@ -13,7 +15,7 @@ struct AgentBatchRequest: Codable, Sendable {
         guard (1...8).contains(steps.count) else {
             throw AgentModeFailure("invalidBatch", "Agent batch requires 1...8 tap/type steps.")
         }
-        for step in steps { try step.validate(expectedPID: expectedPID) }
+        for step in steps { try step.validate(expectedPID: expectedPID, layout: layout) }
         if usesReferences {
             guard snapshotID != nil, steps.allSatisfy({ $0.ref != nil }) else {
                 throw AgentModeFailure("mixedBatchTargets", "A reference batch requires one snapshotID and only ref steps. Native ID and reference steps cannot be mixed.")
@@ -58,7 +60,7 @@ struct AgentBatchStep: Codable, Sendable {
         return try JSONDecoder().decode(AgentBatchStep.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
-    func validate(expectedPID: Int32?) throws {
+    func validate(expectedPID: Int32?, layout: TypingLayout? = nil) throws {
         _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
         guard (id != nil) != (ref != nil) else {
             throw AgentModeFailure("invalidBatchTarget", "Every agent batch step requires exactly one native id or published ref.")
@@ -83,7 +85,7 @@ struct AgentBatchStep: Codable, Sendable {
             guard focus == nil else { throw AgentModeFailure("mixedBatchPayload", "Only a type step can focus its field.") }
         case .type:
             guard let text else { throw AgentModeFailure("missingBatchText", "A type step requires literal text.") }
-            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text))
+            let events = try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text, layout: layout))
             try KeyboardPrimitives.validate(events, limits: .selected)
         }
     }

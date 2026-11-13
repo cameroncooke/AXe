@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `describe-ui --minimal-keys` reads only label, identifier, value, frame, role, role description, type and enabled state, about 30 ms faster on a Settings screen ([#70](https://github.com/cameroncooke/AXe/pull/70) by [@alex-hall](https://github.com/alex-hall)).
 
 ### Changed
+- `axe type` now types on the simulator's own hardware keyboard layout instead of always sending US key positions, so text arrives as written on German, French, British and other keyboards, including characters that need Option or a dead key. Before, `yz@` arrived as `zy“` on a German keyboard and `#` as `£` on a British one. AXe reads the layout from the simulator's keyboard settings and the key positions from the layout data in its runtime. This covers `type` on every simulator route (plain, `--input-mode selected`, `--agent`), batch type steps and `serve`. `--layout <name>` names a layout and `--layout us` sends US key positions as before. Physical devices still use US positions. ([#81](https://github.com/cameroncooke/AXe/issues/81), reported with a first implementation in [#95](https://github.com/cameroncooke/AXe/pull/95) by [@scriptease](https://github.com/scriptease))
 - `axe --output json describe-ui` now takes as long as plain `describe-ui`, about 45 ms less on a Settings screen, with the same output.
 
 ### Fixed

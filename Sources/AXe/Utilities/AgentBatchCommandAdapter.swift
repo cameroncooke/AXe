@@ -14,11 +14,13 @@ enum AgentBatchCommandAdapter {
     }
 
     static func run(data: Data, expectedPID: Int32?, simulatorUDID: String) throws {
-        try AgentModeCommandAdapter.send(request(data: data, expectedPID: expectedPID), simulatorUDID: simulatorUDID)
+        // Agent batch steps carry no options, so every type step uses the simulator's own layout.
+        let layout = try TypingLayout.resolve(TypingLayout.automatic, simulatorUDID: simulatorUDID)
+        try AgentModeCommandAdapter.send(request(data: data, expectedPID: expectedPID, layout: layout), simulatorUDID: simulatorUDID)
     }
 
     /// Both public input forms use the same bounded document and native request validation.
-    static func request(data bytes: Data, expectedPID: Int32?) throws -> SelectedHIDRequest {
+    static func request(data bytes: Data, expectedPID: Int32?, layout: TypingLayout? = nil) throws -> SelectedHIDRequest {
         guard !bytes.isEmpty, bytes.count <= 16_384 else {
             throw ValidationError("Agent batch JSON must contain 1...16384 bytes.")
         }
@@ -29,7 +31,7 @@ enum AgentBatchCommandAdapter {
             // A malformed file is the caller's mistake, not a response AXe failed to read.
             throw ValidationError("Agent batch JSON is malformed or lacks a steps array.")
         }
-        let batch = AgentBatchRequest(expectedPID: expectedPID, snapshotID: document.snapshotID, steps: document.steps)
+        let batch = AgentBatchRequest(expectedPID: expectedPID, snapshotID: document.snapshotID, steps: document.steps, layout: layout)
         try batch.validate()
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .agentBatch(batch))

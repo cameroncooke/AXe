@@ -62,13 +62,13 @@ The result directory must be new. Earlier failed output is never replaced. The d
 
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
-| Core controls | 76 | 72 | 268 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
+| Core controls | 77 | 73 | 268 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
 | Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
 | Keyboard and hardware | 16 | 10 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 6 | 6 | 30 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **245** | **93** | **536** | **874 case executions** |
+| **Total** | **246** | **94** | **536** | **876 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
@@ -190,7 +190,7 @@ A failed case is not replayed. An input quarantine stops later work on that gues
 
 ## Focused checks
 
-Use `--only iphone`, `--only ipad` or `--only duo` with a group: `core-controls`, `agent-controls`, `keyboard-hardware`, `media` or `hinge`. A focused run proves only that group and guest. `--suite core` keeps the nine generic core checks for a narrow compatibility check. The full Duo profile uses explicit display/orientation cases instead.
+Use `--only iphone`, `--only ipad` or `--only duo` with a group: `core-controls`, `agent-controls`, `keyboard-hardware`, `media` or `hinge`. A focused run proves only that group and guest. `--suite core` keeps the ten generic core checks for a narrow compatibility check. The full Duo profile uses explicit display/orientation cases instead.
 
 The existing direct runner accepts each exact Playground suite and the registered `PhotosButtonLeafE2ETests` suite. Its tests-only mode needs the current app and native test target already built, and matching helper paths from a matrix run. For example:
 

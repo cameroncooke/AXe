@@ -277,15 +277,8 @@ extension Type: BatchConvertible {
             throw CLIError(errorDescription: "Invalid input configuration.", code: .invalidArguments)
         }
 
-        guard TextToHIDEvents.validateText(inputText) else {
-            let unsupportedChars = inputText.compactMap { char in
-                let keyEvent = KeyEvent.keyCodeForString(String(char))
-                return keyEvent.keyCode == 0 ? char : nil
-            }
-            throw TextToHIDEvents.TextConversionError.unsupportedCharacter(unsupportedChars.first ?? " ")
-        }
-
-        let hidEvents = try TextToHIDEvents.convertTextToHIDEvents(inputText)
+        let hidEvents = try TypingLayout.resolve(layout, simulatorUDID: context.simulatorUDID) { logger.info().log($0) }
+            .events(for: inputText)
         guard !hidEvents.isEmpty else {
             return []
         }

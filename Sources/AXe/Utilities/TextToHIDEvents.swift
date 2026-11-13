@@ -8,11 +8,20 @@ struct TextToHIDEvents {
     // MARK: - Error Types
     enum TextConversionError: Error, LocalizedError, UserFacingError {
         case unsupportedCharacter(Character)
+        /// The simulator's keyboard layout, read from its runtime, has no key for the character.
+        case notOnLayout(Character, layout: String)
+        /// Each character has a key, but pressed in this order the layout combines them into
+        /// other characters, as a Vietnamese keyboard turns "oo" into "ô".
+        case combinesOnLayout(Character, layout: String)
         
         var errorDescription: String? {
             switch self {
             case .unsupportedCharacter(let char):
                 return "No keycode found for character: '\(char)'"
+            case let .notOnLayout(char, layout):
+                return "The \(layout) keyboard layout has no key for the character '\(char)'."
+            case let .combinesOnLayout(char, layout):
+                return "The \(layout) keyboard layout combines the keys for this text into other characters at '\(char)', so it cannot be typed as written."
             }
         }
 
@@ -60,6 +69,19 @@ struct TextToHIDEvents {
         }
     }
     
+    // MARK: - Key Strokes
+
+    /// The key presses for planned key strokes, holding Shift and Option around each key that needs them.
+    static func events(for strokes: [KeyStroke]) -> [FBSimulatorHIDEvent] {
+        strokes.flatMap { stroke -> [FBSimulatorHIDEvent] in
+            let modifiers: [UInt32] = (stroke.shift ? [225] : []) + (stroke.option ? [226] : [])
+            let key = UInt32(stroke.usage)
+            return modifiers.map { .keyboard(direction: .down, keyCode: $0) }
+                + [.keyboard(direction: .down, keyCode: key), .keyboard(direction: .up, keyCode: key)]
+                + modifiers.reversed().map { .keyboard(direction: .up, keyCode: $0) }
+        }
+    }
+
     // MARK: - Public API
     
     /// Validates that a text string can be converted to HID events

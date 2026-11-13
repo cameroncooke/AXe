@@ -80,7 +80,7 @@ extension AgentModeController {
                     screenID: request.screenID, screenUUID: request.screenUUID,
                     operation: .complete, token: nil,
                     payload: .agent(AgentModeRequest(kind: .typeText, expectedPID: initial.expectedPID,
-                        snapshotID: snapshotID, ref: fieldRef, text: mode.text)))
+                        snapshotID: snapshotID, ref: fieldRef, text: mode.text, layout: mode.layout)))
             }
             var typeResult = await PhaseTimer.measure("agent.typeText") {
                 await performReserved(typing(focused.id, focusedRef), focusPlan: baseline, retryDepth: retryDepth,

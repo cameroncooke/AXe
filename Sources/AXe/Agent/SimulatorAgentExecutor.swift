@@ -76,7 +76,7 @@ final class SimulatorAgentExecutor {
             } else {
                 throw AgentTextModelError.missingConfiguration
             }
-            try Self.validateTextForHID(text)
+            _ = try typingEvents(for: text)
             try await replaceText(in: element, with: text, screen: screen)
             return AgentExecutedAction(
                 targetDescription: element.displayName,
@@ -165,7 +165,7 @@ final class SimulatorAgentExecutor {
         guard text != nil || !events.isEmpty else { return }
 
         if let text {
-            events.append(contentsOf: try TextToHIDEvents.convertTextToHIDEvents(text))
+            events.append(contentsOf: try typingEvents(for: text))
         }
 
         try await HIDInteractor.performHIDEvent(
@@ -175,12 +175,12 @@ final class SimulatorAgentExecutor {
         )
     }
 
-    private static func validateTextForHID(_ text: String) throws {
-        guard TextToHIDEvents.validateText(text) else {
-            let unsupported = text.first { KeyEvent.keyCodeForString(String($0)).keyCode == 0 }
-            throw CLIError(
-                errorDescription: "The selected text contains a character AXe cannot type using the US HID keyboard: \(unsupported.map(String.init) ?? "unknown")."
-            )
+    /// The key presses for `text` on the simulator's own keyboard layout.
+    private func typingEvents(for text: String) throws -> [FBSimulatorHIDEvent] {
+        do {
+            return try TypingLayout.resolve(TypingLayout.automatic, simulatorUDID: simulatorUDID).events(for: text)
+        } catch let error as TextToHIDEvents.TextConversionError {
+            throw CLIError(errorDescription: "The selected text contains a character AXe cannot type on the simulator's keyboard: \(error.localizedDescription)")
         }
     }
 
