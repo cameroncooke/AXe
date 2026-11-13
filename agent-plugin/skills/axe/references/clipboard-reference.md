@@ -5,7 +5,7 @@ printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid <UUID>
 ```
 
 - Stages exact UTF-8 bytes in one booted simulator's general clipboard; does not insert text.
-- Standalone public CoreDevice route: no agent, selected-screen or batch options. `type` keeps its US HID keyboard mapping.
+- Standalone public CoreDevice route: no agent, selected-screen or batch options. `type` sends key presses instead; see its `--layout`.
 - Supply 1...65536 bytes, then close stdin. Empty, oversized or invalid UTF-8 input rejects before a copy. Line endings and combining characters are kept; no trimming or normalizing.
 - `--udid` must be an exact existing Booted simulator UUID; names and the `booted` and `all` aliases reject. No implicit boot.
 

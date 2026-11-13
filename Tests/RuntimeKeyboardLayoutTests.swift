@@ -186,19 +186,61 @@ struct RuntimeKeyboardLayoutTests {
         #expect(try RuntimeKeyboardLayout(name: "german", runtimeRoot: root).name == "German")
     }
 
-    @Test("Physical devices take auto and us, and refuse a named layout")
-    func physicalDevicesTypeUS() throws {
+    @Test("Physical devices send US positions unless a layout is named, and refuse auto")
+    func physicalDeviceLayouts() throws {
         let udid = "00000001-0000000000000001"
         try Type.parse(["Hello", "--udid", udid]).validateOnDevice(inBatch: false)
         try Type.parse(["Hello", "--udid", udid, "--layout", "us"]).validateOnDevice(inBatch: false)
-        let named = try Type.parse(["Hello", "--udid", udid, "--layout", "German"])
-        #expect(throws: (any Error).self) { try named.validateOnDevice(inBatch: false) }
+        try Type.parse(["Grüße", "--udid", udid, "--layout", "German"]).validateOnDevice(inBatch: false)
+        // Before the lease: auto has nothing to read on a device, and the US table cannot type é.
+        let automatic = try Type.parse(["Hello", "--udid", udid, "--layout", "auto"])
+        #expect(throws: CLIError.self) { try automatic.validateOnDevice(inBatch: false) }
+        let unsupported = try Type.parse(["caf\u{E9}", "--udid", udid])
+        #expect(throws: TextToHIDEvents.TextConversionError.self) { try unsupported.validateOnDevice(inBatch: false) }
+
+        #expect(try TypingLayout.resolve(nil, deviceVersion: "27.2") == .us)
+        #expect(try TypingLayout.resolve("us", deviceVersion: "27.2") == .us)
+        #expect(throws: CLIError.self) { try TypingLayout.resolve("auto", deviceVersion: "27.2") }
+        #expect(throws: CLIError.self) { try TypingLayout.resolve("German", deviceVersion: "27.2", runtimes: []) }
+    }
+
+    @Test("A named device layout comes from the closest runtime and plans Option and dead keys", .enabled(if: runtimeRoot != nil))
+    func namedDeviceLayout() throws {
+        let root = try #require(Self.runtimeRoot)
+        let runtimes = [SimulatorRuntimeRoot(root: root, version: "27.2", build: "test")]
+        let german = try TypingLayout.resolve("german", deviceVersion: "27.2", runtimes: runtimes)
+        #expect(german.runtime?.name == "German")
+        let steps = try Type.physicalKeySteps(for: "@é", layout: german)
+        // Option down, L down and up, Option up; then the dead key and E.
+        #expect(steps.map(\.code) == [226, 15, 15, 226, 46, 46, 8, 8])
+        #expect(steps.map(\.pressed) == [true, true, false, false, true, false, true, false])
+        // The US table: a, then Shift and B.
+        #expect(try Type.physicalKeySteps(for: "aB").map(\.code) == [4, 4, 225, 5, 5, 225])
+    }
+
+    @Test("The closest runtime: the same version, else the nearest, newer on a tie")
+    func closestRuntime() {
+        let root = URL(fileURLWithPath: "/x")
+        let runtimes = ["26.5", "27.0", "27.2", "27.3"].map { SimulatorRuntimeRoot(root: root, version: $0, build: $0) }
+        #expect(SimulatorRuntimeRoot.closest(to: "27.2", in: runtimes)?.version == "27.2")
+        #expect(SimulatorRuntimeRoot.closest(to: "27.1", in: runtimes)?.version == "27.2")
+        #expect(SimulatorRuntimeRoot.closest(to: "26.0", in: runtimes)?.version == "26.5")
+        #expect(SimulatorRuntimeRoot.closest(to: "28.0", in: runtimes)?.version == "27.3")
+        #expect(SimulatorRuntimeRoot.closest(to: nil, in: runtimes)?.version == "27.3")
+        #expect(SimulatorRuntimeRoot.closest(to: "27.2", in: []) == nil)
+    }
+
+    @Test("At least one iOS simulator runtime is found on this Mac", .enabled(if: runtimeRoot != nil))
+    func installedRuntimesAreFound() {
+        let installed = SimulatorRuntimeRoot.installed()
+        #expect(!installed.isEmpty)
+        #expect(installed.allSatisfy { FileManager.default.fileExists(atPath: $0.root.appendingPathComponent("System/Library/KeyboardLayouts/USBKeyboardLayouts.bundle").path) })
     }
 
     @Test("auto is the default, and falls back to the US table when the simulator cannot be found")
     func automaticFallsBackToUS() throws {
         let command = try Type.parse(["Hello", "--udid", "00000000-0000-0000-0000-000000000001"])
-        #expect(command.layout == "auto")
+        #expect(command.layout == nil)
         var notes: [String] = []
         let layout = try command.typingLayout { notes.append($0) }
         #expect(layout == .us)

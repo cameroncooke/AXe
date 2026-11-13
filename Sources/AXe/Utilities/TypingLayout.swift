@@ -97,6 +97,76 @@ struct TypingLayout: Codable, Equatable, Sendable {
     }
 }
 
+extension TypingLayout {
+    /// The layout for `--layout` on a physical device. A device does not report the keyboard in
+    /// use, so it types US key positions unless a layout is named. A named layout's data comes
+    /// from the installed simulator runtime closest to the device's system version.
+    static func resolve(_ choice: String?, deviceVersion: String?,
+                        runtimes: [SimulatorRuntimeRoot] = SimulatorRuntimeRoot.installed(),
+                        note: (String) -> Void = { _ in }) throws -> TypingLayout {
+        guard let choice, choice != fixedUS else { return .us }
+        guard choice != automatic else { throw deviceAutomatic }
+        guard let runtime = SimulatorRuntimeRoot.closest(to: deviceVersion, in: runtimes) else {
+            throw CLIError(errorDescription: "No iOS simulator runtime is installed, so AXe has no data for the '\(choice)' keyboard layout. Install one in Xcode, or pass --layout us.", code: .invalidArguments)
+        }
+        let layout = try RuntimeKeyboardLayout(name: choice, runtimeRoot: runtime.root)
+        note("Typing on the \(layout.name) keyboard layout, with layout data from the iOS \(runtime.version) simulator runtime")
+        return TypingLayout(runtime: Runtime(name: layout.name, root: runtime.root.path))
+    }
+
+    static let deviceAutomatic = CLIError(
+        errorDescription: "--layout auto works on simulators only: a physical device does not report the keyboard in use. Name the device's keyboard layout, such as --layout German, or leave --layout out to send US key positions.",
+        code: .invalidArguments)
+}
+
+/// An installed iOS simulator runtime's root, with the system it runs. A physical device has no
+/// layout data on this Mac; the runtimes carry the same `USBKeyboardLayouts.bundle` iOS ships.
+struct SimulatorRuntimeRoot: Equatable, Sendable {
+    let root: URL
+    let version: String
+    let build: String
+
+    /// The iOS simulator runtimes on this Mac, read from their system version files.
+    static func installed() -> [SimulatorRuntimeRoot] {
+        let fileManager = FileManager.default
+        let containers = ["/Library/Developer/CoreSimulator/Volumes", "/private/var/run/com.apple.security.cryptexd/mnt"]
+            .flatMap { base in ((try? fileManager.contentsOfDirectory(atPath: base)) ?? []).map { "\(base)/\($0)" } }
+        let profileDirectories = containers.map { "\($0)/Library/Developer/CoreSimulator/Profiles/Runtimes" }
+            + ["/Library/Developer/CoreSimulator/Profiles/Runtimes"]
+        var found: [SimulatorRuntimeRoot] = []
+        for directory in profileDirectories {
+            for name in (try? fileManager.contentsOfDirectory(atPath: directory)) ?? [] where name.hasSuffix(".simruntime") {
+                let root = URL(fileURLWithPath: "\(directory)/\(name)/Contents/Resources/RuntimeRoot")
+                let versionFile = root.appendingPathComponent("System/Library/CoreServices/SystemVersion.plist")
+                guard let system = RuntimeKeyboardLayout.propertyList(at: versionFile) as? [String: Any],
+                      ["iPhone OS", "iOS"].contains(system["ProductName"] as? String ?? ""),
+                      let version = system["ProductVersion"] as? String, let build = system["ProductBuildVersion"] as? String
+                else { continue }
+                found.append(SimulatorRuntimeRoot(root: root, version: version, build: build))
+            }
+        }
+        return found
+    }
+
+    /// The runtime with the device's version, else the nearest one. Nil when none is installed.
+    static func closest(to deviceVersion: String?, in runtimes: [SimulatorRuntimeRoot]) -> SimulatorRuntimeRoot? {
+        func value(_ version: String) -> Int {
+            let parts = numbers(version)
+            return (parts.first ?? 0) * 10_000 + (parts.dropFirst().first ?? 0) * 100 + (parts.dropFirst(2).first ?? 0)
+        }
+        guard let deviceVersion else { return runtimes.max { value($0.version) < value($1.version) } }
+        let target = value(deviceVersion)
+        // Ties go to the newer runtime, whose layouts are a superset in every pair measured.
+        return runtimes.min { (abs(value($0.version) - target), -value($0.version)) < (abs(value($1.version) - target), -value($1.version)) }
+    }
+
+    private static func numbers(_ version: String) -> [Int] {
+        var parts = version.split(separator: ".").compactMap { Int($0) }
+        while parts.count > 2, parts.last == 0 { parts.removeLast() }
+        return parts
+    }
+}
+
 /// Where a booted simulator keeps its runtime and its data, read from its launch process so
 /// that no simulator set has to be loaded.
 struct SimulatorFiles {
