@@ -37,6 +37,11 @@ When reading issues:
 - No fluff or cheerful filler text
 - Technical prose only, be kind but direct (e.g., "Thanks @user" not "Thanks so much @user!")
 
+## Reporting
+- End every task with a one- or two-line TL;DR and a visual (chart, table, diagram or status board) of what was done or what the results were.
+- Keep any text to what the visual cannot show: decisions needed, caveats, what was not done or not verified.
+- When the user asks for full details, give them in full: every figure, failure, command and file path, not a summary.
+
 ## Docs
 - If modifying or adding/removing commands/options, update README.md and the skill in `agent-plugin/skills/axe/`.
 
