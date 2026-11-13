@@ -1,24 +1,25 @@
 class Axe < Formula
   desc "<normalized>"
   homepage "https://github.com/cameroncooke/AXe"
-  license "MIT"
-  version "<normalized>"
-  depends_on macos: :sonoma
-
   url "<normalized>"
   sha256 "<normalized>"
+  license "MIT"
+
+  depends_on macos: :sonoma
 
   def install
     libexec.install "axe", "Frameworks", "AXe_AXe.bundle"
     bin.write_exec_script libexec/"axe"
   end
 
-  def post_install
-    Dir.glob("#{libexec}/Frameworks/*.framework").each do |framework|
-      system "codesign", "--force", "--sign", "-", "--timestamp=none", framework
-    end
-
-    system "codesign", "--force", "--sign", "-", "--timestamp=none", libexec/"axe"
+  # The archive ships unsigned; sign the frameworks, then the executable that loads them.
+  post_install_steps do
+    run "/usr/bin/codesign", args: [
+      "--force", "--sign", "-", "--timestamp=none",
+      "{{libexec}}/Frameworks/FBControlCore.framework",
+      "{{libexec}}/Frameworks/FBSimulatorControl.framework",
+      "{{libexec}}/axe"
+    ]
   end
 
   test do
