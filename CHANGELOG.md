@@ -5,7 +5,7 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v2.0.5] - 2026-11-13
+## [Unreleased]
 
 ### Added
 - `axe serve --udid <UDID>` keeps one process open and runs one command per standard input line, answering each with the JSON line `axe --output json` prints. Setup happens once, and serve keeps the input broker running between commands, so reading the screen and tapping took about 176 ms instead of 290 ms on an iPhone 17 Pro simulator (146 ms with `--minimal-keys`). Based on the serve mode proposed in [#70](https://github.com/cameroncooke/AXe/pull/70) by [@alex-hall](https://github.com/alex-hall) and [@dphurley](https://github.com/dphurley).
