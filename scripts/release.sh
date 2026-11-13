@@ -415,6 +415,8 @@ fi
 
 RELEASE_MANAGED_FILES=(
   "CHANGELOG.md"
+  "agent-plugin/.claude-plugin/plugin.json"
+  "agent-plugin/.codex-plugin/plugin.json"
 )
 
 has_unmanaged_changes() {
@@ -534,6 +536,44 @@ fi
 rm -f "$RELEASE_NOTES_TMP"
 [[ -n "$CHANGELOG_VALIDATION_TEMP" ]] && rm -f "$CHANGELOG_VALIDATION_TEMP"
 
+# --- Plugin manifests ---
+
+# Installed plugins update only when the manifest version changes. A release with its own notes
+# raises both manifests to its version here, in the same commit as its changelog. A release that
+# reuses older notes ships that older skill, so its manifests must already name that version.
+MANIFEST_SCRIPT="scripts/plugin-manifest-version.sh"
+MANIFEST_VERSION="$RELEASE_NOTES_SOURCE_VERSION"
+MANIFESTS_UPDATED=false
+
+restore_release_files() {
+  if $CHANGELOG_UPDATED; then
+    git checkout -- "$CHANGELOG_PATH"
+  fi
+  if $MANIFESTS_UPDATED; then
+    git checkout -- $("$MANIFEST_SCRIPT" paths)
+  fi
+}
+
+if ! "$MANIFEST_SCRIPT" check "$MANIFEST_VERSION" >/dev/null 2>&1; then
+  if [[ "$MANIFEST_VERSION" != "$VERSION" ]]; then
+    echo "Error: v$VERSION reuses the v$MANIFEST_VERSION notes, so its plugin manifests must be $MANIFEST_VERSION." >&2
+    "$MANIFEST_SCRIPT" check "$MANIFEST_VERSION" || true
+    restore_release_files
+    exit 1
+  elif $DRY_RUN; then
+    echo "Dry-run: would set both plugin manifests to $VERSION."
+  else
+    "$MANIFEST_SCRIPT" set "$VERSION"
+    MANIFESTS_UPDATED=true
+    echo "Set both plugin manifests to $VERSION"
+  fi
+fi
+
+if ! $DRY_RUN && ! "$MANIFEST_SCRIPT" check "$MANIFEST_VERSION"; then
+  restore_release_files
+  exit 1
+fi
+
 # --- Release notes (tag annotation) ---
 
 RELEASE_NOTES="Release $TAG_NAME"
@@ -551,10 +591,10 @@ echo ""
 echo "Preparing release for $TAG_NAME"
 echo "Workflow: $WORKFLOW_NAME"
 
-if $CHANGELOG_UPDATED && ! $DRY_RUN; then
-  echo "Committing changelog update..."
-  git add "$CHANGELOG_PATH"
-  git commit -m "Finalize changelog for v$VERSION"
+if { $CHANGELOG_UPDATED || $MANIFESTS_UPDATED; } && ! $DRY_RUN; then
+  echo "Committing changelog and plugin manifest updates..."
+  git add "$CHANGELOG_PATH" $("$MANIFEST_SCRIPT" paths)
+  git commit -m "Finalize changelog and plugin manifests for v$VERSION"
 fi
 
 TMP_NOTES=$(mktemp)
