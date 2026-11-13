@@ -20,7 +20,7 @@ extension AgentModeController {
             let steps = await reboundSteps(batch.steps, original: original.snapshot, stored: &stored) ?? []
             if !steps.isEmpty {
                 var retry = request
-                retry.payload = .agentBatch(AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps))
+                retry.payload = .agentBatch(AgentBatchRequest(expectedPID: batch.expectedPID, snapshotID: stored.id, steps: steps, layout: batch.layout))
                 return await performBatchRetrying(retry, retryDepth: retryDepth + 1)
             }
         }
@@ -163,10 +163,10 @@ extension AgentModeController {
                     if let referencePlan {
                         if referencePlan.isFocusStep(offset) {
                             return await performReferenceFocusStep(action, step: step, retryDepth: retryDepth,
-                                index: offset, plan: referencePlan, pid: batchPID)
+                                index: offset, plan: referencePlan, pid: batchPID, layout: batch.layout)
                         }
                         return await performReferenceBatchStep(action, step: step, retryDepth: retryDepth, index: offset,
-                            plan: referencePlan, pid: batchPID)
+                            plan: referencePlan, pid: batchPID, layout: batch.layout)
                     }
                     guard let current = record, current.context == baseline else {
                         throw AgentModeFailure("batchContextChanged", "The simulator restarted, rotated or changed its display during the batch, so the remaining steps were not sent. \(AgentModeFailure.batchRest)")
@@ -177,14 +177,14 @@ extension AgentModeController {
                     if step.action == .type && step.focuses {
                         let ref = try Self.batchReference(current.snapshot, id: id, action: .tap)
                         action.payload = .agent(AgentModeRequest(kind: .focusAndType, expectedPID: batchPID,
-                            snapshotID: current.id, ref: ref, text: step.text))
+                            snapshotID: current.id, ref: ref, text: step.text, layout: batch.layout))
                         return Self.focusStep(await performFocusAndTypeRetrying(action, retryDepth: retryDepth),
                             retried: retryDepth > 0)
                     }
                     let ref = try Self.batchReference(current.snapshot, id: id,
                         action: step.action == .tap ? .tap : .typeText)
                     action.payload = .agent(AgentModeRequest(kind: step.action == .tap ? .tap : .typeText,
-                        expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text))
+                        expectedPID: batchPID, snapshotID: current.id, ref: ref, text: step.text, layout: batch.layout))
                     return await performReserved(action, retryDepth: retryDepth)
                 }
                 last = response
@@ -279,7 +279,7 @@ extension AgentModeController {
     /// and does not publish an intermediate table that another step or caller could reuse.
     private func performReferenceBatchStep(_ request: SelectedHIDRequest, step: AgentBatchStep, retryDepth: Int,
                                           index: Int, plan: AgentBatchReferencePlan,
-                                          pid: Int32) async -> SelectedHIDResponse {
+                                          pid: Int32, layout: TypingLayout?) async -> SelectedHIDResponse {
         do {
             let result: SelectedHIDResponse
             let kind: AgentModeRequest.Kind
@@ -305,7 +305,7 @@ extension AgentModeController {
                 let target = try plan.resolve(index: index, snapshot: snapshot, context: context, pid: pid)
                 // The complete batch document and target plan were validated before step one.
                 // Carry that chosen authority directly; no opaque ID becomes selector text.
-                let mode = AgentModeRequest(kind: .typeText, expectedPID: pid, text: step.text)
+                let mode = AgentModeRequest(kind: .typeText, expectedPID: pid, text: step.text, layout: layout)
                 let native = try nativeRequest(request, mode: mode, pid: pid,
                     context: context, snapshot: snapshot, cached: nil, binding: target)
                 record = nil
@@ -342,7 +342,7 @@ extension AgentModeController {
     /// controller reservation, and later steps resolve their own fresh evidence.
     private func performReferenceFocusStep(_ request: SelectedHIDRequest, step: AgentBatchStep, retryDepth: Int,
                                           index: Int, plan: AgentBatchReferencePlan,
-                                          pid: Int32) async -> SelectedHIDResponse {
+                                          pid: Int32, layout: TypingLayout?) async -> SelectedHIDResponse {
         do {
             guard let screenID = request.screenID, let screenUUID = request.screenUUID else {
                 throw AgentModeFailure.missingContext
@@ -359,7 +359,7 @@ extension AgentModeController {
             let table = store(snapshot, context: context, pid: pid)
             var focus = request
             focus.payload = .agent(AgentModeRequest(kind: .focusAndType, expectedPID: pid, snapshotID: table.id,
-                ref: ref, text: step.text))
+                ref: ref, text: step.text, layout: layout))
             return Self.focusStep(await performFocusAndTypeRetrying(focus, retryDepth: retryDepth),
                 retried: retryDepth > 0)
         } catch {

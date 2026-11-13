@@ -160,7 +160,7 @@ Gesture and path guards have their own typed codes (for example `swipeHitChanged
 4. Type and scroll:
    - Already focused field: `type <TEXT>` with its current `typeText` ref.
    - Current tap-capable TextField: `type <TEXT> --agent --focus --snapshot-id <UUID> --ref <REF>` focuses and types in one command. Inspect both phase receipts and use the replacement capture.
-   - Typing does not clear existing text. US keyboard mapping, 256-byte bound and per-key focus checks apply.
+   - Typing does not clear existing text. The keys come from the simulator's keyboard layout (`type --layout`, `auto` by default); the 256-byte bound and per-key focus checks apply.
    - Scroll area: `swipe --agent --udid <UDID> --snapshot-id <UUID> --ref <REF> --direction up --distance 0.5`. Direction is finger movement. Agent swipes (ref or coordinates) slow to rest before lift-off, so the content moves about that distance without a fling; the reply carries the settled screen.
 5. After input, use the replacement capture or read again.
    - Treat changed UI, boot, PID, display, hinge, rotation or geometry as stale, including changes made outside AXe; refresh and resolve again.
@@ -439,7 +439,7 @@ Use on a current tap-capable native TextField with a unique typed field ID or co
 - One guarded physical focus tap, a read of the same field's actual focus and new value/frame baseline, then typing.
 - The keyboard can take a second or two to report focus after the tap (seen with a search field in a sheet). A typing phase refused for that sent no key; AXe reads and sends it again up to three more times before failing.
 - Can open the keyboard and move the insertion point. Does not clear or replace text, and does not promise to append.
-- Before the tap: all text is checked (US mapping, 1...256 UTF-8 bytes, a complete bounded key sequence), plus the snapshot, owner, display, pose, fresh target and point-hit guards.
+- Before the tap: all text is checked (a key for every character on the simulator's keyboard layout, 1...256 UTF-8 bytes, a complete bounded key sequence), plus the snapshot, owner, display, pose, fresh target and point-hit guards.
 - The field's frame may change when the keyboard appears; the new frame must be finite, positive and inside the same display. The tap may change value or selection; the actual post-focus value becomes the exact typing baseline.
 - Sibling index and parent-container changes do not change field identity; parent paths and container object IDs are not typing-recipient authority. Still bound: the chosen field authority (semantic or opaque, kept by the broker), observed field object ID/PID, type, actual focus, uniqueness, full display context and other identity/state facts.
 - No label or coordinate fallback, no typing through a tap-only alias. Duplicated or malformed field IDs refuse.
@@ -592,7 +592,7 @@ Type steps in the ref form:
 - Optional positive `--expected-pid` asserts the same captured owner for either form.
 - Each step has exactly one `id` or `ref`. Ref documents require `snapshotID`; ID documents reject it. Mixed forms and unknown JSON fields reject.
 - `type` requires literal `text` and accepts optional Boolean `focus`; `tap` rejects both.
-- Type text: US mapping, 1...256 UTF-8 bytes, keyboard limits as for `type`.
+- Type text: typed on the simulator's own keyboard layout (batch steps take no `--layout`), 1...256 UTF-8 bytes, keyboard limits as for `type`.
 - Unsupported: coordinates, arbitrary selectors, retained input, device actions, nested batches, text file or stdin, delays, continuing after errors.
 
 ### Retries, stops and recovery

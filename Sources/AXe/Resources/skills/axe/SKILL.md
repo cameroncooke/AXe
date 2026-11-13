@@ -62,7 +62,8 @@ axe type 'London' --agent --view navigation --focus --udid <UDID> --snapshot-id 
 ```
 
 - `--focus` taps the field, checks it took focus and types. Without it, the field must already be focused. Several fields on one screen: one batch of focus steps.
-- Typing does not clear existing text. At most 256 UTF-8 bytes per call, US keyboard mapping.
+- Typing does not clear existing text. At most 256 UTF-8 bytes per call.
+- AXe picks the keys from the simulator's own keyboard layout (German, French, British and so on), so pass the text as it should read. A character that keyboard has no key for fails before anything is typed. If text arrives as other characters, the app was already typing when the simulator's keyboard changed: relaunch the app, or name the layout with `--layout <name>` on a non-agent `type`. `--layout us` sends US key positions.
 - Return, Backspace and shortcuts on a focused field: `key 40`, `key 42`, `key-sequence --keycodes ...` or `key-combo`, with `--agent --snapshot-id <SNAPSHOT_ID> --ref <FIELD_REF>`. Codes: [cli-quick-reference.md](references/cli-quick-reference.md#common-keycodes).
 - Fill every field the task needs before Save or Done. Never tap Done just to hide the keyboard: it can commit the form.
 

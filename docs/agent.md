@@ -214,7 +214,7 @@ Screen text is labelled as untrusted observation in every decision prompt. The o
 - The command automates booted iOS Simulators, not physical devices.
 - It is accessibility-first and has no screenshot/vision fallback, so canvas-only or poorly labelled interfaces may be blocked.
 - rs/1 rows omit frames. Unlabelled scroll areas are indistinguishable to Jev, and targets beyond the 64-row cap are not offered until the screen changes.
-- Text entry inherits AXe's current US HID keyboard character support.
+- Text entry types on the simulator's own keyboard layout, as `axe type` does; a character that layout has no key for is refused.
 - Picker wheels, sliders, drag-and-drop and hardware-button plans are not yet exposed to Jev.
 - App launch depends on CoreSimulator's installed-app metadata; hidden services and extensions are filtered but unusual system bundles may still appear.
 - Reads reuse the frontmost-application handle between actions, so a system alert that appears while the app's own screen also changes may not be observed until the next refresh.

@@ -41,8 +41,9 @@ struct PlaygroundOrdinaryTextTests {
         try await app.core.waitForValue("text-input-field", equals: "Initial text")
         let empty = try await app.attempt(["type", ""])
         try #require(empty.exitCode == 0, "type with empty text failed: \(empty.output)")
-        let refused = try await app.attempt(["type", "Price: £50"])
-        try #require(refused.exitCode != 0 && refused.output.contains("£"), "Unsupported text was not refused: \(refused.output)")
+        // No hardware keyboard layout has a key for 日, whatever keyboard the simulator is set to.
+        let refused = try await app.attempt(["type", "Price: 日50"])
+        try #require(refused.exitCode != 0 && refused.output.contains("日"), "Unsupported text was not refused: \(refused.output)")
         try await TestHelpers.waitForSettledAccessibility(simulatorUDID: app.udid, description: "the text field after refusals")
         let state = try await app.core.state()
         try #require(app.core.value("text-input-field", in: state) == "Initial text"

@@ -751,6 +751,40 @@ Grades, by the grader and by my review of every transcript:
 - Disclosure: FlowDeck's official skill (`resources/ui.md`, and `batch --examples`) contains a worked example that is essentially the Weather task, with its control names and expected answers ("11°", "78%", "10.7 mm", "Lightning"). It was used unedited, as for every tool, but FlowDeck's Weather result is not a blind test.
 - Limits: three runs per tool and app; one model; one host and simulator (iPhone 18 Pro, iOS 27.2 beta, Xcode 27.2 beta 3); returned-text tokens exclude images, which FlowDeck and RocketSim used (6.7 and 4.0 images per run on Weather and Contacts) and AXe did not.
 
+## Phase 14: typing on the simulator's keyboard layout (13 November)
+
+Issue [#81](https://github.com/cameroncooke/AXe/issues/81). `type` sent US key positions, so text arrived as other characters on any simulator whose hardware keyboard layout is not US: `yz@` as `zy“` on German, `azerty@1` as `qwerty2&` on French and `#` as `£` on British, which is the default of an en-GB simulator. Uncommitted on `proto/runtime-keyboard-layouts`.
+
+- [x] Read each layout's keys from the runtime's own `USBKeyboardLayouts.bundle` (`RuntimeKeyboardLayout`), including Option-layer characters and one dead key
+- [x] Read the active layout from the simulator's keyboard settings on disk (`SimulatorKeyboardSettings`), with the rules measured on iOS 27.2
+- [x] `--layout auto` (the default), `us` and any runtime layout name, on plain, selected, agent, batch, agent batch and `serve` typing; physical devices stay on US positions
+- [x] Broker protocol version 92: requests carry the layout, so an older running broker cannot ignore it
+- [x] README, skill, `docs/agent.md` and changelog
+- [x] Focused end-to-end suites on the E2E simulators (see below)
+
+Rules measured by typing fixed key positions under each setting (iOS 27.2, repeated on 26.5 and 27.3):
+
+- With `AppleKeyboardsExpanded`, the active keyboard is `KeyboardLastUsed` when it is listed exactly, otherwise the first of `AppleKeyboards`. Without it the list is ignored for the default keyboard of `AppleLanguages`.
+- A keyboard in a multilingual group (`ml=`) types with the first keyboard of the group.
+- `hw=Automatic` is the first hardware layout the runtime lists for the keyboard. When that is a group (`Group-Latin`) the simulator types US positions; when the runtime has no such layout it types on the language's default.
+- An app takes the layout the first time its keyboard is used and keeps it. Changing the settings, or switching keyboard with Control-Space, does not change a running app.
+- In a field that takes only ASCII, iOS types US positions while a keyboard without Latin letters is active.
+
+Verification, all on the final code unless noted:
+
+- Unit tests: 1206 of 1206 (19 new in `RuntimeKeyboardLayoutTests`).
+- Every layout, offline: an independent reading of the layout data lists 53,434 typeable characters across the 253 layouts of iOS 27.2. AXe plans keys for all but 92 of them (0.17%) and refuses those; no plan would combine into other characters. iOS 26.5: 240 layouts, 50,155 characters, 83 refused.
+- Every layout, live: 52,899 characters typed with the default `auto` into the Settings search field of an iOS 27.2 simulator and read back, each layout set as the simulator's keyboard. 208 of 253 layouts arrive exactly. 33 more differ only by characters AXe refuses before typing (68 characters, mostly an accent on its own and the Vietnamese vowels, which that layout holds back until the next key). 12 show 44 other differences: iOS input methods that compose text (Korean, Zhuyin, Cangjie, Kana: 29, where the diagnosis stopped at 12 per layout), right-to-left marks iOS adds on the Arabic and Urdu transliteration keyboards (9), smart quotes on two Thai layouts (2), a Latin letter sent as a US position on Cherokee (1) and three single characters (Comanche, Kiowa, German DIN 2137) that arrive correctly when typed in one call and differed only in the one-character-per-call diagnosis.
+- Detection: 18 keyboard settings (one or several keyboards, last used listed or not, not expanded, nothing set, multilingual groups, Dvorak chosen for English, options in another order) typed exactly on iOS 27.2, 26.5 and 27.3.
+- Automatic layouts: for 284 keyboards of iOS 27.2 the simulator's real layout was identified from what fixed positions type. 218 agree with AXe's reading. 40 are input methods. 14 are keyboards the simulator did not accept as written and replaced with its language default. 12 could not be measured (the harness could not focus the field).
+- Routes: plain, standard input, batch, chunked batch, `serve`, selected, agent, agent focus, agent batch by reference and by ID, with and without focus: 13 routes on German, French, British and US keyboards, 52 of 52 on iOS 27.2, 26.5 and 27.3.
+- Other runtimes: 15 layouts typed in full on iOS 26.5 and 6 on iOS 27.3 (including Tuvan, the one layout whose data differs from 27.2), no wrong character. The layout data of iOS 27.0, 27.1 and 27.2 is byte-identical.
+- Timing against `main`, release builds, alternating blocks on one simulator: plain `type` 80 runs each, US 402.1 ms before and 399.7 ms after, German 400.2 ms and 403.3 ms, interquartile range about 10 ms. Selected, agent and agent batch typing within 6 ms of `main` over 20 runs each. The plain route reads the layout while the input session is set up.
+- End-to-end, payload built with Xcode 27.2 beta 3, results in `e2e-results/keyboard-layouts-20261113T140919Z/`: `--suite core` on the iPhone and the iPad (10 cases each, with the new case that sets a German keyboard, types `Grüße @ [yz] é€` and restores the settings); `agent-controls` on the iPhone (148 cases); `keyboard-hardware` on the iPhone (16), the iPad (10) and the Duo (57). Two keyboard cases expected `£` to be refused, which an en-GB simulator can now type; they use `日` instead and pass. On the Duo, 11 of 12 suites passed in the group run; the held Home button during rotation case of `PlaygroundDuoHardwareInterruptionTests` failed once and the suite passed when rerun alone. The full `make e2e` was not run.
+- Found and fixed on the way: reference batches dropped the layout for their steps; text passed in decomposed form (`e` and a combining accent) was refused.
+
+Known limits: input-method keyboards compose what is typed, as before; a field that takes only ASCII on a non-Latin keyboard needs `--layout us` for text the US table cannot tell apart; selected and agent typing keep their 1,024-event bound, which 171 or more Option-Shift characters exceed; iOS smart punctuation still rewrites quotes and dashes.
+
 ## Open items for the owner
 
 - Whether to report the Reminders defect to Apple; the log extracts in `e2e-results/benchmark-reminders/root-cause/` are enough for a report. The benchmark now works around it (Phase 13).
