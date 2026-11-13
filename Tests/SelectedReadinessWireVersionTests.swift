@@ -6,7 +6,7 @@ import Testing
 struct SelectedReadinessWireVersionTests {
     @Test("The readiness candidate cannot use the previous selected broker")
     func previousWireUsesAnotherEndpointAndIsRejected() throws {
-        #expect(SelectedHIDRequest.version == 90)
+        #expect(SelectedHIDRequest.version == 91)
         // The one literal check above; everything else follows the current version.
         let previousVersion = SelectedHIDRequest.version - 1
         let simulator = "wire-isolation-only"

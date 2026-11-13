@@ -205,6 +205,12 @@ struct HIDInteractor {
         }
     }
 
+    /// `axe serve` runs many commands in one process. It drops the cached connection after each, as a
+    /// one-off command's exit does, so none is reused across commands or a simulator reboot.
+    static func discardConnection(for simulatorUDID: String) {
+        hidConnections.removeValue(forKey: simulatorUDID)
+    }
+
     // Get or create a cached HID connection (matching CompanionLib's connectToHID behavior)
     private static func getOrCreateHIDConnection(for simulator: FBSimulator, logger: AxeLogger) async throws -> FBSimulatorHID {
         if let existingHID = hidConnections[simulator.udid] {

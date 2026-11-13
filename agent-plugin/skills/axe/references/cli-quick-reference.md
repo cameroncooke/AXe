@@ -8,6 +8,7 @@ No UI target, so no `--agent`; app reads and input use the agent commands in SKI
 - [Simulator discovery](#simulator-discovery)
 - [Screens](#screens)
 - [Device settings](#device-settings)
+- [Serve: many commands, one process](#serve-many-commands-one-process)
 - [Screenshot](#screenshot)
 - [Video recording](#video-recording)
 - [Video streaming](#video-streaming)
@@ -57,6 +58,17 @@ axe settings set --udid <UDID> --appearance dark
 ```
 
 - Simulators and physical devices. Also text size, accessibility display settings, VoiceOver, location, status bar: [settings-reference.md](settings-reference.md).
+
+## Serve: many commands, one process
+
+```bash
+axe serve --udid <UDID>
+```
+
+- For scripts and test harnesses that send many commands. Write one command per line to standard input, as typed after `axe` but without `--udid`; each gets one line on standard output, the JSON `axe --output json <command>` prints, in order.
+- Prints a ready line first; exits when standard input closes. A failed line gets its error reply and serve carries on.
+- Lines: `describe-ui`, `displays`, `screenshot`, `tap`, `swipe`, `drag`, `draw`, `type`, `button`, `key`, `key-sequence`, `key-combo`, `touch`, `gesture`, `slider`, `rotate`, `hinge`, and `ping`. Not `batch`, `--stdin` or `--udid`.
+- `describe-ui --minimal-keys` (also outside serve) reads only label, identifier, value, frame, role, role description, type and enabled state; about 30 ms faster on a typical screen.
 
 ## Screenshot
 

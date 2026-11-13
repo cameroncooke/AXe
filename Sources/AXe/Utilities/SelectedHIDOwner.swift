@@ -312,6 +312,21 @@ final class SelectedHIDOwner {
         } else { clear() }
     }
 
+    /// A keep-alive sends nothing and changes nothing but the idle clock, so a client that is still
+    /// running (`axe serve`) keeps the broker and its connection for its next input. A retained
+    /// contact keeps its own expiry: the same clock releases it, so a keep-alive must not extend it.
+    func keepAlive(_ request: SelectedHIDRequest) -> SelectedHIDResponse {
+        do { try request.validate() }
+        catch { return response(request, outcome: "rejectedBeforeInput", error: error) }
+        guard !shouldStop else { return response(request, outcome: "rejectedBeforeInput", error: SelectedHIDFailure.busy) }
+        guard admission.token == nil else {
+            return response(request, outcome: "rejectedBeforeInput",
+                error: SelectedHIDFailure.invalid("A retained contact expires on its own clock"))
+        }
+        lastActivity = dependencies.now()
+        return response(request, outcome: "keptAlive")
+    }
+
     func rejectBusy(_ request: SelectedHIDRequest) -> SelectedHIDResponse {
         var result = response(request, outcome: "rejectedBeforeInput",
             error: quarantined ? SelectedHIDFailure.invalid("Device input is quarantined; no input was sent. " + HIDInputQuarantine.recoveryStep(recordPath: quarantineReceipt?.recordPath)) : SelectedHIDFailure.busy,

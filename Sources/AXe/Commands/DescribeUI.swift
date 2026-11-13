@@ -26,6 +26,9 @@ struct DescribeUI: PhysicalDeviceCommand {
     )
     var point: String?
 
+    @Flag(name: .customLong("minimal-keys"), help: "Read only label, identifier, value, frame, role, role description, type and enabled state, which is faster.")
+    var minimalKeys: Bool = false
+
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedAX: SelectedAXOptions
     @OptionGroup var agentMode: AgentModeOptions
@@ -55,6 +58,9 @@ struct DescribeUI: PhysicalDeviceCommand {
     func validate() throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID), hasSimulatorOnlyOptions { return }
         try agentMode.validate()
+        if minimalKeys, agentMode.enabled || selectedInput.mode == .selected {
+            throw ValidationError("--minimal-keys applies to the plain describe-ui read, not to --agent or selected input.")
+        }
         if agentMode.enabled {
             guard point == nil, agentMode.elementRef == nil else {
                 throw ValidationError("Agent describe-ui does not accept --point or --ref.")
@@ -92,7 +98,7 @@ struct DescribeUI: PhysicalDeviceCommand {
 
     private var hasSimulatorOnlyOptions: Bool {
         PhysicalAccessibilityCommands.usesSimulatorOptions(input: selectedInput, ax: selectedAX, agent: agentMode)
-            || sinceScreenHash != nil || rowOffset != nil || rowLimit != nil || readRef != nil
+            || minimalKeys || sinceScreenHash != nil || rowOffset != nil || rowLimit != nil || readRef != nil
             || textField != nil || textOffset != nil || textLimit != nil
     }
 
@@ -134,7 +140,8 @@ struct DescribeUI: PhysicalDeviceCommand {
         let jsonData = try await AccessibilityFetcher.fetchAccessibilityInfoJSONData(
             for: simulatorUDID,
             point: try parsedPoint(),
-            logger: logger
+            logger: logger,
+            keys: minimalKeys ? AccessibilityFetcher.minimalRequestKeys : AccessibilityFetcher.accessibilityRequestKeys
         )
         guard let jsonString = String(data: jsonData, encoding: .utf8) else {
             throw CLIError(errorDescription: "Failed to convert accessibility info to JSON string.", code: .treeUnavailable)

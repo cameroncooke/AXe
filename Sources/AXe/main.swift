@@ -51,6 +51,7 @@ struct Axe: AsyncParsableCommand {
             RecordVideo.self,
             Screenshot.self,
             Batch.self,
+            Serve.self,
             SliderReadWorkerCommand.self,
             HIDBrokerCommand.self,
             PhysicalDeviceBrokerCommand.self
@@ -80,6 +81,16 @@ struct Axe: AsyncParsableCommand {
             return
         }
 
+        let rendered = await formattedOutput(for: invocation, format: format)
+        do { try FileHandle.standardOutput.write(contentsOf: rendered.bytes) }
+        catch { Darwin.exit(EXIT_FAILURE) }
+        Darwin.exit(rendered.exitCode)
+    }
+
+    /// Runs one command line under `--output text|json` and returns exactly what the CLI prints and
+    /// its exit code. `axe serve` uses it to answer each line as the one-off command would.
+    static func formattedOutput(for invocation: CLIOutputInvocation,
+                                format: CLIOutputFormat) async -> (bytes: Data, exitCode: Int32) {
         // A command line that fails to parse still names the subcommands it spells out.
         let output = CLIOutputContext(format: format, command: commandPath(spelledBy: invocation.arguments)
             ?? invocation.command, agent: invocation.agent)
@@ -95,6 +106,10 @@ struct Axe: AsyncParsableCommand {
                 if command is StreamVideo || command is HIDBrokerCommand || command is SliderReadWorkerCommand || command is PhysicalDeviceBrokerCommand {
                     throw CLIOutputFailure(code: "unsupportedOutput",
                         message: "--output text|json is not supported for binary streaming or internal worker commands.")
+                }
+                if command is Serve {
+                    throw CLIOutputFailure(code: "unsupportedOutput",
+                        message: "axe serve already writes one JSON line per command; run it without --output.")
                 }
                 try await run(&command)
                 if !invocation.agent, inputCommands.contains(where: { $0 == type(of: command) }),
@@ -121,23 +136,15 @@ struct Axe: AsyncParsableCommand {
             }
         }
 
-        let bytes: Data
         do {
-            bytes = try CLIOutput.rendered(output, failure: completion.failure, cleanMessage: completion.cleanMessage)
+            return (try CLIOutput.rendered(output, failure: completion.failure, cleanMessage: completion.cleanMessage),
+                    completion.exitCode)
         } catch {
             // Encoding occurs before the first write. This failure cannot append a second result.
             let fallback = CLIOutputContext(format: format, command: output.command, agent: invocation.agent)
             let failure = CLIOutputFailure(code: "outputEncodingFailed", message: "Could not encode the command result.")
-            guard let rendered = try? CLIOutput.rendered(fallback, failure: failure) else {
-                Darwin.exit(EXIT_FAILURE)
-            }
-            do { try FileHandle.standardOutput.write(contentsOf: rendered) }
-            catch { Darwin.exit(EXIT_FAILURE) }
-            Darwin.exit(EXIT_FAILURE)
+            return ((try? CLIOutput.rendered(fallback, failure: failure)) ?? Data(), EXIT_FAILURE)
         }
-        do { try FileHandle.standardOutput.write(contentsOf: bytes) }
-        catch { Darwin.exit(EXIT_FAILURE) }
-        Darwin.exit(completion.exitCode)
     }
 
     /// Commands whose JSON success result is `SelectedInputSummary`'s shape on every route.
