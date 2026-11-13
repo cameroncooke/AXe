@@ -92,7 +92,7 @@ HOMEBREW_SHA="$(shasum -a 256 "$HOMEBREW_ARCHIVE" | awk '{print $1}')"
 grep -q 'depends_on macos: :sonoma' "$FORMULA_OUT"
 grep -q 'libexec.install "axe", "Frameworks", "AXe_AXe.bundle"' "$FORMULA_OUT"
 grep -q 'bin.write_exec_script libexec/"axe"' "$FORMULA_OUT"
-grep -q 'def post_install' "$FORMULA_OUT"
+grep -q 'post_install_steps do' "$FORMULA_OUT"
 
 tmp_dir="$WORK_DIR/normalized-formulas"
 mkdir -p "$tmp_dir"
