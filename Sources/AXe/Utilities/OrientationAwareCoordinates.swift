@@ -41,7 +41,8 @@ enum SimulatorOrientation: String, CaseIterable {
 // MARK: - Coordinate Mapping
 
 /// Describes how logical coordinates from the accessibility tree map to the physical
-/// portrait coordinate space that FBSimulatorHIDEvent expects.
+/// native coordinate space that FBSimulatorHIDEvent expects.
+/// Apple TV is native landscape and needs no rotation.
 ///
 /// The AX application frame alone cannot distinguish two landscape cases:
 ///   - **Rotation:**  hardware is in landscape (device rotated). Rotation math applies.
@@ -53,7 +54,7 @@ enum SimulatorOrientation: String, CaseIterable {
 /// then fall back to screenshot pixel aspect ratio to distinguish portrait-hardware
 /// letterboxing from a rotated simulator.
 enum CoordinateMapping {
-    /// Portrait device, portrait app — pass coordinates through unchanged.
+    /// Native coordinates (including Apple TV) — pass through unchanged.
     case passthrough
 
     /// Hardware is rotated. Apply rotation math.
@@ -70,7 +71,7 @@ enum CoordinateMapping {
 // MARK: - Orientation-Aware Coordinate Translation
 
 /// Translates logical UI coordinates (as reported by the accessibility tree and
-/// consumed by `axe tap`, `axe touch`, and `axe swipe`) into the physical portrait
+/// consumed by `axe tap`, `axe touch`, and `axe swipe`) into the physical native
 /// coordinate space that FBSimulatorHIDEvent expects.
 ///
 /// ## Root cause
@@ -80,7 +81,9 @@ enum CoordinateMapping {
 /// coordinates must be mapped back to physical portrait before dispatching HID
 /// events, otherwise taps land in the wrong location.
 ///
-/// ## Two landscape cases
+/// Apple TV already reports native landscape coordinates and passes through unchanged.
+///
+/// ## Two iOS landscape cases
 /// Both a rotated device and a portrait device running a landscape-only app produce
 /// a landscape-shaped AX application frame. AXe first asks the simulator's private
 /// screen properties for the current UI orientation so it can distinguish landscape
@@ -105,7 +108,7 @@ struct OrientationAwareCoordinates {
     /// Detection flow:
     /// 1. Fetch AX application frame.
     /// 2. If an explicit override was supplied → rotation case.
-    /// 3. Otherwise read SimulatorKit private UI orientation.
+    /// 3. Read the product family; Apple TV → passthrough. Otherwise probe private UI orientation.
     /// 4. If private orientation is unavailable and the AX frame is portrait-shaped → passthrough.
     /// 5. If unavailable and landscape-shaped, probe screenshot dimensions.
     ///    - Screenshot portrait-shaped (taller than wide) → letterbox case.
@@ -142,6 +145,33 @@ struct OrientationAwareCoordinates {
         orientationOverride: SimulatorOrientation? = nil,
         logger: AxeLogger
     ) async throws -> CoordinateMapping {
+        // Preserve the no-probe paths for missing frames and explicit overrides.
+        let screenState: SimulatorScreenState
+        if orientationOverride == nil, applicationFrame(from: roots) != nil {
+            screenState = await SimulatorOrientationReader.currentScreenState(
+                simulatorUDID: simulatorUDID,
+                logger: logger
+            )
+        } else {
+            screenState = SimulatorScreenState(productFamily: .familyUnknown, orientation: nil)
+        }
+
+        return try await detectMapping(
+            from: roots,
+            screenState: screenState,
+            orientationOverride: orientationOverride,
+            logger: logger,
+            screenshotReader: { await screenshotPixelDimensions(for: simulatorUDID, logger: logger) }
+        )
+    }
+
+    static func detectMapping(
+        from roots: [AccessibilityElement],
+        screenState: SimulatorScreenState,
+        orientationOverride: SimulatorOrientation? = nil,
+        logger: AxeLogger,
+        screenshotReader: () async -> (width: Int, height: Int)?
+    ) async throws -> CoordinateMapping {
         guard let appFrame = applicationFrame(from: roots) else {
             throw CLIError(errorDescription: "Unable to determine coordinate mapping because the accessibility application frame is unavailable.", code: .readFailed)
         }
@@ -154,14 +184,14 @@ struct OrientationAwareCoordinates {
             return .rotation(orientationOverride, portraitSize: portraitSize)
         }
 
-        // Prefer the simulator's private UI orientation state when available; this
-        // distinguishes landscape-left from landscape-right and catches upside-down portrait.
-        let simulatorOrientation = await SimulatorOrientationReader.currentOrientation(
-            simulatorUDID: simulatorUDID,
-            logger: logger
-        )
+        if screenState.productFamily == .familyAppleTV {
+            logger.info().log("Apple TV uses native landscape coordinates; passthrough")
+            return .passthrough
+        }
 
-        if let simulatorOrientation {
+        // Private orientation distinguishes landscape-left from landscape-right
+        // and catches upside-down portrait on portrait-native devices.
+        if let simulatorOrientation = screenState.orientation {
             logger.info().log("Detected simulator UI orientation: \(simulatorOrientation.rawValue)")
             guard let portraitSize = portraitDimensions(from: roots, orientation: simulatorOrientation) else {
                 throw CLIError(errorDescription: "Unable to determine coordinate mapping because portrait dimensions are unavailable.", code: .readFailed)
@@ -193,7 +223,7 @@ struct OrientationAwareCoordinates {
             "AX frame \(Int(appFrame.width))×\(Int(appFrame.height)) is landscape; probing screenshot dimensions"
         )
 
-        let screenshotDims = await screenshotPixelDimensions(for: simulatorUDID, logger: logger)
+        let screenshotDims = await screenshotReader()
 
         if let dims = screenshotDims, dims.height > dims.width {
             // Screenshot is portrait-shaped despite a landscape AX frame →

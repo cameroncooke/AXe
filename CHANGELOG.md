@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - On the iPhone Duo with iOS 27.1, `hinge read`, `hinge set`, agent input and the plain screenshot no longer fail with "Motion sample reports invalid angle or velocity". That runtime reports no velocity with any hinge sample; AXe now reads it as 0 and still refuses a sample whose angle is invalid ([#87](https://github.com/cameroncooke/AXe/issues/87), reported by [@WingCH](https://github.com/WingCH)).
+- Fixed tvOS simulator coordinate mapping rejecting taps, touches and swipes when the private orientation probe is unavailable by preserving Apple TV's native landscape coordinates ([#69](https://github.com/cameroncooke/AXe/issues/69)).
 
 ## [v2.0.0]
 

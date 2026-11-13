@@ -1,12 +1,18 @@
 import Foundation
+import FBControlCore
 import FBSimulatorControl
+
+struct SimulatorScreenState {
+    let productFamily: FBControlCoreProductFamily
+    let orientation: SimulatorOrientation?
+}
 
 @MainActor
 struct SimulatorOrientationReader {
-    static func currentOrientation(
+    static func currentScreenState(
         simulatorUDID: String,
         logger: AxeLogger
-    ) async -> SimulatorOrientation? {
+    ) async -> SimulatorScreenState {
         do {
             let frameworkLoader = FBSimulatorControlFrameworkLoader.xcodeFrameworks
             try frameworkLoader.loadPrivateFrameworks(logger)
@@ -19,18 +25,27 @@ struct SimulatorOrientationReader {
 
             guard let simulator = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
                 logger.info().log("Orientation probe: simulator \(simulatorUDID) not found")
-                return nil
+                return SimulatorScreenState(productFamily: .familyUnknown, orientation: nil)
+            }
+
+            let productFamily = simulator.productFamily
+            // Apple TV uses native landscape coordinates and has no orientation to probe.
+            guard productFamily != .familyAppleTV else {
+                return SimulatorScreenState(productFamily: productFamily, orientation: nil)
             }
 
             guard let device = sendObject(simulator, selector: "device") else {
                 logger.info().log("Orientation probe: simulator device unavailable")
-                return nil
+                return SimulatorScreenState(productFamily: productFamily, orientation: nil)
             }
 
-            return readOrientation(from: device, logger: logger)
+            return SimulatorScreenState(
+                productFamily: productFamily,
+                orientation: readOrientation(from: device, logger: logger)
+            )
         } catch {
             logger.info().log("Orientation probe failed: \(error)")
-            return nil
+            return SimulatorScreenState(productFamily: .familyUnknown, orientation: nil)
         }
     }
 
