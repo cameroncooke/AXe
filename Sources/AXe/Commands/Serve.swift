@@ -42,21 +42,17 @@ struct Serve: AsyncParsableCommand {
         try Self.write(ServeProtocol.ready(simulatorUDID: simulatorUDID))
 
         // The broker shuts down after 30 s without a request, and the next tap then waits about 0.6 s
-        // for a new one. While serve waits for its next line it keeps a running broker alive.
-        var lastActivity = ContinuousClock.now
-        for await event in ServeInput.events(tick: .seconds(10)) {
+        // for a new one. Every tick keeps a running broker alive, whatever lines arrive in between:
+        // reads and pings never reach the broker, so they cannot stand in for a keep-alive.
+        for await event in ServeInput.events(tick: ServeInput.keepAliveInterval) {
             let line: String
             switch event {
             case .tick:
-                if ContinuousClock.now - lastActivity >= ServeInput.keepAliveInterval {
-                    SelectedHIDBroker.keepAliveIfRunning(simulatorUDID: simulatorUDID)
-                    lastActivity = .now
-                }
+                SelectedHIDBroker.keepAliveIfRunning(simulatorUDID: simulatorUDID)
                 continue
             case .line(let text):
                 line = text
             }
-            defer { lastActivity = .now }
             let reply: Data
             switch ServeProtocol.parse(line, simulatorUDID: simulatorUDID) {
             case .skip:
@@ -112,15 +108,17 @@ enum ServeProtocol {
         guard commands.contains(name) else {
             return .refused(command: name, message: "serve runs \(commands.joined(separator: ", ")) and ping; `\(name)` is not one of them.")
         }
-        if tokens.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
+        // Words after `--` are positional text, for example `type -- --udid`, so only options before it count.
+        let terminator = tokens.firstIndex(of: "--") ?? tokens.endIndex
+        let options = tokens[..<terminator]
+        if options.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
             return .refused(command: name, message: "Leave out --udid: serve already targets \(simulatorUDID).")
         }
-        if tokens.contains("--stdin") {
+        if options.contains("--stdin") {
             return .refused(command: name, message: "--stdin would read serve's own input. Pass the text as an argument or with --file.")
         }
         var arguments = tokens
-        // Arguments after `--` are positional, so --udid goes before it.
-        arguments.insert(contentsOf: ["--udid", simulatorUDID], at: tokens.firstIndex(of: "--") ?? tokens.endIndex)
+        arguments.insert(contentsOf: ["--udid", simulatorUDID], at: terminator)
         return .command(["--output", "json"] + arguments)
     }
 
@@ -150,8 +148,8 @@ enum ServeProtocol {
 enum ServeInput {
     enum Event: Sendable { case line(String), tick }
 
-    /// Shorter than the broker's 30 s idle limit even when a tick arrives just after it is due.
-    static let keepAliveInterval: Duration = .seconds(15)
+    /// Well inside the broker's 30 s idle limit, even when a command delays a tick.
+    static let keepAliveInterval: Duration = .seconds(10)
 
     static func events(tick: Duration) -> AsyncStream<Event> {
         AsyncStream { continuation in

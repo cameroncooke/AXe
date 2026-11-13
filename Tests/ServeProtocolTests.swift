@@ -47,6 +47,14 @@ struct ServeProtocolTests {
             == .command(["--output", "json", "type", "--udid", udid, "--", "--literal"]))
     }
 
+    @Test("Text after -- may spell --udid or --stdin")
+    func allowsOptionLikeTextAfterTerminator() {
+        #expect(ServeProtocol.parse("type -- --udid", simulatorUDID: udid)
+            == .command(["--output", "json", "type", "--udid", udid, "--", "--udid"]))
+        #expect(ServeProtocol.parse("type -- --stdin", simulatorUDID: udid)
+            == .command(["--output", "json", "type", "--udid", udid, "--", "--stdin"]))
+    }
+
     @Test("Refuses commands that stream, read standard input or manage devices", arguments: [
         "batch --step 'tap -x 1 -y 1'", "serve", "record-video", "stream-video", "hid-broker --selected",
         "list-simulators", "shutdown", "agent 'Open Settings'", "--output json tap -x 1 -y 1",
@@ -165,9 +173,31 @@ struct BrokerKeepAliveTests {
         #expect(!tap.isKeepAlive)
     }
 
-    @Test("Serve sends one before the broker's 30 s idle limit")
+    @Test("Serve sends one well inside the broker's 30 s idle limit, and waits briefly for its answer")
     func intervalIsInsideBrokerIdleLimit() {
-        #expect(ServeInput.keepAliveInterval + .seconds(10) < .seconds(30))
+        #expect(ServeInput.keepAliveInterval * 2 < .seconds(30))
+        #expect(SelectedHIDBroker.keepAliveResponseMilliseconds <= 2000)
+    }
+
+    @Test("Resets an idle owner's clock, so maintenance keeps it running")
+    @MainActor
+    func keepAliveResetsIdleClock() async {
+        final class Clock: @unchecked Sendable { var now: TimeInterval = 0 }
+        let clock = Clock()
+        let dependencies = SelectedAXDependencies(execute: { request, _, broker, _, _ in
+            SelectedHIDResponse(version: SelectedHIDRequest.version, requestID: request.requestID, brokerID: broker,
+                outcome: "unused", token: nil, enqueuedEventCount: 0, cleanup: "notNeeded", error: nil, context: nil)
+        }, persist: { _, _, _ in Issue.record("No quarantine expected") }, now: { clock.now })
+        let owner = SelectedHIDOwner(simulatorUDID: UUID().uuidString, logger: AxeLogger(), dependencies: dependencies)
+        clock.now = 25
+        #expect(owner.keepAlive(request()).outcome == "keptAlive")
+        clock.now = 40
+        await owner.maintain()
+        #expect(!owner.shouldStop)
+        clock.now = 56
+        await owner.maintain()
+        #expect(owner.shouldStop)
+        #expect(owner.keepAlive(request()).outcome == "rejectedBeforeInput")
     }
 }
 

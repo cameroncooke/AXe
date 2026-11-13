@@ -29,13 +29,14 @@ enum SelectedHIDBroker {
     /// Sends to a broker that is already running, without starting one. Nil means nothing was sent:
     /// there is no broker to reach, or the request is not one it accepts. A failure after the request
     /// has gone out is thrown, because the input may have been sent.
-    static func sendToRunningBroker(_ request: SelectedHIDRequest, simulatorUDID: String) throws -> SelectedHIDResponse? {
+    static func sendToRunningBroker(_ request: SelectedHIDRequest, simulatorUDID: String,
+                                    readMilliseconds: Int? = nil) throws -> SelectedHIDResponse? {
         guard let data = try? encoded(request), let path = try? endpoint(simulatorUDID: simulatorUDID),
               let descriptor = (try? HIDBroker.connectToRunningBroker(endpoint: path,
                   expectedVersion: SelectedHIDRequest.version)) ?? nil else { return nil }
         defer { Darwin.close(descriptor) }
         guard (try? HIDBroker.configureSocketTimeouts(descriptor,
-            readMilliseconds: request.path?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)) != nil else {
+            readMilliseconds: readMilliseconds ?? request.path?.responseTimeoutMilliseconds ?? 120_000, writeMilliseconds: 2000)) != nil else {
             return nil
         }
         return try exchange(data, requestID: request.requestID, descriptor: descriptor)
@@ -43,11 +44,15 @@ enum SelectedHIDBroker {
 
     /// Keeps an already-running broker from shutting down while idle. Starts nothing: with no broker
     /// running it returns false, and the next input starts one as usual.
+    static let keepAliveResponseMilliseconds = 2000
+
     @discardableResult
     static func keepAliveIfRunning(simulatorUDID: String) -> Bool {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: .keepAlive)
-        guard let response = try? sendToRunningBroker(request, simulatorUDID: simulatorUDID) else { return false }
+        // A keep-alive sends no input, so a broker that does not answer at once is not worth waiting for.
+        guard let response = try? sendToRunningBroker(request, simulatorUDID: simulatorUDID,
+            readMilliseconds: keepAliveResponseMilliseconds) else { return false }
         return response.error == nil && response.outcome == "keptAlive"
     }
 

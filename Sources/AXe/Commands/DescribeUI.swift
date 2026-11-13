@@ -26,7 +26,7 @@ struct DescribeUI: PhysicalDeviceCommand {
     )
     var point: String?
 
-    @Flag(name: .customLong("minimal-keys"), help: "Read only label, identifier, value, frame, role, type and enabled, which is faster.")
+    @Flag(name: .customLong("minimal-keys"), help: "Read only label, identifier, value, frame, role, role description, type and enabled state, which is faster.")
     var minimalKeys: Bool = false
 
     @OptionGroup var selectedInput: SelectedInputOptions
