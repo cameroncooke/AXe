@@ -98,6 +98,22 @@ enum FBAXOpaqueFrameTapRules {
     try requireUnchangedTree(first, second)
   }
 
+  /// An unmapped point that falls through to a container covering the whole panel shows that
+  /// nothing is drawn there. SpringBoard on a two-panel device keeps a Home-screen icon's frame
+  /// from the panel it was first laid out on (#87), so that frame's centre can be bare
+  /// wallpaper on the other panel.
+  static func requirePointInsidePanelContent(_ roots: [FBSimulatorAXNode],
+    context: FBSimulatorHIDDisplayContext) throws {
+    guard let frame = roots.first?.frame else {
+      throw FBAXOpaqueFrameTapError.rejected("Native point result has no frame")
+    }
+    let native = CGSize(width: context.nativePixelSize.width / context.scale,
+      height: context.nativePixelSize.height / context.scale)
+    for size in [native, context.logicalSize] where frame.contains(CGRect(origin: .zero, size: size)) {
+      throw FBAXOpaqueFrameTapError.rejected("Native point fell through to a container covering the whole panel")
+    }
+  }
+
   private static func valid(_ frame: CGRect) -> Bool {
     [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height].allSatisfy(\.isFinite)
       && frame.size.width > 0 && frame.size.height > 0
@@ -127,6 +143,7 @@ extension FBSimulatorAXWorker {
         hitPID: initialPID, target: target, point: point, counts: counts) == .unmapped else {
         throw FBSimulatorAXTargetError.targetMismatch
       }
+      try FBAXOpaqueFrameTapRules.requirePointInsidePanelContent(initial.roots, context: observation.displayContext)
       try provider.validateCurrentRevision(expected: observation)
       let request = FBAXTranslationRequest(kind: .point(nativePoint), pointDisplayID: observation.axDisplayID,
         displayContext: observation.displayContext)

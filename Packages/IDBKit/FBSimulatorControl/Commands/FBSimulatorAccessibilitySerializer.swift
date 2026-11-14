@@ -51,14 +51,15 @@ enum FBSimulatorAccessibilitySerializer {
     keys: Set<FBAXKeys>,
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
-    seenPids: SeenPIDs?
+    seenPids: SeenPIDs?,
+    windowFilter: FBAXInactivePanelWindowFilter? = nil
   ) throws -> [[String: Any]] {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
     if nestedFormat {
-      return [try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids)]
+      return try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: 0).map { [$0] } ?? []
     }
-    return try flatRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids)
+    return try flatRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: 0)
   }
 
   static func formattedDescription(
@@ -72,7 +73,10 @@ enum FBSimulatorAccessibilitySerializer {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
     if nestedFormat {
-      return try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil)
+      guard let root = try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, windowFilter: nil, depth: 0) else {
+        throw FBSimulatorAXSnapshotError.emptyHierarchy
+      }
+      return root
     }
     return try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, discoveryMethod: discoveryMethodRecursive)
   }
@@ -211,17 +215,20 @@ enum FBSimulatorAccessibilitySerializer {
     keys: Set<FBAXKeys>,
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
-    seenPids: SeenPIDs?
+    seenPids: SeenPIDs?,
+    windowFilter: FBAXInactivePanelWindowFilter?,
+    depth: Int
   ) throws -> [[String: Any]] {
     try Task.checkCancellation()
     var values: [[String: Any]] = []
     let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return [] }
     values.append(try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes))
     try Task.checkCancellation()
     for child in attributes.children() {
       try Task.checkCancellation()
       child.axSetBridgeDelegateToken(token)
-      values.append(contentsOf: try flatRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids))
+      values.append(contentsOf: try flatRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: depth + 1))
     }
     try Task.checkCancellation()
     return values
@@ -233,21 +240,33 @@ enum FBSimulatorAccessibilitySerializer {
     keys: Set<FBAXKeys>,
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
-    seenPids: SeenPIDs?
-  ) throws -> [String: Any] {
+    seenPids: SeenPIDs?,
+    windowFilter: FBAXInactivePanelWindowFilter?,
+    depth: Int
+  ) throws -> [String: Any]? {
     try Task.checkCancellation()
     let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return nil }
     var values = try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes)
     var childrenValues: [[String: Any]] = []
     try Task.checkCancellation()
     for child in attributes.children() {
       try Task.checkCancellation()
       child.axSetBridgeDelegateToken(token)
-      childrenValues.append(try nestedRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids))
+      if let childValues = try nestedRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: depth + 1) {
+        childrenValues.append(childValues)
+      }
     }
     values["children"] = childrenValues
     try Task.checkCancellation()
     return values
+  }
+
+  /// Only the frontmost application's direct children are attributed to a panel.
+  static func isInactivePanelWindow(_ attributes: FBAXElementAttributes, depth: Int,
+    filter: FBAXInactivePanelWindowFilter?) -> Bool {
+    guard depth == 1, let filter else { return false }
+    return filter.excludes(attributes.frame())
   }
 }
 
@@ -256,10 +275,11 @@ extension FBSimulatorAccessibilitySerializer {
   static func recursiveDescription(fromElement element: FBAXPlatformElement, token: String,
     nestedFormat: Bool, keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?, seenPids: SeenPIDs?,
-    nativeIdentity: FBAXNativeIdentityCollector) throws -> [[String: Any]] {
+    nativeIdentity: FBAXNativeIdentityCollector,
+    windowFilter: FBAXInactivePanelWindowFilter? = nil) throws -> [[String: Any]] {
     try identityDescription(element, token: token, nestedFormat: nestedFormat, keys: keys,
       collector: collector, coverageGrid: coverageGrid, seenPids: seenPids,
-      nativeIdentity: nativeIdentity, depth: 0)
+      nativeIdentity: nativeIdentity, windowFilter: windowFilter, depth: 0)
   }
 
   static func formattedDescription(ofElement element: FBAXPlatformElement, token: String,
@@ -268,7 +288,7 @@ extension FBSimulatorAccessibilitySerializer {
     if nestedFormat {
       let values = try identityDescription(element, token: token, nestedFormat: true, keys: keys,
         collector: collector, coverageGrid: coverageGrid, seenPids: nil,
-        nativeIdentity: nativeIdentity, depth: 0)
+        nativeIdentity: nativeIdentity, windowFilter: nil, depth: 0)
       guard let root = values.first else { throw FBSimulatorAXSnapshotError.emptyHierarchy }
       return root
     }
@@ -293,10 +313,12 @@ extension FBSimulatorAccessibilitySerializer {
   private static func identityDescription(_ element: FBAXPlatformElement, token: String,
     nestedFormat: Bool, keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?, seenPids: SeenPIDs?,
-    nativeIdentity: FBAXNativeIdentityCollector, depth: Int) throws -> [[String: Any]] {
+    nativeIdentity: FBAXNativeIdentityCollector, windowFilter: FBAXInactivePanelWindowFilter?,
+    depth: Int) throws -> [[String: Any]] {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
     let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return [] }
     var values = try identityDictionary(element, token: token, keys: keys, collector: collector,
       coverageGrid: coverageGrid, seenPids: seenPids, nativeIdentity: nativeIdentity, depth: depth,
       attributes: attributes)
@@ -306,7 +328,7 @@ extension FBSimulatorAccessibilitySerializer {
       child.axSetBridgeDelegateToken(token)
       descendants += try identityDescription(child, token: token, nestedFormat: nestedFormat, keys: keys,
         collector: collector, coverageGrid: coverageGrid, seenPids: seenPids,
-        nativeIdentity: nativeIdentity, depth: depth + 1)
+        nativeIdentity: nativeIdentity, windowFilter: windowFilter, depth: depth + 1)
     }
     if nestedFormat { values["children"] = descendants; return [values] }
     return [values] + descendants

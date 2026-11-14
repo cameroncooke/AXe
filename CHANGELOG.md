@@ -17,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - On the iPhone Duo with iOS 27.1, `hinge read`, `hinge set`, agent input and the plain screenshot no longer fail with "Motion sample reports invalid angle or velocity". That runtime reports no velocity with any hinge sample; AXe now reads it as 0 and still refuses a sample whose angle is invalid ([#87](https://github.com/cameroncooke/AXe/issues/87), reported by [@WingCH](https://github.com/WingCH)).
+- On the iPhone Duo Home screen, agent captures no longer list every icon, Dock item and status bar control twice. SpringBoard lists the windows of both screens, and AXe now leaves out the windows sized to the screen that is off, so a ref names one control. On a 27.2 Duo the agent capture took 0.22 s instead of 0.37 s folded and 0.29 s instead of 0.40 s open. Folded Home-screen icon taps that were refused as `targetCovered` now go through. ([#87](https://github.com/cameroncooke/AXe/issues/87))
+- An agent tap no longer goes through when its tap point lands on bare background instead of the control. SpringBoard on the iPhone Duo can keep an icon's frame from the other screen's layout, so the frame's centre can be empty wallpaper; AXe now refuses that tap with `targetCovered` and sends nothing, where a copy on the screen that is off used to send a tap that did nothing. ([#87](https://github.com/cameroncooke/AXe/issues/87))
 
 ## [v2.0.0]
 
