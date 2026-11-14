@@ -142,7 +142,8 @@ final class FBAXTranslationRequest {
       keys: keys,
       collector: collector,
       coverageGrid: grid,
-      seenPids: seenPids
+      seenPids: seenPids,
+      windowFilter: inactivePanelWindowFilter
     )
 
     // Base coverage after the main traversal.
@@ -350,6 +351,14 @@ final class FBAXTranslationRequest {
     )
   }
 
+  /// Leaves the other panel's SpringBoard windows out of a two-panel device's tree. The AX
+  /// display ID of a selected request is the active panel's screen ID; legacy requests use 0.
+  private var inactivePanelWindowFilter: FBAXInactivePanelWindowFilter? {
+    guard pointDisplayID != 0, let device else { return nil }
+    return FBAXInactivePanelWindowFilter(panels: FBAXIntegratedPanelCatalog.panels(for: device),
+      activeScreenID: pointDisplayID)
+  }
+
   // The keys to serialize, or an empty set when none were requested.
   private static func serializerKeys(_ options: FBAccessibilityRequestOptions) -> Set<FBAXKeys> {
     options.keys ?? []
@@ -380,7 +389,8 @@ extension FBAXTranslationRequest {
       let grid = options.collectFrameCoverage ? FBAccessibilityCoverageGrid(screenBounds: bounds) : nil
       let values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: element,
         token: token, nestedFormat: options.nestedFormat, keys: Self.serializerKeys(options),
-        collector: collector, coverageGrid: grid, seenPids: SeenPIDs(), nativeIdentity: nativeIdentity)
+        collector: collector, coverageGrid: grid, seenPids: SeenPIDs(), nativeIdentity: nativeIdentity,
+        windowFilter: inactivePanelWindowFilter)
       let coverage = grid.map { $0.coverageRatio() }.flatMap { $0 >= 0 ? Double($0) : nil }
       return buildResponse(elements: values, serializationStart: started,
         frameCoverage: coverage, additionalFrameCoverage: nil)
