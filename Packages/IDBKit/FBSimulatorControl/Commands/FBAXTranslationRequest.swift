@@ -106,7 +106,8 @@ final class FBAXTranslationRequest {
       nestedFormat: options.nestedFormat,
       keys: Self.serializerKeys(options),
       collector: collector,
-      coverageGrid: nil
+      coverageGrid: nil,
+      transform: pointFrameTransform(for: element)
     )
     return buildResponse(elements: elements, serializationStart: serializationStart, frameCoverage: nil, additionalFrameCoverage: nil)
   }
@@ -143,7 +144,7 @@ final class FBAXTranslationRequest {
       collector: collector,
       coverageGrid: grid,
       seenPids: seenPids,
-      windowFilter: inactivePanelWindowFilter
+      panel: makePanelRead()
     )
 
     // Base coverage after the main traversal.
@@ -351,12 +352,47 @@ final class FBAXTranslationRequest {
     )
   }
 
-  /// Leaves the other panel's SpringBoard windows out of a two-panel device's tree. The AX
-  /// display ID of a selected request is the active panel's screen ID; legacy requests use 0.
-  private var inactivePanelWindowFilter: FBAXInactivePanelWindowFilter? {
-    guard pointDisplayID != 0, let device else { return nil }
-    return FBAXInactivePanelWindowFilter(panels: FBAXIntegratedPanelCatalog.panels(for: device),
-      activeScreenID: pointDisplayID)
+  /// A selected whole-tree read on a two-panel device leaves the other panel's SpringBoard
+  /// windows and icons out; on a quarter-turned panel it orients native-oriented windows (#87).
+  /// The AX display ID of a selected request is the active panel's screen ID; legacy requests use 0.
+  private func makePanelRead() -> FBAXPanelRead? {
+    guard pointDisplayID != 0 else { return nil }
+    let filter = device.flatMap { FBAXInactivePanelWindowFilter(panels: FBAXIntegratedPanelCatalog.panels(for: $0),
+      activeScreenID: pointDisplayID) }
+    let transform = displayContext.flatMap(FBAXPanelFrameTransform.init(context:))
+    guard let rules = FBAXPanelWindowRules(filter: filter, transform: transform) else { return nil }
+    return FBAXPanelRead(rules: rules, activeDisplayID: pointDisplayID, processKey: processKey(transform))
+  }
+
+  private func processKey(_ transform: FBAXPanelFrameTransform?) -> FBAXNativeFrameProcesses.DisplayKey? {
+    guard let transform, let device else { return nil }
+    return .init(device: device.udid.uuidString, displayID: pointDisplayID, rotation: transform.rotation)
+  }
+
+  /// A point hit has no window ancestry. Its frames are oriented as its process's windows were
+  /// in the last tree read on this display and rotation; without one, the frontmost
+  /// application's windows are classified once when it is the hit's process.
+  func pointFrameTransform(for element: FBAXPlatformElement) -> FBAXPanelFrameTransform? {
+    guard pointDisplayID != 0, let transform = displayContext.flatMap(FBAXPanelFrameTransform.init(context:)),
+          let key = processKey(transform)?.process(element.axTranslationPid), key.pid > 0 else {
+      return nil
+    }
+    if let space = FBAXNativeFrameProcesses.space(for: key) { return space == .native ? transform : nil }
+    guard let translator,
+          let root = translator.frontmostApplication(withDisplayId: pointDisplayID, bridgeDelegateToken: token),
+          root.pid == key.pid,
+          let application = translator.macPlatformElement(fromTranslation: root) as? FBAXPlatformElement else {
+      return nil
+    }
+    root.bridgeDelegateToken = token
+    application.axSetBridgeDelegateToken(token)
+    let frames = FBAXElementAttributes(application, keys: [], includeChildren: true).children().map { child in
+      child.axSetBridgeDelegateToken(token)
+      return FBAXElementAttributes(child, keys: [], includeChildren: false).rawFrame()
+    }
+    let space = FBAXNativeFrameProcesses.classify(frames, transform: transform)
+    FBAXNativeFrameProcesses.record(space, for: key)
+    return space == .native ? transform : nil
   }
 
   // The keys to serialize, or an empty set when none were requested.
@@ -377,7 +413,8 @@ extension FBAXTranslationRequest {
       nativeIdentity.invalidate("pointSubtreeOnly")
       elements = try FBSimulatorAccessibilitySerializer.formattedDescription(ofElement: element,
         token: token, nestedFormat: options.nestedFormat, keys: Self.serializerKeys(options),
-        collector: collector, coverageGrid: nil, nativeIdentity: nativeIdentity)
+        collector: collector, coverageGrid: nil, nativeIdentity: nativeIdentity,
+        transform: pointFrameTransform(for: element))
     case .frontmostApplication:
       // Identity completeness is defined for the current recursive tree only.
       // Preserve the existing semantic remote-content behavior if requested.
@@ -390,7 +427,7 @@ extension FBAXTranslationRequest {
       let values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: element,
         token: token, nestedFormat: options.nestedFormat, keys: Self.serializerKeys(options),
         collector: collector, coverageGrid: grid, seenPids: SeenPIDs(), nativeIdentity: nativeIdentity,
-        windowFilter: inactivePanelWindowFilter)
+        panel: makePanelRead())
       let coverage = grid.map { $0.coverageRatio() }.flatMap { $0 >= 0 ? Double($0) : nil }
       return buildResponse(elements: values, serializationStart: started,
         frameCoverage: coverage, additionalFrameCoverage: nil)

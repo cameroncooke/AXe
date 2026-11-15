@@ -131,7 +131,14 @@ public final class FBSimulatorAccessibilityCommands: NSObject, AsyncAccessibilit
 
   /// Selected-display whole tree. Context supplies the remote hit-test transform.
   public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
-    try validateAccessibility(bootstrap: false)
+    try await accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext, bootstrap: false)
+  }
+
+  /// A plain whole-tree read on a measured display, as plain point reads on a Duo panel are:
+  /// the tree then holds only that panel's windows, oriented as the panel is.
+  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext,
+                                                          bootstrap: Bool) async throws -> FBAccessibilityElement {
+    try validateAccessibility(bootstrap: bootstrap)
     let request = FBAXTranslationRequest(kind: .frontmostApplication, pointDisplayID: displayID, displayContext: displayContext)
     return try await accessibilityElement(request: request, remediationPermitted: true)
   }
@@ -298,6 +305,12 @@ extension FBSimulator: AsyncAccessibilityCommands {
 
   public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBAccessibilityElement {
     try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID, displayContext: displayContext)
+  }
+
+  public func accessibilityElementForFrontmostApplication(displayID: UInt32, displayContext: FBSimulatorHIDDisplayContext,
+                                                          bootstrap: Bool) async throws -> FBAccessibilityElement {
+    try await accessibilityCommands().accessibilityElementForFrontmostApplication(displayID: displayID,
+      displayContext: displayContext, bootstrap: bootstrap)
   }
 
   public func accessibilityElementMatching(

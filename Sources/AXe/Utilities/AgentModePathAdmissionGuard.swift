@@ -307,7 +307,9 @@ enum AgentModePathIdentityPolicy {
               chain.allSatisfy({ snapshot.nodes.indices.contains($0) }),
               chain.contains(where: { sameSignature(snapshot.nodes[$0], area,
                   usingNativeIdentity: usingNativeIdentity) }) else {
-            throw AgentModeFailure("pathIdentityChanged", "The swipe's start point is no longer inside the scroll area you chose (the screen moved), so nothing was sent. Swipe again with the area's ref from a current capture.")
+            // The hit can also be a view accessibility does not list, such as the Home screen's
+            // background (#87), so this does not claim the screen moved.
+            throw AgentModeFailure("pathIdentityChanged", "AXe could not confirm that the swipe's start point is inside the scroll area you chose, so nothing was sent. Swipe again with the area's ref from a current capture, or swipe by coordinates with --start-x, --start-y, --end-x and --end-y and the capture's snapshot ID.")
         }
         return chain
     }

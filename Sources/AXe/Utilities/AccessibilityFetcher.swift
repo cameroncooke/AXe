@@ -71,13 +71,23 @@ struct AccessibilityFetcher {
                 }, isUsable: { try !isTransientPointFallback(in: $0, at: point) },
                     bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point, keys: keys) { try await element(true) } })
             }
+            // On a Duo the default display lists both panels' SpringBoard windows, so every Home-screen
+            // control appears twice and the inner panel's are in native coordinates (#87).
+            let observation = try await measuredDuoObservation(for: target)
+            let frontmost: @MainActor (Bool) async throws -> FBAccessibilityElement = { bootstrap in
+                if let observation {
+                    return try await target.accessibilityElementForFrontmostApplication(displayID: observation.axDisplayID,
+                        displayContext: observation.displayContext, bootstrap: bootstrap)
+                }
+                return try await target.accessibilityElementForFrontmostApplication(bootstrap: bootstrap)
+            }
             return try await retryingMissingTranslation(logger: logger) {
                 try await readingDirectlyFirst(direct: {
-                    let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
+                    let element = try await frontmost(false)
                     defer { element.close() }
                     return try serializedAccessibilityData(from: element, keys: keys)
                 }, isUsable: containsAccessibilityDescendant,
-                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target, keys: keys) })
+                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(keys: keys) { try await frontmost(true) } })
             }
         }
     }
@@ -227,13 +237,15 @@ struct AccessibilityFetcher {
         return latestData
     }
 
-    private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator,
-                                                                keys: Set<FBAXKeys>) async throws -> Data {
+    private static func fetchFrontmostAccessibilityInfoJSONData(
+        keys: Set<FBAXKeys>,
+        element: @MainActor () async throws -> FBAccessibilityElement
+    ) async throws -> Data {
         var latestData: Data?
         for attempt in 0..<5 {
             // IDB's former `accessibilityElements(withNestedFormat:)` API also serialized the
             // frontmost application internally. This explicit handle API preserves that scope.
-            let accessibilityElement = try await target.accessibilityElementForFrontmostApplication()
+            let accessibilityElement = try await element()
             let data: Data
             do {
                 data = try serializedAccessibilityData(from: accessibilityElement, keys: keys)

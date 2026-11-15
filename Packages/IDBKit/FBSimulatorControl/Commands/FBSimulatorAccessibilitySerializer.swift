@@ -52,14 +52,14 @@ enum FBSimulatorAccessibilitySerializer {
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
     seenPids: SeenPIDs?,
-    windowFilter: FBAXInactivePanelWindowFilter? = nil
+    panel: FBAXPanelRead? = nil
   ) throws -> [[String: Any]] {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
     if nestedFormat {
-      return try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: 0).map { [$0] } ?? []
+      return try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, panel: panel, transform: nil, attributes: nil, depth: 0).map { [$0] } ?? []
     }
-    return try flatRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: 0)
+    return try flatRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, panel: panel, transform: nil, attributes: nil, depth: 0)
   }
 
   static func formattedDescription(
@@ -68,17 +68,20 @@ enum FBSimulatorAccessibilitySerializer {
     nestedFormat: Bool,
     keys: Set<FBAXKeys>,
     collector: FBAccessibilityProfilingCollector?,
-    coverageGrid: FBAccessibilityCoverageGrid?
+    coverageGrid: FBAccessibilityCoverageGrid?,
+    transform: FBAXPanelFrameTransform? = nil
   ) throws -> [String: Any] {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
     if nestedFormat {
-      guard let root = try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, windowFilter: nil, depth: 0) else {
+      guard let root = try nestedRecursiveDescription(fromElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, panel: nil, transform: transform, attributes: nil, depth: 0) else {
         throw FBSimulatorAXSnapshotError.emptyHierarchy
       }
       return root
     }
-    return try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, discoveryMethod: discoveryMethodRecursive)
+    var attributes = FBAXElementAttributes(element, keys: keys, includeChildren: false)
+    attributes.frameTransform = transform
+    return try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: nil, discoveryMethod: discoveryMethodRecursive, attributes: attributes)
   }
 
   // The values here mirror the old SimulatorBridge implementation for downstream
@@ -216,19 +219,21 @@ enum FBSimulatorAccessibilitySerializer {
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
     seenPids: SeenPIDs?,
-    windowFilter: FBAXInactivePanelWindowFilter?,
+    panel: FBAXPanelRead?,
+    transform: FBAXPanelFrameTransform?,
+    attributes precomputed: FBAXElementAttributes?,
     depth: Int
   ) throws -> [[String: Any]] {
     try Task.checkCancellation()
     var values: [[String: Any]] = []
-    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
-    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return [] }
+    var attributes = precomputed ?? FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    guard let subtree = panelSubtree(element, &attributes, panel: panel, inherited: transform, depth: depth) else { return [] }
     values.append(try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes))
     try Task.checkCancellation()
-    for child in attributes.children() {
+    for (child, childAttributes) in children(of: element, attributes.children(), keys: keys, token: token, panel: panel, depth: depth) {
       try Task.checkCancellation()
       child.axSetBridgeDelegateToken(token)
-      values.append(contentsOf: try flatRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: depth + 1))
+      values.append(contentsOf: try flatRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, panel: panel, transform: subtree.transform, attributes: childAttributes, depth: depth + 1))
     }
     try Task.checkCancellation()
     return values
@@ -241,19 +246,21 @@ enum FBSimulatorAccessibilitySerializer {
     collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?,
     seenPids: SeenPIDs?,
-    windowFilter: FBAXInactivePanelWindowFilter?,
+    panel: FBAXPanelRead?,
+    transform: FBAXPanelFrameTransform?,
+    attributes precomputed: FBAXElementAttributes?,
     depth: Int
   ) throws -> [String: Any]? {
     try Task.checkCancellation()
-    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
-    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return nil }
+    var attributes = precomputed ?? FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    guard let subtree = panelSubtree(element, &attributes, panel: panel, inherited: transform, depth: depth) else { return nil }
     var values = try accessibilityDictionary(forElement: element, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, discoveryMethod: discoveryMethodRecursive, attributes: attributes)
     var childrenValues: [[String: Any]] = []
     try Task.checkCancellation()
-    for child in attributes.children() {
+    for (child, childAttributes) in children(of: element, attributes.children(), keys: keys, token: token, panel: panel, depth: depth) {
       try Task.checkCancellation()
       child.axSetBridgeDelegateToken(token)
-      if let childValues = try nestedRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, windowFilter: windowFilter, depth: depth + 1) {
+      if let childValues = try nestedRecursiveDescription(fromElement: child, token: token, keys: keys, collector: collector, coverageGrid: coverageGrid, seenPids: seenPids, panel: panel, transform: subtree.transform, attributes: childAttributes, depth: depth + 1) {
         childrenValues.append(childValues)
       }
     }
@@ -262,11 +269,30 @@ enum FBSimulatorAccessibilitySerializer {
     return values
   }
 
-  /// Only the frontmost application's direct children are attributed to a panel.
-  static func isInactivePanelWindow(_ attributes: FBAXElementAttributes, depth: Int,
-    filter: FBAXInactivePanelWindowFilter?) -> Bool {
-    guard depth == 1, let filter else { return false }
-    return filter.excludes(attributes.frame())
+  /// The frame transform for this element and its subtree, or nil to leave them out: another
+  /// panel's window, or an element SpringBoard drew on another panel (#87).
+  static func panelSubtree(_ element: FBAXPlatformElement, _ attributes: inout FBAXElementAttributes,
+    panel: FBAXPanelRead?, inherited: FBAXPanelFrameTransform?, depth: Int) -> FBAXPanelSubtree? {
+    guard let panel else {
+      attributes.frameTransform = inherited
+      return FBAXPanelSubtree(transform: inherited)
+    }
+    guard let subtree = panel.subtree(element, attributes: attributes, depth: depth, inherited: inherited) else { return nil }
+    attributes.frameTransform = subtree.transform
+    return subtree
+  }
+
+  /// A panel read reads the root's direct children before serializing any of them, so it knows
+  /// whether the root also lists another panel's windows. Their attributes are reused.
+  static func children(of element: FBAXPlatformElement, _ children: [FBAXPlatformElement], keys: Set<FBAXKeys>,
+    token: String, panel: FBAXPanelRead?, depth: Int) -> [(FBAXPlatformElement, FBAXElementAttributes?)] {
+    guard depth == 0, let panel else { return children.map { ($0, nil) } }
+    let read = children.map { child -> (FBAXPlatformElement, FBAXElementAttributes?) in
+      child.axSetBridgeDelegateToken(token)
+      return (child, FBAXElementAttributes(child, keys: keys, includeChildren: true))
+    }
+    panel.prepare(pid: element.axTranslationPid, windowFrames: read.compactMap { $0.1?.rawFrame() })
+    return read
   }
 }
 
@@ -276,24 +302,27 @@ extension FBSimulatorAccessibilitySerializer {
     nestedFormat: Bool, keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?, seenPids: SeenPIDs?,
     nativeIdentity: FBAXNativeIdentityCollector,
-    windowFilter: FBAXInactivePanelWindowFilter? = nil) throws -> [[String: Any]] {
+    panel: FBAXPanelRead? = nil) throws -> [[String: Any]] {
     try identityDescription(element, token: token, nestedFormat: nestedFormat, keys: keys,
       collector: collector, coverageGrid: coverageGrid, seenPids: seenPids,
-      nativeIdentity: nativeIdentity, windowFilter: windowFilter, depth: 0)
+      nativeIdentity: nativeIdentity, panel: panel, transform: nil, attributes: nil, depth: 0)
   }
 
   static func formattedDescription(ofElement element: FBAXPlatformElement, token: String,
     nestedFormat: Bool, keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
-    coverageGrid: FBAccessibilityCoverageGrid?, nativeIdentity: FBAXNativeIdentityCollector) throws -> [String: Any] {
+    coverageGrid: FBAccessibilityCoverageGrid?, nativeIdentity: FBAXNativeIdentityCollector,
+    transform: FBAXPanelFrameTransform? = nil) throws -> [String: Any] {
     if nestedFormat {
       let values = try identityDescription(element, token: token, nestedFormat: true, keys: keys,
         collector: collector, coverageGrid: coverageGrid, seenPids: nil,
-        nativeIdentity: nativeIdentity, windowFilter: nil, depth: 0)
+        nativeIdentity: nativeIdentity, panel: nil, transform: transform, attributes: nil, depth: 0)
       guard let root = values.first else { throw FBSimulatorAXSnapshotError.emptyHierarchy }
       return root
     }
+    var attributes = FBAXElementAttributes(element, keys: keys, includeChildren: false)
+    attributes.frameTransform = transform
     return try identityDictionary(element, token: token, keys: keys, collector: collector,
-      coverageGrid: coverageGrid, seenPids: nil, nativeIdentity: nativeIdentity, depth: 0)
+      coverageGrid: coverageGrid, seenPids: nil, nativeIdentity: nativeIdentity, depth: 0, attributes: attributes)
   }
 
   static func identityDictionary(_ element: FBAXPlatformElement, token: String,
@@ -313,22 +342,25 @@ extension FBSimulatorAccessibilitySerializer {
   private static func identityDescription(_ element: FBAXPlatformElement, token: String,
     nestedFormat: Bool, keys: Set<FBAXKeys>, collector: FBAccessibilityProfilingCollector?,
     coverageGrid: FBAccessibilityCoverageGrid?, seenPids: SeenPIDs?,
-    nativeIdentity: FBAXNativeIdentityCollector, windowFilter: FBAXInactivePanelWindowFilter?,
+    nativeIdentity: FBAXNativeIdentityCollector, panel: FBAXPanelRead?,
+    transform: FBAXPanelFrameTransform?, attributes precomputed: FBAXElementAttributes?,
     depth: Int) throws -> [[String: Any]] {
     try Task.checkCancellation()
     element.axSetBridgeDelegateToken(token)
-    let attributes = FBAXElementAttributes(element, keys: keys, includeChildren: true)
-    if isInactivePanelWindow(attributes, depth: depth, filter: windowFilter) { return [] }
+    var attributes = precomputed ?? FBAXElementAttributes(element, keys: keys, includeChildren: true)
+    guard let subtree = panelSubtree(element, &attributes, panel: panel, inherited: transform, depth: depth) else { return [] }
     var values = try identityDictionary(element, token: token, keys: keys, collector: collector,
       coverageGrid: coverageGrid, seenPids: seenPids, nativeIdentity: nativeIdentity, depth: depth,
       attributes: attributes)
     var descendants: [[String: Any]] = []
-    for child in nativeIdentity.children(from: attributes.nativeIdentityChildren()) {
+    let identityChildren = nativeIdentity.children(from: attributes.nativeIdentityChildren())
+    for (child, childAttributes) in children(of: element, identityChildren, keys: keys, token: token, panel: panel, depth: depth) {
       try Task.checkCancellation()
       child.axSetBridgeDelegateToken(token)
       descendants += try identityDescription(child, token: token, nestedFormat: nestedFormat, keys: keys,
         collector: collector, coverageGrid: coverageGrid, seenPids: seenPids,
-        nativeIdentity: nativeIdentity, windowFilter: windowFilter, depth: depth + 1)
+        nativeIdentity: nativeIdentity, panel: panel, transform: subtree.transform,
+        attributes: childAttributes, depth: depth + 1)
     }
     if nestedFormat { values["children"] = descendants; return [values] }
     return [values] + descendants
@@ -343,6 +375,8 @@ extension FBSimulatorAccessibilitySerializer {
 struct FBAXElementAttributes {
   let element: FBAXPlatformElement
   private let batch: [String: Any]?
+  /// Set for an element inside a native-oriented panel window; `frame()` is then oriented.
+  var frameTransform: FBAXPanelFrameTransform?
 
   init(_ element: FBAXPlatformElement, keys: Set<FBAXKeys>, includeChildren: Bool) {
     self.element = element
@@ -371,7 +405,8 @@ struct FBAXElementAttributes {
     return (value as? NSNumber)?.boolValue ?? read()
   }
 
-  func frame() -> NSRect { (batch?["AXFrame"] as? NSValue)?.rectValue ?? element.axFrame() }
+  func rawFrame() -> NSRect { (batch?["AXFrame"] as? NSValue)?.rectValue ?? element.axFrame() }
+  func frame() -> NSRect { frameTransform.map { $0.logicalFrame(rawFrame()) } ?? rawFrame() }
   func role() -> String? { string("AXRole") { element.axRole() } }
   func label() -> String? { string("AXDescription") { element.axLabel() } }
   func value() -> Any? {

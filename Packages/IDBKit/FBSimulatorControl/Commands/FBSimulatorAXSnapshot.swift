@@ -446,7 +446,8 @@ actor FBSimulatorAXWorker {
     let request = FBAXTranslationRequest(kind: .point(point), pointDisplayID: observation.axDisplayID,
                                          displayContext: observation.displayContext)
     let native = try request.nativePoint(from: point)
-    let nativeRequest = FBAXTranslationRequest(kind: .point(native), pointDisplayID: observation.axDisplayID)
+    let nativeRequest = FBAXTranslationRequest(kind: .point(native), pointDisplayID: observation.axDisplayID,
+                                               displayContext: observation.displayContext)
     let handle = try await FBSimulatorAccessibilityCommands(simulator: simulator)
       .accessibilityElementForSnapshot(request: nativeRequest, worker: self)
     defer { handle.close() }

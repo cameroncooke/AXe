@@ -56,9 +56,9 @@ struct FBAXInactivePanelWindowFilterTests {
   @Test(arguments: [true, false])
   func serializerLeavesOutOnlyTopLevelInactivePanelWindows(nested: Bool) throws {
     let filter = try #require(FBAXInactivePanelWindowFilter(panels: duo, activeScreenID: 3))
-    let root = try serialize(duoSpringBoard(), nested: nested, filter: filter)
+    let root = try serialize(duoSpringBoard(), nested: nested, panel: read(filter))
     #expect(labels(root).sorted() == ["Inner settings", "Inner window", "Nested outer-sized", "SpringBoard"])
-    let unfiltered = try serialize(duoSpringBoard(), nested: nested, filter: nil)
+    let unfiltered = try serialize(duoSpringBoard(), nested: nested, panel: nil)
     #expect(labels(unfiltered).count == 7)
   }
 
@@ -66,7 +66,7 @@ struct FBAXInactivePanelWindowFilterTests {
   func identitySerializerLeavesOutOnlyTopLevelInactivePanelWindows(nested: Bool) throws {
     let filter = try #require(FBAXInactivePanelWindowFilter(panels: duo, activeScreenID: 3))
     let identities = FBAXNativeIdentityCollector()
-    let root = try serialize(duoSpringBoard(), nested: nested, filter: filter, identities: identities)
+    let root = try serialize(duoSpringBoard(), nested: nested, panel: read(filter), identities: identities)
     #expect(identities.metadata == .init(complete: true))
     #expect(labels(root).sorted() == ["Inner settings", "Inner window", "Nested outer-sized", "SpringBoard"])
   }
@@ -84,6 +84,117 @@ struct FBAXInactivePanelWindowFilterTests {
     for frame in [CGRect(x: 0, y: 0, width: 669, height: 900), CGRect(x: 52, y: 417, width: 87, height: 68)] {
       try FBAXOpaqueFrameTapRules.requirePointInsidePanelContent([try node(frame)], context: inner)
     }
+  }
+
+  // Inner panel in landscape (rot90): native 669x951 pt, oriented 951x669 pt.
+  private func innerContext(_ rotation: FBSimulatorHIDDisplayRotation = .rot90) throws -> FBSimulatorHIDDisplayContext {
+    try FBSimulatorHIDDisplayContext(hidTarget: 3, nativePixelSize: CGSize(width: 2007, height: 2853),
+      scale: 3, rotation: rotation)
+  }
+
+  @Test func frameTransformInvertsTheHIDPointTransform() throws {
+    for rotation in [FBSimulatorHIDDisplayRotation.rot90, .rot270] {
+      let context = try innerContext(rotation)
+      let transform = try #require(FBAXPanelFrameTransform(context: context))
+      for logical in [CGPoint(x: 903.2, y: 379.7), CGPoint(x: 10, y: 600), CGPoint(x: 951, y: 0)] {
+        let normalized = try context.normalizedPoint(from: logical)
+        let native = CGPoint(x: normalized.x * 669, y: normalized.y * 951)
+        let back = transform.logicalPoint(native)
+        #expect(abs(back.x - logical.x) < 0.001 && abs(back.y - logical.y) < 0.001)
+      }
+    }
+    #expect(FBAXPanelFrameTransform(context: try innerContext(.rot0)) == nil)
+    #expect(FBAXPanelFrameTransform(context: try innerContext(.rot180)) == nil)
+  }
+
+  @Test func frameTransformMovesTheDockIconToWhereItIsDrawn() throws {
+    let transform = try #require(FBAXPanelFrameTransform(context: try innerContext()))
+    // Measured: Safari's native frame, drawn at about (871...935, 348...412) in landscape.
+    let safari = transform.logicalFrame(CGRect(x: 347.667, y: 15.833, width: 64, height: 64))
+    #expect(abs(safari.minX - 871.167) < 0.01 && abs(safari.minY - 347.667) < 0.01)
+    #expect(safari.size == CGSize(width: 64, height: 64))
+    #expect(transform.logicalFrame(CGRect(x: 0, y: 0, width: 669, height: 951)) == CGRect(x: 0, y: 0, width: 951, height: 669))
+    #expect(transform.logicalFrame(.zero) == .zero)
+    let flipped = try #require(FBAXPanelFrameTransform(context: try innerContext(.rot270)))
+    #expect(flipped.logicalFrame(CGRect(x: 10, y: 20, width: 30, height: 40)) == CGRect(x: 20, y: 629, width: 40, height: 30))
+  }
+
+  @Test func processSpaceNeedsOneKindOfPanelWindow() throws {
+    let transform = try #require(FBAXPanelFrameTransform(context: try innerContext()))
+    let native = CGRect(x: 0, y: 0, width: 669, height: 951)
+    let oriented = CGRect(x: 0, y: 0, width: 951, height: 669)
+    let outer = CGRect(x: 0, y: 0, width: 466, height: 678)
+    #expect(FBAXNativeFrameProcesses.classify([native, outer], transform: transform) == .native)
+    #expect(FBAXNativeFrameProcesses.classify([oriented], transform: transform) == .oriented)
+    #expect(FBAXNativeFrameProcesses.classify([native, oriented], transform: transform) == .mixed)
+    #expect(FBAXNativeFrameProcesses.classify([outer], transform: transform) == .mixed)
+  }
+
+  @Test(arguments: [true, false])
+  func serializerOrientsOnlyNativePanelWindows(nested: Bool) throws {
+    let transform = try #require(FBAXPanelFrameTransform(context: try innerContext()))
+    let rules = try #require(FBAXPanelWindowRules(filter: nil, transform: transform))
+    let root = Element(label: "SpringBoard", frame: CGRect(x: 0, y: 0, width: 466, height: 678), role: "AXApplication", children: [
+      Element(label: "Native window", frame: CGRect(x: 0, y: 0, width: 669, height: 951), children: [
+        Element(label: "Safari", frame: CGRect(x: 347.667, y: 15.833, width: 64, height: 64), role: "AXButton"),
+        Element(label: "Structural", frame: .zero, role: "AXButton"),
+      ]),
+      Element(label: "Oriented window", frame: CGRect(x: 0, y: 0, width: 951, height: 669), children: [
+        Element(label: "App button", frame: CGRect(x: 10, y: 20, width: 30, height: 40), role: "AXButton"),
+      ]),
+    ])
+    let value = try serialize(root, nested: nested, panel: FBAXPanelRead(rules: rules, activeDisplayID: 3, processKey: nil))
+    let frames = frames(value)
+    #expect(frames["SpringBoard"] == CGRect(x: 0, y: 0, width: 466, height: 678))
+    #expect(frames["Native window"] == CGRect(x: 0, y: 0, width: 951, height: 669))
+    #expect(abs((frames["Safari"]?.minX ?? 0) - 871.167) < 0.01)
+    #expect(frames["Structural"] == .zero)
+    #expect(frames["Oriented window"] == CGRect(x: 0, y: 0, width: 951, height: 669))
+    #expect(frames["App button"] == CGRect(x: 10, y: 20, width: 30, height: 40))
+  }
+
+  @Test(arguments: [true, false])
+  func springBoardButtonsDrawnOnTheOtherPanelAreLeftOut(nested: Bool) throws {
+    let filter = try #require(FBAXInactivePanelWindowFilter(panels: duo, activeScreenID: 3))
+    let rules = try #require(FBAXPanelWindowRules(filter: filter, transform: nil))
+    let inner = CGRect(x: 0, y: 0, width: 669, height: 951)
+    let outer = CGRect(x: 0, y: 0, width: 466, height: 678)
+    func springBoard(listsOuterWindow: Bool) -> Element {
+      Element(label: "SpringBoard", frame: outer, role: "AXApplication", children: [
+        Element(label: "Inner window", frame: inner, children: [
+          Element(label: "Outer icon copy", frame: CGRect(x: 22, y: 52, width: 68, height: 86), role: "AXButton", display: 1,
+            children: [Element(label: "Copy label", frame: CGRect(x: 24, y: 117, width: 64, height: 19))]),
+          Element(label: "Widget", frame: CGRect(x: 52, y: 720, width: 184, height: 162), role: "AXButton", display: 3),
+          Element(label: "Unknown display", frame: CGRect(x: 52, y: 417, width: 86, height: 68), role: "AXButton"),
+          Element(label: "Group on outer", frame: CGRect(x: 0, y: 0, width: 10, height: 10), display: 1),
+        ]),
+      ] + (listsOuterWindow ? [Element(label: "Outer window", frame: outer)] : []))
+    }
+    let panel = { FBAXPanelRead(rules: rules, activeDisplayID: 3, processKey: nil) }
+    let filtered = try serialize(springBoard(listsOuterWindow: true), nested: nested, panel: panel())
+    #expect(labels(filtered).sorted() == ["Group on outer", "Inner window", "SpringBoard", "Unknown display", "Widget"])
+    // An app lists no other panel's window, so its buttons are not asked for a display.
+    let app = try serialize(springBoard(listsOuterWindow: false), nested: nested, panel: panel())
+    #expect(labels(app).count == 7)
+  }
+
+  private func frames(_ value: FBSimulatorAXValue) -> [String: CGRect] {
+    var found: [String: CGRect] = [:]
+    func walk(_ value: FBSimulatorAXValue) {
+      switch value {
+      case .object(let members):
+        if case .string(let label)? = members["AXLabel"], case .object(let frame)? = members["frame"],
+           case .number(let x)? = frame["x"], case .number(let y)? = frame["y"],
+           case .number(let width)? = frame["width"], case .number(let height)? = frame["height"] {
+          found[label] = CGRect(x: x, y: y, width: width, height: height)
+        }
+        members.values.forEach(walk)
+      case .array(let members): members.forEach(walk)
+      default: break
+      }
+    }
+    walk(value)
+    return found
   }
 
   private func node(_ frame: CGRect) throws -> FBSimulatorAXNode {
@@ -105,17 +216,21 @@ struct FBAXInactivePanelWindowFilterTests {
     ])
   }
 
-  private func serialize(_ root: Element, nested: Bool, filter: FBAXInactivePanelWindowFilter?,
+  private func read(_ filter: FBAXInactivePanelWindowFilter) -> FBAXPanelRead? {
+    FBAXPanelWindowRules(filter: filter, transform: nil).map { FBAXPanelRead(rules: $0, activeDisplayID: 3, processKey: nil) }
+  }
+
+  private func serialize(_ root: Element, nested: Bool, panel: FBAXPanelRead?,
     identities: FBAXNativeIdentityCollector? = nil) throws -> FBSimulatorAXValue {
     let keys: Set<FBAXKeys> = [.label, .type, .frameDict, .pid]
     let values: [[String: Any]]
     if let identities {
       values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: root, token: "read",
         nestedFormat: nested, keys: keys, collector: nil, coverageGrid: nil, seenPids: nil,
-        nativeIdentity: identities, windowFilter: filter)
+        nativeIdentity: identities, panel: panel)
     } else {
       values = try FBSimulatorAccessibilitySerializer.recursiveDescription(fromElement: root, token: "read",
-        nestedFormat: nested, keys: keys, collector: nil, coverageGrid: nil, seenPids: nil, windowFilter: filter)
+        nestedFormat: nested, keys: keys, collector: nil, coverageGrid: nil, seenPids: nil, panel: panel)
     }
     return try JSONDecoder().decode(FBSimulatorAXValue.self, from: JSONSerialization.data(withJSONObject: values))
   }
@@ -135,10 +250,12 @@ struct FBAXInactivePanelWindowFilterTests {
     let label: String
     let frame: CGRect
     let role: String
+    let display: UInt32?
     let children: [Element]
-    init(label: String, frame: CGRect, role: String = "AXGroup", children: [Element] = []) {
-      self.label = label; self.frame = frame; self.role = role; self.children = children
+    init(label: String, frame: CGRect, role: String = "AXGroup", display: UInt32? = nil, children: [Element] = []) {
+      self.label = label; self.frame = frame; self.role = role; self.display = display; self.children = children
     }
+    func axDisplayID() -> UInt32? { display }
     func axNativeIdentity() -> FBSimulatorAXNativeIdentity? {
       .init(pid: 42, objectID: UInt64(UInt(bitPattern: ObjectIdentifier(self).hashValue)))
     }
