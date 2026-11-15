@@ -136,7 +136,8 @@ final class FBAXPanelRead {
   /// Called once with the root's direct children before any of them is serialized.
   func prepare(pid: pid_t, windowFrames: [CGRect]) {
     if let filter = rules.filter { checksButtonDisplays = windowFrames.contains(where: filter.excludes) }
-    if let transform = rules.transform, let processKey, pid > 0 {
+    // Just after boot the application can list no windows yet; that is no classification to keep.
+    if let transform = rules.transform, let processKey, pid > 0, !windowFrames.isEmpty {
       FBAXNativeFrameProcesses.record(FBAXNativeFrameProcesses.classify(windowFrames, transform: transform),
         for: processKey.process(pid))
     }

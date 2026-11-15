@@ -130,6 +130,17 @@ struct FBAXInactivePanelWindowFilterTests {
     #expect(FBAXNativeFrameProcesses.classify([outer], transform: transform) == .mixed)
   }
 
+  @Test func treeReadRecordsNoSpaceForAnEmptyWindowList() throws {
+    let transform = try #require(FBAXPanelFrameTransform(context: try innerContext()))
+    let rules = try #require(FBAXPanelWindowRules(filter: nil, transform: transform))
+    let display = FBAXNativeFrameProcesses.DisplayKey(device: UUID().uuidString, displayID: 3, rotation: .rot90)
+    let read = FBAXPanelRead(rules: rules, activeDisplayID: 3, processKey: display)
+    read.prepare(pid: 42, windowFrames: [])
+    #expect(FBAXNativeFrameProcesses.space(for: display.process(42)) == nil)
+    read.prepare(pid: 42, windowFrames: [CGRect(x: 0, y: 0, width: 669, height: 951)])
+    #expect(FBAXNativeFrameProcesses.space(for: display.process(42)) == .native)
+  }
+
   @Test(arguments: [true, false])
   func serializerOrientsOnlyNativePanelWindows(nested: Bool) throws {
     let transform = try #require(FBAXPanelFrameTransform(context: try innerContext()))
