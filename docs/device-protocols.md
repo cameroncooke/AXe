@@ -15,9 +15,23 @@ device. Any local process can open TCP connections through it; AXe never creates
    `result.connectionProperties.tunnelIPAddress`. The Mac's end is the same `/64` prefix with host part
    `::2`. The address changes when the phone restarts.
 2. **RSD port.** macOS `remoted` keeps an ESTABLISHED TCP connection to the device's service directory
-   (RSD). `netstat -anv -p tcp`: the foreign port of a `remoted` socket whose foreign address starts
-   with the tunnel prefix. Fallback: the last `server port N` in `remotepairingd`'s unified log for that
-   address.
+   (RSD). Neither `devicectl` nor `remotectl` reports its port, and CoreDevice's
+   `createservicesocket` action cannot replace it: remoted refuses the accessibility service to every
+   client, CoreDeviceService included ("Client lacks privilege to interact with service"). AXe uses, in
+   order:
+   - The port saved by `axe device-port` for this hardware UDID, when it was saved for the same tunnel
+     address. A recreated tunnel has a new address and port. A saved port that fails the step 4 identity
+     check is deleted; one that only fails to connect is kept, because the first connection after an idle
+     period can be reset. The file is `~/Library/Caches/com.cameroncooke.axe/device-service-ports.json`.
+   - `nettop -L 1 -m tcp -n -x -p remoted -J state`: the foreign port of `remoted`'s Established `tcp6`
+     row whose foreign address equals the tunnel address, in about 70 ms. nettop reads the network
+     statistics interface and prints full addresses.
+   On two Macs in issue #91 (macOS 27.2.1 with an endpoint-security agent) netstat listed no TCP sockets
+   when an ad hoc or Apple Development signed process started it, and all of them when a shell or a
+   notarized Developer ID process did. When nettop finds nothing, the error prints a line for Terminal
+   that runs netstat in the user's shell and passes only the port to `axe device-port`. AXe no longer
+   scans `remotepairingd`'s log, which records the port only when it creates the tunnel and took 8 to
+   41 s.
 3. **RSD session.** Connect to `[tunnel]:port` and speak RemoteXPC. After the handshake the device sends
    one dictionary: `MessageType: "Handshake"`, `MessagingProtocolVersion` (7), `Services`
    (name -> `Port` string, `Entitlement`, `Properties` with `UsesRemoteXPC`, `Features`,
