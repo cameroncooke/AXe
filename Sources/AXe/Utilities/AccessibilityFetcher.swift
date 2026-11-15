@@ -72,10 +72,10 @@ struct AccessibilityFetcher {
                     bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point, keys: keys) { try await element(true) } })
             }
             // On a Duo the default display lists both panels' SpringBoard windows, so every Home-screen
-            // control appears twice and the inner panel's are in native coordinates (#87).
-            let observation = try await measuredDuoObservation(for: target)
+            // control appears twice and the inner panel's are in native coordinates (#87). Each attempt
+            // measures the active panel again, so a retry after a fold reads the new one.
             let frontmost: @MainActor (Bool) async throws -> FBAccessibilityElement = { bootstrap in
-                if let observation {
+                if let observation = try await measuredDuoObservation(for: target) {
                     return try await target.accessibilityElementForFrontmostApplication(displayID: observation.axDisplayID,
                         displayContext: observation.displayContext, bootstrap: bootstrap)
                 }
@@ -205,10 +205,20 @@ struct AccessibilityFetcher {
         guard target.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
             return nil
         }
-        let discovery = try await ActivePanelReader.discoverWithMetadata(for: target)
-        let panel = discovery.readback.snapshot.activePanel.identity
-        return try await FBSimulatorNativeContextReader(simulator: target, screenID: panel.displayID,
-            screenUniqueID: panel.uniqueID).observation()
+        // A read during a fold or rotation can see the screens change; read them again until they
+        // settle, within the budget display reads use.
+        let deadline = ProcessInfo.processInfo.systemUptime + DisplayTransition.settleBudgetSeconds
+        while true {
+            do {
+                let discovery = try await ActivePanelReader.discoverWithMetadata(for: target)
+                let panel = discovery.readback.snapshot.activePanel.identity
+                return try await FBSimulatorNativeContextReader(simulator: target, screenID: panel.displayID,
+                    screenUniqueID: panel.uniqueID).observation()
+            } catch FBSimulatorContextError.changedDuringRead
+                where ProcessInfo.processInfo.systemUptime < deadline {
+                try await Task.sleep(nanoseconds: DisplayTransition.rereadIntervalNanoseconds)
+            }
+        }
     }
 
     static func retryingTransientPointFallback(

@@ -390,6 +390,8 @@ final class FBAXTranslationRequest {
       child.axSetBridgeDelegateToken(token)
       return FBAXElementAttributes(child, keys: [], includeChildren: false).rawFrame()
     }
+    // Just after boot the application can list no windows yet; that is no classification to keep.
+    guard !frames.isEmpty else { return nil }
     let space = FBAXNativeFrameProcesses.classify(frames, transform: transform)
     FBAXNativeFrameProcesses.record(space, for: key)
     return space == .native ? transform : nil
