@@ -51,6 +51,79 @@ struct ListDevices: AsyncParsableCommand {
     }
 }
 
+struct DevicePort: AsyncParsableCommand {
+    static let configuration = CommandConfiguration(commandName: "device-port",
+        abstract: "Save a physical device's service directory port when AXe cannot find it.",
+        discussion: """
+        AXe reads the port with nettop. Some Macs hide network connections from AXe; then the device error prints a line to paste in Terminal, where netstat lists them, and that line runs this command. AXe checks the port with the device before saving it, and uses it until the device's tunnel is recreated. Without --port, prints that line.
+
+        Example:
+          axe device-port --udid <UDID>
+        """)
+
+    @Option(help: "Hardware UDID of the physical device.")
+    var udid: String
+
+    @Option(help: "The service directory port. Omit it to print the command that finds it.")
+    var port: String?
+
+    func run() async throws {
+        guard let listed = try await AutomationTarget.physicalDeviceRecord(udid: udid) else {
+            throw CLIOutputFailure(code: "invalidArguments",
+                message: "device-port takes a physical device's hardware UDID. Run axe list-devices.")
+        }
+        let device = try await CoreDeviceInventory.details(for: listed)
+        guard let address = device.tunnelAddress, let hardwareUDID = device.udid else {
+            throw CLIOutputFailure(code: "deviceNotConnected",
+                message: "CoreDevice reported no tunnel for the device. Connect it by USB or reconnect it in Xcode.")
+        }
+        let tunnel = try DeviceTunnelAddress(address)
+
+        guard let port else {
+            let command = tunnel.savePortCommand(udid: hardwareUDID)
+            if CLIOutput.isFormatted {
+                try CLIOutput.writeJSON(["udid": hardwareUDID, "tunnel": address, "command": command])
+            } else {
+                CLIOutput.message("Run this in Terminal to save the port:\n  \(command)")
+            }
+            return
+        }
+        let value = try Self.parsePort(port, tunnel: address)
+        do {
+            try await DeviceServiceDirectory.savePort(value, tunnelAddress: address, expectedUDID: hardwareUDID)
+        } catch let error as DeviceServiceError {
+            if case .targetMismatch = error { throw error }
+            throw CLIOutputFailure(code: "invalidArguments",
+                message: "Port \(value) is not the device's service directory on \(address) (\(error.localizedDescription)) Nothing was saved. Run axe device-port --udid \(hardwareUDID) for the line that finds it.")
+        }
+        if CLIOutput.isFormatted {
+            try CLIOutput.writeJSON(Saved(udid: hardwareUDID, tunnel: address, port: value))
+        } else {
+            CLIOutput.message("Saved port \(value) for \(hardwareUDID) on \(address).")
+        }
+    }
+
+    static func parsePort(_ text: String, tunnel: String) throws -> UInt16 {
+        let lines = text.split(whereSeparator: \.isNewline)
+        guard lines.count == 1 else {
+            throw CLIOutputFailure(code: "invalidArguments", message: lines.isEmpty
+                ? "netstat listed no remoted connection to \(tunnel). Check the device connection in Xcode and run the line again."
+                : "netstat listed more than one remoted connection to \(tunnel). Reconnect the device in Xcode and run the line again.")
+        }
+        guard let port = UInt16(lines[0].trimmingCharacters(in: .whitespaces)), port != 0 else {
+            throw CLIOutputFailure(code: "invalidArguments",
+                message: "--port must be a port number from 1 to 65535, not \"\(lines[0])\".")
+        }
+        return port
+    }
+
+    struct Saved: Encodable {
+        let udid: String
+        let tunnel: String
+        let port: UInt16
+    }
+}
+
 struct Doctor: AsyncParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Check whether a simulator or physical device is ready for AXe.",
         discussion: """

@@ -3,7 +3,7 @@ import Foundation
 
 enum DeviceServiceError: LocalizedError {
     case invalidTunnelAddress
-    case rsdPortUnavailable
+    case rsdPortUnavailable(tunnel: DeviceTunnelAddress, udid: String, reason: String)
     case connectionFailed(String)
     case timeout
     case invalidProtocol(String)
@@ -16,8 +16,11 @@ enum DeviceServiceError: LocalizedError {
         switch self {
         case .invalidTunnelAddress:
             return "The device has no valid CoreDevice tunnel address. Connect it in Xcode and try again."
-        case .rsdPortUnavailable:
-            return "The CoreDevice service directory port was not found. Check the device connection in Xcode and try again."
+        case .rsdPortUnavailable(let tunnel, let udid, let reason):
+            return "The CoreDevice service directory port was not found: nettop \(reason). "
+                + "Check the device connection in Xcode and try again. If this Mac hides network connections "
+                + "from AXe, run this in Terminal to save the port, then try again:\n  "
+                + tunnel.savePortCommand(udid: udid)
         case .connectionFailed(let reason):
             return "Could not connect to the CoreDevice service: \(reason)"
         case .timeout:
@@ -68,23 +71,54 @@ final class DeviceServiceDirectory: @unchecked Sendable {
         }
     }
 
+    /// Uses the port that `axe device-port` saved for this device and tunnel, then nettop. A saved port that
+    /// fails to connect is kept, because the first connection after an idle period can be reset; only the
+    /// device's identity check proves it wrong.
     private static func connectOnce(tunnelAddress: String, expectedUDID: String) async throws -> DeviceServiceDirectory {
         try await run(on: .global(qos: .userInitiated)) {
             let tunnel = try DeviceTunnelAddress(tunnelAddress)
-            let port = try tunnel.serviceDirectoryPort(expectedUDID: expectedUDID)
-            let session = try RemoteXPCConnection(tunnel: tunnel, port: port, timeout: 8)
-            let services = try session.readServiceDirectory(expectedUDID: expectedUDID)
-            let ports = services.compactMapValues { service -> UInt16? in
-                let fields = service.dictionaryValue
-                let properties = fields?["Properties"]?.dictionaryValue
-                guard properties?["UsesRemoteXPC"] == .bool(true),
-                      properties?["EncryptSocketData"] != .bool(true),
-                      let text = fields?["Port"]?.stringValue,
-                      let port = UInt16(text), port != 0 else { return nil }
-                return port
+            var savedPortError: Error?
+            if let saved = DeviceServicePortStore.shared.port(udid: expectedUDID, tunnel: tunnel) {
+                do {
+                    return try open(tunnel: tunnel, port: saved, expectedUDID: expectedUDID)
+                } catch DeviceServiceError.targetMismatch {
+                    DeviceServicePortStore.shared.remove(udid: expectedUDID)
+                } catch {
+                    savedPortError = error
+                }
             }
-            return DeviceServiceDirectory(tunnel: tunnel, servicePorts: ports, session: session)
+            let port: UInt16
+            do {
+                port = try tunnel.serviceDirectoryPort(expectedUDID: expectedUDID)
+            } catch {
+                throw savedPortError ?? error
+            }
+            return try open(tunnel: tunnel, port: port, expectedUDID: expectedUDID)
         }
+    }
+
+    /// Checks a port the user found and saves it for later connections to this device and tunnel.
+    static func savePort(_ port: UInt16, tunnelAddress: String, expectedUDID: String) async throws {
+        try await run(on: .global(qos: .userInitiated)) {
+            let tunnel = try DeviceTunnelAddress(tunnelAddress)
+            try open(tunnel: tunnel, port: port, expectedUDID: expectedUDID).close()
+            try DeviceServicePortStore.shared.save(port: port, udid: expectedUDID, tunnel: tunnel)
+        }
+    }
+
+    private static func open(tunnel: DeviceTunnelAddress, port: UInt16, expectedUDID: String) throws -> DeviceServiceDirectory {
+        let session = try RemoteXPCConnection(tunnel: tunnel, port: port, timeout: 8)
+        let services = try session.readServiceDirectory(expectedUDID: expectedUDID)
+        let ports = services.compactMapValues { service -> UInt16? in
+            let fields = service.dictionaryValue
+            let properties = fields?["Properties"]?.dictionaryValue
+            guard properties?["UsesRemoteXPC"] == .bool(true),
+                  properties?["EncryptSocketData"] != .bool(true),
+                  let text = fields?["Port"]?.stringValue,
+                  let port = UInt16(text), port != 0 else { return nil }
+            return port
+        }
+        return DeviceServiceDirectory(tunnel: tunnel, servicePorts: ports, session: session)
     }
 
     func close() {
@@ -262,6 +296,7 @@ final class DeviceServiceDirectory: @unchecked Sendable {
 }
 
 struct DeviceTunnelAddress {
+    let host: String
     private let address: in6_addr
     private let scopeID: UInt32
 
@@ -281,6 +316,7 @@ struct DeviceTunnelAddress {
             scopeID = 0
         }
 
+        self.host = host
         self.address = address
         self.scopeID = scopeID
     }
@@ -295,80 +331,59 @@ struct DeviceTunnelAddress {
         return socketAddress
     }
 
-    func serviceDirectoryPort(expectedUDID: String) throws -> UInt16 {
-        if let sockets = Self.readCommand("/usr/sbin/netstat", arguments: ["-anv", "-p", "tcp"], timeout: 3),
-            let port = portFromSockets(sockets)
-        {
-            return port
+    /// Finds the port of the device's service directory: the remote port of remoted's connection to the tunnel,
+    /// read with nettop in about 70 ms. netstat lists the same connection, but on the Macs in issue #91 it
+    /// listed no TCP sockets when AXe started it; nettop reads them through a different kernel interface.
+    func serviceDirectoryPort(
+        expectedUDID: String,
+        readSockets: () -> CommandOutcome = {
+            DeviceTunnelAddress.readCommand("/usr/bin/nettop",
+                arguments: ["-L", "1", "-m", "tcp", "-n", "-x", "-p", "remoted", "-J", "state"], timeout: 3)
         }
-
-        let allowedCharacters = CharacterSet(charactersIn: "0123456789ABCDEFabcdef-")
-        guard !expectedUDID.isEmpty, expectedUDID.unicodeScalars.allSatisfy(allowedCharacters.contains) else {
-            throw DeviceServiceError.rsdPortUnavailable
+    ) throws -> UInt16 {
+        let reason: String
+        switch readSockets() {
+        case .output(let text):
+            if let port = portFromNettop(text) { return port }
+            reason = "listed no single remoted connection to \(host)"
+        case .timedOut(let seconds):
+            reason = "timed out after \(Int(seconds)) s"
+        case .failed:
+            reason = "failed"
         }
-        let predicate = """
-            process == "remotepairingd" AND eventMessage CONTAINS[c] "(\(expectedUDID))" AND
-            (eventMessage CONTAINS[c] "server port " OR eventMessage CONTAINS[c] "Tunnel established")
-            """
-        if let logs = Self.readCommand(
-            "/usr/bin/log",
-            arguments: ["show", "--last", "1d", "--style", "compact", "--predicate", predicate],
-            timeout: 8
-        ), let port = portFromLogs(logs, expectedUDID: expectedUDID) {
-            return port
-        }
-        throw DeviceServiceError.rsdPortUnavailable
+        throw DeviceServiceError.rsdPortUnavailable(tunnel: self, udid: expectedUDID, reason: reason)
     }
 
-    private func portFromSockets(_ sockets: String) -> UInt16? {
+    /// Reads `nettop -L 1 -m tcp -n -x -p remoted -J state` rows such as
+    /// `tcp6 fd77::2.58876<->fd77::1.57198,Established,` and returns the one port connected to this tunnel.
+    func portFromNettop(_ sockets: String) -> UInt16? {
         var ports: Set<UInt16> = []
-        var exactPorts: Set<UInt16> = []
         for line in sockets.split(whereSeparator: \.isNewline) {
-            let fields = line.split(whereSeparator: \.isWhitespace)
-            guard fields.count > 10, fields[0] == "tcp6", fields[5] == "ESTABLISHED",
-                fields[10].hasPrefix("remoted:"),
-                let separator = fields[4].lastIndex(of: "."),
-                let port = UInt16(fields[4][fields[4].index(after: separator)...]),
-                port != 0
-            else { continue }
-
-            let host = fields[4][..<separator].split(separator: "%").first
-            guard let host, let foreign = Self.parseIPv6(host), matches(foreign, byteCount: 8) else { continue }
+            let fields = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard fields.count > 1, fields[0].hasPrefix("tcp6 "), fields[1] == "Established",
+                  let arrow = fields[0].range(of: "<->") else { continue }
+            let remote = fields[0][arrow.upperBound...]
+            guard let separator = remote.lastIndex(of: "."),
+                  let port = UInt16(remote[remote.index(after: separator)...]), port != 0,
+                  let foreign = remote[..<separator].split(separator: "%").first.flatMap(Self.parseIPv6),
+                  sameAddress(foreign) else { continue }
             ports.insert(port)
-            if matches(foreign, byteCount: 16) {
-                exactPorts.insert(port)
-            }
         }
-        let candidates = exactPorts.isEmpty ? ports : exactPorts
-        return candidates.count == 1 ? candidates.first : nil
+        return ports.count == 1 ? ports.first : nil
     }
 
-    private func portFromLogs(_ logs: String, expectedUDID: String) -> UInt16? {
-        var matchingTunnel = false
-        var port: UInt16?
-        for line in logs.split(whereSeparator: \.isNewline) {
-            guard line.range(of: "(\(expectedUDID))", options: .caseInsensitive) != nil else { continue }
-            if line.range(of: "Tunnel established", options: .caseInsensitive) != nil {
-                matchingTunnel = containsTunnelAddress(line)
-                port = nil
-            }
-            if let marker = line.range(of: "server port ", options: .caseInsensitive),
-                matchingTunnel || containsTunnelAddress(line),
-                let candidate = UInt16(line[marker.upperBound...].prefix(while: \.isNumber)),
-                candidate != 0
-            {
-                port = candidate
-            }
-        }
-        return port
+    /// One line the user pastes in Terminal. Their shell runs netstat, which lists every connection there, and
+    /// passes `axe device-port` only the port. netstat cuts long addresses short, so the line matches the
+    /// address up to its last group.
+    func savePortCommand(udid: String) -> String {
+        let bare = host.split(separator: "%").first.map(String.init) ?? host
+        let prefix = bare.lastIndex(of: ":").map { String(bare[...$0]) } ?? bare
+        let awk = #"/remoted/ && $6 == "ESTABLISHED" && index($5, p) == 1 { n = split($5, a, "."); if (!seen[a[n]]++) print a[n] }"#
+        return "axe device-port --udid \(udid) --port \"$(netstat -anv -p tcp | awk -v p='\(prefix)' '\(awk)')\""
     }
 
-    private func containsTunnelAddress(_ line: Substring) -> Bool {
-        line.split { $0.isWhitespace || "[](),;<>".contains($0) }.contains { field in
-            let host = field.split(separator: "%").first ?? field
-            guard let loggedAddress = Self.parseIPv6(host) else { return false }
-            return matches(loggedAddress, byteCount: 16)
-        }
+    func sameAddress(as other: DeviceTunnelAddress) -> Bool {
+        sameAddress(other.address)
     }
 
     private static func parseIPv6(_ host: Substring) -> in6_addr? {
@@ -376,15 +391,19 @@ struct DeviceTunnelAddress {
         return inet_pton(AF_INET6, String(host), &result) == 1 ? result : nil
     }
 
-    private func matches(_ other: in6_addr, byteCount: Int) -> Bool {
+    private func sameAddress(_ other: in6_addr) -> Bool {
         withUnsafeBytes(of: address) { ownBytes in
-            withUnsafeBytes(of: other) { otherBytes in
-                ownBytes.prefix(byteCount).elementsEqual(otherBytes.prefix(byteCount))
-            }
+            withUnsafeBytes(of: other) { otherBytes in ownBytes.elementsEqual(otherBytes) }
         }
     }
 
-    private static func readCommand(_ executable: String, arguments: [String], timeout: TimeInterval) -> String? {
+    enum CommandOutcome {
+        case output(String)
+        case timedOut(TimeInterval)
+        case failed
+    }
+
+    static func readCommand(_ executable: String, arguments: [String], timeout: TimeInterval) -> CommandOutcome {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         do {
             try FileManager.default.createDirectory(
@@ -393,14 +412,14 @@ struct DeviceTunnelAddress {
                 attributes: [.posixPermissions: 0o700]
             )
         } catch {
-            return nil
+            return .failed
         }
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let output = directory.appendingPathComponent("stdout")
         guard FileManager.default.createFile(atPath: output.path, contents: nil),
             let handle = try? FileHandle(forWritingTo: output)
-        else { return nil }
+        else { return .failed }
         defer { try? handle.close() }
 
         let process = Process()
@@ -413,22 +432,23 @@ struct DeviceTunnelAddress {
         do {
             try process.run()
         } catch {
-            return nil
+            return .failed
         }
 
         guard finished.wait(timeout: .now() + timeout) == .success else {
             if process.isRunning {
                 process.terminate()
             }
-            return nil
+            return .timedOut(timeout)
         }
-        guard process.terminationStatus == 0 else { return nil }
-        guard let input = try? FileHandle(forReadingFrom: output) else { return nil }
+        guard process.terminationStatus == 0 else { return .failed }
+        guard let input = try? FileHandle(forReadingFrom: output) else { return .failed }
         defer { try? input.close() }
         let maximumOutput = 4 * 1024 * 1024
-        guard let data = try? input.read(upToCount: maximumOutput + 1), data.count <= maximumOutput else {
-            return nil
+        guard let data = try? input.read(upToCount: maximumOutput + 1), data.count <= maximumOutput,
+              let text = String(data: data, encoding: .utf8) else {
+            return .failed
         }
-        return String(data: data, encoding: .utf8)
+        return .output(text)
     }
 }

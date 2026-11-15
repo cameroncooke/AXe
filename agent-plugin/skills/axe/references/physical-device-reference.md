@@ -14,6 +14,7 @@ axe describe-ui --udid "$DEVICE_UDID"
 - Pair in Xcode, enable Developer Mode, unlock. AXe does none of these.
 - Resolve every `doctor` check before continuing. A failure ends `Error: <name> is not ready.` with the check's ID as code: `notPaired`, `developerModeDisabled`, `deviceNotConnected`, `developerDiskImageUnavailable`, `deviceLocked`, `screenshotServiceUnavailable`.
 - Structured checks: `axe --output json doctor --udid "$DEVICE_UDID"`.
+- "The CoreDevice service directory port was not found": this Mac hides network connections from AXe. The message ends with one `axe device-port --udid … --port "$(netstat …)"` line; ask the user to paste it in their own Terminal, then retry. AXe checks and saves the port until the device's tunnel is recreated. `axe device-port --udid "$DEVICE_UDID"` prints the line again.
 - Open the saved screenshot to verify what is visible.
 - Error codes match simulators: `busy` (another command on the device), `timeout` (deadline), `cleanupUncertain` (a touch or key may be held); CoreDevice failure is `xcodeUnavailable`, `readFailed` or `timeout`. A failed batch step keeps the step's code.
 
