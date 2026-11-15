@@ -71,13 +71,23 @@ struct AccessibilityFetcher {
                 }, isUsable: { try !isTransientPointFallback(in: $0, at: point) },
                     bootstrapped: { try await fetchAccessibilityInfoJSONData(at: point, keys: keys) { try await element(true) } })
             }
+            // On a Duo the default display lists both panels' SpringBoard windows, so every Home-screen
+            // control appears twice and the inner panel's are in native coordinates (#87). Each attempt
+            // measures the active panel again, so a retry after a fold reads the new one.
+            let frontmost: @MainActor (Bool) async throws -> FBAccessibilityElement = { bootstrap in
+                if let observation = try await measuredDuoObservation(for: target) {
+                    return try await target.accessibilityElementForFrontmostApplication(displayID: observation.axDisplayID,
+                        displayContext: observation.displayContext, bootstrap: bootstrap)
+                }
+                return try await target.accessibilityElementForFrontmostApplication(bootstrap: bootstrap)
+            }
             return try await retryingMissingTranslation(logger: logger) {
                 try await readingDirectlyFirst(direct: {
-                    let element = try await target.accessibilityElementForFrontmostApplication(bootstrap: false)
+                    let element = try await frontmost(false)
                     defer { element.close() }
                     return try serializedAccessibilityData(from: element, keys: keys)
                 }, isUsable: containsAccessibilityDescendant,
-                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(from: target, keys: keys) })
+                    bootstrapped: { try await fetchFrontmostAccessibilityInfoJSONData(keys: keys) { try await frontmost(true) } })
             }
         }
     }
@@ -195,10 +205,20 @@ struct AccessibilityFetcher {
         guard target.device.deviceType?.identifier == "com.apple.CoreSimulator.SimDeviceType.iPhone-Duo" else {
             return nil
         }
-        let discovery = try await ActivePanelReader.discoverWithMetadata(for: target)
-        let panel = discovery.readback.snapshot.activePanel.identity
-        return try await FBSimulatorNativeContextReader(simulator: target, screenID: panel.displayID,
-            screenUniqueID: panel.uniqueID).observation()
+        // A read during a fold or rotation can see the screens change; read them again until they
+        // settle, within the budget display reads use.
+        let deadline = ProcessInfo.processInfo.systemUptime + DisplayTransition.settleBudgetSeconds
+        while true {
+            do {
+                let discovery = try await ActivePanelReader.discoverWithMetadata(for: target)
+                let panel = discovery.readback.snapshot.activePanel.identity
+                return try await FBSimulatorNativeContextReader(simulator: target, screenID: panel.displayID,
+                    screenUniqueID: panel.uniqueID).observation()
+            } catch FBSimulatorContextError.changedDuringRead
+                where ProcessInfo.processInfo.systemUptime < deadline {
+                try await Task.sleep(nanoseconds: DisplayTransition.rereadIntervalNanoseconds)
+            }
+        }
     }
 
     static func retryingTransientPointFallback(
@@ -227,13 +247,15 @@ struct AccessibilityFetcher {
         return latestData
     }
 
-    private static func fetchFrontmostAccessibilityInfoJSONData(from target: FBSimulator,
-                                                                keys: Set<FBAXKeys>) async throws -> Data {
+    private static func fetchFrontmostAccessibilityInfoJSONData(
+        keys: Set<FBAXKeys>,
+        element: @MainActor () async throws -> FBAccessibilityElement
+    ) async throws -> Data {
         var latestData: Data?
         for attempt in 0..<5 {
             // IDB's former `accessibilityElements(withNestedFormat:)` API also serialized the
             // frontmost application internally. This explicit handle API preserves that scope.
-            let accessibilityElement = try await target.accessibilityElementForFrontmostApplication()
+            let accessibilityElement = try await element()
             let data: Data
             do {
                 data = try serializedAccessibilityData(from: accessibilityElement, keys: keys)

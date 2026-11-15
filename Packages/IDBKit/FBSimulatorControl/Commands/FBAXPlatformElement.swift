@@ -55,6 +55,13 @@ protocol FBAXPlatformElement: AnyObject {
   func axSetBridgeDelegateToken(_ token: String?)
   /// One translator request for several attributes; nil when the adapter cannot batch.
   func axBatchedAttributes(_ names: [String]) -> [String: Any]?
+  /// The guest display the element is drawn on; nil when unknown.
+  func axDisplayID() -> UInt32?
+}
+
+// Test doubles and other adapters do not report a display.
+extension FBAXPlatformElement {
+  func axDisplayID() -> UInt32? { nil }
 }
 
 extension AXPMacPlatformElement: FBAXPlatformElement {
@@ -138,6 +145,25 @@ extension AXPMacPlatformElement: FBAXPlatformElement {
 
   func axBatchedAttributes(_ names: [String]) -> [String: Any]? {
     accessibilityMultipleAttributes(names.map { NSAccessibility.Attribute(rawValue: $0) }) as [String: Any]?
+  }
+
+  /// AXP attribute 63 with guest attribute 2123, as read by `FBSimulatorAXIdentityDiagnostic`:
+  /// a SpringBoard icon drawn on the Duo's inner panel answered 3 and the outer panel's copy 1.
+  /// The element's bridge-delegate token must already be set.
+  func axDisplayID() -> UInt32? {
+    guard let translation, let translator = AXPTranslator.sharedInstance() as? AXPTranslator,
+          let request = AXPTranslatorRequest.request(withTranslation: translation) as? AXPTranslatorRequest else {
+      return nil
+    }
+    request.requestType = 2
+    request.attributeType = 63
+    request.parameters = ["parameter": NSNumber(value: 2123)]
+    guard let response = translator.sendRequest(request) as? AXPTranslatorResponse, response.error == 0,
+          let number = response.resultData as? NSNumber, number.int64Value > 0,
+          number.int64Value <= Int64(UInt32.max) else {
+      return nil
+    }
+    return UInt32(number.int64Value)
   }
 }
 
