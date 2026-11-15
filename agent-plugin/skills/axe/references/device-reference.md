@@ -91,6 +91,7 @@ Failures carry one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`
 ## App input on the iPhone Duo
 
 - Use the agent commands. An agent capture binds the active screen; a fold, rotation or hinge change makes its refs stale, so capture again.
+- On one of the two screens, SpringBoard's accessibility tree does not list the Home-screen icons that are drawn there, so they are missing from the capture. Find them in `axe screenshot` and tap with `-x`/`-y` and the capture's `--snapshot-id`. Dock icons, widgets and the search button keep their refs.
 - Plain `tap`, `touch`, `swipe`, `drag` and `type` run on the Duo with logical points and measured pose checks but check no target or app: never use them to operate an app.
 - At most 100,000 movement steps on the Duo; larger paths reject before event allocation.
 
