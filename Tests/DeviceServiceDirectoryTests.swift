@@ -67,7 +67,8 @@ struct DeviceServiceDirectoryPortTests {
 
     @Test("The pasted line matches netstat's shortened address and prints the port alone")
     func savePortCommand() throws {
-        let command = try Self.tunnel("fd77:197:3d4d::1%utun4").savePortCommand(udid: Self.udid)
+        // A numeric scope, because a named one such as utun4 exists only on a Mac with that interface.
+        let command = try Self.tunnel("fd77:197:3d4d::1%4").savePortCommand(udid: Self.udid)
         #expect(command.hasPrefix("axe device-port --udid \(Self.udid) --port \"$(netstat -anv -p tcp | awk -v p='fd77:197:3d4d::' "))
         #expect(command.hasSuffix("')\""))
 
