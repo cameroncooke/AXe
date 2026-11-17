@@ -3,7 +3,7 @@
 AXe is a command-line tool that automates iOS simulators, including the dual-screen iPhone Duo, and connected iPhones and iPads. It reads the accessibility tree, sends taps, typing, gestures and hardware buttons, captures screenshots and video, and changes device settings. An agent mode gives AI agents checked, stateful control of the UI.
 
 [![CI](https://github.com/cameroncooke/AXe/actions/workflows/release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/release.yml)
-[![Licence: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Licence: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ## Install
 
@@ -279,7 +279,7 @@ make e2e-devices   # opt-in run on connected iPhones and iPads
 make bench-quick   # quick A/B timing of direct commands against a baseline payload
 ```
 
-`make release-check` runs everything short of the end-to-end suites and reports each check: released CHANGELOG sections unchanged against `origin/main`, the script tests, the two skill copies identical, the skill lint, no open items in `docs/release-readiness.md`, the release packaging dry run, and the unit tests. Every check runs even when one fails. `RELEASE_CHECK_SKIP="skill lint,packaging"` leaves checks out by name and `RELEASE_CHECK_BASE` changes the ref.
+`make release-check` runs everything short of the end-to-end suites and reports each check: released CHANGELOG sections unchanged against `origin/main`, the script tests, the two skill copies identical, the licence files in the resource bundle identical to the root ones, the skill lint, no open items in `docs/release-readiness.md`, the release packaging dry run, and the unit tests. Every check runs even when one fails. `RELEASE_CHECK_SKIP="skill lint,packaging"` leaves checks out by name and `RELEASE_CHECK_BASE` changes the ref.
 
 `AXE_BUILD_ARCHS` defaults to `"arm64 x86_64"`; set `arm64` for local Duo work. `make e2e` creates missing simulators, needs Xcode 27.1 or later for the Playground's Duo hinge view, and exits 2 without an iPhone Duo runtime. `make e2e-devices` exits 1 before building when no device is paired. See [Playground testing](docs/playground-testing.md) for simulator overrides and rerunning single groups. To validate a release payload under another Xcode, build the test bundle with that Xcode, then run `AXE_BIN_PATH=/path/to/release/axe ./test-runner.sh --tests-only`.
 
@@ -304,10 +304,18 @@ Full documentation is available at [axe-cli.com/docs](https://axe-cli.com/docs).
 
 AXe is an independent open-source iOS Simulator automation project and is not affiliated with, endorsed by, or associated with Deque Systems or its axe® accessibility products.
 
+## Contributing
+
+Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it sets out the licence terms that apply to contributions.
+
 ## Licence
 
-This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+AXe is licensed under the GNU General Public License version 3 only (GPL-3.0-only). See [LICENSE](LICENSE).
 
-Third-party licensing notices, including Meta's IDB MIT attribution, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+Running `axe` to test an app does not put that app under the GPL. If you distribute AXe, or software that contains AXe's code, you must do so under the GPL and make the corresponding source available.
 
-The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's root MIT licence is unchanged.
+To use AXe's code in software you do not release under the GPL, you need a commercial licence. Contact [web@cameroncooke.com](mailto:web@cameroncooke.com).
+
+AXe releases up to and including v2.0.4, and all AXe source published before the change to the GPL, were released under the MIT License and remain available under it. That notice, and the notices for Meta's IDB frameworks (MIT), are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+
+The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's own licence, and THIRD_PARTY_LICENSES, are in the bundle too, under `licenses/axe`.

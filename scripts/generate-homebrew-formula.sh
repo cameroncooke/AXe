@@ -8,7 +8,7 @@ VERSION=""
 URL=""
 SHA256=""
 DESCRIPTION="CLI tool for interacting with iOS Simulators via accessibility and HID APIs"
-LICENSE_NAME="MIT"
+LICENSE_NAME="GPL-3.0-only"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

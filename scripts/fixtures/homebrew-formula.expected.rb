@@ -1,7 +1,7 @@
 class Axe < Formula
   desc "<normalized>"
   homepage "https://github.com/cameroncooke/AXe"
-  license "MIT"
+  license "GPL-3.0-only"
   version "<normalized>"
   depends_on macos: :sonoma
 
