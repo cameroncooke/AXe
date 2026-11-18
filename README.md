@@ -73,6 +73,7 @@ Simulators and physical devices share one error vocabulary. The codes that matte
 | `captureFailed`, `outputFailed`, `readFailed`, `xcodeUnavailable` | Capture, output file, a state read, or the selected Xcode failed |
 | `actionOutcomeUnknown` | A shutdown or clipboard copy may have happened but could not be confirmed |
 | `unsupportedOnDevice`, `settingUnsupported` | The target does not offer this command or setting |
+| `unsupportedDevice` | The simulator has no built-in touch display, as on Apple TV; AXe supports iPhone and iPad simulators |
 | `commandFailed` | Anything else |
 
 Feature-specific codes are listed in their sections. JSON Schema (2020-12) files are in [schemas/](schemas/): the [command result envelope](schemas/axe.output.command-result.v1.schema.json), [each command's `data.result`](schemas/axe.output.command-payloads.v1.schema.json) (in `$defs`, keyed by the full command path), and the agent result [version 1](schemas/axe.output.agent-result.v1.schema.json) (`--view full`) and [version 2](schemas/axe.output.agent-result.v2.schema.json). Receipts printed by `--verbose` are not described. Ignore fields you do not know; AXe can add them within a schema version.

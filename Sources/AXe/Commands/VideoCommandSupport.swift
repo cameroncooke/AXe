@@ -93,8 +93,18 @@ struct VideoFrameUtilities {
         return (image.width, image.height)
     }
 
+    /// A device type with no built-in touch display (Apple TV) has no main screen surface; a failed
+    /// capture reports that instead of the framebuffer error. A capture that works never checks.
+    @MainActor
     static func captureScreenshotData(from simulator: FBSimulator) async throws -> Data {
-        try await simulator.takeScreenshot(format: .png)
+        do {
+            return try await simulator.takeScreenshot(format: .png)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            try FBSimulatorNativeContextReader.requireTouchDisplay(for: simulator)
+            throw error
+        }
     }
 
     static func makeCGImage(from data: Data) -> CGImage? {

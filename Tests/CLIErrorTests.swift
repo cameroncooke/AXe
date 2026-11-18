@@ -77,6 +77,7 @@ struct CLIErrorTests {
             (SelectedHIDFailure.invalid("Measured context changed before input"), "rejectedBeforeInput"),
             (FBSimulatorContextError.unavailable("Unsupported guest rotation"), "displayUnavailable"),
             (FBSimulatorContextError.changedDuringRead, "screensDidNotSettle"),
+            (FBSimulatorContextError.unsupportedProfile, "unsupportedDevice"),
             (FBSimulatorSelectedScreenshotError.changedContext, "screenChanged"),
             (ActivePanelReadError(childFailure: .cancelled), "interrupted"),
             (ActivePanelReadError(childFailure: .deadline), "timeout"),

@@ -120,6 +120,7 @@ struct RecordVideo: AsyncParsableCommand {
             let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state).rawValue
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)", code: .notBooted)
         }
+        try FBSimulatorNativeContextReader.requireTouchDisplay(for: targetSimulator)
 
         let outputURL = try prepareOutputURL()
         Self.progress("Recording simulator \(targetSimulator.udid) to \(outputURL.path)")

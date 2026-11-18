@@ -6,6 +6,8 @@ import Darwin
 public enum FBSimulatorContextError: Error, Sendable {
   case unavailable(String)
   case changedDuringRead
+  /// The device type declares no built-in touch display, as on Apple TV. No read can succeed.
+  case unsupportedProfile
 }
 
 public enum FBSimulatorHingeCapability: String, Codable, Sendable {
@@ -198,6 +200,17 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
     return classifyCapability(identifier: identifier, model: model, version: version, integratedDigitizerIDs: ids)
   }
 
+  /// Throws `unsupportedProfile` when the device type declares no built-in touch display. Missing
+  /// or unreadable profile metadata is not proof either way, so it passes.
+  public static func requireTouchDisplay(for simulator: FBSimulator) throws {
+    guard let capability = try? capability(for: simulator) else { return }
+    try requireTouchDisplay(capability.integratedDigitizerIDs)
+  }
+
+  static func requireTouchDisplay(_ profileIDs: [UInt32]) throws {
+    guard !profileIDs.isEmpty else { throw FBSimulatorContextError.unsupportedProfile }
+  }
+
   /// Classifies by the device type's declared built-in touch displays, not by profile version or
   /// model. Every full read still validates the live display report, host catalogue and boot
   /// identity; a two-panel device must also return native hinge samples, or input fails closed.
@@ -225,7 +238,8 @@ public actor FBSimulatorNativeContextReader: FBSimulatorHIDFreshnessProvider, FB
   // The device profile defines the integrated set. Virtual CAD displays are not classified by
   // names or guessed raw enums. The guest display report independently validates its full set.
   static func hostCatalog(_ values: [FBSimulatorDisplayInfo], profileIDs: [UInt32]) throws -> [FBSimulatorDisplayInfo] {
-    guard !profileIDs.isEmpty, Set(profileIDs).count == profileIDs.count,
+    try requireTouchDisplay(profileIDs)
+    guard Set(profileIDs).count == profileIDs.count,
           Set(values.map(\.screenID)).count == values.count else {
       throw FBSimulatorContextError.unavailable("Invalid profile IDs or duplicate host screen IDs")
     }
