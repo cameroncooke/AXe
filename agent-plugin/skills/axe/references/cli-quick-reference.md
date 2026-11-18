@@ -11,6 +11,7 @@ No UI target, so no `--agent`; app reads and input use the agent commands in SKI
 - [Screenshot](#screenshot)
 - [Video recording](#video-recording)
 - [Video streaming](#video-streaming)
+- [Mirror to an iPhone or iPad](#mirror-to-an-iphone-or-ipad)
 - [Clipboard staging](#clipboard-staging)
 - [Gestures and drawing](#gestures-and-drawing)
 - [Hardware buttons](#hardware-buttons)
@@ -84,6 +85,15 @@ axe stream-video --udid <UDID> --fps 10 --format mjpeg > stream.mjpeg
 axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
   ffmpeg -f image2pipe -framerate 30 -i - -c:v libx264 -preset ultrafast output.mp4
 ```
+
+## Mirror to an iPhone or iPad
+
+```bash
+axe mirror pair              # no --udid: one-time code and QR code for the AXe Mirror app
+axe mirror --udid <UDID>     # host the simulator until Ctrl+C
+```
+
+- For a person to see and touch the simulator from a phone or tablet. `axe mirror` is long-running and prints one JSON line per event: [mirror-reference.md](mirror-reference.md).
 
 ## Clipboard staging
 

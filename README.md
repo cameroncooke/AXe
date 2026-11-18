@@ -1,6 +1,6 @@
 <img src="banner.png" alt="AXe" width="600"/>
 
-AXe is a command-line tool that automates iOS simulators, including the dual-screen iPhone Duo, and connected iPhones and iPads. It reads the accessibility tree, sends taps, typing, gestures and hardware buttons, captures screenshots and video, and changes device settings. An agent mode gives AI agents checked, stateful control of the UI.
+AXe is a command-line tool that automates iOS simulators, including the dual-screen iPhone Duo, and connected iPhones and iPads. It reads the accessibility tree, sends taps, typing, gestures and hardware buttons, captures screenshots and video, and changes device settings. An agent mode gives AI agents checked, stateful control of the UI, and `axe mirror` puts a simulator on your iPhone or iPad, live and touchable.
 
 [![CI](https://github.com/cameroncooke/AXe/actions/workflows/release.yml/badge.svg)](https://github.com/cameroncooke/AXe/actions/workflows/release.yml)
 [![Licence: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -172,6 +172,44 @@ axe stream-video --udid "$UDID" --fps 30 --format ffmpeg | \
 
 `stream-video` formats are `mjpeg` (multipart JPEG), `raw` (4-byte big-endian length, then a JPEG), `ffmpeg` (concatenated JPEGs) and `bgra` (packed pixels; a selected-screen stream prints its width and height on stderr, the ordinary simulator stream does not, so pass `--screen-id` and `--screen-uuid` when you need them). On a physical device `--format h264` streams native H.264 Annex B. Stream bytes go to stdout and diagnostics to stderr; keep them separate. `--fps` is an upper limit. On any simulator, `record-video --follow-active-display` follows the active screen through folds and rotations into one fixed-size movie, and `--screen-id` with `--screen-uuid` captures one screen and fails if it stops being active; see the [recording reference](agent-plugin/skills/axe/references/recording-reference.md).
 
+## Mirror: a simulator on your iPhone or iPad
+
+`axe mirror` hosts one booted simulator for the free AXe Mirror app on iPhone and iPad. The app shows the simulator's screen live and sends your touches back to it.
+
+```bash
+axe mirror pair                      # show a one-time code and QR code for the app to scan or type
+axe mirror --udid "$UDID"            # host the simulator; Ctrl+C to stop
+axe mirror viewers                   # list the paired viewers
+axe mirror unpair "Ada's iPhone"     # remove one by name or ID
+```
+
+`mirror pair` prints a ten-character code (`XXXXX-XXXXX`) and the same code as a QR code in the terminal, then waits for the app to use it. The code works once and for ten minutes, and the host does not have to be running. `--name` sets the name the app shows for this Mac (the Mac's own name by default), and `--json` prints JSON lines instead of the QR code: one with the code, one when a viewer has paired. Only paired viewers can connect; any other is refused before any video or touch is exchanged. `mirror viewers` lists them by name, date paired and ID (`--json` for JSON), and `mirror unpair` removes one by its name, its ID or the first six or more characters of its ID.
+
+`axe mirror --udid <UDID>` streams the screen as HEVC video at up to 60 frames a second, with a bitrate that adapts to the link, to one viewer at a time. It replays the viewer's touches, with one or two fingers, and its Home, app switcher and Lock buttons. It prints one JSON line per event on standard output and its logs on standard error:
+
+```text
+{"event":"relays","relays":"https://eu1.relay.axe-cli.com","source":"published list"}
+{"event":"endpoint","hostID":"<host ID>"}
+{"event":"ready","relay":"<relay URL>","udid":"<UDID>"}
+{"event":"viewerConnected"}
+{"event":"streaming","height":"2296","width":"1056"}
+{"event":"path","kind":"direct"}
+{"event":"viewerDisconnected"}
+{"event":"stopped"}
+```
+
+`path` has `kind` `direct` or `relay`. The other events are `refused` (`viewer`, `reason`), when a viewer that is not paired tries to connect, and `error` (`message`). Every value is a string. Ctrl+C or SIGTERM stops the host.
+
+Connections are encrypted from end to end (QUIC, through the [iroh](https://github.com/n0-computer/iroh) library). The two devices connect directly when they can and through a relay when they cannot; a relay cannot read the video or the touches. AXe reads its relay list from the DNS TXT record `_relays.axe-cli.com` and falls back to a built-in list. iroh's public relays are a last resort, for when none of AXe's answers. `--relay-url <URL>`, on `mirror` and `mirror pair`, uses that relay and no other.
+
+```bash
+axe mirror --udid "$UDID" --demo --demo-app com.example.MyApp
+```
+
+`--demo` runs a public demo host: any viewer may connect without pairing, one at a time. It keeps the viewer inside one app: the hardware buttons are off, touches that start at the top or bottom edge of the screen are dropped, and the bitrate is capped. `--demo-app` names the app kept in front. A demo host has its own key, so it never opens this Mac's paired host.
+
+`axe mirror` needs an Apple silicon Mac with macOS 14.5 or later and works on simulators only; the rest of AXe is unchanged. The host key and the list of paired viewers are in `~/Library/Application Support/AXe/mirror/` (`host.key`, `viewers.json`), readable by you only. The app's source is in [AXeMirror/](AXeMirror/README.md).
+
 ## Displays, hinge and rotation
 
 ```
@@ -293,7 +331,7 @@ AXe supports Xcode 26 and Xcode 27. Xcode 27 simulator automation uses Device Hu
 
 ## Development
 
-AXe keeps its own copy of the IDB frameworks it uses, `FBControlCore` and `FBSimulatorControl`, in [Packages/IDBKit](Packages/IDBKit/README.md); edit them directly. XcodeGen is required to generate their project.
+AXe keeps its own copy of the IDB frameworks it uses, `FBControlCore` and `FBSimulatorControl`, in [Packages/IDBKit](Packages/IDBKit/README.md); edit them directly. XcodeGen is required to generate their project. The AXe Mirror app for iPhone and iPad is in [AXeMirror/](AXeMirror/README.md), also an XcodeGen project.
 
 ```bash
 make build      # rebuilds the IDBKit frameworks only when stale, then swift build
@@ -333,6 +371,6 @@ AXe is an independent open-source iOS Simulator automation project and is not af
 
 This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-Third-party licensing notices, including Meta's IDB MIT attribution, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
+Third-party licensing notices, including Meta's IDB MIT attribution and the MIT and Apache 2.0 licences of iroh, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
 
 The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's root MIT licence is unchanged.

@@ -259,10 +259,46 @@ function invoke_xcodebuild() {
   return $exit_code
 }
 
+# Runs `swift build` for one architecture. iroh, which `axe mirror` needs, ships for
+# Apple silicon only, so the Intel slice is built without the mirror feature:
+# Package.swift leaves iroh out when AXE_WITHOUT_MIRROR is set. The arm64 slice is
+# always built with it, whatever the caller's environment says.
+# $1: Architecture; the rest is passed to swift build.
+function swift_build_for_arch() {
+  local target_arch="$1"
+  shift
+  if [[ "$target_arch" == "x86_64" ]]; then
+    AXE_WITHOUT_MIRROR=1 swift build --arch "$target_arch" "$@"
+  else
+    env -u AXE_WITHOUT_MIRROR swift build --arch "$target_arch" "$@"
+  fi
+}
+
 function swift_build_bin_path() {
   local build_config="$1"
   local target_arch="$2"
-  swift build --configuration "$build_config" --arch "$target_arch" --show-bin-path
+  swift_build_for_arch "$target_arch" --configuration "$build_config" --show-bin-path
+}
+
+# Building with and without the mirror feature makes SwiftPM rewrite Package.resolved
+# (the iroh pin goes and comes back). Keep a copy and put it back afterwards, also
+# when a build fails, so the script leaves the file as it found it.
+PACKAGE_RESOLVED_PATH="${REPO_ROOT}/Package.resolved"
+PACKAGE_RESOLVED_BACKUP=""
+
+function save_package_resolved() {
+  [[ -f "$PACKAGE_RESOLVED_PATH" ]] || return 0
+  PACKAGE_RESOLVED_BACKUP="$(mktemp)"
+  cp "$PACKAGE_RESOLVED_PATH" "$PACKAGE_RESOLVED_BACKUP"
+  trap restore_package_resolved EXIT
+}
+
+function restore_package_resolved() {
+  [[ -n "$PACKAGE_RESOLVED_BACKUP" && -f "$PACKAGE_RESOLVED_BACKUP" ]] || return 0
+  cmp -s "$PACKAGE_RESOLVED_BACKUP" "$PACKAGE_RESOLVED_PATH" ||
+    cp "$PACKAGE_RESOLVED_BACKUP" "$PACKAGE_RESOLVED_PATH"
+  rm -f "$PACKAGE_RESOLVED_BACKUP"
+  PACKAGE_RESOLVED_BACKUP=""
 }
 
 function copy_resource_bundle() {
@@ -668,11 +704,12 @@ function build_axe_executable() {
   local executable_dest="${output_base_dir}/axe"
   require_build_architectures
   print_subsection "⚡" "Building AXe Executable"
+  save_package_resolved
   swift package clean
   local target_arch executable_source slice
   local slices=()
   for target_arch in $AXE_BUILD_ARCHS; do
-    swift build --configuration "$build_config" --arch "$target_arch"
+    swift_build_for_arch "$target_arch" --configuration "$build_config"
     executable_source="$(swift_build_bin_path "$build_config" "$target_arch")/axe"
     if [[ ! -f "$executable_source" ]]; then
       echo "Error: AXe executable not found: $executable_source" >&2
@@ -694,6 +731,7 @@ function build_axe_executable() {
   for slice in "${slices[@]}"; do rm -f "$slice"; done
 
   copy_resource_bundle "${output_base_dir}"
+  restore_package_resolved
 
   for target_arch in $AXE_BUILD_ARCHS; do
     verify_macho_has_arch "${executable_dest}" "$target_arch"
