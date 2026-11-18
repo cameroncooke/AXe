@@ -38,6 +38,18 @@
                                            error:(NSError * _Nullable * _Nullable)error;
 
 /**
+ As above, and runs `whileLoaded` after Accessibility has loaded and before the session ends.
+ Ending the session switches app Accessibility off again; a WebKit page that has not built its
+ tree by then stays without one, so a web read probes inside this block. A caller that joins
+ another caller's preparation does not run its block.
+ */
++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(nonnull id)simulatorDevice
+                                         timeout:(NSTimeInterval)timeout
+                                          logger:(nullable id<FBControlCoreLogger>)logger
+                                     whileLoaded:(void (^ _Nullable)(void))whileLoaded
+                                           error:(NSError * _Nullable * _Nullable)error;
+
+/**
  All of the Frameworks for operations involving the HID and Framebuffer.
  */
 @property (class, nonnull, nonatomic, readonly, strong) FBSimulatorControlFrameworkLoader *xcodeFrameworks;

@@ -69,6 +69,9 @@ public struct FBSimulatorAXNode: Codable, Sendable {
   public let focused: Bool?
   public let enabled: Bool?
   public let hidden: Bool?
+  /// A hosted web control's container that answers a point read at the control's tap point
+  /// (a heading around a link). Absent for every other node.
+  public let webTapAnswer: FBSimulatorAXNativeIdentity?
   public let children: [FBSimulatorAXNode]
 
   enum CodingKeys: String, CodingKey {
@@ -77,6 +80,7 @@ public struct FBSimulatorAXNode: Codable, Sendable {
     case focused, enabled, hidden
     case role, roleDescription = "role_description", subrole, nativeIdentity
     case customActionNames = "custom_actions"
+    case webTapAnswer
   }
   private struct Frame: Codable { let x: Double; let y: Double; let width: Double; let height: Double }
 
@@ -97,6 +101,7 @@ public struct FBSimulatorAXNode: Codable, Sendable {
     focused = try values.decodeIfPresent(Bool.self, forKey: .focused)
     enabled = try values.decodeIfPresent(Bool.self, forKey: .enabled)
     hidden = try values.decodeIfPresent(Bool.self, forKey: .hidden)
+    webTapAnswer = try values.decodeIfPresent(FBSimulatorAXNativeIdentity.self, forKey: .webTapAnswer)
     let value = try values.decodeIfPresent(Frame.self, forKey: .frame)
     frame = value.map { CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height) }
     children = try values.decodeIfPresent([Self].self, forKey: .children) ?? []
@@ -118,6 +123,7 @@ public struct FBSimulatorAXNode: Codable, Sendable {
     try values.encodeIfPresent(focused, forKey: .focused)
     try values.encodeIfPresent(enabled, forKey: .enabled)
     try values.encodeIfPresent(hidden, forKey: .hidden)
+    try values.encodeIfPresent(webTapAnswer, forKey: .webTapAnswer)
     if let frame {
       try values.encode(Frame(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height), forKey: .frame)
     }

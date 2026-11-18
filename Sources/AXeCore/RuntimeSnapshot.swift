@@ -20,6 +20,8 @@ public enum RuntimeElementRole: String, Codable, Sendable {
     case cell
     case image
     case keyboardKey = "keyboard-key"
+    /// A web page link. Only web control rows use it; native roles never derive it.
+    case link
     case list
     case menu
     case other

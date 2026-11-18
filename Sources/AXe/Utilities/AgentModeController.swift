@@ -29,6 +29,8 @@ final class AgentModeController {
     var record: Record?
     private var sequence = 0
     private(set) var isBusy = false
+    /// Whether this request's reads also read hosted web pages. Set per request by `perform`.
+    var readsWebContent = false
 
     init(simulatorUDID: String, logger: AxeLogger, owner: SelectedHIDOwner,
          discoverDisplay: DisplayDiscovery? = nil) {
@@ -40,7 +42,21 @@ final class AgentModeController {
 
     static func canReuseSnapshot(_ previous: AgentModeSnapshot, with fresh: AgentModeSnapshot) -> Bool {
         previous.hash == fresh.hash && previous.nativeFingerprint == fresh.nativeFingerprint
-            && previous.protectedTargetsMatch(fresh)
+            && previous.web?.digest == fresh.web?.digest && previous.protectedTargetsMatch(fresh)
+    }
+
+    /// A capture asked for web content with --web; an action on a `w` ref, or any request on a
+    /// snapshot that read web content, keeps reading it so every replacement keeps its `w` rows.
+    nonisolated static func readsWebContent(_ mode: AgentModeRequest?, snapshotID: UUID?, record: Record?) -> Bool {
+        if mode?.includeWebContent == true || mode?.namesWebControl == true { return true }
+        guard let snapshotID, let record, snapshotID == record.id else { return false }
+        return record.snapshot.web != nil
+    }
+
+    /// The web controls a read returned, or nil when it did not ask for them.
+    nonisolated static func webControls(_ response: SelectedHIDResponse?) -> AgentWebControls? {
+        guard let ax = response?.ax, ax.webControls != nil || ax.webFailure != nil else { return nil }
+        return AgentWebControls(nodes: ax.webControls ?? [], failure: ax.webFailure, keyboard: ax.webKeyboard ?? [])
     }
 
     func maintain() async {
@@ -64,7 +80,8 @@ final class AgentModeController {
     func perform(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
         guard !isBusy, !owner.isBusy else { return reject(request) }
         isBusy = true
-        defer { isBusy = false }
+        readsWebContent = Self.readsWebContent(request.agent, snapshotID: request.agent?.snapshotID, record: record)
+        defer { isBusy = false; readsWebContent = false }
         return withReadingContinuation(await performReserved(request), request: request)
     }
 
@@ -72,6 +89,8 @@ final class AgentModeController {
     func performBatch(_ request: SelectedHIDRequest) async -> SelectedHIDResponse {
         guard !isBusy, !owner.isBusy else { return reject(request) }
         isBusy = true
+        // Batches act on app refs only and capture the app's own tree.
+        readsWebContent = false
         defer { isBusy = false }
         return await performBatchRetrying(request)
     }
@@ -104,6 +123,9 @@ final class AgentModeController {
     func performReserved(_ request: SelectedHIDRequest,
                                  focusPlan: AgentFocusAndTypePlan? = nil, retryDepth: Int = 0,
                                  preread: Record? = nil) async -> SelectedHIDResponse {
+        if request.agent?.namesWebControl == true {
+            return await performWebReserved(request)
+        }
         if request.agent?.kind == .focusAndType {
             return await performFocusAndTypeRetrying(request, retryDepth: retryDepth)
         }
@@ -189,7 +211,8 @@ final class AgentModeController {
                 context = observedContext
                 pid = observedPID
                 snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
-                    try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata, context: observedContext)
+                    try AgentModeSnapshot(roots: roots, nativeIdentityMetadata: observed.ax?.nativeIdentityMetadata,
+                        context: observedContext, web: Self.webControls(observed))
                 }
                 fresh = observed
             }
@@ -334,7 +357,7 @@ final class AgentModeController {
 
     /// A refusal before any input returns the current screen as a new table, so recovery needs
     /// no separate description. Nothing is replayed.
-    private func refusal(_ request: SelectedHIDRequest, _ error: AgentModeFailure,
+    func refusal(_ request: SelectedHIDRequest, _ error: AgentModeFailure,
                          native: SelectedHIDResponse?, action: AgentModeActionReceipt?,
                          context: SelectedHIDContext?, pid: Int32?,
                          original: AgentModeSnapshot? = nil, retryDepth: Int = 0,
@@ -460,7 +483,8 @@ final class AgentModeController {
               let fresh = try? await observe(display: display, pid: pid),
               let freshContext = fresh.context, let roots = fresh.ax?.roots, let freshPID = fresh.ax?.expectedPID,
               let snapshot = try? AgentModeSnapshot(roots: roots,
-                  nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: freshContext) else { return nil }
+                  nativeIdentityMetadata: fresh.ax?.nativeIdentityMetadata, context: freshContext,
+                  web: Self.webControls(fresh)) else { return nil }
         return store(snapshot, context: freshContext, pid: freshPID)
     }
 
@@ -482,7 +506,7 @@ final class AgentModeController {
             && mode.selectorKind == nil && mode.tapSelector == nil
     }
 
-    private func receipt(_ kind: AgentModeRequest.Kind, _ result: SelectedHIDResponse,
+    func receipt(_ kind: AgentModeRequest.Kind, _ result: SelectedHIDResponse,
                          retried: Bool) -> AgentModeActionReceipt {
         AgentModeActionReceipt(kind: kind, outcome: result.outcome,
             enqueuedEventCount: result.enqueuedEventCount, cleanup: result.cleanup, replayed: false,
@@ -491,7 +515,7 @@ final class AgentModeController {
     }
 
     /// A fresh replacement is useful, but its failure must not suggest replaying the action.
-    private func publishReplacement(_ request: SelectedHIDRequest, mode: AgentModeRequest,
+    func publishReplacement(_ request: SelectedHIDRequest, mode: AgentModeRequest,
                                     result: SelectedHIDResponse, action: AgentModeActionReceipt,
                                     context: SelectedHIDContext, pid: Int32) async -> SelectedHIDResponse {
         do {
@@ -507,7 +531,8 @@ final class AgentModeController {
                         }
                         let snapshot = try PhaseTimer.measureSync("agent.snapshotBuild") {
                             try AgentModeSnapshot(roots: afterRoots,
-                                nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: observedContext)
+                                nativeIdentityMetadata: after.ax?.nativeIdentityMetadata, context: observedContext,
+                                web: Self.webControls(after))
                         }
                         return (observedContext, snapshot)
                     }
@@ -562,7 +587,7 @@ final class AgentModeController {
         }
     }
 
-    private static func display(of context: SelectedHIDContext) throws -> ActivePanelIdentity {
+    static func display(of context: SelectedHIDContext) throws -> ActivePanelIdentity {
         guard let uuid = UUID(uuidString: context.screenUUID) else {
             throw AgentModeFailure.missingContext
         }
@@ -571,7 +596,7 @@ final class AgentModeController {
 
     /// An explicit display option must name the table's display. No display is measured here;
     /// the table's panel is admitted by the full context read that follows.
-    private func requireRequestedDisplay(_ request: SelectedHIDRequest, matches context: SelectedHIDContext) throws {
+    func requireRequestedDisplay(_ request: SelectedHIDRequest, matches context: SelectedHIDContext) throws {
         guard let requestedID = request.screenID, let requestedUUID = request.screenUUID else { return }
         guard requestedID == context.screenID, requestedUUID == UUID(uuidString: context.screenUUID) else {
             throw AgentModeFailure("inactiveDisplay", "The display you selected is not this snapshot's display, so nothing was sent. Use the display of the capture, or capture again on the display you want.")
@@ -654,7 +679,8 @@ final class AgentModeController {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
             screenID: display.displayID, screenUUID: display.uniqueID, operation: .complete, token: nil,
             payload: .ax(SelectedAXRequest(kind: .describe, expectedPID: pid,
-                endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0, includeNativeIdentity: true)))
+                endpoint: nil, selectorKind: nil, selectorValue: nil, preDelay: 0, postDelay: 0, includeNativeIdentity: true,
+                includeWebContent: readsWebContent ? true : nil)))
         let result = await PhaseTimer.measure("agent.observe") { await owner.perform(request) }
         guard result.error == nil, result.cleanup != "uncertain" else {
             throw AgentModeNativeFailure(response: result)

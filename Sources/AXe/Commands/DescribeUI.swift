@@ -5,12 +5,13 @@ struct DescribeUI: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Print the accessibility tree as JSON.",
         discussion: """
-        --point prints only the element at one point. With --agent it prints a compact snapshot whose refs other agent commands act on; see the AXe skill.
+        --point prints only the element at one point. With --agent it prints a compact snapshot whose refs other agent commands act on; see the AXe skill. --agent --web also lists the links, buttons and fields of web pages on screen (web views, Safari, sign-in sheets) as w refs that tap and type act on.
 
         Examples:
           axe describe-ui --udid <UDID>
           axe describe-ui --point 200,400 --udid <UDID>
           axe describe-ui --agent --view navigation --udid <UDID>
+          axe describe-ui --agent --web --udid <UDID>
         """
     )
 
@@ -55,6 +56,9 @@ struct DescribeUI: PhysicalDeviceCommand {
     @Option(name: .customLong("text-limit"), help: "--read-ref: Unicode scalars to return, 1 to 4096 (default 1024).")
     var textLimit: Int?
 
+    @Flag(name: .customLong("web"), help: "Agent only: also list the controls of web pages on screen as w refs. Later actions on this snapshot keep reading them.")
+    var includeWebContent = false
+
     func validate() throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID), hasSimulatorOnlyOptions { return }
         try agentMode.validate()
@@ -77,7 +81,7 @@ struct DescribeUI: PhysicalDeviceCommand {
             }
             if let readRef {
                 try agentMode.requireSnapshot()
-                guard !readRef.isEmpty, sinceScreenHash == nil, rowOffset == nil, rowLimit == nil else {
+                guard !readRef.isEmpty, sinceScreenHash == nil, rowOffset == nil, rowLimit == nil, !includeWebContent else {
                     throw ValidationError("--read-ref requires one snapshot reference, without hash polling or row paging.")
                 }
                 try AgentModeTextQuery(field: textField ?? .label, offset: textOffset ?? 0,
@@ -88,8 +92,8 @@ struct DescribeUI: PhysicalDeviceCommand {
             return
         }
         guard sinceScreenHash == nil, rowOffset == nil, rowLimit == nil, readRef == nil,
-              textField == nil, textOffset == nil, textLimit == nil else {
-            throw ValidationError("Agent hash, row and reference-read options require --agent.")
+              textField == nil, textOffset == nil, textLimit == nil, !includeWebContent else {
+            throw ValidationError("Agent hash, row, reference-read and --web options require --agent.")
         }
         try selectedInput.validate()
         try selectedAX.validate(allowed: selectedInput.mode == .selected)
@@ -99,7 +103,7 @@ struct DescribeUI: PhysicalDeviceCommand {
     private var hasSimulatorOnlyOptions: Bool {
         PhysicalAccessibilityCommands.usesSimulatorOptions(input: selectedInput, ax: selectedAX, agent: agentMode)
             || minimalKeys || sinceScreenHash != nil || rowOffset != nil || rowLimit != nil || readRef != nil
-            || textField != nil || textOffset != nil || textLimit != nil
+            || textField != nil || textOffset != nil || textLimit != nil || includeWebContent
     }
 
     func validateOnDevice(inBatch: Bool) throws {
@@ -154,7 +158,8 @@ struct DescribeUI: PhysicalDeviceCommand {
             expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, sinceScreenHash: sinceScreenHash,
             rowOffset: rowOffset ?? 0, rowLimit: rowLimit ?? 64,
             readReference: readRef, textQuery: readRef.map { _ in AgentModeTextQuery(
-                field: textField ?? .label, offset: textOffset ?? 0, limit: textLimit ?? 1024) }), input: selectedInput)
+                field: textField ?? .label, offset: textOffset ?? 0, limit: textLimit ?? 1024) },
+            includeWebContent: includeWebContent ? true : nil), input: selectedInput)
     }
 
     func selectedRequest() throws -> SelectedHIDRequest {

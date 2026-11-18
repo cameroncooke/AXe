@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 92
+    static let version = 93
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
 
     /// What a request asks the owner to do. A request carries exactly one, so a mixed request

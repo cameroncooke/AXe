@@ -7,7 +7,7 @@ struct KeyCombo: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press a key while holding modifier keys.",
         discussion: """
-        AXe presses the modifiers in order, presses and releases the key, then releases the modifiers in reverse order. Modifiers: 224 Control, 225 Shift, 226 Option, 227 Command, and 228 to 231 for the right-hand keys; physical devices and selected input accept only these. With --agent, pass the --snapshot-id and --ref of the focused TextField.
+        AXe presses the modifiers in order, presses and releases the key, then releases the modifiers in reverse order. Modifiers: 224 Control, 225 Shift, 226 Option, 227 Command, and 228 to 231 for the right-hand keys; physical devices and selected input accept only these. With --agent, pass the --snapshot-id and --ref of the focused TextField, or of a web field (wN), which AXe taps first so the caret is at the end of its text.
 
         Examples:
           axe key-combo --modifiers 227 --key 4 --udid <UDID>        # Cmd+A

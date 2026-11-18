@@ -7,7 +7,7 @@ struct Key: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press one key by HID keycode.",
         discussion: """
-        Common keycodes: 40 Return, 41 Escape, 42 Backspace, 43 Tab, 44 Space, 4 to 29 the letters a to z. With --agent, pass the --snapshot-id and --ref of the focused TextField.
+        Common keycodes: 40 Return, 41 Escape, 42 Backspace, 43 Tab, 44 Space, 4 to 29 the letters a to z. With --agent, pass the --snapshot-id and --ref of the focused TextField, or of a web field (wN), which AXe taps first so the caret is at the end of its text.
 
         Examples:
           axe key 40 --udid <UDID>
