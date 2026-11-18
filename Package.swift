@@ -22,10 +22,21 @@ let idbPrivateHeaderSearchFlags = [
 // unsafe flags to its generated test runner, leaving a bare `-I` that consumes the next option.
 ].map { "-I\($0.path)" }
 
+// `axe mirror` carries its stream over iroh. The prebuilt iroh library is Apple silicon only and
+// needs macOS 14.5, so a build with AXE_WITHOUT_MIRROR set (the Intel slice) leaves it out and
+// gets a command that says so.
+let includeMirror = ProcessInfo.processInfo.environment["AXE_WITHOUT_MIRROR"] == nil
+let mirrorPackages: [Package.Dependency] = includeMirror
+    ? [.package(url: "https://github.com/n0-computer/iroh-ffi", exact: "1.2.0")]
+    : []
+let mirrorProducts: [Target.Dependency] = includeMirror
+    ? [.product(name: "IrohLib", package: "iroh-ffi")]
+    : []
+
 let package = Package(
     name: "AXe",
     platforms: [
-        .macOS(.v14)
+        .macOS(includeMirror ? "14.5" : "14.0")
     ],
     products: [
         .library(
@@ -39,7 +50,7 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.5.0"),
-    ],
+    ] + mirrorPackages,
     targets: [
         .target(
             name: "AXeCore",
@@ -52,7 +63,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 "FBSimulatorControl",
                 "FBControlCore"
-            ],
+            ] + mirrorProducts,
             path: "Sources/AXe",
             resources: [
                 .copy("Resources/skills"),
@@ -60,7 +71,7 @@ let package = Package(
             ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"] + idbPrivateHeaderSearchFlags)
-            ],
+            ] + (includeMirror ? [.define("AXE_MIRROR")] : []),
             linkerSettings: [
                 .unsafeFlags([
                     "-Xlinker", "-dead_strip",
@@ -81,7 +92,7 @@ let package = Package(
             path: "Tests",
             swiftSettings: [
                 .unsafeFlags(idbPrivateHeaderSearchFlags)
-            ]
+            ] + (includeMirror ? [.define("AXE_MIRROR")] : [])
         ),
         .plugin(
             name: "VersionPlugin",

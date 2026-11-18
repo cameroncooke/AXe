@@ -1,6 +1,15 @@
 {
-  "originHash" : "88a6a8cc67faab9df6f937f7dec23f89d6685f7533ea4697e78637780d8794d8",
+  "originHash" : "e5810bc07c7d3b2a6ea78768ca17fdbe1426ca2fbc7e622d35e5129b3e7085b6",
   "pins" : [
+    {
+      "identity" : "iroh-ffi",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/n0-computer/iroh-ffi",
+      "state" : {
+        "revision" : "66a8d619a4d791d458d582f312df6e0ab42bc541",
+        "version" : "1.2.0"
+      }
+    },
     {
       "identity" : "swift-argument-parser",
       "kind" : "remoteSourceControl",

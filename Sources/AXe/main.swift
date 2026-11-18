@@ -53,6 +53,7 @@ struct Axe: AsyncParsableCommand {
             Screenshot.self,
             Batch.self,
             Serve.self,
+            MirrorCommand.self,
             SliderReadWorkerCommand.self,
             HIDBrokerCommand.self,
             PhysicalDeviceBrokerCommand.self

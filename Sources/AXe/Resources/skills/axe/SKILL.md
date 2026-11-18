@@ -1,6 +1,6 @@
 ---
 name: axe
-description: Official skill for the AXe CLI, which gives agents eyes and hands on iOS apps. Sees and operates app UI, including web pages in Safari and web views, takes screenshots and changes device settings on iOS Simulators and physical iPhones and iPads. Use when checking, testing or validating an iOS app after building or changing it, or whenever an iOS app's screen needs to be seen or driven.
+description: Official skill for the AXe CLI, which gives agents eyes and hands on iOS apps. Sees and operates app UI, including web pages in Safari and web views, takes screenshots and changes device settings on iOS Simulators and physical iPhones and iPads. Use when checking, testing or validating an iOS app after building or changing it, or whenever an iOS app's screen needs to be seen or driven. Also use when the user wants to see or touch a simulator from their own iPhone or iPad, or to pair that device (axe mirror).
 ---
 
 # AXe
@@ -154,3 +154,4 @@ Agent mode covers app reads and input on every simulator, including the iPhone D
 | run a command with no UI target (`list-simulators`, `displays`, `screenshot`, `button`, `shutdown`) or a gesture with no agent form | [cli-quick-reference.md](references/cli-quick-reference.md) |
 | record or stream video | [recording-reference.md](references/recording-reference.md) |
 | stage text on the clipboard | [clipboard-reference.md](references/clipboard-reference.md) |
+| show a simulator live on the user's iPhone or iPad, or pair that device (`axe mirror`, long-running, prints JSON events) | [mirror-reference.md](references/mirror-reference.md) |
