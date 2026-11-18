@@ -1,6 +1,6 @@
 ---
 name: axe
-description: Official skill for the AXe CLI, which gives agents eyes and hands on iOS apps. Sees and operates app UI, takes screenshots and changes device settings on iOS Simulators and physical iPhones and iPads. Use when checking, testing or validating an iOS app after building or changing it, or whenever an iOS app's screen needs to be seen or driven.
+description: Official skill for the AXe CLI, which gives agents eyes and hands on iOS apps. Sees and operates app UI, including web pages in Safari and web views, takes screenshots and changes device settings on iOS Simulators and physical iPhones and iPads. Use when checking, testing or validating an iOS app after building or changing it, or whenever an iOS app's screen needs to be seen or driven.
 ---
 
 # AXe
@@ -104,18 +104,18 @@ Also:
 
 ## Web pages
 
-Web views, Safari, SFSafariViewController and sign-in sheets show a page as one area. Add `--web` to list its links, buttons, fields and checkboxes as `w` rows:
+A web view, Safari or a Safari sheet shows a page as one area. Add `--web` to list its controls as `w` rows:
 
 ```bash
 axe describe-ui --agent --web --view navigation --udid <UDID>
 ```
 
-- Tap a `w` row like any ref. Type into a web field only with `--focus`: `axe type 'ada@example.com' --agent --focus --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref w2`.
-- `key`, `key-combo` and `key-sequence` take a web field ref too and tap it first, near its right end. In a one-line field whose text fits, the caret is then at the end, so one Backspace (42) per character of the value its row shows, in one `key-sequence`, clears it; check a multi-line or overflowing field in a screenshot. A selection does not survive to the next command.
-- Safari sheets list their toolbar (Back, Forward, Reload, Share, Open in Safari) and the keyboard's Previous, Next and Done as `w` rows. Their Close button is not listed: tap it by coordinates from a screenshot.
-- Tapping a pop-up button (`<select>`) lists its options as `w` rows; tap one to choose it. Search suggestions (ARIA options) are `w` buttons too.
-- Only controls a tap would reach now are listed. Read page text from a screenshot. Text that only reacts to a click handler has no row; tap it by coordinates. To reach more, swipe the web view's own `swipe` row (an `e` ref) with `--direction up`; the swipe may start on the page.
-- Actions on a `--web` snapshot keep returning `w` rows. Batches do not take `w` refs. Details: [agent-reference.md](references/agent-reference.md#web-pages).
+- Tap a `w` row like any ref. A pop-up button's options and search suggestions come back as `w` rows to tap.
+- Type only with `--focus`: `axe type 'ada@example.com' --agent --focus --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref w2`.
+- `key`, `key-combo` and `key-sequence` on a `w` field tap it first, leaving the caret at the end of a one-line field. Clear one with a single `key-sequence` of one 42 (Backspace) per character of its value; check other fields in a screenshot first.
+- Only controls a tap would reach now are listed. Read page text from a screenshot. Tap click-only text and a Safari sheet's Close button by coordinates.
+- Scroll with the web view's own `swipe` row (an `e` ref). Actions on a `--web` snapshot keep returning `w` rows.
+- Batches do not take `w` refs. Details: [agent-reference.md](references/agent-reference.md#web-pages).
 
 ## Coordinates (fallback)
 
