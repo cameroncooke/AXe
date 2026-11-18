@@ -135,7 +135,16 @@
           "type": "object",
           "additionalProperties": { "type": "array", "items": { "type": "string" } }
         },
-        "truncatedCustomActionRefs": { "type": "array", "items": { "type": "string" } }
+        "truncatedCustomActionRefs": { "type": "array", "items": { "type": "string" } },
+        "webContent": {
+          "description": "Present when the capture read web pages (describe-ui --agent --web, or an action on such a snapshot): the number of w rows, or why the web read returned none.",
+          "type": "object",
+          "required": ["controls"],
+          "properties": {
+            "controls": { "type": "integer", "minimum": 0 },
+            "failure": { "enum": ["unsupportedRotation", "readFailed"] }
+          }
+        }
       }
     },
     "quarantine": {

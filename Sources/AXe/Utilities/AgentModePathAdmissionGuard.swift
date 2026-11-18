@@ -139,6 +139,11 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             try checkDeadline()
             return nil
         }
+        let native = result.outcome == .ready && result.snapshot?.roots.first?.pid == admission.expectedPID
+        if kind == .swipe, !native {
+            // A web page in the app draws in its own WebKit process; the swipe scrolls the page.
+            return try await webPageHit(at: start, observation: observation)
+        }
         guard result.outcome == .ready, let snapshot = result.snapshot, snapshot.roots.count == 1,
               let hit = snapshot.roots.first, hit.pid == admission.expectedPID,
               hit.type?.isEmpty == false, hit.hidden != true, hit.enabled != false,
@@ -147,6 +152,23 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
         }
         try checkDeadline()
         return hit
+    }
+
+    /// The element at a swipe start on a WebKit page: another process than the app's, proved to
+    /// be a page process, with the app still in front.
+    private func webPageHit(at start: CGPoint, observation: FBSimulatorHIDSessionObservation) async throws -> FBSimulatorAXNode {
+        do {
+            let hit = try await PhaseTimer.measure("native.pathGuard.webPointHit") {
+                try await FBSimulatorAXSnapshot.webElement(at: start, for: simulator, expectedPID: admission.expectedPID,
+                    observation: observation, freshnessProvider: feed, timeoutSeconds: 3, pageOnly: true)
+            }
+            try checkDeadline()
+            return hit
+        } catch let failure as AgentModeFailure {
+            throw failure
+        } catch {
+            throw AgentModeFailure("\(kind.rawValue)PointReadFailed", "AXe could not confirm the control at the \(kind.rawValue) start, so nothing was sent. \(AgentModeFailure.actFromCapture)")
+        }
     }
 
     private func validateRelationship(hit: FBSimulatorAXNode?, start: CGPoint, tree: AgentModeSnapshot,
@@ -176,6 +198,8 @@ final class AgentModePathAdmissionGuard: FBSimulatorHIDInputAdmissionGuard {
             try validateEmptyStart(start, area: target, tree: tree)
             return
         }
+        // A start on a web page (proved by webPageHit): the selected area holds the whole path.
+        if kind == .swipe, hit.pid != admission.expectedPID { return }
         if kind == .swipe, nativeTarget.nativeIdentity != nil,
            try AgentModeCoarseScrollAdmission.validateIfAncestor(hit: hit, area: target,
                 start: start, ends: ends, snapshot: tree,

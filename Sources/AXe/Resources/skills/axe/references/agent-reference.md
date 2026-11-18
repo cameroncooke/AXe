@@ -18,6 +18,7 @@
 - [Double-tap a control](#double-tap-a-control)
 - [Pinch inside an area](#pinch-inside-an-area)
 - [Run a small ordered agent batch](#run-a-small-ordered-agent-batch)
+- [Web pages](#web-pages)
 
 ## Output format
 
@@ -447,9 +448,33 @@ Use on a current tap-capable native TextField with a unique typed field ID or co
 - One broker reservation spans the command; native input leases are per phase.
 - Reply: the batch receipt shape with two phases, tap then type. Check both and the replacement capture. If typing failed after focus, the focus tap is still an input effect. A failed final observation keeps completed receipts and requires a refresh. Never resubmit either phase. Key cleanup and quarantine apply as usual.
 
+## Web pages
+
+```bash
+axe describe-ui --agent --web --udid <UDID>
+axe tap --agent --udid <UDID> --snapshot-id <UUID> --ref w3
+axe type 'ada@example.com' --agent --focus --udid <UDID> --snapshot-id <UUID> --ref w2
+```
+
+A web page (WKWebView in any app, Safari, SFSafariViewController, an ASWebAuthenticationSession sign-in sheet) runs in its own process, so a capture shows it as one area. `--web` also lists the page's controls as `w` rows after the app's own targets and before the keys of an on-screen keyboard (an iPad keyboard alone fills most of a 64-row page), for example `w2|typeText|text-field|Email|`.
+
+- Listed: links (`link`, including a link WebKit reports as a heading, such as a news site's story headline), buttons and pop-up buttons (`button`), text fields, text areas and search fields (`text-field`, action `typeText`), checkboxes and switches (`switch`, value `0` or `1`), sliders, and ARIA options such as search suggestions (`button`). Page text is not listed; read it from a screenshot. Text that only has a click handler (a `div` with `onclick`) looks like any text to accessibility and has no row; tap it by coordinates from a screenshot.
+- Pop-up buttons: tapping one (`<select>`) opens its options, which the returned capture lists as `w` rows; tap one to choose it.
+- Safari sheets (SFSafariViewController, ASWebAuthenticationSession): the bottom toolbar's Back, Forward, Share, Reload and Open in Safari, and the Previous, Next and Done bar above the keyboard, are `w` rows. Disabled ones (Back on the first page) have no row. The top bar's Close and page menu are not listed: on iOS 27.2 accessibility answers any point on that bar with the address label, so tap Close by coordinates from a screenshot. Safari's own toolbar is part of Safari's app tree and has `e` rows. Keyboard keys and suggestions are never rows.
+- Only controls a tap would reach now: AXe hit-tests each control's centre and keeps it only when the hit is that control or its own text. A control scrolled out of its web view, under the keyboard or under another view has no row.
+- A web view the app hides works with or without `isInspectable`.
+- In the full view (`--view full`), `capture.webContent` is present on a `--web` capture: `controls` is the number of `w` rows, `failure` says why there are none (`unsupportedRotation`: portrait only; `readFailed`).
+- Every later action on that snapshot, app refs included, reads web content again, so its capture keeps `w` rows. A capture without `--web` drops them.
+- `w` refs take `tap`, `type --focus`, `key`, `key-combo` and `key-sequence` only. Scroll with the web view's own `swipe` row (an `e` ref), then use the `w` rows of the returned capture. The swipe may start on the page itself: AXe checks that the element there belongs to a WebKit page process, with the app still in front, and that the scroll area holds the whole path. Batches do not accept `w` refs.
+- Tap: AXe reads the screen again, finds the control (the same element, or the one control with that role and label), and reads the element at its centre once more just before touch down. Something else there refuses with `targetCovered`.
+- Type: web fields report focus whether or not they have it, so typing always taps first and needs `--focus`; plain `type --ref wN` refuses with `unsupportedReference`. The tap lands near the right end of the field's visible part, so in a one-line field whose text fits the caret follows the existing text; in a text area or an overflowing field it may not. AXe then waits for the software keyboard (the app's own, or the one Safari's sign-in sheets draw) and refuses with `targetChanged` if it does not appear. The tap steps left of any other control drawn over the field's right end (a search field's Clear button). Before each key the field must still be the element at the centre of its visible part, which stays the field when such a control appears as text goes in; when the keyboard now covers the field, each key checks only that the same app is in front. Typing does not clear text.
+- Keys: `key`, `key-combo` and `key-sequence` on a `w` text field tap it first and wait for the keyboard, as `type --focus` does, then send the keys with the same check before each key down. In a one-line field whose text fits, the caret is at the end of the text, so `key-sequence` with one 42 (Backspace) per character of the row's value clears it; check other fields in a screenshot first. A selection made by one command (`key-combo --modifiers 227 --key 4`, Command+A) is lost when the next command taps the field.
+- After typing, a field that shows its value is read back. When it does not show the text, `nextSteps` says so; check a screenshot rather than typing again.
+- Cost: a `--web` capture took about 0.29 s against 0.13 s without on an iPhone 18 Pro simulator (release build), and a capture of BBC News about 0.45 s; a web tap about 0.8 s and a web type about 2 to 2.5 s including the returned capture.
+
 ## Keys on a focused field
 
-All three commands take a current `typeText` ref for an already focused, enabled, visible native TextField and do not focus it. Keycodes are HID codes in 0...255, not Unicode characters ([common keycodes](cli-quick-reference.md#common-keycodes)).
+All three commands take a current `typeText` ref for an already focused, enabled, visible native TextField and do not focus it. A web field ref (`wN`) is the exception: AXe taps it first, see [Web pages](#web-pages). Keycodes are HID codes in 0...255, not Unicode characters ([common keycodes](cli-quick-reference.md#common-keycodes)).
 
 ```bash
 axe key 42 --agent --udid <UDID> --snapshot-id <UUID> --ref <REF>                        # Backspace

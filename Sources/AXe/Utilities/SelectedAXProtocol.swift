@@ -63,7 +63,7 @@ struct SelectedAXDoubleTapTiming: Codable, Sendable {
 }
 
 struct SelectedAXRequest: Codable, Sendable {
-    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, sliderPercentage, semanticPress }
+    enum Kind: String, Codable, Sendable { case describe, describePoint, tap, hold, doubleTap, sliderEndpoint, sliderPercentage, semanticPress, webTap, webType }
     enum SelectorKind: String, Codable, Sendable, Equatable { case id, label, value }
     let kind: Kind
     let expectedPID: Int32?
@@ -81,6 +81,17 @@ struct SelectedAXRequest: Codable, Sendable {
     var percentage: Double? = nil
     var nativeTarget: SelectedNativeTarget? = nil
     var includeNativeIdentity: Bool? = nil
+    /// A whole-tree read also returns the controls of hosted web pages a tap would reach.
+    var includeWebContent: Bool? = nil
+    /// The web control a web tap or web typing acts on, from a web read of the same app.
+    var webTarget: FBSimulatorAXNode? = nil
+    /// Web typing's complete key sequence.
+    var keyEvents: [SelectedKeyboardPrimitive]? = nil
+    /// Web typing into a field the keyboard now covers, after AXe's own tap on it brought the
+    /// keyboard up: each key checks only that the app is still in front.
+    var webFieldCovered: Bool? = nil
+
+    var isWebInput: Bool { kind == .webTap || kind == .webType }
 
     static func endpoint(forPercentage value: Double) -> FBSimulatorSliderEndpoint? {
         if value == 0 { return .minimum }
@@ -101,8 +112,17 @@ struct SelectedAXRequest: Codable, Sendable {
         if kind != .sliderPercentage, percentage != nil {
             throw SelectedHIDFailure.invalid("Only a selected slider percentage accepts a percentage payload")
         }
-        if kind != .describePoint, point != nil {
-            throw SelectedHIDFailure.invalid("Only a selected point description accepts a point payload")
+        if kind != .describePoint, !isWebInput, point != nil {
+            throw SelectedHIDFailure.invalid("Only a selected point description or web input accepts a point payload")
+        }
+        if let includeWebContent, kind != .describe || !includeWebContent {
+            throw SelectedHIDFailure.invalid("Only a whole-tree read can include web content")
+        }
+        if !isWebInput, webTarget != nil || keyEvents != nil {
+            throw SelectedHIDFailure.invalid("Only web input accepts a web target or key events")
+        }
+        if let webFieldCovered, kind != .webType || !webFieldCovered {
+            throw SelectedHIDFailure.invalid("Only web typing can name a covered field")
         }
         if kind != .hold, holdDuration != nil {
             throw SelectedHIDFailure.invalid("Only an agent reference hold accepts a hold duration")
@@ -188,6 +208,22 @@ struct SelectedAXRequest: Codable, Sendable {
                   !selectorValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   selectorValue.utf8.count <= 4096, preDelay == 0, postDelay == 0 else {
                 throw SelectedHIDFailure.invalid("Selected slider requires an ID or label, native endpoint and no delays")
+            }
+        case .webTap, .webType:
+            // A web control lives in its page's WebContent process, never the app's own.
+            guard let expectedPID, endpoint == nil, selectorKind == nil, selectorValue == nil,
+                  elementType == nil, preDelay == 0, postDelay == 0, let point,
+                  point.x.isFinite, point.y.isFinite, point.x >= 0, point.y >= 0,
+                  let webTarget, AgentWebControls.isWebDiscovery(webTarget), let identity = webTarget.nativeIdentity,
+                  identity.pid > 0, identity.objectID > 0, identity.pid == webTarget.pid,
+                  identity.pid != expectedPID else {
+                throw SelectedHIDFailure.invalid("Web input requires the app's PID, one point and one web control from a web read")
+            }
+            if kind == .webType {
+                guard let keyEvents else { throw SelectedHIDFailure.invalid("Web typing requires its key events") }
+                try KeyboardPrimitives.validate(keyEvents, limits: .selected)
+            } else if keyEvents != nil {
+                throw SelectedHIDFailure.invalid("A web tap carries no key events")
             }
         }
     }
@@ -308,6 +344,15 @@ struct SelectedAXResult: Codable, Sendable {
     var validation: SelectedAXValidation?
     var rejectedHit: SelectedAXRejectedHit?
     var wait: SelectedAXWaitReceipt?
+    /// Controls of hosted web pages, for a read that asked for them. Nil when not asked or unread.
+    var webControls: [FBSimulatorAXNode]?
+    /// Why a requested web read returned no controls list.
+    var webFailure: String?
+    /// Elements where a keyboard sits, from any process, read with a web read. A keyboard another
+    /// process draws (SFSafariViewController, sign-in sheets) is absent from the app's own tree.
+    var webKeyboard: [FBSimulatorAXNode]?
+    /// The web element a web input confirmed at its point before its first event.
+    var webElement: FBSimulatorAXNode?
 }
 
 enum SelectedAXContentError: Error { case tooLarge }

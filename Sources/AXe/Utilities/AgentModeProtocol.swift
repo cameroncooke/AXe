@@ -35,9 +35,17 @@ struct AgentModeRequest: Codable, Sendable {
     var rowLimit: Int = 64
     var readReference: String? = nil
     var textQuery: AgentModeTextQuery? = nil
+    /// A capture that also reads hosted web pages and lists their controls as `w` refs.
+    var includeWebContent: Bool? = nil
+
+    /// A `w` ref names a hosted web control; only taps, typing and keys act on one.
+    var namesWebControl: Bool { ref.map(AgentWebControls.isReference) == true }
 
     func validate() throws {
         _ = try AgentModePIDPolicy.expectedPID(assertion: expectedPID, snapshot: nil)
+        if let includeWebContent, kind != .describe || !includeWebContent {
+            throw AgentModeFailure("invalidWebContent", "--web applies to describe-ui --agent only.")
+        }
         if kind == .focusAndType {
             guard snapshotID != nil, ref != nil, let text,
                   point == nil, selectorKind == nil, selectorValue == nil, tapSelector == nil,
@@ -177,9 +185,12 @@ struct AgentModeRequest: Codable, Sendable {
             throw AgentModeFailure("mixedPayload", "Drag destination and steps apply only to a reference drag.")
         }
         if let ref {
-            guard snapshotID != nil, ref.utf8.count <= 32, ref.first == "e",
+            guard snapshotID != nil, ref.utf8.count <= 32, ref.first == "e" || ref.first == "w",
                   let number = Int(ref.dropFirst()), number > 0 else {
-                throw AgentModeFailure("invalidReference", "A reference requires its immutable --snapshot-id and an eN name.")
+                throw AgentModeFailure("invalidReference", "A reference requires its immutable --snapshot-id and an eN or wN name.")
+            }
+            if namesWebControl, ![.tap, .typeText, .focusAndType, .keyPress, .keyCombo, .keySequence].contains(kind) {
+                throw AgentModeFailure("unsupportedReference", "A web control ref (wN) supports tap, type and keys only. Nothing was sent.")
             }
         }
         guard [point != nil, ref != nil, selectorValue != nil, tapSelector != nil].filter({ $0 }).count <= 1 else {
@@ -359,6 +370,14 @@ struct AgentModeCapture: Codable, Sendable {
     var customActions: [String: [String]]? = nil
     var truncatedCustomActionRefs: [String]? = nil
     var scrollPreview: AgentModeScrollPreview? = nil
+    /// Present when the capture read hosted web pages: how many `w` rows it found, or why not.
+    var webContent: AgentModeWebContentState? = nil
+}
+
+/// What a capture's web read found.
+struct AgentModeWebContentState: Codable, Sendable {
+    let controls: Int
+    let failure: String?
 }
 
 struct AgentModeActionReceipt: Codable, Sendable {

@@ -7,7 +7,7 @@ struct KeySequence: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Press several keys in order by HID keycode.",
         discussion: """
-        Each key is pressed and released before the next. With --agent, pass the --snapshot-id and --ref of the focused TextField.
+        Each key is pressed and released before the next. With --agent, pass the --snapshot-id and --ref of the focused TextField, or of a web field (wN), which AXe taps first so the caret is at the end of its text.
 
         Examples:
           axe key-sequence --keycodes 11,8,15,15,18 --udid <UDID>    # hello

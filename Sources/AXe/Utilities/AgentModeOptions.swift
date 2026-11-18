@@ -18,7 +18,7 @@ struct AgentModeOptions: ParsableArguments {
     })
     var snapshotID: UUID?
 
-    @Option(name: .customLong("ref"), help: "Agent only: a ref from that snapshot, such as e12.")
+    @Option(name: .customLong("ref"), help: "Agent only: a ref from that snapshot, such as e12, or w3 for a web control.")
     var elementRef: String?
 
     func validate() throws {
@@ -31,17 +31,18 @@ struct AgentModeOptions: ParsableArguments {
         CLIOutput.setAgentView(view ?? .reading)
         if let elementRef {
             guard Self.isReference(elementRef) else {
-                throw ValidationError("--ref must be a ref from the capture, such as e12.")
+                throw ValidationError("--ref must be a ref from the capture, such as e12 or w3.")
             }
             try requireSnapshot()
         }
     }
 
-    /// `e` followed by a positive decimal ordinal without a leading zero, at most 32 bytes: the
-    /// form every capture publishes and the broker accepts.
+    /// `e` (an app control) or `w` (a web page control) followed by a positive decimal ordinal
+    /// without a leading zero, at most 32 bytes: the forms captures publish and the broker accepts.
     static func isReference(_ text: String) -> Bool {
         let digits = text.utf8.dropFirst()
-        return text.utf8.count <= 32 && text.utf8.first == UInt8(ascii: "e") && !digits.isEmpty
+        return text.utf8.count <= 32 && (text.utf8.first == UInt8(ascii: "e") || text.utf8.first == UInt8(ascii: "w"))
+            && !digits.isEmpty
             && digits.first != UInt8(ascii: "0") && digits.allSatisfy { (UInt8(ascii: "0")...UInt8(ascii: "9")).contains($0) }
     }
 

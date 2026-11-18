@@ -31,6 +31,10 @@ enum SelectedAXOperation {
             }
             if ax.preDelay > 0 { try await PhaseTimer.measure("ax.preDelay") { try await Task.sleep(for: .seconds(ax.preDelay)) } }
             let display = try request.selectedDisplay()
+            if ax.isWebInput {
+                return await SelectedWebOperation.perform(request, ax: ax, simulator: simulator, display: display,
+                    brokerID: brokerID, transportOwner: transportOwner)
+            }
             if ax.kind == .describe || ax.kind == .describePoint {
                 // A snapshot is a bounded read. Live subscriptions belong to actual input.
                 let reader = PhaseTimedFreshnessProvider(FBSimulatorNativeContextReader(simulator: simulator,
@@ -87,6 +91,36 @@ enum SelectedAXOperation {
                 guard acquisition.outcome == .ready else {
                     result.failure = .acquisitionFailed
                     throw SelectedHIDFailure.invalid("Selected AX acquisition ended with \(acquisition.outcome.rawValue): \(acquisition.failureDescription ?? "No further detail")")
+                }
+                if ax.includeWebContent == true, let pid = result.expectedPID {
+                    // A failed web read leaves the app's own tree usable and says why.
+                    do {
+                        result.webControls = try await PhaseTimer.measure("ax.webControls") {
+                            try await FBSimulatorAXSnapshot.webControls(for: simulator, expectedPID: pid,
+                                observation: initial, freshnessProvider: reader)
+                        }
+                    } catch FBSimulatorAXWebError.unsupportedRotation {
+                        result.webFailure = "unsupportedRotation"
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        result.webFailure = "readFailed"
+                    }
+                    if result.webControls != nil {
+                        // The keyboard probe is evidence only: a failed read leaves it out.
+                        do {
+                            result.webKeyboard = try await PhaseTimer.measure("ax.webKeyboard") {
+                                try await FBSimulatorAXSnapshot.pointElements(
+                                    at: AgentWebControls.keyboardProbePoints(initial.displayContext.logicalSize),
+                                    for: simulator, expectedPID: pid, observation: initial, freshnessProvider: reader)
+                            }
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            result.webKeyboard = nil
+                        }
+                    }
+                    try SelectedAXBounds.validateContent(result)
                 }
                 return response(request, brokerID: brokerID, result: result, observation: observation,
                     outcome: "ready", count: 0, cleanup: "notNeeded", error: nil)

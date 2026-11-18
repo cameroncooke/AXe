@@ -63,6 +63,12 @@ public final class FBAccessibilityElement {
     return try FBAXHostedWebPoint.read(element, token: request.token, budget: budget, routing: routing)
   }
 
+  /// Hosted web control reads (FBAXWebControls.swift); platform references stay inside `body`.
+  func webRequest<T>(operation: String, _ body: (FBAXTranslationRequest, FBAXPlatformElement) throws -> T) throws -> T {
+    guard !closed else { throw FBAccessibilityError.closedElement(operation: operation) }
+    return try body(request, element)
+  }
+
   func semanticPressSelection(identifier: String, pid: Int32, rootContext: UInt32, display: UInt32,
     budget: FBAXAcquisitionBudget, routing: FBAXIdentityRoutingRecorder) throws -> FBAXSemanticPressSelection {
     guard !closed else { throw FBAccessibilityError.closedElement(operation: "select semantic press target") }

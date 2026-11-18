@@ -787,6 +787,38 @@ Physical devices, follow-up the same day, live on the iPhone 16 Pro Max (iOS 27.
 
 Known limits: input-method keyboards compose what is typed, as before; a field that takes only ASCII on a non-Latin keyboard needs `--layout us` for text the US table cannot tell apart; selected and agent typing keep their 1,024-event bound, which 171 or more Option-Shift characters exceed; iOS smart punctuation still rewrites quotes and dashes.
 
+## Phase 15: agent mode on web pages (17 November)
+
+Issue [#65](https://github.com/cameroncooke/AXe/issues/65). Agent mode could not see inside web pages: a WKWebView, Safari or a Safari sheet was one opaque area. Uncommitted on `claude/axe-issue-65-webview-2f2541`.
+
+- [x] `describe-ui --agent --web` lists the controls of the web pages on screen as `w` rows (links, buttons, fields, checkboxes, pop-ups, ARIA options), and the Safari sheet toolbar and keyboard accessory bar; only controls a tap would reach now
+- [x] `tap`, `type --focus`, `key`, `key-combo` and `key-sequence` act on `w` refs, with the element at the control's point read again before the tap and before each key
+- [x] `swipe --agent` on a web view's scroll area may start on the page (the start must be in a WebKit page process)
+- [x] Broker protocol version 93: requests carry the web options, so an older running broker cannot ignore them
+- [x] README, skill (both copies), agent reference, changelog and `docs/playground-testing.md`
+- [x] Playground `web-sign-in` screen and `PlaygroundAgentWebTests` (WKWebView and Safari), now in the iPhone, iPad and Duo agent-controls groups
+
+Found while testing and fixed:
+
+- A page that starts while AXe's accessibility bootstrap is not holding app Accessibility on builds no accessibility tree for over a minute (point reads say "No translation object"). A web read that finds no page while some probe points go unanswered now holds Accessibility on and reads again for up to 2.5 s. Reads straight after launch: 6 of 6, against 1 of 4 before. The held read is bounded by the bootstrap's own deadline, and controls read before the session ends late are kept.
+- WebKit's point hit test can name a link as a button (same label and frame, another object ID); the guard accepts that pair only.
+- On an iPad the on-screen keyboard adds about 50 key rows, which pushed `w` rows past the first 64-row page. Keyboard keys now follow the web rows.
+- An independent review found twelve issues; the confirmed ones are fixed: web keys had a flat 8 s allowance (now 8 s plus the requested waits plus 0.15 s per key: 60 Backspaces took 12 s, 200 typed characters 14 s); typing without a per-key point check is now allowed only when the web read worked and the field reaches under the keyboard; a rebuilt control is matched by label only when that label named one control in the snapshot; a refused key phase after the focus tap reports the tap's events; a field whose label changes as text goes in is followed by its native identity; the keyboard probe no longer swallows cancellation; an unanswered process kind is asked again up to three times; letter buttons in the page's own process are not a keyboard. Docs no longer promise the caret is at the end of a text area.
+- On BBC News, typing into the search field stopped after five characters: the field shows a Clear button at its right end, where the focus tap and the per-key check were. Keys are now checked at the centre of the field's visible part, and the focus tap steps left of any control drawn over the field's right end.
+- Agent swipes on Safari's scroll area were refused (`swipePointReadFailed`), because the point under the finger belongs to the WebKit process. Fixed as above.
+- Recording the BBC run turned up a third: the front page's story headlines were not listed. WebKit reports a link inside a heading as an `AXHeading` with the `Link` trait, and a point read at its centre answers with the heading around it. Elements with the link trait (not text) are now links, reported with the `AXLink` role and no heading-level value; a hit on one of a control's two nearest containers that is not a control counts as the control, and that container is recorded on the row (`webTapAnswer`) so the tap guard accepts exactly it. The front page went from 0 headlines to 7 listed, a headline tap opened its story, capture time unchanged (0.46 s).
+
+Verification:
+
+- Unit tests: 1239 (two timing tests failed while E2E ran in parallel and passed twice each alone). IDBKit: 293 Swift Testing cases and 9 XCTest cases.
+- `PlaygroundAgentWebTests` on the iPhone 18 Pro (iOS 27.2), the iPad Air 11-inch (iOS 27.2) and a new Duo (iOS 27.2) simulator, final code: 2 of 2 on each (the Duo run alone with `AXE_DUO_E2E=0`: the suite is ordinary-only, so the matrix runs it on the iPhone and the iPad).
+- Full `make e2e` (`scripts/run-e2e.sh`, pinned to the iOS 27.2 iPhone and iPad and a new iOS 27.2 Duo, Xcode 27.3 beta), results `e2e-results/20261117T141207Z/`: iPhone 37 of 37 suites, iPad 14 of 14, both including the web suite. Duo: 38 of 64 passed, 4 not reached; the failures began with "Timed out creating the simulator remote automation session" and "DTUHID guest barrier timed out" after reboots and ended in an input quarantine, the Duo degradation after matrix stress recorded before. Rerun alone in four batches from a fresh boot (`e2e-results/duo-rerun-1` to `-4`): every group passed except `PlaygroundDuoScrollCoverageTests` (rotation "Display enumeration timed out"), `PlaygroundDuoAgentInterruptionTests` (1 case) and `PlaygroundDuoHeldModifierTests` (2 cases). A/B on the same Duo, v2.0.4 payload then this branch (`e2e-results/duo-ab3-v204`, `duo-ab3-cand`): identical, scroll coverage 12 of 12 on both, agent interruption 1 failure on both, held modifier 2 failures on both (its probe was built for the other installed iOS 27.2 Duo runtime). `PlaygroundAgentTests` and `PlaygroundAgentDragTests` also passed on both builds (`duo-ab-v204`, `duo-ab-cand`).
+- Physical device, iPhone 16 Pro Max: `--web` and `w` refs are refused with `unsupportedOnDevice`; nothing is sent.
+- Timing against the v2.0.4 release, both release payloads (v2.0.4 built from its tag), `scripts/bench-quick.py --pairs 7` on the iPhone 18 Pro simulator: no regression on any command (plain, selected and agent `describe-ui`, `tap`, selected `tap`, `key`; candidate within -9 to +3 ms). Report `e2e-results/bench-quick/20261117T140856Z.json`. Agent capture on the web sign-in screen, 11 alternating runs: 0.127 s without `--web`, 0.293 s with it.
+- BBC News in Safari on the iPhone simulator: rejected additional cookies, opened a live story, switched its page tabs, Safari Back, scrolled the front page with agent swipes, searched for "Premier League" (with suggestions shown), opened a result and went back. 21 captures, median 0.43 s, slowest 1.81 s. Recorded again with the final release build, captioned with each step and command: about 68 s, 23 steps, no retries (front page, top story, Back, two scrolls, a story from further down, Back, search with the Clear button showing, a result, Back).
+
+Known limits: Safari sheet Close and page menu are reached by coordinates; text that only has a click handler has no row; a selection does not survive to the next key command; a web page in landscape is not read (`unsupportedRotation`); two web views sharing one WebContent process list only the first; physical devices are not supported.
+
 ## Open items for the owner
 
 - Whether to report the Reminders defect to Apple; the log extracts in `e2e-results/benchmark-reminders/root-cause/` are enough for a report. The benchmark now works around it (Phase 13).

@@ -102,6 +102,21 @@ Also:
 - When verification must be read-only, use `describe-ui` and screenshots only, no taps.
 - For visual facts the accessibility tree lacks: `axe screenshot --udid <UDID> --output shot.png`, then open the PNG.
 
+## Web pages
+
+Web views, Safari, SFSafariViewController and sign-in sheets show a page as one area. Add `--web` to list its links, buttons, fields and checkboxes as `w` rows:
+
+```bash
+axe describe-ui --agent --web --view navigation --udid <UDID>
+```
+
+- Tap a `w` row like any ref. Type into a web field only with `--focus`: `axe type 'ada@example.com' --agent --focus --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref w2`.
+- `key`, `key-combo` and `key-sequence` take a web field ref too and tap it first, near its right end. In a one-line field whose text fits, the caret is then at the end, so one Backspace (42) per character of the value its row shows, in one `key-sequence`, clears it; check a multi-line or overflowing field in a screenshot. A selection does not survive to the next command.
+- Safari sheets list their toolbar (Back, Forward, Reload, Share, Open in Safari) and the keyboard's Previous, Next and Done as `w` rows. Their Close button is not listed: tap it by coordinates from a screenshot.
+- Tapping a pop-up button (`<select>`) lists its options as `w` rows; tap one to choose it. Search suggestions (ARIA options) are `w` buttons too.
+- Only controls a tap would reach now are listed. Read page text from a screenshot. Text that only reacts to a click handler has no row; tap it by coordinates. To reach more, swipe the web view's own `swipe` row (an `e` ref) with `--direction up`; the swipe may start on the page.
+- Actions on a `--web` snapshot keep returning `w` rows. Batches do not take `w` refs. Details: [agent-reference.md](references/agent-reference.md#web-pages).
+
 ## Coordinates (fallback)
 
 For a visible control with no usable ref or selector, such as a custom-drawn view:

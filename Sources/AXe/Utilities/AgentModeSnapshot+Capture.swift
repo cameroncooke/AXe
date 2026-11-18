@@ -6,7 +6,8 @@ extension AgentModeSnapshot {
     func capture(id: UUID, sequence: Int, udid: String, request: AgentModeRequest,
                  applicationPID: Int32, context: SelectedHIDContext,
                  unchanged: Bool, expiresIn: Double) -> AgentModeCapture {
-        let targets = targetRows()
+        // Web control rows follow the app's own targets and share their paging.
+        let targets = orderedTargetRows(applicationPID: applicationPID, context: context)
         let scroll = RuntimeSnapshotCompactor.scrollAreas(in: elements, limit: Self.maximumElements)
         let text = RuntimeSnapshotCompactor.text(in: elements, limit: Self.maximumElements)
         let emittedParents = Set((targets + scroll).map { $0.element.ref })
@@ -79,7 +80,24 @@ extension AgentModeSnapshot {
             unavailableReferences: unavailable.isEmpty ? nil : unavailable,
             customActions: customActions.isEmpty ? nil : customActions,
             truncatedCustomActionRefs: truncatedCustomActionRefs.isEmpty ? nil : truncatedCustomActionRefs,
-            scrollPreview: scrollPreview)
+            scrollPreview: scrollPreview,
+            webContent: web.map { AgentModeWebContentState(controls: $0.rows().count, failure: $0.failure) })
+    }
+
+    /// The app's targets, then any web control rows. The keys of an on-screen keyboard go after
+    /// the web rows: an iPad keyboard alone fills most of a 64-row page.
+    func orderedTargetRows(applicationPID: Int32, context: SelectedHIDContext) -> [RuntimeSnapshotRow] {
+        let native = targetRows()
+        let webRows = web?.rows() ?? []
+        guard !webRows.isEmpty else { return native }
+        guard let keyboard = AgentModeKeyboardDetector.occlusion(in: self, expectedPID: applicationPID,
+                logicalSize: CGSize(width: context.logicalWidth, height: context.logicalHeight)) else {
+            return native + webRows
+        }
+        let isKey: (RuntimeSnapshotRow) -> Bool = {
+            $0.element.path == keyboard.path || $0.element.path.hasPrefix(keyboard.path + ".")
+        }
+        return native.filter { !isKey($0) } + webRows + native.filter(isKey)
     }
 
     func detail(ref: String, query: AgentModeTextQuery) throws -> AgentModeTextDetail {

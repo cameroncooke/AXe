@@ -63,12 +63,12 @@ The result directory must be new. Earlier failed output is never replaced. The d
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
 | Core controls | 77 | 73 | 268 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
-| Agent controls | 148 | 4 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard and refusals |
+| Agent controls | 150 | 6 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard, web sign-in (WKWebView and Safari) and refusals |
 | Keyboard and hardware | 16 | 10 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 6 | 6 | 30 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **246** | **94** | **536** | **876 case executions** |
+| **Total** | **248** | **96** | **536** | **880 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
@@ -330,6 +330,22 @@ export AXE_DUO_E2E=1
 ```
 
 Run these jobs serially. The runner supplies a new artifact directory and checks the registered case counts: two and four, with no skipped or missing cases. The normal matrix and agent-controls/keyboard-hardware groups also register the suites. Preserve failed outputs and do not replay input. Public accessibility output still does not prove exact native UID continuity. Shared-ID and anonymous fields remain separate checks.
+
+## Web sign-in
+
+`PlaygroundAgentWebTests` signs in to two web pages with agent web refs (`describe-ui --agent --web`, `type --focus --ref wN`, `tap --ref wN`) on the ordinary iPhone and the iPad, where it is part of the agent-controls group. Like the other ordinary-only suites it does not run in Duo mode; on a Duo simulator run it alone with `AXE_DUO_E2E=0`.
+
+- **WKWebView:** the Playground's Web Sign In page (`web-sign-in`) shows a sign-in form in a web view that keeps `isInspectable` off. The case checks the five listed controls, that `type` without `--focus` on a web field is refused before input, then types the email with two extra characters, removes them with a two-Backspace `key-sequence` on the field's `w` ref, types the password, ticks Remember me and taps Sign in. The page posts what it received to the native status line, which the case reads with plain `describe-ui`: the exact email, the password length and the checkbox. It then signs out.
+- **Safari:** the case serves a sign-in site on `127.0.0.1` from the test process, opens it in Safari with `simctl openurl`, types the email and password and taps Sign in. The site records the form submission, and the case requires exactly the typed email and password. Safari's "Save Password?" sheet is dismissed with its Not Now app ref, then the case follows the Sign out link and requires the site to see it. Safari is terminated at the end.
+
+Both cases need the software keyboard (see the prerequisite above). Run them alone on an existing warm ordinary iPhone:
+
+```sh
+export AXE_BIN_PATH=/absolute/path/to/matched-runtime/axe
+export SIMULATOR_UDID=IPHONE_UUID
+export AXE_DUO_E2E=0
+./test-runner.sh --tests-only PlaygroundAgentWebTests
+```
 
 ## Resources, delivery and boundaries
 

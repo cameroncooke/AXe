@@ -27,9 +27,13 @@ struct AgentModeSnapshot: Sendable {
     let nativePID: Int32?
     let keyboardButtons: [AgentModeKeyboardDetector.Button]
     let redundantTextParents: [String: String]
+    /// Hosted web page controls, when this capture asked for them. They never enter the native
+    /// fingerprints or hash: web refs are checked by their own point reads.
+    let web: AgentWebControls?
 
     init(roots: [FBSimulatorAXNode], nativeIdentityMetadata: FBSimulatorAXNativeIdentityMetadata? = nil,
-         context: SelectedHIDContext) throws {
+         context: SelectedHIDContext, web: AgentWebControls? = nil) throws {
+        self.web = web
         guard context.logicalWidth.isFinite, context.logicalHeight.isFinite,
               context.logicalWidth > 0, context.logicalHeight > 0 else {
             throw AgentModeFailure.missingContext

@@ -156,6 +156,7 @@ static void FBSimulatorInvalidateAutomationSession(id session)
 + (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice
                                                 deadline:(dispatch_time_t)deadline
                                                   logger:(nullable id<FBControlCoreLogger>)logger
+                                             whileLoaded:(void (^ _Nullable)(void))whileLoaded
                                                    error:(NSError **)error;
 
 @end
@@ -220,6 +221,11 @@ static void FBSimulatorControl_SimLogHandler(int level, const char *function, in
 
 + (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
 {
+  return [self bootstrapAccessibilityForSimulatorDevice:simulatorDevice timeout:timeout logger:logger whileLoaded:nil error:error];
+}
+
++ (BOOL)bootstrapAccessibilityForSimulatorDevice:(id)simulatorDevice timeout:(NSTimeInterval)timeout logger:(id<FBControlCoreLogger>)logger whileLoaded:(void (^)(void))whileLoaded error:(NSError **)error
+{
   if (!isfinite(timeout) || timeout <= 0 || timeout >= (NSTimeInterval)INT64_MAX / NSEC_PER_SEC) {
     if (error) {
       *error = FBSimulatorAccessibilityBootstrapError(10, @"Simulator Accessibility preparation requires a finite positive timeout");
@@ -272,6 +278,7 @@ static void FBSimulatorControl_SimLogHandler(int level, const char *function, in
   BOOL success = [self performAccessibilityBootstrapForSimulatorDevice:simulatorDevice
                                                               deadline:deadline
                                                                 logger:logger
+                                                           whileLoaded:whileLoaded
                                                                  error:&bootstrapError];
   // Session invalidation is synchronous too. Never report success past the deadline.
   if (success && !FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"after session cleanup", &bootstrapError)) {
@@ -292,7 +299,7 @@ static void FBSimulatorControl_SimLogHandler(int level, const char *function, in
   return success;
 }
 
-+ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice deadline:(dispatch_time_t)deadline logger:(id<FBControlCoreLogger>)logger error:(NSError **)error
++ (BOOL)performAccessibilityBootstrapForSimulatorDevice:(id)simulatorDevice deadline:(dispatch_time_t)deadline logger:(id<FBControlCoreLogger>)logger whileLoaded:(void (^)(void))whileLoaded error:(NSError **)error
 {
   if (!FBSimulatorAccessibilityBootstrapCheckDeadline(deadline, @"before framework loading", error)) {
     return NO;
@@ -425,6 +432,10 @@ static void FBSimulatorControl_SimLogHandler(int level, const char *function, in
       return NO;
     }
     FBSimulatorAccessibilityBootstrapPhase(logger, @"load-finished");
+    if (whileLoaded) {
+      whileLoaded();
+      FBSimulatorAccessibilityBootstrapPhase(logger, @"while-loaded-finished");
+    }
     [logger log:@"Bootstrapped simulator Accessibility through a short-lived remote automation session"];
     return YES;
   } @finally {
