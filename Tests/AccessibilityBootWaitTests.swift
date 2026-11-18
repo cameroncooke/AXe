@@ -52,6 +52,45 @@ struct AccessibilityBootWaitTests {
         #expect(reads == 1)
     }
 
+    @Test("A device with no built-in touch display stops after one read, without waiting")
+    func unsupportedDeviceStopsAtOnce() async {
+        var reads = 0
+        var checks = 0
+        do {
+            try await AccessibilityFetcher.waitingForReadableDisplays(
+                simulatorUDID: "FIXTURE", logger: AxeLogger(),
+                wait: { _ in Issue.record("No wait for an unsupported device") },
+                requireSupportedDevice: {
+                    checks += 1
+                    throw FBSimulatorContextError.unsupportedProfile
+                }
+            ) {
+                reads += 1
+                throw DisplaysNotReady()
+            }
+            Issue.record("Expected the unsupported-device error")
+        } catch {
+            #expect(CLIErrorMapping.failure(for: error).code == "unsupportedDevice")
+        }
+        #expect(reads == 1)
+        #expect(checks == 1)
+    }
+
+    @Test("A supported device is checked once and keeps waiting for its displays")
+    func supportedDeviceChecksOnce() async throws {
+        var reads = 0
+        var checks = 0
+        try await AccessibilityFetcher.waitingForReadableDisplays(
+            simulatorUDID: "FIXTURE", logger: AxeLogger(), wait: { _ in },
+            requireSupportedDevice: { checks += 1 }
+        ) {
+            reads += 1
+            if reads < 4 { throw DisplaysNotReady() }
+        }
+        #expect(reads == 4)
+        #expect(checks == 1)
+    }
+
     @Test("A whole-tree read retries a missing translation until the tree arrives")
     func retriesMissingTranslation() async throws {
         var reads = 0

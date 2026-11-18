@@ -45,7 +45,9 @@ struct AccessibilityFetcher {
         }
 
         if target.osVersion.version.majorVersion >= 27 {
-            try await waitingForReadableDisplays(simulatorUDID: simulatorUDID, logger: logger) {
+            try await waitingForReadableDisplays(simulatorUDID: simulatorUDID, logger: logger,
+                requireSupportedDevice: { try FBSimulatorNativeContextReader.requireTouchDisplay(for: target) }
+            ) {
                 try requireStartedDisplay(try await FBSimulatorDisplayInfoReader.read(for: target).rows)
             }
         }
@@ -138,6 +140,8 @@ struct AccessibilityFetcher {
     /// object" until it was rebooted; a first read made once the displays answered worked. A
     /// settled simulator answers the first display read. Otherwise this reads the displays every
     /// 250 ms for at most 60 s before any accessibility request.
+    /// After the first failed read, a device type with no built-in touch display (Apple TV) stops
+    /// the wait at once: its displays will never be readable.
     static func waitingForReadableDisplays(
         simulatorUDID: String,
         logger: AxeLogger,
@@ -145,10 +149,12 @@ struct AccessibilityFetcher {
         pollInterval: Duration = .milliseconds(250),
         clock: ContinuousClock = ContinuousClock(),
         wait: @MainActor (Duration) async throws -> Void = { duration in try await Task.sleep(for: duration) },
+        requireSupportedDevice: @MainActor () throws -> Void = {},
         readDisplays: @MainActor () async throws -> Void
     ) async throws {
         let deadline = clock.now.advanced(by: maximumWait)
         var logged = false
+        var checkedSupport = false
         while true {
             do {
                 try await readDisplays()
@@ -156,6 +162,10 @@ struct AccessibilityFetcher {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
+                if !checkedSupport {
+                    checkedSupport = true
+                    try requireSupportedDevice()
+                }
                 guard clock.now < deadline else {
                     throw CLIError(errorDescription: "Simulator \(simulatorUDID) is still starting: its displays could not be read, so AXe did not read accessibility. Accessibility read this early can stop working until the simulator is rebooted. Wait until `axe displays --udid \(simulatorUDID)` succeeds, then read again.", code: .notBooted)
                 }

@@ -116,6 +116,7 @@ actor NativeHingeReadinessBackend: FBSimulatorHingeReadinessBackend {
       switch value {
       case .changedDuringRead: return .init(.changedDuringRead, "Full native context changed during read")
       case .unavailable(let detail): return .init(.unavailable, detail)
+      case .unsupportedProfile: return .init(.unavailable, "Device type declares no built-in touch display")
       }
     }
     if let value = error as? ActivePanelReadError {

@@ -102,6 +102,8 @@ enum CLIErrorMapping {
             case .unavailable(let detail):
                 return CLIOutputFailure(code: "displayUnavailable",
                     message: "The simulator display state could not be read: " + sentence(detail))
+            case .unsupportedProfile:
+                return unsupportedDevice
             @unknown default:
                 return CLIOutputFailure(code: "displayUnavailable", message: "The simulator display state could not be read.")
             }
@@ -163,6 +165,8 @@ enum CLIErrorMapping {
     }
 
     static let interrupted = CLIOutputFailure(code: "interrupted", message: "The command was interrupted.")
+    static let unsupportedDevice = CLIOutputFailure(code: "unsupportedDevice",
+        message: "This simulator has no built-in touch display, as on Apple TV. AXe supports iPhone and iPad simulators.")
     static let someInputSent = "Some input may have been sent; it was not repeated. Read the screen before trying again."
 
     /// Readable text from a broker or framework detail, or nil when it is a Swift or Objective-C

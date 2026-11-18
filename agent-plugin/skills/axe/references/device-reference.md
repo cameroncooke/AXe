@@ -86,7 +86,7 @@ Active  inner  951×669 pt @3x  landscape
 - An uncertain send holds the input lock and saves a recovery record.
 - Not the two-finger `gesture rotate`; not a batch step.
 
-Failures carry one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `displayUnavailable` (no consistent set of screens yet, as in the first seconds after boot; read again), `rotationFailed`, `quarantined`.
+Failures carry one code: `targetNotFound`, `notBooted`, `noHinge`, `bootChanged`, `busy`, `timeout`, `hingeUnavailable`, `screensDidNotSettle`, `displayUnavailable` (no consistent set of screens yet, as in the first seconds after boot; read again), `unsupportedDevice` (no built-in touch display, as on Apple TV; AXe supports iPhone and iPad simulators), `rotationFailed`, `quarantined`.
 
 ## App input on the iPhone Duo
 

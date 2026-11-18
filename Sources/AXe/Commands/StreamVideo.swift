@@ -129,6 +129,7 @@ struct StreamVideo: AsyncParsableCommand {
             let stateDescription = FBiOSTargetStateStringFromState(targetSimulator.state).rawValue
             throw CLIError(errorDescription: "Simulator \(trimmedUDID) is not booted. Current state: \(stateDescription)", code: .notBooted)
         }
+        try FBSimulatorNativeContextReader.requireTouchDisplay(for: targetSimulator)
 
         let cancellationFlag = CancellationFlag()
         let signalObserver = SignalObserver(signals: [SIGINT, SIGTERM]) {
