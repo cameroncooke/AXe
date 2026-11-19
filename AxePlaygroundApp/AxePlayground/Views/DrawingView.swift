@@ -3,6 +3,9 @@ import UIKit
 
 /// Records raw UIKit touches as strokes and reports the last stroke through accessibility values.
 /// Coordinates are in screen points, the same space AXe uses for touch input.
+///
+/// Every finger draws its own line. The reported stroke follows the first finger only, from its
+/// touch-down until all fingers are up, with the most fingers seen at once in "max touches".
 struct DrawingView: View {
     var body: some View {
         DrawingControllerView()
@@ -232,6 +235,7 @@ private final class DrawingCanvas: UIView {
     private var current: DrawingStroke?
     private var currentPath: UIBezierPath?
     private var finishedPaths: [UIBezierPath] = []
+    private var otherPaths: [ObjectIdentifier: UIBezierPath] = [:]     // lines of the fingers that joined the first
 
     var isContactDown: Bool { !contacts.isEmpty }
 
@@ -251,6 +255,7 @@ private final class DrawingCanvas: UIView {
         current = nil
         primary = nil
         contacts = []
+        otherPaths = [:]
         setNeedsDisplay()
     }
 
@@ -268,13 +273,28 @@ private final class DrawingCanvas: UIView {
             path.addLine(to: point)
             currentPath = path
         }
-        for touch in ordered { contacts.insert(ObjectIdentifier(touch)) }
+        for touch in ordered {
+            let id = ObjectIdentifier(touch)
+            contacts.insert(id)
+            guard id != primary else { continue }
+            let point = touch.location(in: self)
+            let path = UIBezierPath()
+            path.move(to: point)
+            path.addLine(to: point)
+            otherPaths[id] = path
+        }
         if let seen = current?.maxTouches, contacts.count > seen { current?.maxTouches = contacts.count }
         setNeedsDisplay()
         onChange?()
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for touch in touches {
+            guard let path = otherPaths[ObjectIdentifier(touch)] else { continue }
+            let samples = event?.coalescedTouches(for: touch) ?? [touch]
+            for sample in samples.isEmpty ? [touch] : samples { path.addLine(to: sample.location(in: self)) }
+            setNeedsDisplay()
+        }
         guard let touch = touches.first(where: { ObjectIdentifier($0) == primary }) else { return }
         let samples = event?.coalescedTouches(for: touch) ?? [touch]
         for sample in samples.isEmpty ? [touch] : samples {
@@ -297,6 +317,11 @@ private final class DrawingCanvas: UIView {
         for touch in touches {
             let id = ObjectIdentifier(touch)
             guard contacts.remove(id) != nil else { continue }
+            if let path = otherPaths.removeValue(forKey: id) {
+                path.addLine(to: touch.location(in: self))
+                finishedPaths.append(path)
+                setNeedsDisplay()
+            }
             if id == primary {
                 let point = touch.location(in: self)
                 let screen = screenPoint(point)
@@ -334,6 +359,8 @@ private final class DrawingCanvas: UIView {
             UIColor.systemRed.setStroke()
             stroke(currentPath)
         }
+        UIColor.systemOrange.setStroke()
+        for path in otherPaths.values { stroke(path) }
     }
 
     private func stroke(_ path: UIBezierPath) {
