@@ -24,6 +24,9 @@ final class MirrorClient: @unchecked Sendable {
         case connected
         /// The connection was lost, or has not been made after `attempts` tries; still trying.
         case reconnecting(attempts: Int)
+        /// The Mac cannot be reached, for this reason. `retrying` is false once the app has stopped
+        /// trying by itself; `retry()` starts it again.
+        case unreachable(MirrorUnreachable, retrying: Bool)
         /// The Mac said no, and trying again will not help.
         case refused(Refusal)
     }
@@ -50,6 +53,9 @@ final class MirrorClient: @unchecked Sendable {
     private var generation = 0
     private var stopped = false
     private var attempts = 0
+    private var tryingSince: TimeInterval?      // since when there has been no connection; nil while connected or stopped
+    private var lastDiagnosis = 0.0
+    private var gaveUp = false                  // stopped trying by itself; `retry()` starts again
     private var timer: DispatchSourceTimer?
     private var tick = 0
 
@@ -95,11 +101,16 @@ final class MirrorClient: @unchecked Sendable {
 
     func start() {
         pathMonitor.pathUpdateHandler = { [weak self] path in
-            self?.network = path.usesInterfaceType(.wifi) ? "wifi" : path.usesInterfaceType(.cellular) ? "cellular"
+            guard let self else { return }
+            let had = self.network
+            self.network = path.usesInterfaceType(.wifi) ? "wifi" : path.usesInterfaceType(.cellular) ? "cellular"
                 : path.status == .satisfied ? "other" : "none"
+            // A network that has come back is worth one more run of tries without being asked.
+            if had == "none", self.network != "none", self.gaveUp { self.retry() }
         }
         pathMonitor.start(queue: queue)
         queue.async { [self] in
+            tryingSince = Self.now()
             report(.connecting)
             connect()
             let timer = DispatchSource.makeTimerSource(queue: queue)
@@ -223,6 +234,7 @@ final class MirrorClient: @unchecked Sendable {
                     self.connection = connection
                     control = input
                     attempts = 0
+                    tryingSince = nil
                     report(.connected)
                     sendInfo()
                     return true
@@ -244,15 +256,52 @@ final class MirrorClient: @unchecked Sendable {
                 connection = nil
                 control = nil
                 if let refusal {
+                    tryingSince = nil       // a refusal is an answer: nothing is unreachable
                     report(.refused(refusal))
                     return
                 }
                 attempts += 1
-                report(.reconnecting(attempts: attempts))
-                queue.asyncAfter(deadline: .now() + 1) { [self] in
+                if tryingSince == nil { tryingSince = Self.now() }      // a working connection has just dropped
+                // Once the reason is on screen it stays there; `watchForNoConnection` keeps it current.
+                if MirrorRetry.phase(elapsed: Self.now() - (tryingSince ?? Self.now())) == .quiet { report(.reconnecting(attempts: attempts)) }
+                queue.asyncAfter(deadline: .now() + MirrorRetry.pause(afterFailures: attempts)) { [self] in
                     guard current == generation else { return }
                     connect()
                 }
+            }
+        }
+    }
+
+    /// Called twice a second. With no connection for ten seconds it works out why and reports it,
+    /// and again every ten seconds in case the reason has changed; after two minutes it stops the
+    /// tries and reports that too.
+    private func watchForNoConnection() {
+        guard connection == nil, !stopped, !gaveUp, let since = tryingSince else { return }
+        let time = Self.now()
+        switch MirrorRetry.phase(elapsed: time - since) {
+        case .quiet:
+            return
+        case .explaining:
+            guard time - lastDiagnosis >= 10 else { return }
+            lastDiagnosis = time
+            diagnose(retrying: true)
+        case .stopped:
+            gaveUp = true
+            tryingSince = nil
+            generation += 1         // the try under way, and the one waiting to start, no longer count
+            diagnose(retrying: false)
+        }
+    }
+
+    /// Finds out why the Mac cannot be reached, from what this device can check: its own network,
+    /// then whether the relays answer.
+    private func diagnose(retrying: Bool) {
+        let hasNetwork = network != "none", relays = target.relays
+        Task { [self] in
+            let answering = hasNetwork && !relays.isEmpty ? await MirrorRelays.measure(relays).count : 0
+            queue.async { [self] in
+                guard connection == nil, !stopped, gaveUp != retrying else { return }
+                report(.unreachable(MirrorUnreachable.reason(hasNetwork: hasNetwork, relays: relays.count, answering: answering), retrying: retrying))
             }
         }
     }
@@ -262,6 +311,9 @@ final class MirrorClient: @unchecked Sendable {
         queue.async { [self] in
             guard !stopped else { return }
             attempts = 0
+            gaveUp = false
+            tryingSince = Self.now()
+            lastDiagnosis = 0
             report(.connecting)
             connect()
         }
@@ -335,6 +387,7 @@ final class MirrorClient: @unchecked Sendable {
     // MARK: Clock and reports
 
     private func periodic() {
+        watchForNoConnection()
         guard connection != nil else { return }
         tick += 1
         var ping = Data()
