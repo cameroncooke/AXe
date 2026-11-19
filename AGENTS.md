@@ -26,6 +26,13 @@ When reading issues:
 - For a failure or a fix, run only the affected suites in isolation: `scripts/test-playground-matrix.py` with `--only <iphone|ipad|duo>` and one `--group <Suite>` per suite (see "Focused checks" in `docs/playground-testing.md`). Add the suites that share a changed test helper or script, and the few that exercise a changed product path. Assume the rest still pass.
 - Run the full suite once, when a significant portion of the whole project is finished, such as the end of a release's work. A wave of fixes, a merge or a single risky commit is not that point. If in doubt, do not run it; ask.
 
+## Releasing
+- A release is made by running the release script, `scripts/release.sh`. It is never made by creating or pushing a tag by hand, and never by editing the changelog's version heading by hand.
+- Do not describe or propose a release as "tagging". Say "run the release script", and when asking the owner whether to release, ask whether to run it.
+- `scripts/release.sh --help` prints the current version and what each bump would give. With no argument the script proposes a minor bump; pass `major`, `minor`, `patch` or an explicit version such as `2.1.0`. `--dry-run` previews without changing anything.
+- The script must be run on `main` with a clean working tree. It asks for confirmation, renames the changelog's `[Unreleased]` heading to the new version and creates the release; the Release workflow then builds, signs and packages. Read the script before the first time you run it.
+- Run it only when the owner asks for a release. `make release-check` comes first.
+
 ## Performance
 - An ordinary simulator interaction must be as fast as in the current release (the latest release tag). This applies to every input route, including selected and agent modes.
 - An iPhone Duo interaction must be as fast as the same interaction on an ordinary simulator.
