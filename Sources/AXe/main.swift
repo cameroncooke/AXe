@@ -72,7 +72,7 @@ struct Axe: AsyncParsableCommand {
             do {
                 command = try parseAsRoot(invocation.arguments)
             } catch {
-                exit(withError: error)
+                exitAfterParseFailure(error)
             }
             do {
                 try await run(&command)
@@ -164,6 +164,43 @@ struct Axe: AsyncParsableCommand {
         }
     }
 
+    /// Prints a parse failure and exits, as `exit(withError:)` does, but without the name of a
+    /// default subcommand that is kept out of help. The parser's last line would otherwise send the
+    /// reader to `axe mirror start --help`, a name nothing else mentions.
+    private static func exitAfterParseFailure(_ error: Error) -> Never {
+        let text = fullMessage(for: error)
+        let shown = withoutHiddenDefaultNames(text)
+        guard shown != text else { exit(withError: error) }
+        let code = exitCode(for: error)
+        if code == .success {
+            print(shown)
+        } else {
+            FileHandle.standardError.write(Data((shown + "\n").utf8))
+        }
+        Darwin.exit(code.rawValue)
+    }
+
+    /// Whether `child` is the subcommand `parent` runs when none is named, and is kept out of help:
+    /// a name the user never types and should never be shown.
+    static func isHiddenDefault(_ child: ParsableCommand.Type, of parent: ParsableCommand.Type) -> Bool {
+        guard let fallback = parent.configuration.defaultSubcommand else { return false }
+        return ObjectIdentifier(fallback) == ObjectIdentifier(child) && !child.configuration.shouldDisplay
+    }
+
+    /// `text` with every "<parent> <hidden default subcommand>" shortened to "<parent>".
+    static func withoutHiddenDefaultNames(_ text: String) -> String {
+        var result = text
+        func visit(_ parent: ParsableCommand.Type, path: String) {
+            for child in parent.configuration.subcommands {
+                let childPath = path + " " + child._commandName
+                if isHiddenDefault(child, of: parent) { result = result.replacingOccurrences(of: childPath, with: path) }
+                visit(child, path: childPath)
+            }
+        }
+        visit(Axe.self, path: Axe._commandName)
+        return result
+    }
+
     /// The leading command words that name known subcommands, for example `hinge set` in
     /// `hinge set 200 --udid …`; nil when the first word is not a command.
     static func commandPath(spelledBy arguments: [String]) -> String? {
@@ -178,16 +215,22 @@ struct Axe: AsyncParsableCommand {
     }
 
     /// The full command path without the root, for example `hinge set` or `settings status-bar show`.
+    /// A hidden default subcommand is left out: the mirror host is `mirror`, as the user typed it.
     static func commandPath(of command: ParsableCommand) -> String {
         let target = ObjectIdentifier(type(of: command))
         func path(below parent: ParsableCommand.Type) -> [String]? {
             for child in parent.configuration.subcommands {
-                if ObjectIdentifier(child) == target { return [child._commandName] }
-                if let rest = path(below: child) { return [child._commandName] + rest }
+                let name = isHiddenDefault(child, of: parent) ? [] : [child._commandName]
+                if ObjectIdentifier(child) == target { return name }
+                if let rest = path(below: child) { return name + rest }
             }
             return nil
         }
-        return path(below: Axe.self)?.joined(separator: " ") ?? "axe"
+        guard let words = path(below: Axe.self), !words.isEmpty else {
+            // The mirror host is the one command reached through a hidden default.
+            return command is MirrorStartCommand ? MirrorCommand._commandName : "axe"
+        }
+        return words.joined(separator: " ")
     }
 
     private struct OutputCompletion: Sendable {
