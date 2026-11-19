@@ -43,6 +43,65 @@ struct MirrorConfigTests {
         #expect(!MirrorDemo.blocksTouch(downAt: 0.92))
     }
 
+    @Test("The demo's lock passes touches on only while the sample app is in front")
+    func demoLock() {
+        var state = MirrorDemo.LockState()
+        let front = MirrorDemo.lockStep(inFront: true, state: &state)
+        #expect(front.allowsInput)
+        #expect(!front.pullBack)
+
+        // Another app in front: touches are dropped at once and the sample app is brought back,
+        // again once a second for as long as it lasts.
+        let first = MirrorDemo.lockStep(inFront: false, state: &state)
+        #expect(!first.allowsInput)
+        #expect(first.pullBack)
+        var pulls = 1
+        var open = false
+        for _ in 2...MirrorDemo.stuckAfter {
+            let step = MirrorDemo.lockStep(inFront: false, state: &state)
+            if step.pullBack { pulls += 1 }
+            if step.allowsInput { open = true }
+        }
+        #expect(!open)
+        #expect(pulls == 3)
+        // Three seconds of bringing it back without success: something the app cannot cover is in
+        // front, and the touch that dismisses it is let through.
+        let stuck = MirrorDemo.lockStep(inFront: false, state: &state)
+        #expect(stuck.allowsInput)
+
+        // Back in front: everything starts again.
+        let back = MirrorDemo.lockStep(inFront: true, state: &state)
+        let away = MirrorDemo.lockStep(inFront: false, state: &state)
+        #expect(back.allowsInput)
+        #expect(state == MirrorDemo.LockState(away: 1, unknown: 0))
+        #expect(!away.allowsInput)
+    }
+
+    @Test("A look that cannot tell which app is in front leaves input open and brings the app back every five seconds")
+    func demoLockUnknown() {
+        var state = MirrorDemo.LockState()
+        var pulls = 0
+        var closed = false
+        for _ in 1...40 {
+            let step = MirrorDemo.lockStep(inFront: nil, state: &state)
+            if step.pullBack { pulls += 1 }
+            if !step.allowsInput { closed = true }
+        }
+        #expect(!closed)
+        #expect(pulls == 2)
+    }
+
+    @Test("The sample app's process is read from what simctl launch prints")
+    func demoProcessID() {
+        let plain = MirrorDemo.processID(inLaunchOutput: "com.example.app: 12345\n")
+        let none = MirrorDemo.processID(inLaunchOutput: "")
+        let words = MirrorDemo.processID(inLaunchOutput: "An error was encountered")
+        #expect(plain == 12345)
+        #expect(none == nil)
+        #expect(words == nil)
+        #expect(MirrorDemo.launchArguments == ["--launch-arg", "demo=1"])
+    }
+
     @Test("A demo visitor keeps the demo for three minutes, then a newcomer may take over")
     func demoTurns() {
         #expect(!MirrorDemo.isBusy(connectedFor: nil))

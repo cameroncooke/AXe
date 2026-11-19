@@ -41,6 +41,21 @@ struct AxePlaygroundApp: App {
     }
 }
 
+/// Demo mode: the app as shown to visitors of a public AXe Mirror demo, who are strangers using
+/// the simulator from their own phone. `axe mirror --demo` starts the app with `--launch-arg demo=1`.
+/// Only screens that take touches and nothing else are offered then. A text field, a web page or
+/// a system prompt each lead out of the app (a text field's menu offers Search Web and Share), so
+/// every screen that has one is left out.
+enum DemoMode {
+    static let isOn = ProcessInfo.processInfo.arguments.contains("demo=1")
+
+    static let screens: Set<String> = [
+        "tap-test", "touch-monitor", "swipe-test", "gesture-presets", "drawing", "zoom", "switch-test", "tab-view-test",
+    ]
+
+    static func allows(_ screen: String) -> Bool { !isOn || screens.contains(screen) }
+}
+
 // Singleton to manage navigation state
 class NavigationManager: ObservableObject {
     static let shared = NavigationManager()
@@ -50,6 +65,7 @@ class NavigationManager: ObservableObject {
     private init() {}
     
     func navigateToScreen(_ screenName: String) {
+        guard DemoMode.allows(screenName) else { return }
         directLaunchScreen = screenName
     }
 }

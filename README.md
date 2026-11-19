@@ -208,7 +208,7 @@ If the stream is slow and the app shows Relay while both devices are on the same
 axe mirror --udid "$UDID" --demo --demo-app com.example.MyApp
 ```
 
-`--demo` runs a public demo host: any viewer may connect without pairing, one at a time. It keeps the viewer inside one app: the hardware buttons are off, touches that start at the top or bottom edge of the screen are dropped, and the bitrate is capped. `--demo-app` names the app kept in front. A demo host has its own key, so it never opens this Mac's paired host.
+`--demo` runs a public demo host: any viewer may connect without pairing, one at a time. It keeps the viewer inside one app: the hardware buttons are off, touches that start at the top or bottom edge of the screen are dropped, and the bitrate is capped. `--demo-app` names that app. It is started afresh for each visitor, and while one is connected the host checks four times a second which app is in front: if it is another, the visitor's touches are dropped and the app is brought back. The app is started with the arguments `--launch-arg demo=1`, so that it can hide whatever leads out of it; a text field does, because its menu offers Search Web and Share. If the app cannot be started, the host reports an `error` event and stops. A demo host has its own key, so it never opens this Mac's paired host.
 
 `axe mirror` needs an Apple silicon Mac with macOS 14.5 or later and works on simulators only; the rest of AXe is unchanged. The host key and the list of paired viewers are in `~/Library/Application Support/AXe/mirror/` (`host.key`, `viewers.json`), readable by you only. The app's source is in [AXeMirror/](AXeMirror/README.md).
 
