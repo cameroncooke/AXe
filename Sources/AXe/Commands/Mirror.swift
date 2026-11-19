@@ -10,34 +10,79 @@ import FBSimulatorControl
 /// Hosts a live view of one simulator for a viewer app on another device, and manages which
 /// viewers may connect. `axe mirror --udid <UDID>` runs the host; the other subcommands pair a
 /// viewer, list the paired viewers and remove one.
+///
+/// The host is a default subcommand that nobody types, and the argument parser answers
+/// `axe mirror --help` with that subcommand's help, not this command's. So the host's help is
+/// written as the help for all of `axe mirror` (see `MirrorHelp`), and the subcommand itself is
+/// left out of the list this command prints for `axe help mirror`. Giving this command the host's
+/// options instead does not work: the parser reads a parent's options first, so `--relay-url`
+/// after `pair` went to the host and `pair` never saw it.
 // Named MirrorCommand because `Mirror` is the standard library's reflection type, which AXe uses.
 struct MirrorCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mirror",
-        abstract: "Show one simulator live in the AXe Mirror app on an iPhone or iPad, with touch.",
-        discussion: """
-        Pair a device once with axe mirror pair, then run axe mirror --udid <UDID>. Only paired devices can connect. Needs an Apple silicon Mac.
-        """,
+        abstract: MirrorHelp.abstract,
+        usage: MirrorHelp.usage,
+        discussion: MirrorHelp.discussion + "\n\n" + MirrorHelp.hostOptions,
         subcommands: [MirrorStartCommand.self, MirrorPairCommand.self, MirrorViewersCommand.self, MirrorUnpairCommand.self, MirrorTestPairCommand.self],
         defaultSubcommand: MirrorStartCommand.self
     )
 }
 
+/// The help for `axe mirror` as a whole. `axe mirror --help` prints it with the host's options
+/// below it; `axe help mirror` prints it with the list of subcommands below it.
+enum MirrorHelp {
+    static let abstract = "Show one simulator live in the AXe Mirror app on an iPhone or iPad, with touch."
+
+    /// One line per thing a person can type. `MirrorHelpTests` checks that every subcommand shown
+    /// to users is here, so a new one cannot be left out.
+    static let commands: [(usage: String, summary: String)] = [
+        ("axe mirror --udid <UDID>", "Host a booted simulator for paired viewers."),
+        ("axe mirror pair", "Pair a viewer with a one-time code or QR code."),
+        ("axe mirror viewers", "List the paired viewers."),
+        ("axe mirror unpair <viewer>", "Remove a paired viewer by its name or ID."),
+    ]
+
+    static let usage = """
+    axe mirror --udid <udid> [--relay-url <relay-url>] [--demo] [--demo-app <demo-app>]
+    axe mirror pair [--name <name>] [--json] [--relay-url <relay-url>]
+    axe mirror viewers [--json]
+    axe mirror unpair <viewer>
+    """
+
+    static let discussion: String = {
+        let width = (commands.map(\.usage.count).max() ?? 0) + 3
+        let table = commands.map { "  " + $0.usage.padding(toLength: width, withPad: " ", startingAt: 0) + $0.summary }
+        return """
+        Pair a device once, then host a booted simulator. Only paired devices can connect. Needs an Apple silicon Mac.
+
+        Commands:
+        \(table.joined(separator: "\n"))
+
+        The host prints one JSON line per event, starting with the host ID. Logs go to standard error. Stop it with Ctrl+C or SIGTERM.
+
+        Each command has its own help, for example axe mirror pair --help.
+        """
+    }()
+
+    /// Where the host's own options are listed, for the screen that does not list them itself.
+    static let hostOptions = "The host's options are listed by axe mirror --help."
+}
+
 /// Runs the host. The viewer finds this Mac by its host ID, a public key, over iroh: directly when
 /// the two can reach each other, through a relay when they cannot. Only paired viewers are let in.
 struct MirrorStartCommand: AsyncParsableCommand {
+    // `axe mirror --help` prints this command's help, so it is the help for all of `axe mirror`.
+    // The name "start" is never needed and is not shown anywhere.
     static let configuration = CommandConfiguration(
         commandName: "start",
-        abstract: "Host one simulator for paired viewers (the default when no subcommand is given).",
-        discussion: """
-        Prints one JSON line per event, starting with the host ID. Logs go to standard error. Stop with Ctrl+C or SIGTERM.
-
-        Example:
-          axe mirror --udid <UDID>
-        """
+        abstract: MirrorHelp.abstract,
+        usage: MirrorHelp.usage,
+        discussion: MirrorHelp.discussion,
+        shouldDisplay: false
     )
 
-    @Option(name: .customLong("udid"), help: "UDID of the booted simulator.")
+    @Option(name: .customLong("udid"), help: "UDID of the booted simulator to host.")
     var simulatorUDID: String
 
     @Option(name: .customLong("relay-url"), help: "Use this iroh relay and no other; by default AXe picks from its published list.")
