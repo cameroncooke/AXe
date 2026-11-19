@@ -44,7 +44,7 @@ axe mirror unpair <NAME_OR_ID>
 axe mirror --udid <UDID> --demo --demo-app <BUNDLE_ID>
 ```
 
-- Public: any viewer may connect without pairing, one at a time. It is kept inside that one app: no hardware buttons, no touches that start at the top or bottom edge, a capped bitrate. It uses its own key.
+- Public: any viewer may connect without pairing, one at a time. It is kept inside that one app: no hardware buttons, no touches that start at the top or bottom edge, a capped bitrate, and touches are dropped and the app brought back whenever another app is in front. The app is started with `--launch-arg demo=1` for each visitor; the host stops with an `error` event if it cannot be started. It uses its own key.
 - Start one only when the user asks for a demo host.
 
 ## Network

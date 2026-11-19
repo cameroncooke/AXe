@@ -40,6 +40,7 @@ final class MirrorHomeRelayWatcher: HomeRelayCallback {
 final class MirrorLastValue: @unchecked Sendable {
     private let lock = NSLock()
     private var value: [String]?
+    var current: [String]? { lock.withLock { value } }
     func changed(to new: [String]) -> Bool {
         lock.withLock {
             defer { value = new }

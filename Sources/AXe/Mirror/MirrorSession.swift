@@ -84,7 +84,9 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
     private var adaptTimer: DispatchSourceTimer?
     private var relayWatch: Task<Void, Never>?
     private var blockedGesture: UInt32?     // demo only: the gesture now being dropped
-    private var demoAppTimer: DispatchSourceTimer?
+    private var demoLock: MirrorDemoLock?   // demo only: keeps the visitor inside the sample app
+    /// The host cannot go on: the message says why.
+    var onFatal: ((String) -> Void)?
 
     // The bitrate rule's state; see `adaptBitrate()`.
     private var currentMbps = 0.0
@@ -131,14 +133,22 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
                     self.onEvent?(["event": "ready", "udid": self.simulator.udid, "relay": String(text.dropFirst("iroh online, home relay ".count))])
                 }
             }
+            if settings.demo, let app = settings.demoApp {
+                let lock = MirrorDemoLock(simulator: simulator, app: app) { mirrorNote($0) }
+                lock.onAppMissing = { [weak self] in
+                    self?.onFatal?("The demo's sample app \(app) could not be started on the simulator. Install it and start the demo again.")
+                }
+                demoLock = lock
+            }
             link.onConnected = { [weak self] in
                 self?.endSession()
                 self?.onEvent?(["event": "viewerConnected"])
-                self?.showDemoApp()
+                self?.demoLock?.visitorArrived()
             }
             link.onMessage = { [weak self] type, payload in self?.handle(type: type, payload: payload) }
             link.onClosed = { [weak self] in
                 self?.endSession()
+                self?.demoLock?.visitorLeft()
                 self?.onEvent?(["event": "viewerDisconnected"])
             }
             link.onPathSelected = { [weak self] relay in self?.pathChanged(toRelay: relay) }
@@ -197,6 +207,7 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
             encoder = nil
         }
         health.stop()
+        demoLock?.visitorLeft()
         link.closeAndWait()
         return health.summary()
     }
@@ -644,8 +655,12 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
             let time = mirrorNow()
             if let message = MirrorTouch(payload, received: time) {
                 if settings.demo {
-                    // A touch that starts at the top or bottom edge is dropped whole, down to up.
-                    if message.isDown { blockedGesture = MirrorDemo.blocksTouch(downAt: message.y1) || (message.contacts > 1 && MirrorDemo.blocksTouch(downAt: message.y2)) ? message.gesture : nil }
+                    // A touch that starts at the top or bottom edge, or while another app than the
+                    // sample app is in front, is dropped whole, down to up.
+                    if message.isDown {
+                        let edge = MirrorDemo.blocksTouch(downAt: message.y1) || (message.contacts > 1 && MirrorDemo.blocksTouch(downAt: message.y2))
+                        blockedGesture = edge || demoLock?.allowsInput == false ? message.gesture : nil
+                    }
                     if message.gesture == blockedGesture { return }
                 }
                 input?.receive(message)
@@ -656,34 +671,6 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
         default:
             break
         }
-    }
-
-    // MARK: Demo
-
-    /// Starts the demo's sample app afresh when a viewer arrives, so that every visitor begins on
-    /// its first screen and not where the last one stopped. Every half minute while one is
-    /// connected it is brought to the front again, in case the visitor found a way out of it.
-    private func showDemoApp() {
-        guard settings.demo, let app = settings.demoApp else { return }
-        let udid = simulator.udid
-        let launch = { (afresh: Bool) in
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl", "launch"] + (afresh ? ["--terminate-running-process"] : []) + [udid, app]
-            process.standardOutput = FileHandle.nullDevice
-            process.standardError = FileHandle.nullDevice
-            try? process.run()
-        }
-        launch(true)
-        demoAppTimer?.cancel()
-        let timer = DispatchSource.makeTimerSource(queue: queue)
-        timer.schedule(deadline: .now() + 30, repeating: 30)
-        timer.setEventHandler { [weak self] in
-            guard let self, self.link.hasViewer else { self?.demoAppTimer?.cancel(); self?.demoAppTimer = nil; return }
-            launch(false)
-        }
-        timer.resume()
-        demoAppTimer = timer
     }
 
     // MARK: Session

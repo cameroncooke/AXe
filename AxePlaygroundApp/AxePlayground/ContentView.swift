@@ -48,7 +48,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private func destinationView(for screen: String) -> some View {
-        switch screen {
+        switch DemoMode.allows(screen) ? screen : "" {
         // Touch & Gestures
         case "tap-test":
             TapTestView()
@@ -139,6 +139,11 @@ struct MainMenuView: View {
     @Binding var showSwipeTestModal: Bool
     @Binding var showMediaPattern: Bool
     
+    /// The menu, without the screens a demo's visitor may not open and the sections that leaves empty.
+    private var shownSections: [(String, [(String, String, String)])] {
+        menuSections.map { ($0.0, $0.1.filter { DemoMode.allows($0.0) }) }.filter { !$0.1.isEmpty }
+    }
+
     private let menuSections: [(String, [(String, String, String)])] = [
         ("Touch & Gestures", [
             ("tap-test", "Tap Test", "Displays coordinates of CLI taps"),
@@ -187,7 +192,7 @@ struct MainMenuView: View {
     
     var body: some View {
         List {            
-            ForEach(menuSections, id: \.0) { section in
+            ForEach(shownSections, id: \.0) { section in
                 Section(section.0) {
                     ForEach(section.1, id: \.0) { item in
                         if item.0 == "swipe-test" || item.0 == "media-pattern" {

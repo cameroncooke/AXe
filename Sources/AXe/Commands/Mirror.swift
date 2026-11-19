@@ -407,12 +407,19 @@ enum MirrorHost {
         let session = MirrorSession(simulator: simulator, framebuffer: framebuffer, secret: secret, settings: settings)
         session.onEvent = { emit($0) }
         let stop = AsyncStream<Void>.makeStream()
+        let fatal = MirrorLastValue()
+        session.onFatal = { message in
+            _ = fatal.changed(to: [message])
+            emit(["event": "error", "message": message])
+            stop.continuation.yield()
+        }
         let observer = SignalObserver(signals: [SIGINT, SIGTERM]) { stop.continuation.yield() }
         defer { observer.invalidate() }
         session.start()
         for await _ in stop.stream { break }
         for line in session.stop() { FileHandle.standardError.write(Data((line + "\n").utf8)) }
         emit(["event": "stopped"])
+        if let message = fatal.current?.first { throw CLIError(errorDescription: message, code: .commandFailed) }
     }
 
     static func emit(_ event: [String: String]) {
