@@ -174,7 +174,7 @@ axe stream-video --udid "$UDID" --fps 30 --format ffmpeg | \
 
 ## Mirror: a simulator on your iPhone or iPad
 
-`axe mirror` hosts one booted simulator for the free AXe Mirror app on iPhone and iPad. The app shows the simulator's screen live and sends your touches back to it.
+`axe mirror` hosts one booted simulator for the free AXe Mirror app on iPhone and iPad. The app shows the simulator's screen live and sends your touches back to it. The app is open source: you can [build it yourself](AXeMirror/README.md#build-it-yourself-for-your-iphone-or-ipad) from this repository without the App Store.
 
 ```bash
 axe mirror pair                      # show a one-time code and QR code for the app to scan or type

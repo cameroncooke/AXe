@@ -11,13 +11,46 @@ axe mirror --udid <UDID>     # hosts one booted simulator; tap the Mac in the ap
 
 The host sends the screen as HEVC video. The app decodes it, and sends back touches (one or two fingers) and the Home, app switcher and Lock buttons. The connection is encrypted from end to end (QUIC, through the [iroh](https://github.com/n0-computer/iroh) library). It is direct when the two devices can reach each other and goes through a relay when they cannot. See [Mirror](../README.md#mirror-a-simulator-on-your-iphone-or-ipad) in the main README for the command.
 
+## Getting the app
+
+AXe Mirror is free and open source, under the same licence as AXe: the GNU General Public License version 3 (see [LICENSE](../LICENSE)). There are two ways to get it:
+
+- From the App Store, once it is published there.
+- By building it yourself from this folder, which needs nothing from the App Store. A self-built copy works the same way: it pairs with `axe mirror pair`, finds the same relays, and can try the demo.
+
+## Build it yourself for your iPhone or iPad
+
+You need a Mac with Xcode and an Apple ID. A free Apple ID is enough; with one, the app stops opening after seven days and has to be installed again, and the Macs you paired stay paired as long as the app is not deleted. A paid developer account lasts a year.
+
+1. Install [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`), then generate and open the project:
+
+   ```bash
+   git clone https://github.com/cameroncooke/AXe.git
+   cd AXe/AXeMirror
+   xcodegen generate
+   open AXeMirror.xcodeproj
+   ```
+
+2. In Xcode, select the AXeMirror target, open Signing & Capabilities, choose your own team, and change the bundle identifier to one of your own, for example `com.example.axemirror`. The identifier in `project.yml` belongs to the App Store copy and cannot be signed by anyone else.
+3. Connect the iPhone or iPad, choose it as the run destination and press Run. The first time, the device asks you to trust your developer certificate under Settings > General > VPN & Device Management.
+
+Or do steps 2 and 3 from the command line, with your own team ID and identifier:
+
+```bash
+xcodebuild -project AXeMirror.xcodeproj -scheme AXeMirror \
+  -destination 'generic/platform=iOS' -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM=<your team ID> PRODUCT_BUNDLE_IDENTIFIER=com.example.axemirror build
+```
+
+Then pair and connect as usual: `axe mirror pair` on the Mac, scan the code in the app, and `axe mirror --udid <UDID>`.
+
 ## Requirements
 
 - Xcode 27 or later (a release version, not a beta, for App Store builds)
 - [XcodeGen](https://github.com/yonaskolb/XcodeGen)
 - iOS or iPadOS 17.5 or later on the device or simulator
 
-## Build
+## Build for the simulator
 
 The Xcode project is generated from `project.yml` and is not checked in.
 
@@ -34,7 +67,7 @@ xcodebuild -project AXeMirror.xcodeproj -scheme AXeMirror \
   -destination 'generic/platform=iOS Simulator' build
 ```
 
-The project depends on the [iroh-ffi](https://github.com/n0-computer/iroh-ffi) Swift package, version 1.2.0, which Xcode fetches on the first build. To run on a device, set your own development team and bundle identifier in `project.yml` and generate again.
+The project depends on the [iroh-ffi](https://github.com/n0-computer/iroh-ffi) Swift package, version 1.2.0, which Xcode fetches on the first build.
 
 ## Source layout
 
