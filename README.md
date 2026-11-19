@@ -198,9 +198,11 @@ axe mirror unpair "Ada's iPhone"     # remove one by name or ID
 {"event":"stopped"}
 ```
 
-`path` has `kind` `direct` or `relay`. The other events are `refused` (`viewer`, `reason`), when a viewer that is not paired tries to connect, and `error` (`message`). Every value is a string. Ctrl+C or SIGTERM stops the host.
+`path` has `kind` `direct` or `relay`. The other events are `refused` (`viewer`, `reason`), when a viewer that is not paired tries to connect, `warning` (`code`, `message`) and `error` (`message`). Every value is a string. Ctrl+C or SIGTERM stops the host.
 
 Connections are encrypted from end to end (QUIC, through the [iroh](https://github.com/n0-computer/iroh) library). The two devices connect directly when they can and through a relay when they cannot; a relay cannot read the video or the touches. AXe reads its relay list from the DNS TXT record `_relays.axe-cli.com` and falls back to a built-in list. iroh's public relays are a last resort, for when none of AXe's answers. `--relay-url <URL>`, on `mirror` and `mirror pair`, uses that relay and no other.
+
+If the stream is slow and the app shows Relay while both devices are on the same network, macOS is probably keeping `axe` off the local network. `axe mirror` checks at start: it prints a warning, with the event `warning` and code `localNetworkBlocked`, and when a viewer on the same network connects, the host moves to the relay alone for it, which is slower than a direct connection but steady. That viewer reconnects by itself, once, after a few seconds. Viewers on other networks still connect directly. The host asks macOS again whenever a viewer on the same network arrives, so it returns to direct connections by itself once it is allowed. Allow the app you run `axe` from in System Settings > Privacy & Security > Local Network. Apple's Terminal and SSH sessions are always allowed; other terminal apps and launch agents need the permission.
 
 ```bash
 axe mirror --udid "$UDID" --demo --demo-app com.example.MyApp

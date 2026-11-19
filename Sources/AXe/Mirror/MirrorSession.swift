@@ -33,6 +33,8 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
         var demo = false                // a demo host: see `MirrorDemo`
         var demoApp: String?            // the sample app a demo host keeps in front
         var relayOnly = false
+        var avoidLocalNetwork = false   // macOS keeps this process off the local network: see `MirrorLink.avoidsLocalNetwork`
+        var assumeLocalNetworkBlocked = false   // tests: every later check also answers "blocked"
     }
 
     private struct Frame {
@@ -145,6 +147,8 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
                 link.allows = { viewers.allows($0) }
                 link.onRefused = { [weak self] viewer in self?.onEvent?(["event": "refused", "viewer": viewer, "reason": "not paired"]) }
             }
+            link.avoidsLocalNetwork = settings.avoidLocalNetwork
+            if settings.assumeLocalNetworkBlocked { link.localNetworkCheck = { .blocked } }
             link.start(secret: secret, relayOnly: settings.relayOnly, relayURLs: settings.relayURLs)
             let adapt = DispatchSource.makeTimerSource(queue: queue)
             adapt.schedule(deadline: .now() + 0.25, repeating: 0.25)

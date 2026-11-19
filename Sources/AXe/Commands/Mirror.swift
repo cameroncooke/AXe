@@ -115,6 +115,10 @@ struct MirrorStartCommand: AsyncParsableCommand {
         help: ArgumentHelp("Listen on loopback only, so every viewer goes through the relay.", visibility: .hidden))
     var relayOnly = false
 
+    @Flag(name: .customLong("assume-local-network-blocked"),
+        help: ArgumentHelp("Behave as if macOS kept this process off the local network. For tests.", visibility: .hidden))
+    var assumeLocalNetworkBlocked = false
+
     @Option(name: .customLong("delay-rule"),
         help: ArgumentHelp("How the touch replay delay is chosen: gestures, steady or fixed.", visibility: .hidden))
     var delayRule = "gestures"
@@ -150,6 +154,17 @@ struct MirrorStartCommand: AsyncParsableCommand {
         settings.relayURLs = relays.relays
         MirrorHost.emit(relays.event)
         settings.relayOnly = relayOnly
+        // A host that macOS keeps off the local network still hears a viewer on that network but
+        // cannot answer it. Direct paths then open, are chosen for the picture and die, over and
+        // over, and touches go unanswered for seconds at a time (measured 19 November 2026). Such a
+        // host says why, and moves to the relay alone while a viewer on its own network is connected.
+        // It asks macOS again each time such a viewer arrives, so it recovers once it is allowed.
+        if !relayOnly, assumeLocalNetworkBlocked || MirrorLocalNetwork.check() == .blocked {
+            settings.avoidLocalNetwork = true
+            settings.assumeLocalNetworkBlocked = assumeLocalNetworkBlocked
+            MirrorHost.emit(["event": "warning", "code": "localNetworkBlocked", "message": MirrorLocalNetwork.advice])
+            FileHandle.standardError.write(Data(("Warning: " + MirrorLocalNetwork.advice + "\n").utf8))
+        }
         settings.viewers = allowUnpaired || demo ? nil : MirrorViewers(url: viewersFile.map { URL(fileURLWithPath: $0) } ?? MirrorViewers.defaultURL)
         settings.delayRule = delayRule
         try await MirrorHost.run(simulator: simulator, secret: secret, settings: settings)
