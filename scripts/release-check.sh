@@ -51,6 +51,14 @@ skill_lint() {
     npx --yes skill-check@1.2.0 check agent-plugin/skills/axe --no-security-scan --fail-on-warning
 }
 
+# The resource bundle ships AXe's licence and notices with every release; they must match the root files.
+licence_copies() {
+    local status=0
+    cmp LICENSE Sources/AXe/Resources/licenses/axe/LICENSE || status=1
+    cmp THIRD_PARTY_LICENSES Sources/AXe/Resources/licenses/axe/THIRD_PARTY_LICENSES || status=1
+    return "$status"
+}
+
 echo "Release checks at $(git rev-parse --short HEAD) on $(git rev-parse --abbrev-ref HEAD)"
 if [[ -n "$(git status --porcelain)" ]]; then
     echo "  NOTE  the working tree has uncommitted changes; the checks cover them too"
@@ -59,6 +67,7 @@ fi
 check "changelog" python3 -I scripts/check-changelog-released.py "$BASE"
 check "script tests" python3 -I -m unittest discover -s scripts/tests
 check "skill copies" diff -r agent-plugin/skills/axe Sources/AXe/Resources/skills/axe
+check "licence copies" licence_copies
 check "skill lint" skill_lint
 check "readiness log" python3 -I scripts/check-release-readiness.py
 check "packaging" scripts/release-dry-run.sh

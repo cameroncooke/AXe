@@ -8,7 +8,7 @@
   },
   "homepage": "https://axe-cli.com/docs",
   "repository": "https://github.com/cameroncooke/AXe",
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "keywords": [
     "ios",
     "simulator",

@@ -3,7 +3,7 @@ class Axe < Formula
   homepage "https://github.com/cameroncooke/AXe"
   url "<normalized>"
   sha256 "<normalized>"
-  license "MIT"
+  license "GPL-3.0-only"
 
   depends_on macos: :sonoma
 
