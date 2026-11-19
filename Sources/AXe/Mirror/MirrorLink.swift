@@ -51,7 +51,10 @@ final class MirrorLastValue: @unchecked Sendable {
 final class MirrorPathLogger: PathEventCallback {
     let log: (String) -> Void
     let selected: (Bool) -> Void    // whether the path now in use is a relay
-    init(log: @escaping (String) -> Void, selected: @escaping (Bool) -> Void) { self.log = log; self.selected = selected }
+    let direct: (String) -> Void    // the remote address of a direct path that is now in use
+    init(log: @escaping (String) -> Void, selected: @escaping (Bool) -> Void, direct: @escaping (String) -> Void = { _ in }) {
+        self.log = log; self.selected = selected; self.direct = direct
+    }
     func onEvent(event: PathEvent) async throws {
         // A direct path is logged with its address and what kind of network that address is on, so that a
         // session can be checked afterwards for having run over a VPN (Tailscale uses 100.64/10 and fd7a:115c:a1e0::/48).
@@ -76,6 +79,7 @@ final class MirrorPathLogger: PathEventCallback {
         case .selected(_, let remote, _):
             log("path selected \(kind(remote))")
             selected(remote.hasPrefix("http"))
+            if !remote.hasPrefix("http") { direct(remote) }
         case .lagged: break
         }
     }
@@ -102,6 +106,29 @@ final class MirrorLink {
     private var watch: WatchHandle?
     private var homeWatch: WatchHandle?
     private var relays: [String] = []           // what the endpoint was last given; empty means iroh's public relays
+    private var secret = Data()
+    private var relayOnlyAsked = false          // asked for at start: the endpoint never leaves the relay
+    private var relayOnlyNow = false            // how the endpoint is bound at present
+    private var rebinding = false
+    private var idleCount = 0                   // goes up each time a viewer leaves
+    /// Set when macOS keeps this process off the local network (see `MirrorLocalNetwork`). A viewer
+    /// on one of this Mac's own networks then cannot hold a direct path, and trying costs it the
+    /// stream: paths open, are chosen for the video and die. iroh offers no way to refuse one
+    /// address, so when such a path is chosen, the endpoint is closed and bound again on the relay
+    /// alone. A path that opens and is never chosen does no harm and is left alone: the host also
+    /// tries a distant viewer's private address, which can look like one of this Mac's own. The viewer reconnects by itself within a few seconds and stays on the
+    /// relay. A minute after the last viewer has gone the endpoint allows direct paths again, so a
+    /// viewer somewhere else, whom this process can reach, still gets one.
+    ///
+    /// What was found at the start is not trusted for the life of the host: the user may allow the
+    /// permission while it runs, and the first start after the program file is replaced has been
+    /// seen to report "blocked" when a later one did not. So the question is asked again each time
+    /// a path on this Mac's own network is chosen, and the host stops avoiding them once the answer
+    /// is that it is allowed.
+    var avoidsLocalNetwork = false
+    /// Asks macOS again. Tests replace it.
+    var localNetworkCheck: () -> MirrorLocalNetwork.Access = { MirrorLocalNetwork.check() }
+    static let directAgainAfter: TimeInterval = 60
     var onPathSelected: ((Bool) -> Void)?       // on `queue`; true when the path now in use is a relay
     var onConnected: (() -> Void)?              // on `queue`
     var onMessage: ((UInt8, Data) -> Void)?     // on `queue`
@@ -131,30 +158,84 @@ final class MirrorLink {
 
     /// `relayURLs` are our relays in order of preference; empty means iroh's public relays.
     func start(secret: Data, relayOnly: Bool = false, relayURLs: [String] = []) {
-        Task {
-            do {
-                let preset: Preset = relayOnly ? MirrorRelayOnlyPreset(relayURLs: relayURLs) : relayURLs.isEmpty ? presetN0() : MirrorOwnRelayPreset(relayURLs: relayURLs)
-                let endpoint = try await Endpoint.bind(options: EndpointOptions(preset: preset, secretKey: secret, alpns: Self.alpns))
-                lock.lock(); self.endpoint = endpoint; relays = relayURLs; lock.unlock()
-                onNote?("iroh endpoint \(endpoint.id().description)")
-                await endpoint.online()
-                onNote?("iroh online, home relay \(endpoint.addr().relayUrl() ?? "none")")
-                // For the log only. iroh did not report a stopped relay here within two minutes, so the
-                // session's relay watch asks the relay itself.
-                // The callback also fires when only a relay's connection state changes, so repeats are dropped.
-                let last = MirrorLastValue()
-                homeWatch = endpoint.watchHomeRelay(callback: MirrorHomeRelayWatcher { [weak self] urls in
-                    guard last.changed(to: urls) else { return }
-                    self?.onNote?(urls.isEmpty ? "home relay: none" : "home relay: \(urls.joined(separator: " "))")
-                })
-                while let incoming = await endpoint.acceptNext() {
-                    Task {
-                        do { try await self.serve(try await incoming.accept().connect()) } catch { self.onNote?("iroh connection failed: \(error)") }
-                    }
+        lock.lock(); self.secret = secret; relayOnlyAsked = relayOnly; relayOnlyNow = relayOnly; relays = relayURLs; lock.unlock()
+        Task { await listen(first: true) }
+    }
+
+    /// Binds the endpoint and serves viewers until it is closed. `first` is false when the endpoint
+    /// is bound again while the host runs; the notes then differ, so that the host reports its ID
+    /// and that it is ready once only.
+    private func listen(first: Bool) async {
+        lock.lock(); let secret = self.secret, relayOnly = relayOnlyNow, relayURLs = relays; lock.unlock()
+        do {
+            let preset: Preset = relayOnly ? MirrorRelayOnlyPreset(relayURLs: relayURLs) : relayURLs.isEmpty ? presetN0() : MirrorOwnRelayPreset(relayURLs: relayURLs)
+            let endpoint = try await Endpoint.bind(options: EndpointOptions(preset: preset, secretKey: secret, alpns: Self.alpns))
+            lock.lock(); self.endpoint = endpoint; rebinding = false; lock.unlock()
+            if first { onNote?("iroh endpoint \(endpoint.id().description)") }
+            await endpoint.online()
+            let home = endpoint.addr().relayUrl() ?? "none"
+            onNote?(first ? "iroh online, home relay \(home)" : "listening again, \(relayOnly ? "on the relay only" : "direct paths allowed"), home relay \(home)")
+            // For the log only. iroh did not report a stopped relay here within two minutes, so the
+            // session's relay watch asks the relay itself.
+            // The callback also fires when only a relay's connection state changes, so repeats are dropped.
+            let last = MirrorLastValue()
+            homeWatch = endpoint.watchHomeRelay(callback: MirrorHomeRelayWatcher { [weak self] urls in
+                guard last.changed(to: urls) else { return }
+                self?.onNote?(urls.isEmpty ? "home relay: none" : "home relay: \(urls.joined(separator: " "))")
+            })
+            while let incoming = await endpoint.acceptNext() {
+                Task {
+                    do { try await self.serve(try await incoming.accept().connect()) } catch { self.onNote?("iroh connection failed: \(error)") }
                 }
-            } catch {
-                onNote?("iroh failed: \(error)")
             }
+        } catch {
+            lock.lock(); rebinding = false; lock.unlock()
+            onNote?("iroh failed: \(error)")
+        }
+    }
+
+    /// Closes the endpoint and binds it again, on the relay alone or with direct paths allowed. A
+    /// connected viewer is dropped and reconnects by itself.
+    private func rebind(relayOnly: Bool, why: String) {
+        lock.lock()
+        guard !rebinding, relayOnlyNow != relayOnly, relayOnly || !relayOnlyAsked, let endpoint = self.endpoint else { lock.unlock(); return }
+        rebinding = true
+        relayOnlyNow = relayOnly
+        let connection = self.connection
+        self.endpoint = nil
+        lock.unlock()
+        onNote?(why)
+        Task {
+            try? connection?.close(errorCode: 0, reason: Data("listening again".utf8))
+            try? await endpoint.close()
+            await self.listen(first: false)
+        }
+    }
+
+    /// A direct path to `remote` is now in use. See `avoidsLocalNetwork`.
+    private func directPathSelected(_ remote: String) {
+        lock.lock(); let avoiding = avoidsLocalNetwork; lock.unlock()
+        guard avoiding, MirrorLocalNetwork.isLocal(remote, networks: MirrorLocalNetwork.networks()) else { return }
+        if localNetworkCheck() == .allowed {
+            lock.lock(); avoidsLocalNetwork = false; lock.unlock()
+            onNote?("macOS now lets this process onto the local network: keeping direct paths for viewers on it")
+            return
+        }
+        rebind(relayOnly: true, why: "the viewer is on this Mac's own network, which macOS closes to this process: moving to the relay only")
+    }
+
+    /// Called on `queue` when a viewer has gone. If the endpoint moved to the relay for it, direct
+    /// paths are allowed again once no viewer has been connected for `directAgainAfter`.
+    private func allowDirectAgainLater() {
+        lock.lock()
+        idleCount += 1
+        let count = idleCount, wanted = relayOnlyNow && !relayOnlyAsked
+        lock.unlock()
+        guard wanted else { return }
+        queue.asyncAfter(deadline: .now() + Self.directAgainAfter) { [weak self] in
+            guard let self else { return }
+            self.lock.lock(); let idle = self.connection == nil && self.idleCount == count; self.lock.unlock()
+            if idle { self.rebind(relayOnly: false, why: "no viewer for a minute: allowing direct paths again") }
         }
     }
 
@@ -212,7 +293,7 @@ final class MirrorLink {
         try? previous?.close(errorCode: 0, reason: Data())
         watch = connection.watchPathEvents(callback: MirrorPathLogger(log: { [weak self] text in self?.onNote?(text) }, selected: { [weak self] relay in
             self?.queue.async { if self?.isCurrent(connection) == true { self?.onPathSelected?(relay) } }
-        }))
+        }, direct: { [weak self] remote in self?.directPathSelected(remote) }))
         queue.async { self.onConnected?() }
 
         Task { for await data in controlData { do { try await controlSend.writeAll(buf: data) } catch { break } } }
@@ -252,6 +333,7 @@ final class MirrorLink {
             self.videoSend = nil
             self.lock.unlock()
             self.onClosed?()
+            self.allowDirectAgainLater()
         }
     }
 

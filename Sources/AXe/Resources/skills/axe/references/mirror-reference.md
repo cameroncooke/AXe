@@ -25,6 +25,7 @@ axe mirror --udid <UDID>
 - One JSON line per event on stdout, logs on stderr. In order: `relays`, `endpoint` (`hostID`), `ready` (`udid`, `relay`); then for each viewer `viewerConnected`, `streaming` (`width`, `height`), `path` (`kind`: `direct` or `relay`) and `viewerDisconnected`; `stopped` at exit. Every value is a string.
 - `ready`: a paired viewer can connect now. Tell the user to tap this Mac in the app.
 - `refused` (`viewer`, `reason`): a viewer that is not paired tried to connect; pair it first. `error` (`message`): report it.
+- `warning` with `code` `localNetworkBlocked`: macOS is keeping this process off the local network, so a viewer on the same network goes through the relay: it reconnects once when it arrives and its stream is slower. Viewers on other networks are not affected. Tell the user to allow the app `axe` runs from (their terminal, or the app you run in) in System Settings > Privacy & Security > Local Network. The host asks macOS again when the next viewer on the same network connects, so it does not need restarting.
 - One viewer at a time. The viewer's touches (one or two fingers) and its Home, app switcher and Lock buttons act on the simulator, so take a new agent capture before your own next input.
 
 ## Viewers
