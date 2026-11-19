@@ -15,7 +15,7 @@ The host sends the screen as HEVC video. The app decodes it, and sends back touc
 
 AXe Mirror is free and open source, under the same licence as AXe: the GNU General Public License version 3 (see [LICENSE](../LICENSE)). There are two ways to get it:
 
-- From the App Store, once it is published there.
+- From the [App Store](https://apps.apple.com/app/id6836545597).
 - By building it yourself from this folder, which needs nothing from the App Store. A self-built copy works the same way: it pairs with `axe mirror pair`, finds the same relays, and can try the demo.
 
 ## Build it yourself for your iPhone or iPad
