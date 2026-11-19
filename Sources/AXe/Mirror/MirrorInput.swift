@@ -9,7 +9,7 @@ import Foundation
 /// viewer, so that network jitter does not change how fast a finger appears to move. See
 /// `adaptiveDelay()` for how long that time is and `replay()` for how late and lost touches are handled.
 final class MirrorInput {
-    private enum Command { case discrete(MirrorTouch), tick }
+    private enum Command { case discrete(MirrorTouch), tick, lift }
     private let hid: FBSimulatorHID
     private let width: Double, height: Double       // the simulator's screen in points
     private let interval: TimeInterval
@@ -26,7 +26,8 @@ final class MirrorInput {
     private var samples: [MirrorTouch] = []        // positions of the gesture being replayed, by touch time
     private var replaying: UInt32 = 0
     private var lastPlayed = CGPoint(x: -1, y: -1)
-    private var seenDiscrete: [UInt64] = []
+    private var memory = MirrorTouchMemory()   // which touches of this connection have been taken already
+    private var held: MirrorTouch?      // the touch now down in the simulator, where it was last put
     private var singleOpen = false      // a one-finger touch is down in the simulator, perhaps under a pair
     var edgePoints = 0.0                // a one-finger touch beginning this close to an edge is sent with an edge hint
     private var edgeName = ""           // the edge the open one-finger touch began at, if any
@@ -40,7 +41,6 @@ final class MirrorInput {
     private var needs: [TimeInterval] = []       // the delay each of the last five gestures would have needed
     private var timedAges: [(at: TimeInterval, age: TimeInterval)] = []   // arrival ages of the last 20 s, for the "steady" rule
     private var steadyDelay: TimeInterval = 0, steadySet: TimeInterval = 0
-    private var seenMoves = Set<UInt64>()        // moves of recent gestures already in `samples`
     private var arrivals: [String] = []          // every touch message as it arrived, for the arrivals log
     private var recoveredCount = 0, repeatedCount = 0
     private var currentDelay: TimeInterval = 0   // the replay delay in force for the gesture being replayed
@@ -85,27 +85,19 @@ final class MirrorInput {
         // Downs and ups arrive twice, on the reliable stream and as a datagram; whichever comes first is used.
         if message.kind != 4 {
             lock.lock()
-            let key = UInt64(message.gesture) << 8 | UInt64(message.isDown ? 1 : 2)
-            let repeated = seenDiscrete.contains(key)
-            if !repeated {
-                seenDiscrete.append(key)
-                if seenDiscrete.count > 64 { seenDiscrete.removeFirst() }
-            }
+            let fresh = memory.takeDiscrete(gesture: message.gesture, down: message.isDown)
             lock.unlock()
-            if repeated { return }
+            if !fresh { return }
         }
         if delay > 0 {
             lock.lock()
             defer { lock.unlock() }
             if message.kind == 4 {
                 // A move is used once: from its own datagram, or from the history of a later one.
-                let key = UInt64(message.gesture) << 32 | UInt64(message.sequence)
-                if seenMoves.contains(key) {
+                guard memory.takeMove(gesture: message.gesture, sequence: message.sequence) else {
                     if !message.recovered { repeatedCount += 1 }
                     return
                 }
-                if seenMoves.count > 4096 { seenMoves.removeAll() }
-                seenMoves.insert(key)
                 if message.recovered { recoveredCount += 1 }
             }
             arrivals.append(String(format: "%u,%u,%d,%.6f,%.6f,%d", message.gesture, message.sequence, Int(message.kind), message.touchTime, message.received, message.recovered ? 1 : 0))
@@ -144,8 +136,29 @@ final class MirrorInput {
         }
     }
 
+    /// A viewer has connected or left. A viewer numbers its gestures from one each time it connects,
+    /// so nothing remembered about the last connection's touches may be held against the next one's:
+    /// kept, it made the host take a new viewer's first touches for repeats and drop them. A finger
+    /// the last viewer left down is lifted, because its lift will never come.
+    func viewerChanged() {
+        lock.lock()
+        memory.forget()
+        waiting.removeAll()
+        samples.removeAll()
+        openAges.removeAll()
+        newestMove = nil
+        lock.unlock()
+        commands?.yield(.lift)
+    }
+
     private func handle(_ command: Command) async {
         switch command {
+        case .lift:
+            active = false
+            guard let held else { return }
+            while mirrorNow() < lastMove + interval {}
+            let points = held.contacts >= 2 ? [CGPoint(x: held.x1, y: held.y1), CGPoint(x: held.x2, y: held.y2)] : [CGPoint(x: held.x1, y: held.y1)]
+            await injectUp(MirrorTouch(kind: 2, gesture: held.gesture, sequence: held.sequence, points: points, time: mirrorNow()))
         case .discrete(let message):
             lock.lock()
             // An up carries the final position, so an older move still waiting is no longer wanted.
@@ -377,6 +390,7 @@ final class MirrorInput {
             try await event.sendAsync(on: hid)
         } catch { failure = String(describing: error).prefix(60).replacingOccurrences(of: ",", with: ";") }
         if message.contacts < 2, direction == .up { edgeName = "" }
+        held = direction == .down ? message : nil
         let line = String(format: "%u,%u,%d,%d,%.2f,%.2f,%.6f,%.6f,%.6f,%.6f,%@", message.gesture, message.sequence, Int(message.kind),
                           Int(message.contacts), first.x, first.y, message.touchTime, message.received, start, mirrorNow(), failure)
         lock.lock()

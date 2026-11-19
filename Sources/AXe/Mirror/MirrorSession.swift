@@ -701,6 +701,9 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
         otherPath = PathRate()
         ceilingMbps = 0; ceilingUntil = 0; ceilingFound = 0
         ackLog = []; ageHistory = []
+        // The next viewer numbers its gestures from one again.
+        blockedGesture = nil
+        input?.viewerChanged()
     }
 }
 #endif

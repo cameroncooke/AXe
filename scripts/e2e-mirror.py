@@ -298,6 +298,24 @@ def main():
 
     run(["xcrun", "simctl", "io", viewer_udid, "screenshot", os.path.join(work, "viewer-live.png")], check=False)
 
+    # 3b. A viewer that connects again has its first touch taken. The app numbers its gestures from
+    # one on every connection, and a host that remembered the last connection's numbers dropped them.
+    viewer.tap_id("stream.close")
+    wait_for("the list of Macs", lambda: viewer.find(label="Your Macs"), 15)
+    time.sleep(1.0)     # the stream screen is still sliding away
+    seen = len(events(host_log))
+    viewer.tap_label(MAC_NAME)
+    wait_for("the viewer to connect again", lambda: event(host_log, "streaming", after=seen), 40)
+    time.sleep(2.0)     # the first picture
+    before = tap_count(host)
+    viewer.axe_run("tap", "-x", str(first[0]), "-y", str(first[1]))
+    arrived = True
+    try:
+        wait_for("the first tap after connecting again", lambda: tap_count(host) == before + 1, 10)
+    except Exception:
+        arrived = False
+    check("the first tap after connecting again arrives", arrived, f"tap count {tap_count(host)}, was {before}")
+
     # 4. An unpaired viewer is refused.
     run([axe, "mirror", "unpair", paired["viewer"][:12], "--viewers-file", viewers])
     viewer.tap_id("stream.close")
