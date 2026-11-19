@@ -1,0 +1,75 @@
+# The alarm for the AXe Mirror relay, raised from outside the relay's own server.
+#
+# Every ten minutes this asks the published records and every relay they name whether they are
+# there (scripts/check-relay.sh). When a check fails the run fails, which GitHub reports by email
+# to whoever last changed the schedule below, and an issue labelled "relay-down" is opened, which
+# notifies everyone watching the repository. The issue is commented on while the fault lasts and
+# closed by the first run that passes.
+#
+# Limits worth knowing: GitHub starts scheduled runs late when it is busy (often 5 to 20 minutes),
+# runs them only from the default branch, and switches them off after 60 days without a commit.
+name: Relay monitor
+
+on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: relay-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check the relay
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Ask the relay
+        id: ask
+        run: |
+          set -o pipefail
+          scripts/check-relay.sh | tee result.txt
+
+      - name: Raise the alarm
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The relay check failed at $(date -u '+%Y-%m-%d %H:%M UTC')."
+            echo
+            echo '```'
+            cat result.txt 2>/dev/null || echo "The check produced no output."
+            echo '```'
+            echo
+            echo "Run: $RUN_URL"
+          } > body.md
+          gh label create relay-down --repo "$GITHUB_REPOSITORY" --color B60205 \
+            --description "The AXe Mirror relay failed its outside check" 2>/dev/null || true
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label relay-down --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --repo "$GITHUB_REPOSITORY" --body-file body.md
+          else
+            gh issue create --repo "$GITHUB_REPOSITORY" --label relay-down \
+              --title "The AXe Mirror relay is failing its check" --body-file body.md
+          fi
+
+      - name: Stand the alarm down
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          open=$(gh issue list --repo "$GITHUB_REPOSITORY" --label relay-down --state open --json number --jq '.[0].number // empty')
+          if [ -n "$open" ]; then
+            gh issue close "$open" --repo "$GITHUB_REPOSITORY" \
+              --comment "The relay passed its check at $(date -u '+%Y-%m-%d %H:%M UTC')."
+          fi
