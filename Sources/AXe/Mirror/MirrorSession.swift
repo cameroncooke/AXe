@@ -656,26 +656,27 @@ final class MirrorSession: NSObject, FBFramebufferConsumer, @unchecked Sendable 
 
     // MARK: Demo
 
-    /// Brings the demo's sample app to the front: when a viewer arrives, and every half minute while
-    /// one is connected, in case a visitor found a way out of it.
+    /// Starts the demo's sample app afresh when a viewer arrives, so that every visitor begins on
+    /// its first screen and not where the last one stopped. Every half minute while one is
+    /// connected it is brought to the front again, in case the visitor found a way out of it.
     private func showDemoApp() {
         guard settings.demo, let app = settings.demoApp else { return }
         let udid = simulator.udid
-        let launch = {
+        let launch = { (afresh: Bool) in
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl", "launch", udid, app]
+            process.arguments = ["simctl", "launch"] + (afresh ? ["--terminate-running-process"] : []) + [udid, app]
             process.standardOutput = FileHandle.nullDevice
             process.standardError = FileHandle.nullDevice
             try? process.run()
         }
-        launch()
+        launch(true)
         demoAppTimer?.cancel()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 30, repeating: 30)
         timer.setEventHandler { [weak self] in
             guard let self, self.link.hasViewer else { self?.demoAppTimer?.cancel(); self?.demoAppTimer = nil; return }
-            launch()
+            launch(false)
         }
         timer.resume()
         demoAppTimer = timer
