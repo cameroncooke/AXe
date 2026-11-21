@@ -164,7 +164,10 @@ struct Button: PhysicalDeviceCommand {
             logger.info().log("Duration: \(duration) seconds")
         }
 
-        try await HIDInteractor.performHIDEvent(hidEvent, for: simulatorUDID, logger: logger)
+        if case .direct(let simulator) = try await OrdinaryBrokerInput.performPlainThroughBroker(
+            .button(selectedButtonPayload), simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose) {
+            try await HIDInteractor.performHIDEvent(hidEvent, for: simulatorUDID, loaded: simulator, logger: logger)
+        }
         logger.info().log("\(buttonType.description) press completed successfully")
     }
 } 

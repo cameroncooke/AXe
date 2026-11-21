@@ -11,6 +11,12 @@ enum OrdinaryBrokerInput {
         let context: SelectedHIDContext
     }
 
+    /// Whether a plain key or button went through the broker, or keeps the direct route.
+    enum PlainBrokerRoute {
+        case sent
+        case direct(FBSimulator)
+    }
+
     @MainActor
     static func isDuo(_ simulator: FBSimulator) -> Bool {
         simulator.device.deviceType?.identifier == duoDeviceTypeIdentifier
@@ -52,6 +58,7 @@ enum OrdinaryBrokerInput {
     ) async throws -> Route? {
         let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
         if forKeyboard || includeVerifiedRigid {
+            await startDTUHIDIfNeeded(for: simulator, logger: logger)
             // Duo and verified DTUHID profiles share the broker's retained connection.
             guard try usesSharedKeyboardOwner(for: simulator) else { return nil }
         } else {
@@ -71,6 +78,42 @@ enum OrdinaryBrokerInput {
             throw SelectedHIDFailure.invalid("Simulator boot changed during input preparation")
         }
         return Route(context: SelectedHIDContext(observation))
+    }
+
+    /// How long the guest has to answer the connection that starts `dtuhidd`.
+    static let dtuhidStartTimeout: TimeInterval = 2
+
+    /// Whether a rigid simulator should have `dtuhidd` started for it: an iOS 27 runtime whose
+    /// daemon is not running, booted long enough for DTUHID input.
+    static func shouldStartDTUHID(isDuo: Bool, runtimeMajorVersion: Int, hasProfileMetadata: Bool,
+                                  isDTUHIDRunning: Bool, readinessDelay: TimeInterval) -> Bool {
+        !isDuo && runtimeHasMeasuredRoute(majorVersion: runtimeMajorVersion) && hasProfileMetadata
+            && !isDTUHIDRunning && readinessDelay <= 0
+    }
+
+    /// A headless simulator has no `dtuhidd` until something connects to it, as Device Hub does when
+    /// it shows the simulator. Without it the plain commands keep the per-command Indigo route, about
+    /// 0.3 to 0.6 s a tap on iOS 27.3, against 0.07 s through the broker's retained connection. Any
+    /// failure here keeps the existing route.
+    @MainActor
+    static func startDTUHIDIfNeeded(for simulator: FBSimulator, logger: AxeLogger) async {
+        // Checked first because it needs no process walk.
+        guard runtimeHasMeasuredRoute(majorVersion: simulator.osVersion.version.majorVersion),
+              let boot = try? HIDBroker.currentBootIdentity(simulatorUDID: simulator.udid) else { return }
+        let running = FBProcessFetcher().subprocess(of: boot.processIdentifier, withName: "dtuhidd") > 0
+        guard shouldStartDTUHID(
+            isDuo: isDuo(simulator),
+            runtimeMajorVersion: simulator.osVersion.version.majorVersion,
+            hasProfileMetadata: hasProfileMetadata(simulator),
+            isDTUHIDRunning: running,
+            readinessDelay: HIDBroker.dtuhidReadinessDelay(bootIdentity: boot, now: Date())
+        ) else { return }
+        do {
+            try await FBSimulatorHID.startDTUHIDService(for: simulator, timeout: dtuhidStartTimeout)
+            logger.info().log("Started dtuhidd")
+        } catch {
+            logger.info().log("Could not start dtuhidd; keeping the existing input route: \(error)")
+        }
     }
 
     /// One policy shared by caller capture and broker admission. Rigid Indigo and unknown
@@ -125,6 +168,17 @@ enum OrdinaryBrokerInput {
         logger: AxeLogger,
         verbose: Bool = false
     ) async throws {
+        if let keyboard = try? OrdinaryBrokerKeyboard(event) {
+            var route = PlainBrokerRoute.sent
+            try await SignalScope.cancellingOnSignal {
+                route = try await performPlainThroughBroker(.ordinaryKeyboard(keyboard), simulatorUDID: simulatorUDID,
+                    logger: logger, verbose: verbose)
+            }
+            if case .direct(let simulator) = route {
+                try await HIDInteractor.performHIDEvent(event, for: simulatorUDID, loaded: simulator, logger: logger)
+            }
+            return
+        }
         guard let context = try await captureRoute(
             simulatorUDID: simulatorUDID, preDelay: nil, logger: logger, forKeyboard: true
         )?.context else {
@@ -140,6 +194,54 @@ enum OrdinaryBrokerInput {
         try await SignalScope.cancellingOnSignal {
             try await send(request, simulatorUDID: simulatorUDID, postDelay: nil, verbose: verbose)
         }
+    }
+
+    /// A plain key or hardware button through the broker, which binds the active screen itself, on a
+    /// simulator whose plain input uses the shared owner. The direct DTUHID route opens and drains a
+    /// connection in every command: on iOS 27.3 a key took about 0.27 s and Home about 0.75 s that way,
+    /// against about 0.08 s through the broker. `.direct` means nothing was sent and the caller keeps
+    /// its direct route, with the simulator already read here.
+    @MainActor
+    static func performPlainThroughBroker(
+        _ payload: SelectedHIDRequest.Payload,
+        simulatorUDID: String,
+        logger: AxeLogger,
+        verbose: Bool
+    ) async throws -> PlainBrokerRoute {
+        func request() -> SelectedHIDRequest {
+            var request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(),
+                screenID: nil, screenUUID: nil, operation: .complete, token: nil, payload: payload)
+            request.activeDisplay = true
+            request.plainRoute = true
+            return request
+        }
+        func finish(_ response: SelectedHIDResponse) throws {
+            if verbose { try SelectedHIDBroker.writeReceipt(response) }
+            guard response.error == nil, response.cleanup != "uncertain", response.quarantine == nil else {
+                throw SelectedInputOutput.failure(response)
+            }
+        }
+        let running: SelectedHIDResponse?
+        if case .ordinaryKeyboard = payload {
+            running = try await SelectedHIDBroker.sendOrdinaryKeyboardToRunningBroker(request(), simulatorUDID: simulatorUDID)
+        } else {
+            running = try SelectedHIDBroker.sendToRunningBroker(request(), simulatorUDID: simulatorUDID)
+        }
+        if let running, !refusedBeforeInput(running) {
+            try finish(running)
+            return .sent
+        }
+        let simulator = try await DeviceState.bootedSimulator(udid: simulatorUDID, logger: logger)
+        await startDTUHIDIfNeeded(for: simulator, logger: logger)
+        guard try usesSharedKeyboardOwner(for: simulator) else { return .direct(simulator) }
+        let response: SelectedHIDResponse
+        if case .ordinaryKeyboard = payload {
+            response = try await SelectedHIDBroker.sendOrdinaryKeyboard(request(), simulatorUDID: simulatorUDID)
+        } else {
+            response = try SelectedHIDBroker.send(request(), simulatorUDID: simulatorUDID)
+        }
+        try finish(response)
+        return .sent
     }
 
     /// Sends a plain command for the broker to bind to the active screen, when a broker is already

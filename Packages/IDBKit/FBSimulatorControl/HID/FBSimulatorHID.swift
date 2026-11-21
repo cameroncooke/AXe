@@ -90,6 +90,16 @@ public final class FBSimulatorHID: CustomStringConvertible, @unchecked Sendable 
     return hid
   }
 
+  /// Starts the simulator's `dtuhidd`, which launchd runs only once something connects to it, and
+  /// returns once the guest service has answered a request that carries no input. The connection is
+  /// then closed and the daemon keeps running for the rest of the boot. Throws when the simulator has
+  /// no DTUHID service (Xcode 26) or the service does not answer within `timeout`.
+  public static func startDTUHIDService(for simulator: FBSimulator, timeout: TimeInterval) async throws {
+    let transport = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator)
+    defer { transport.disconnect() }
+    try await transport.prepareConnection(timeout: timeout)
+  }
+
   /// Creates an explicitly targeted DTUHID connection using current measured display geometry.
   /// Existing event coordinates must be oriented logical display points. Refresh the connection
   /// after a display or orientation change; this context does not track runtime changes itself.

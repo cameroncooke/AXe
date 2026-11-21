@@ -61,7 +61,24 @@ enum SelectedHIDBroker {
         guard request.ordinaryKeyboard != nil else { throw SelectedHIDFailure.invalid("Missing legacy keyboard payload") }
         let data = try encoded(request)
         try Task.checkCancellation()
-        let descriptor = try readyDescriptor(simulatorUDID: simulatorUDID)
+        return try await exchangeOrdinaryKeyboard(data, requestID: request.requestID,
+            descriptor: readyDescriptor(simulatorUDID: simulatorUDID))
+    }
+
+    /// The same exchange with a broker that is already running, without starting one. Nil means
+    /// nothing was sent.
+    static func sendOrdinaryKeyboardToRunningBroker(_ request: SelectedHIDRequest,
+                                                    simulatorUDID: String) async throws -> SelectedHIDResponse? {
+        guard request.ordinaryKeyboard != nil, let data = try? encoded(request),
+              let path = try? endpoint(simulatorUDID: simulatorUDID),
+              let descriptor = (try? HIDBroker.connectToRunningBroker(endpoint: path,
+                  expectedVersion: SelectedHIDRequest.version)) ?? nil else { return nil }
+        try Task.checkCancellation()
+        return try await exchangeOrdinaryKeyboard(data, requestID: request.requestID, descriptor: descriptor)
+    }
+
+    private static func exchangeOrdinaryKeyboard(_ data: Data, requestID: UUID,
+                                                 descriptor: Int32) async throws -> SelectedHIDResponse {
         let socket = OrdinaryKeyboardSocket(descriptor: descriptor)
         defer { socket.close() }
         // A zero receive timeout preserves raw Type's existing unbounded whole-command duration.
@@ -72,7 +89,7 @@ enum SelectedHIDBroker {
         return try await withTaskCancellationHandler {
             try Task.checkCancellation()
             return try await offMain {
-                try exchange(data, requestID: request.requestID, descriptor: descriptor)
+                try exchange(data, requestID: requestID, descriptor: descriptor)
             }
         } onCancel: {
             // EOF cancels the broker action. Keep the read side open for its joined cleanup receipt.

@@ -2,7 +2,7 @@ import Foundation
 import FBSimulatorControl
 
 struct SelectedHIDRequest: Codable, Sendable {
-    static let version = 93
+    static let version = 94
     enum Operation: String, Codable, Sendable { case complete, begin, move, end, close }
 
     /// What a request asks the owner to do. A request carries exactly one, so a mixed request
@@ -47,7 +47,8 @@ struct SelectedHIDRequest: Codable, Sendable {
     /// A plain command whose screen the broker binds, as it does for selected input, instead of the
     /// client measuring it first: that measurement loads the simulator set in every command, about
     /// 80 ms. The broker serves it only on a simulator whose plain input uses the shared owner, and
-    /// the payload keeps the plain route's events.
+    /// the payload keeps the plain route's events. It covers a tap, touch, ordinary path, key and
+    /// hardware button.
     var plainRoute: Bool? = nil
 
     // Read-only views of the payload, for code that handles one kind.
@@ -107,7 +108,9 @@ struct SelectedHIDRequest: Codable, Sendable {
         if activeDisplay != nil {
             let bindsAScreen: Bool
             switch payload {
-            case .agent, .agentBatch, .hinge, .ordinaryTouch, .ordinaryKeyboard: bindsAScreen = false
+            case .agent, .agentBatch, .hinge, .ordinaryTouch: bindsAScreen = false
+            // A plain key is sent on the screen the broker binds; with a measured context it is not.
+            case .ordinaryKeyboard: bindsAScreen = plainRoute == true
             default: bindsAScreen = true
             }
             guard activeDisplay == true, screenID == nil, screenUUID == nil, expectedContext == nil,
@@ -137,11 +140,13 @@ struct SelectedHIDRequest: Codable, Sendable {
             switch payload {
             case .contact(let primitives): plainPayload = !primitives.isEmpty
             case .path(let path): plainPayload = path.generator == .ordinary
+            case .ordinaryKeyboard: plainPayload = true
+            case .button(let button): plainPayload = button.expectedBoot == nil
             default: plainPayload = false
             }
             guard plainRoute, isComplete, plainPayload, expectedContext == nil, agentAdmission == nil,
                   activeDisplay == true || (screenID != nil && screenUUID != nil) else {
-                throw SelectedHIDFailure.invalid("A broker-bound plain request is one complete tap, touch or ordinary path")
+                throw SelectedHIDFailure.invalid("A broker-bound plain request is one complete tap, touch, ordinary path, key or button")
             }
         }
         if ordinary, expectedContext == nil, plainRoute != true {

@@ -30,7 +30,9 @@ struct HIDInteractor {
         return 25
     }
 
-    static func makeSession(for simulatorUDID: String, logger: AxeLogger) async throws -> Session {
+    /// `loaded` is a simulator the caller has already read from the simulator set in this command,
+    /// which saves reading the set again.
+    static func makeSession(for simulatorUDID: String, loaded: FBSimulator? = nil, logger: AxeLogger) async throws -> Session {
         let inputLease = try HIDInputLease.acquire(simulatorUDID: simulatorUDID)
         logger.info().log("Loading private frameworks for HID operations...")
         let frameworkLoader = FBSimulatorControlFrameworkLoader.xcodeFrameworks
@@ -44,11 +46,16 @@ struct HIDInteractor {
             )
         }
 
-        let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
-        logger.info().log("FBSimulatorSet obtained.")
-
-        guard let simulator = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
-            throw CLIError.simulatorNotFound(udid: simulatorUDID)
+        let simulator: FBSimulator
+        if let loaded, loaded.udid == simulatorUDID {
+            simulator = loaded
+        } else {
+            let simulatorSet = try await getSimulatorSet(deviceSetPath: nil, logger: logger, reporter: EmptyEventReporter.shared)
+            logger.info().log("FBSimulatorSet obtained.")
+            guard let found = simulatorSet.allSimulators.first(where: { $0.udid == simulatorUDID }) else {
+                throw CLIError.simulatorNotFound(udid: simulatorUDID)
+            }
+            simulator = found
         }
 
         logger.info().log("Target (FBSimulator) obtained: \(simulator.udid)")
@@ -103,8 +110,9 @@ struct HIDInteractor {
         }
     }
 
-    static func performHIDEvent(_ event: FBSimulatorHIDEvent, for simulatorUDID: String, logger: AxeLogger) async throws {
-        let session = try await makeSession(for: simulatorUDID, logger: logger)
+    static func performHIDEvent(_ event: FBSimulatorHIDEvent, for simulatorUDID: String, loaded: FBSimulator? = nil,
+                                logger: AxeLogger) async throws {
+        let session = try await makeSession(for: simulatorUDID, loaded: loaded, logger: logger)
         try await performHIDEvent(event, in: session, logger: logger)
     }
 
