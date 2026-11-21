@@ -5,6 +5,12 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- `axe --version` now prints AXe's copyright and licence notice after the version number. The version stays alone on the first line, so tools that read it are unaffected.
+- AXe's GPL-3.0-only licence now has additional terms under its section 7, in [ADDITIONAL_TERMS.md](ADDITIONAL_TERMS.md): anyone who distributes AXe must keep its copyright notice and the notice `axe --version` prints, credit AXe wherever their product lists acknowledgements or licences, and mark a modified version as changed. The terms also ship in AXe's resource bundle under `licenses/axe`. See [Licence](README.md#licence).
+
 ## [v2.1.1] - 2026-11-19
 
 ### Fixed

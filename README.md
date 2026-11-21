@@ -375,12 +375,14 @@ Pull requests are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first: it set
 
 ## Licence
 
-AXe is licensed under the GNU General Public License version 3 only (GPL-3.0-only). See [LICENSE](LICENSE).
+AXe is licensed under the GNU General Public License version 3 only (GPL-3.0-only), with additional terms under its section 7. See [LICENSE](LICENSE) and [ADDITIONAL_TERMS.md](ADDITIONAL_TERMS.md).
 
 Running `axe` to test an app does not put that app under the GPL. If you distribute AXe, or software that contains AXe's code, you must do so under the GPL and make the corresponding source available.
+
+If you distribute AXe, even unmodified alongside your own app, the additional terms also apply: keep AXe's copyright notice and the notice `axe --version` prints, and credit "AXe by Cameron Cooke (https://github.com/cameroncooke/AXe)" wherever your product lists acknowledgements, third-party software or licences.
 
 To use AXe's code in software you do not release under the GPL, you need a commercial licence. Contact [web@cameroncooke.com](mailto:web@cameroncooke.com).
 
 AXe releases up to and including v2.0.4, and all AXe source published before the change to the GPL, were released under the MIT License and remain available under it. That notice, the notice for Meta's IDB frameworks (MIT) and the licences of iroh (MIT or Apache 2.0), which `axe mirror` uses, are in [THIRD_PARTY_LICENSES](THIRD_PARTY_LICENSES).
 
-The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's own licence, and THIRD_PARTY_LICENSES, are in the bundle too, under `licenses/axe`.
+The keyboard signal detector is adapted from sim-use commit `c02295ed` under Apache 2.0. Its [licence and upstream NOTICE](Sources/AXe/Resources/licenses/sim-use) are included in AXe's resource bundle, with the source and changes listed in `ADAPTATION.md`. AXe's own licence, its additional terms and THIRD_PARTY_LICENSES are in the bundle too, under `licenses/axe`.

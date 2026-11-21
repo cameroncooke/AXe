@@ -8,6 +8,13 @@ import Darwin // For Darwin.exit()
 struct Axe: AsyncParsableCommand {
     static let _ensureSharedApp = NSApplication.shared
 
+    /// Printed by `axe --version` after the version, which stays alone on the first line for tools
+    /// that read it. ADDITIONAL_TERMS.md requires anyone who conveys AXe to keep this notice.
+    static let copyrightNotice = """
+    Copyright © Cameron Cooke and AXe contributors. https://github.com/cameroncooke/AXe
+    Licensed under the GNU General Public License version 3 only, with additional terms under its section 7. See LICENSE and ADDITIONAL_TERMS.md.
+    """
+
     static let configuration = CommandConfiguration(
         abstract: "Automate iOS simulators and connected iPhones and iPads.",
         discussion: """
@@ -21,7 +28,7 @@ struct Axe: AsyncParsableCommand {
           axe tap --label Continue --udid <UDID>
           axe --output json screenshot --udid <UDID> --output screen.png
         """,
-        version: VERSION,
+        version: VERSION + "\n" + copyrightNotice,
         subcommands: [
             DescribeUI.self,
             ListSimulators.self,

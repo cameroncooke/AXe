@@ -56,6 +56,7 @@ licence_copies() {
     local status=0
     cmp LICENSE Sources/AXe/Resources/licenses/axe/LICENSE || status=1
     cmp THIRD_PARTY_LICENSES Sources/AXe/Resources/licenses/axe/THIRD_PARTY_LICENSES || status=1
+    cmp ADDITIONAL_TERMS.md Sources/AXe/Resources/licenses/axe/ADDITIONAL_TERMS.md || status=1
     return "$status"
 }
 
