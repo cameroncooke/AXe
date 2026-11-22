@@ -71,7 +71,12 @@ actor NativeHingeBackend: FBSimulatorHingeBackend {
     connection = nil
   }
 
-  private func connect() throws -> xpc_connection_t {
+  private func connect() throws -> xpc_connection_t { try Self.connect(to: simulator) }
+
+  static func connect(to simulator: FBSimulator) throws -> xpc_connection_t {
+    func unavailable(_ detail: String) -> FBSimulatorHingeFailure {
+      FBSimulatorHingeFailure(reason: .unavailable, detail: detail, delivery: .notDispatched)
+    }
     typealias Endpoint = @convention(c) (mach_port_t, UInt64, UInt64) -> xpc_object_t?
     typealias Connect = @convention(c) (xpc_object_t) -> xpc_connection_t?
     typealias Enable = @convention(c) (xpc_connection_t) -> Void
@@ -81,7 +86,7 @@ actor NativeHingeBackend: FBSimulatorHingeBackend {
           let make = dlsym(handle, "xpc_connection_create_from_endpoint"),
           let enable = dlsym(handle, "xpc_connection_enable_sim2host_4sim") else { throw unavailable("Simulator XPC endpoint functions unavailable") }
     var error: NSError?
-    let port = simulator.device.lookup(Self.service, error: &error)
+    let port = simulator.device.lookup(service, error: &error)
     guard port != 0, let endpoint = unsafeBitCast(ep, to: Endpoint.self)(port, 0, 0),
           let result = unsafeBitCast(make, to: Connect.self)(endpoint) else {
       throw unavailable(error?.localizedDescription ?? "Hinge vendor service unavailable")
@@ -94,7 +99,7 @@ actor NativeHingeBackend: FBSimulatorHingeBackend {
     try vendorMessage(source: "hinge-slider-control", type: "range", value: NSNumber(value: degrees))
   }
 
-  private static func vendorMessage(source: String, type: String, value: NSObject) throws -> xpc_object_t {
+  static func vendorMessage(source: String, type: String, value: NSObject) throws -> xpc_object_t {
     let payload: [String: NSObject] = ["provider": "com.apple.Virtualization.VirtualMachines" as NSString,
       "source": source as NSString, "type": type as NSString, "value": value]
     guard let serialized = IOCFSerialize(payload as CFDictionary, 1) else {
@@ -138,6 +143,81 @@ private final class HingeConnectionFailure: @unchecked Sendable {
   private var failure: String?
   func record(_ value: String) { lock.lock(); defer { lock.unlock() }; if failure == nil { failure = value } }
   func read() -> String? { lock.lock(); defer { lock.unlock() }; return failure }
+}
+
+/// The way an iPhone Duo is held: the device's own orientation, which iOS turns each screen's
+/// picture from. Held upright (`portrait`) the hinge is upright too, like a book's spine: the outer
+/// screen is upright and the inner screen is wide. The inner screen's picture is a quarter turn on
+/// from the device's orientation (measured on profiles 405 and 407).
+public enum FBSimulatorDuoOrientation: String, Codable, Sendable, CaseIterable {
+  case portrait
+  case landscapeRight = "landscape-right"
+  case upsideDown = "pud"
+  case landscapeLeft = "landscape-left"
+
+  /// Degrees, as the outer screen reports its rotation when its picture follows the device.
+  public var degrees: Int {
+    switch self {
+    case .portrait: return 0
+    case .landscapeRight: return 90
+    case .upsideDown: return 180
+    case .landscapeLeft: return 270
+    }
+  }
+
+  /// The rotation the inner screen reports with the device held this way.
+  public var innerRotation: Int { (degrees + 90) % 360 }
+}
+
+/// Moves an iPhone Duo's hinge and turns the device, one message each, on one connection kept open,
+/// as a slider being dragged does. Nothing is read back and nothing is waited for: the caller
+/// reads the hinge and the display report to see what the simulator did. `FBSimulatorHingeNative`
+/// and `FBSimulatorRotationNative` are the checked ways, one move each with a receipt.
+public final class FBSimulatorDuoControl: @unchecked Sendable {
+  private let simulator: FBSimulator
+  private let lock = NSLock()
+  private var connection: xpc_connection_t?
+
+  public init(simulator: FBSimulator) { self.simulator = simulator }
+  deinit { close() }
+
+  /// Sets the hinge's angle, 0 closed to 180 open flat.
+  public func setHinge(_ degrees: Double) throws {
+    guard degrees.isFinite, (0...180).contains(degrees) else {
+      throw FBSimulatorHingeFailure(reason: .invalidRequest, detail: "Angle must be 0...180", delivery: .notDispatched)
+    }
+    try send(NativeHingeBackend.vendorMessage(source: "hinge-slider-control", type: "range", value: NSNumber(value: degrees)))
+  }
+
+  /// Turns the device to an orientation, whichever it had.
+  public func setOrientation(_ orientation: FBSimulatorDuoOrientation) throws {
+    try send(NativeHingeBackend.vendorMessage(source: "orientation-picker-control", type: "enum", value: orientation.rawValue as NSString))
+  }
+
+  public func close() {
+    lock.lock(); defer { lock.unlock() }
+    if let connection { xpc_connection_cancel(connection) }
+    connection = nil
+  }
+
+  private func send(_ message: xpc_object_t) throws {
+    lock.lock(); defer { lock.unlock() }
+    guard simulator.state == .booted else {
+      throw FBSimulatorHingeFailure(reason: .bootChanged, detail: "Simulator is not booted", delivery: .notDispatched)
+    }
+    if connection == nil {
+      let made = try NativeHingeBackend.connect(to: simulator)
+      // A connection the service drops is made again by the next message.
+      xpc_connection_set_event_handler(made) { [weak self] event in
+        guard xpc_get_type(event) == XPC_TYPE_ERROR, let self else { return }
+        self.lock.lock(); defer { self.lock.unlock() }
+        if self.connection === made { self.connection = nil }
+      }
+      xpc_connection_resume(made)
+      connection = made
+    }
+    if let connection { xpc_connection_send_message(connection, message) }
+  }
 }
 
 public enum FBSimulatorHingeNative {

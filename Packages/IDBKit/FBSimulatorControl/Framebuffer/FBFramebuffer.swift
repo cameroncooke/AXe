@@ -77,6 +77,33 @@ public final class FBFramebuffer: NSObject, @unchecked Sendable {
     throw FBSimulatorError.describe("Could not find the Main Screen Surface for Clients \(FBCollectionInformation.oneLineDescription(from: ports)) in \(ioClient)").build()
   }
 
+  /// One framebuffer for each built-in display, in port order. A simulator with one screen has
+  /// one. The iPhone Duo has two, and `mainScreenSurface(for:logger:)` gives only the first, its
+  /// inner screen (measured on iOS 27.2, 20 November 2026): the outer screen's picture is only here.
+  /// Which is which is told by `currentSurface`'s size against the display reports.
+  @objc(builtInDisplaySurfacesForSimulator:logger:error:)
+  public class func builtInDisplaySurfaces(for simulator: FBSimulator, logger: any FBControlCoreLogger) throws -> [FBFramebuffer] {
+    guard let ioClient = simulator.device.io, let ports: [Any] = ioClient.ioPorts() else {
+      throw FBSimulatorError.describe("No IO ports available on \(simulator.udid)").build()
+    }
+    var found: [FBFramebuffer] = []
+    for port in ports {
+      guard let portInterface = port as? SimDeviceIOPortInterface else { continue }
+      let descriptor = portInterface.descriptor as AnyObject
+      guard descriptor.conforms(to: SimDisplayRenderable.self),
+        descriptor.conforms(to: SimDisplayIOSurfaceRenderable.self),
+        descriptor.responds(to: NSSelectorFromString("state")),
+        let state = descriptor.perform(NSSelectorFromString("state"))?.takeUnretainedValue() as? SimDisplayDescriptorState,
+        state.displayClass == 0
+      else { continue }
+      found.append(FBFramebuffer(surface: descriptor, logger: logger))
+    }
+    guard !found.isEmpty else {
+      throw FBSimulatorError.describe("No built-in display surfaces in \(simulator.udid)").build()
+    }
+    return found
+  }
+
   private init(surface: AnyObject, logger: any FBControlCoreLogger) {
     self.consumers = NSMapTable(keyOptions: .weakMemory, valueOptions: .copyIn)
     self.logger = logger
@@ -123,6 +150,12 @@ public final class FBFramebuffer: NSObject, @unchecked Sendable {
       }
     }
     return false
+  }
+
+  /// The display's surface as it is now, without attaching a consumer; nil if the runtime does not
+  /// hand it out synchronously.
+  @objc public var currentSurface: IOSurface? {
+    extractImmediatelyAvailableSurface()
   }
 
   // MARK: - Stats

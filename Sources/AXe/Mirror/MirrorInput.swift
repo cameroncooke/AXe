@@ -9,14 +9,20 @@ import Foundation
 /// viewer, so that network jitter does not change how fast a finger appears to move. See
 /// `adaptiveDelay()` for how long that time is and `replay()` for how late and lost touches are handled.
 final class MirrorInput {
-    private enum Command { case discrete(MirrorTouch), tick, lift }
-    private let hid: FBSimulatorHID
-    private let width: Double, height: Double       // the simulator's screen in points
+    private enum Command { case discrete(MirrorTouch), tick, lift, retarget(FBSimulatorHID, width: Double, height: Double) }
+    // Changed only by `retarget`, on the command task; read under `lock` elsewhere.
+    private var hid: FBSimulatorHID
+    private var width: Double, height: Double       // the simulator's screen in points
+    /// True when the connection takes upright points of the screen as it is turned now, as one
+    /// aimed at an iPhone Duo screen does; false when it takes the unturned panel's points.
+    private let oriented: Bool
     private let interval: TimeInterval
     private let lock = NSLock()
     private var commands: AsyncStream<Command>.Continuation?
     private var newestMove: MirrorTouch?
     private var active = false
+    private var closed = false          // set by `close()`; the clock task then ends
+    private var turned = 0              // see `rotation`
     private var lastMove: TimeInterval = 0
     private var log: [String] = []
     // Replay mode: touches are played back `delay` seconds after they happened, at the times they
@@ -30,6 +36,8 @@ final class MirrorInput {
     private var held: MirrorTouch?      // the touch now down in the simulator, where it was last put
     private var singleOpen = false      // a one-finger touch is down in the simulator, perhaps under a pair
     var edgePoints = 0.0                // a one-finger touch beginning this close to an edge is sent with an edge hint
+    /// Told after each touch is sent whether the simulator took it. Set before the first touch.
+    var onResult: ((Bool) -> Void)?
     private var edgeName = ""           // the edge the open one-finger touch began at, if any
     private var ages: [TimeInterval] = []        // how long after they were made recent touches arrived
     var delayRule = "gestures"
@@ -47,10 +55,11 @@ final class MirrorInput {
     private var startShift: TimeInterval = 0     // how much later than that delay this gesture started
     private var stall: TimeInterval = 0          // time this gesture's clock has waited for late samples
 
-    init(hid: FBSimulatorHID, width: Double, height: Double, hertz: Double, delay: TimeInterval = 0) {
+    init(hid: FBSimulatorHID, width: Double, height: Double, hertz: Double, delay: TimeInterval = 0, oriented: Bool = false) {
         self.hid = hid
         self.width = width
         self.height = height
+        self.oriented = oriented
         self.delay = delay
         interval = 1 / hertz
         let (stream, input) = AsyncStream<Command>.makeStream()
@@ -64,7 +73,9 @@ final class MirrorInput {
                 // With no touch in hand, look again in a few milliseconds and do not spin.
                 lock.lock()
                 let idle = !active && waiting.isEmpty && newestMove == nil
+                let over = closed
                 lock.unlock()
+                if over { return }
                 if idle {
                     try? await Task.sleep(nanoseconds: 4_000_000)
                     next = mirrorNow() + interval
@@ -79,6 +90,60 @@ final class MirrorInput {
                 if next < mirrorNow() { next = mirrorNow() + interval }
             }
         }
+    }
+
+    /// Which way the simulator's screen is turned, in degrees (see `MirrorSession`). Touches arrive
+    /// as shares of the upright picture and the simulator takes them on its unturned panel, so each
+    /// is turned back by this much as it is sent.
+    var rotation: Int {
+        get { lock.lock(); defer { lock.unlock() }; return turned }
+        set { lock.lock(); turned = newValue; lock.unlock() }
+    }
+
+    /// A point of the upright picture, as shares of it, on the unturned panel. Measured on an iPad
+    /// simulator: turned to landscape left, the panel's left edge is the picture's top.
+    static func panelShare(x: Double, y: Double, rotation: Int) -> (x: Double, y: Double) {
+        switch rotation {
+        case 90: return (y, 1 - x)
+        case 180: return (1 - x, 1 - y)
+        case 270: return (1 - y, x)
+        default: return (x, y)
+        }
+    }
+
+    /// Turns the simulator, as Simulator.app's Rotate menu does.
+    func turn(to orientation: FBSimulatorHIDDeviceOrientation) {
+        let connection = currentHID
+        Task.detached(priority: .userInitiated) {
+            do { try await FBSimulatorHIDEvent.deviceOrientation(orientation).sendAsync(on: connection) } catch { mirrorNote("could not turn the simulator: \(error)") }
+        }
+    }
+
+    private var currentHID: FBSimulatorHID { lock.lock(); defer { lock.unlock() }; return hid }
+
+    private var connectionNow: (hid: FBSimulatorHID, width: Double, height: Double) {
+        lock.lock(); defer { lock.unlock() }
+        return (hid, width, height)
+    }
+
+    /// Puts `connection` in place and drops what was waiting for the old screen; returns the old one.
+    private func swapConnection(to connection: FBSimulatorHID, width newWidth: Double, height newHeight: Double) -> FBSimulatorHID {
+        lock.lock(); defer { lock.unlock() }
+        let old = hid
+        hid = connection
+        width = newWidth
+        height = newHeight
+        waiting.removeAll()
+        samples.removeAll()
+        newestMove = nil
+        return old
+    }
+
+    /// Sends from now on through `connection`, a screen of this size in upright points: an iPhone
+    /// Duo has folded or turned, and touches go to the screen now lit. A finger down on the old
+    /// screen is lifted there first, and the old connection is closed.
+    func retarget(_ connection: FBSimulatorHID, width: Double, height: Double) {
+        commands?.yield(.retarget(connection, width: width, height: height))
     }
 
     func receive(_ message: MirrorTouch) {
@@ -151,8 +216,26 @@ final class MirrorInput {
         commands?.yield(.lift)
     }
 
+    /// The simulator is no longer the one mirrored. A finger left down is lifted, and both of this
+    /// object's tasks end; without this each simulator a viewer had chosen would leave a clock
+    /// ticking for the life of the host.
+    func close() {
+        viewerChanged()
+        lock.lock()
+        closed = true
+        lock.unlock()
+        commands?.finish()
+    }
+
     private func handle(_ command: Command) async {
         switch command {
+        case .retarget(let connection, let newWidth, let newHeight):
+            if active, let held {
+                let points = held.contacts >= 2 ? [CGPoint(x: held.x1, y: held.y1), CGPoint(x: held.x2, y: held.y2)] : [CGPoint(x: held.x1, y: held.y1)]
+                await injectUp(MirrorTouch(kind: 2, gesture: held.gesture, sequence: held.sequence, points: points, time: mirrorNow()))
+            }
+            active = false
+            swapConnection(to: connection, width: newWidth, height: newHeight).disconnect()
         case .lift:
             active = false
             guard let held else { return }
@@ -377,8 +460,11 @@ final class MirrorInput {
     }
 
     private func inject(_ message: MirrorTouch, direction: FBSimulatorHIDDirection) async {
-        let first = CGPoint(x: message.x1 * width, y: message.y1 * height)
-        let second = CGPoint(x: message.x2 * width, y: message.y2 * height)
+        let turn = oriented ? 0 : rotation
+        let (hid, width, height) = connectionNow
+        let one = Self.panelShare(x: message.x1, y: message.y1, rotation: turn), two = Self.panelShare(x: message.x2, y: message.y2, rotation: turn)
+        let first = CGPoint(x: one.x * width, y: one.y * height)
+        let second = CGPoint(x: two.x * width, y: two.y * height)
         let event: FBSimulatorHIDEvent = message.contacts >= 2
             ? .twoFingerTouch(direction: direction, finger1: first, finger2: second)
             : .touch(direction: direction, x: first.x, y: first.y)
@@ -390,6 +476,7 @@ final class MirrorInput {
             try await event.sendAsync(on: hid)
         } catch { failure = String(describing: error).prefix(60).replacingOccurrences(of: ",", with: ";") }
         if message.contacts < 2, direction == .up { edgeName = "" }
+        onResult?(failure.isEmpty)
         held = direction == .down ? message : nil
         let line = String(format: "%u,%u,%d,%d,%.2f,%.2f,%.6f,%.6f,%.6f,%.6f,%@", message.gesture, message.sequence, Int(message.kind),
                           Int(message.contacts), first.x, first.y, message.touchTime, message.received, start, mirrorNow(), failure)
@@ -404,6 +491,7 @@ final class MirrorInput {
     /// 2 Home, 3 Lock, 4 Side, 5 Siri. Two quick Home presses open the app switcher.
     func press(button: UInt8, count: UInt8) {
         guard let which = FBSimulatorHIDButton(rawValue: Int32(button)) else { return }
+        let hid = currentHID
         Task.detached(priority: .userInitiated) { [self] in
             for index in 0..<max(1, Int(count)) {
                 if index > 0 { try? await Task.sleep(nanoseconds: 120_000_000) }

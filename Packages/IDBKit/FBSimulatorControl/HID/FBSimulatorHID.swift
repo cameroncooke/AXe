@@ -98,6 +98,18 @@ public final class FBSimulatorHID: CustomStringConvertible, @unchecked Sendable 
     self.init(transport: transport, transportType: .dtuhid, purple: FBSimulatorPurpleHID(), simulator: simulator)
   }
 
+  /// A connection aimed at one display, ready as `ready(for:)` makes the default one: its first
+  /// input is not sent before the guest service has reached it. Measured on an iPhone Duo with
+  /// iOS 27.2: the default connection's touches go to the outer screen even while the inner one is
+  /// lit, and the first tap on a fresh aimed connection that has not waited is lost.
+  public static func ready(for simulator: FBSimulator, displayContext: FBSimulatorHIDDisplayContext) async throws -> FBSimulatorHID {
+    let hid = try FBSimulatorHID(for: simulator, displayContext: displayContext)
+    if let dtuhid = hid.transport as? FBSimulatorDTUHIDTransport {
+      try await dtuhid.prepareConnection(timeout: connectionReadyTimeout)
+    }
+    return hid
+  }
+
   private init(transport: FBSimulatorHIDTransport, transportType: FBSimulatorHIDTransportType, purple: FBSimulatorPurpleHID, simulator: FBSimulator) {
     self.transport = transport
     self.transportType = transportType

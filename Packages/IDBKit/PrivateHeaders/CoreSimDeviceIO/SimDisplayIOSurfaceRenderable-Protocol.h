@@ -52,13 +52,16 @@ NS_ASSUME_NONNULL_BEGIN
  */
 @property (nullable, nonatomic, readonly) id maskedFramebufferSurface;
 
+// The callbacks are called with nil when a display's surface goes away, as an iPhone Duo's outer
+// screen does when it opens (seen with iOS 27.2): a non-null `id` there makes Swift crash
+// bridging the nil.
 // Added in Xcode 9 as -[SimDeviceIOClient attachConsumer:] methods have been removed.
 - (void)unregisterIOSurfaceChangeCallbackWithUUID:(NSUUID *)arg1;
-- (void)registerCallbackWithUUID:(NSUUID *)arg1 ioSurfaceChangeCallback:(void (^)(id))arg2;
+- (void)registerCallbackWithUUID:(NSUUID *)arg1 ioSurfaceChangeCallback:(void (^)(id _Nullable))arg2;
 
 // Callbacks was slightly renamed in Xcode 13.2 to address two surfaces instead of one.
 - (void)unregisterIOSurfacesChangeCallbackWithUUID:(NSUUID *)arg1;
-- (void)registerCallbackWithUUID:(NSUUID *)arg1 ioSurfacesChangeCallback:(void (^)(id))arg2;
+- (void)registerCallbackWithUUID:(NSUUID *)arg1 ioSurfacesChangeCallback:(void (^)(id _Nullable))arg2;
 
 @end
 

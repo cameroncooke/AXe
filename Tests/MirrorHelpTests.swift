@@ -41,7 +41,7 @@ struct MirrorHelpTests {
             #expect(inTable, "\(prefix) has no line in MirrorHelp.commands")
             #expect(inUsage, "\(prefix) is missing from MirrorHelp.usage")
         }
-        #expect(names == ["pair", "viewers", "unpair"])
+        #expect(names == ["pair", "viewers", "unpair", "build", "publish", "builds"])
     }
 
     @Test("The table fits an 80-column terminal, so no line of it is wrapped")

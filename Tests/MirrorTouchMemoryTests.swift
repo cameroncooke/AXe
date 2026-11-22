@@ -71,3 +71,31 @@ struct MirrorTouchMemoryTests {
         #expect(!recent)
     }
 }
+
+#if AXE_MIRROR
+@Suite("Mirror touches on a turned screen")
+struct MirrorRotationTouchTests {
+    @Test("A touch on the upright picture lands where the turned simulator shows it")
+    func landscapeLeft() {
+        // Measured on an iPad simulator (820 x 1180 points) turned to landscape left: a tap at panel
+        // point (205, 236) arrived in the app at (944, 205) of its 1180 x 820 landscape screen.
+        let panel = MirrorInput.panelShare(x: 944.0 / 1180, y: 205.0 / 820, rotation: 90)
+        #expect(abs(panel.x - 205.0 / 820) < 0.0001)
+        #expect(abs(panel.y - 236.0 / 1180) < 0.0001)
+    }
+
+    @Test("Each turn and its opposite come back to the same point, and no turn leaves it alone")
+    func roundTrips() {
+        let point = (x: 0.3, y: 0.7)
+        #expect(MirrorInput.panelShare(x: point.x, y: point.y, rotation: 0) == point)
+        let right = MirrorInput.panelShare(x: point.x, y: point.y, rotation: 270)
+        let left = MirrorInput.panelShare(x: point.x, y: point.y, rotation: 90)
+        #expect(right.x != point.x || right.y != point.y)
+        // A quarter turn one way, then the other, is no turn.
+        let back = MirrorInput.panelShare(x: left.x, y: left.y, rotation: 270)
+        #expect(abs(back.x - point.x) < 0.0001 && abs(back.y - point.y) < 0.0001)
+        let half = MirrorInput.panelShare(x: point.x, y: point.y, rotation: 180)
+        #expect(abs(half.x - 0.7) < 0.0001 && abs(half.y - 0.3) < 0.0001)
+    }
+}
+#endif

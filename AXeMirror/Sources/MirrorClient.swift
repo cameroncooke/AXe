@@ -11,6 +11,10 @@ import VideoToolbox
 /// The Mac is dialled by its ID through a relay. iroh starts the connection there and moves it to a
 /// direct path when the two devices can reach each other. Video arrives on one-way streams; the Mac
 /// replaces the stream with a new one, starting at a keyframe, whenever this side has fallen behind.
+///
+/// A Mac started with `axe mirror` and no `--udid` shows no simulator until this side chooses one:
+/// it sends its list (`onSimulators`), and `choose` opens, boots or creates one. See
+/// `MirrorSimulatorList`.
 /// Everything here runs on one private queue; the callbacks are delivered on the main queue.
 final class MirrorClient: @unchecked Sendable {
     /// Where to find the Mac: its ID and the relays to try, most likely first.
@@ -41,15 +45,50 @@ final class MirrorClient: @unchecked Sendable {
         var width = 0, height = 0
     }
 
+    /// The simulator the Mac is showing, as it says when a stream starts. A Mac with an AXe from
+    /// before the list existed names no simulator, and `udid` is then empty.
+    struct Showing: Equatable {
+        var udid: String
+        var name: String
+        var canChoose: Bool         // the Mac lets this viewer go back to its list of simulators
+        var model = ""              // the kind of device, such as "iPad Air 11-inch (M4)"; empty from an older Mac
+        var canRotate = false       // the Mac turns the simulator when asked
+        var hasHinge = false        // an iPhone Duo: the Mac folds it when asked and says which screen is shown
+        var isIPad: Bool { model.hasPrefix("iPad") }
+    }
+
     var onState: ((State) -> Void)?
     var onStats: ((Stats) -> Void)?
     var onVideoSize: ((CGSize) -> Void)?
+    var onShowing: ((Showing) -> Void)?
+    /// The Mac's simulators: it is waiting for this viewer to choose one.
+    var onSimulators: ((MirrorSimulatorList) -> Void)?
+    var onProgress: ((MirrorSimulatorProgress) -> Void)?
+    /// Which screen the picture is and how far the hinge is open.
+    var onScreen: ((MirrorScreenState) -> Void)?
+    /// Whether the simulator is answering the Mac.
+    var onHealth: ((MirrorSimulatorHealth) -> Void)?
+    /// How busy the Mac is.
+    var onHostLoad: ((MirrorHostLoad) -> Void)?
+    /// The app builds the Mac offers to install on this device.
+    var onBuilds: (([MirrorBuild]) -> Void)?
+    /// The certificate this device serves builds to iOS with, from the Mac.
+    var onInstallIdentity: ((MirrorInstallIdentity) -> Void)?
+    /// A piece of a build asked for with `fetchBuild`, or why it could not be sent.
+    var onBuildPiece: ((MirrorBuildPiece) -> Void)?
+    var onFetchFailed: ((MirrorBuildFetchFailure) -> Void)?
 
     private let queue = DispatchQueue(label: "axemirror.client")
     private let target: Target
     private let identity: Data
     private let ownRelays: [String]
     private let renderer: AVSampleBufferVideoRenderer
+    /// More renderers that get every frame too: the halves of the 3D Duo while it is being folded,
+    /// so the picture on them stays live. Empty the rest of the time, when they cost nothing.
+    private var mirrors: [AVSampleBufferVideoRenderer] = []
+    /// The frame on screen now. A still screen sends no frames, so a renderer that starts
+    /// mirroring is given this one at once.
+    private var lastImage: CVImageBuffer?
     private var generation = 0
     private var stopped = false
     private var attempts = 0
@@ -58,6 +97,13 @@ final class MirrorClient: @unchecked Sendable {
     private var gaveUp = false                  // stopped trying by itself; `retry()` starts again
     private var timer: DispatchSourceTimer?
     private var tick = 0
+    /// When the Mac last sent anything. It answers a ping twice a second, so a quiet connection is a
+    /// dead one: a Mac that stopped without closing it, or a network that went away.
+    private var lastHeard = 0.0
+    /// How long the Mac may say nothing before the connection is dropped and made again. Left to
+    /// itself the connection takes about half a minute to notice, and all that time the app would
+    /// look connected while nothing it sent arrived.
+    static let silenceLimit = 15.0
 
     private var endpoint: Endpoint?
     private var connection: Connection?
@@ -86,6 +132,9 @@ final class MirrorClient: @unchecked Sendable {
     private var gesture: UInt32 = 0
     private var touchSequence: UInt32 = 0
     private var recentMoves: [(fractions: [CGPoint], time: TimeInterval)] = []
+    /// The UDID of the simulator being watched. A connection that drops and comes back names it,
+    /// so the Mac carries on with it instead of sending its list again.
+    private var watching: String?
 
     /// `ownRelays` are the relays this device itself listens on; empty means iroh's public relays.
     init(target: Target, identity: Data, ownRelays: [String], renderer: AVSampleBufferVideoRenderer) {
@@ -141,6 +190,17 @@ final class MirrorClient: @unchecked Sendable {
 
     // MARK: Calls from the main thread
 
+    /// Also shows every frame on these renderers, until it is called again; an empty list stops it.
+    /// Each is flushed when it is dropped, so it does not hold a stale picture.
+    func mirror(to renderers: [AVSampleBufferVideoRenderer]) {
+        queue.async { [self] in
+            for old in mirrors where !renderers.contains(where: { $0 === old }) { old.flush(removingDisplayedImage: true, completionHandler: nil) }
+            let added = renderers.filter { new in !mirrors.contains(where: { $0 === new }) }
+            mirrors = renderers
+            if let lastImage, let sample = Self.sample(of: lastImage) { for renderer in added { renderer.enqueue(sample) } }
+        }
+    }
+
     /// The size, in pixels, of the area the picture is shown in. The Mac sizes the video to fit it.
     func setPane(_ size: CGSize, displayHertz: Int) {
         queue.async { [self] in
@@ -170,6 +230,97 @@ final class MirrorClient: @unchecked Sendable {
         queue.async { [self] in send(43, Data([button, count])) }
     }
 
+    // MARK: Choosing a simulator
+
+    /// Asks the Mac for its list of simulators again.
+    func requestSimulators() {
+        queue.async { [self] in send(MirrorMessage.list, Data()) }
+    }
+
+    /// Asks the Mac for the builds it offers; it sends them again whenever they change. A Mac
+    /// that knows nothing of builds ignores this.
+    func requestBuilds() {
+        queue.async { [self] in send(MirrorMessage.listBuilds, Data()) }
+    }
+
+    /// Asks the Mac for the certificate this device serves builds to iOS with.
+    func requestInstallIdentity() {
+        queue.async { [self] in send(MirrorMessage.installIdentityRequest, Data()) }
+    }
+
+    /// Asks the Mac for one piece of a build's file. The piece comes back through `onBuildPiece`.
+    func fetchBuild(_ id: String, offset: Int) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(MirrorBuildFetch(id: id, offset: offset, length: MirrorBuildFetch.largest)) else { return }
+            send(MirrorMessage.fetchBuild, data)
+        }
+    }
+
+    /// Tells the Mac that Install was tapped on a build, so whoever published it can see that.
+    func reportInstall(_ id: String) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(MirrorBuildInstall(id: id)) else { return }
+            send(MirrorMessage.installing, data)
+        }
+    }
+
+    /// Opens a simulator, or creates one; the Mac boots it first if it has to. The stream starting
+    /// says it worked, and `onProgress` says how far the Mac has got or why it failed.
+    func choose(_ choice: MirrorSimulatorChoice) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(choice) else { return }
+            forgetPicture()
+            send(MirrorMessage.choose, data)
+        }
+    }
+
+    /// Turns the simulator: `MirrorRotationRequest.left` or `.right` for a quarter turn, `.landscape`
+    /// or `.portrait` to make it so. The picture changes shape when the screen has turned.
+    func rotate(_ to: String) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(MirrorRotationRequest(to: to)) else { return }
+            send(MirrorMessage.rotate, data)
+        }
+    }
+
+    /// Folds an iPhone Duo simulator. The picture, and `onScreen`, show what happened.
+    func fold(_ request: MirrorFoldRequest) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(request) else { return }
+            send(MirrorMessage.fold, data)
+        }
+    }
+
+    /// Stops watching the simulator and goes back to the Mac's list. The simulator stays booted.
+    func leaveSimulator() {
+        queue.async { [self] in
+            forgetPicture()
+            send(MirrorMessage.leave, Data())
+        }
+    }
+
+    /// Shuts a simulator down or deletes it on the Mac. The Mac answers with its list as it then
+    /// is. Naming the simulator on screen leaves it first.
+    func manage(_ action: MirrorSimulatorAction) {
+        queue.async { [self] in
+            guard let data = try? JSONEncoder().encode(action) else { return }
+            if let watching, UUID(uuidString: watching) == UUID(uuidString: action.udid) { forgetPicture() }
+            send(MirrorMessage.manage, data)
+        }
+    }
+
+    /// The picture on screen belongs to a simulator that is no longer watched: clear it, and count
+    /// no frame of it towards the next one's frame rate.
+    private func forgetPicture() {
+        watching = nil
+        waitingForKey = true
+        decodedInWindow = 0
+        bytesInWindow = 0
+        lastImage = nil
+        renderer.flush(removingDisplayedImage: true, completionHandler: nil)
+        for mirror in mirrors { mirror.flush(removingDisplayedImage: true, completionHandler: nil) }
+    }
+
     func enteredBackground() {
         queue.async { [self] in
             appState = "background"
@@ -181,6 +332,7 @@ final class MirrorClient: @unchecked Sendable {
     func enteredForeground() {
         queue.async { [self] in
             appState = "active"
+            lastHeard = Self.now()      // nothing was read while in the background
             session = nil
             waitingForKey = true
             renderer.flush()
@@ -235,6 +387,7 @@ final class MirrorClient: @unchecked Sendable {
                     control = input
                     attempts = 0
                     tryingSince = nil
+                    lastHeard = Self.now()
                     report(.connected)
                     sendInfo()
                     return true
@@ -358,15 +511,61 @@ final class MirrorClient: @unchecked Sendable {
                 let payload = Data(body.dropFirst())
                 queue.async { [self] in
                     guard current == generation, number == nil || number == videoStreamNumber else { return }
+                    lastHeard = received
                     switch type {
                     case 1: configure(payload)
                     case 2: decode(payload, received: received)
                     case 3: pong(payload)
+                    case 23: showing(payload)
+                    case MirrorMessage.simulators: simulators(payload)
+                    case MirrorMessage.progress:
+                        guard let progress = try? JSONDecoder().decode(MirrorSimulatorProgress.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onProgress?(progress) }
+                    case MirrorMessage.screen:
+                        guard let screen = try? JSONDecoder().decode(MirrorScreenState.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onScreen?(screen) }
+                    case MirrorMessage.health:
+                        guard let health = try? JSONDecoder().decode(MirrorSimulatorHealth.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onHealth?(health) }
+                    case MirrorMessage.hostLoad:
+                        guard let load = try? JSONDecoder().decode(MirrorHostLoad.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onHostLoad?(load) }
+                    case MirrorMessage.builds:
+                        guard let list = try? JSONDecoder().decode(MirrorBuildList.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onBuilds?(list.builds) }
+                    case MirrorMessage.installIdentity:
+                        guard let identity = try? JSONDecoder().decode(MirrorInstallIdentity.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onInstallIdentity?(identity) }
+                    case MirrorMessage.buildPiece:
+                        guard let piece = MirrorBuildPiece(payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onBuildPiece?(piece) }
+                    case MirrorMessage.fetchFailed:
+                        guard let failure = try? JSONDecoder().decode(MirrorBuildFetchFailure.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onFetchFailed?(failure) }
                     default: break
                     }
                 }
             }
         } catch {}
+    }
+
+    /// A stream is starting, and the Mac says which simulator it shows.
+    private func showing(_ payload: Data) {
+        guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
+        let showing = Showing(udid: json["udid"] as? String ?? "", name: json["name"] as? String ?? "",
+                              canChoose: json["chooser"] as? Bool ?? false, model: json["model"] as? String ?? "",
+                              canRotate: json["rotates"] as? Bool ?? false, hasHinge: json["hinge"] as? Bool ?? false)
+        watching = showing.udid.isEmpty ? nil : showing.udid
+        decodedInWindow = 0
+        bytesInWindow = 0
+        DispatchQueue.main.async { [weak self] in self?.onShowing?(showing) }
+    }
+
+    /// The Mac shows nothing and waits for a choice from this list.
+    private func simulators(_ payload: Data) {
+        guard let list = try? JSONDecoder().decode(MirrorSimulatorList.self, from: payload) else { return }
+        watching = nil
+        DispatchQueue.main.async { [weak self] in self?.onSimulators?(list) }
     }
 
     private func send(_ type: UInt8, _ payload: Data, timely: Bool = false) {
@@ -388,14 +587,20 @@ final class MirrorClient: @unchecked Sendable {
 
     private func periodic() {
         watchForNoConnection()
-        guard connection != nil else { return }
+        guard let connection else { return }
+        if appState == "active", Self.now() - lastHeard > Self.silenceLimit {
+            // Closing it ends the wait in `connect`, which reports that it is reconnecting and tries again.
+            lastHeard = Self.now()
+            try? connection.close(errorCode: MirrorClose.timeout, reason: Data("no answer from the Mac".utf8))
+            return
+        }
         tick += 1
         var ping = Data()
         ping.put(Self.now())
         send(10, ping)
         guard tick % 2 == 0 else { return }
         sendInfo(timely: true)
-        let path = connection?.paths().first(where: { $0.isSelected })
+        let path = connection.paths().first(where: { $0.isSelected })
         let stats = Stats(framesPerSecond: decodedInWindow, megabits: Double(bytesInWindow) * 8 / 1_000_000,
                           route: path.map { $0.isRelay ? "Relay" : "Direct" } ?? "",
                           roundTripMs: Int((roundTrip * 1000).rounded()), width: Int(videoSize.width), height: Int(videoSize.height))
@@ -421,7 +626,9 @@ final class MirrorClient: @unchecked Sendable {
             "paneWidth": paneSize.width, "paneHeight": paneSize.height,
             "lowPower": ProcessInfo.processInfo.isLowPowerModeEnabled,
             "state": appState, "roundTripMs": roundTrip * 1000, "network": network, "displayHz": displayHertz,
+            "chooser": true,        // this app can show the Mac's list of simulators
         ]
+        if let watching { info["resume"] = watching }
         if let path = connection?.paths().first(where: { $0.isSelected }) {
             info["path"] = path.isRelay ? "relay" : "direct"
             info["pathRttMs"] = Int(path.rttMs)
@@ -579,22 +786,33 @@ final class MirrorClient: @unchecked Sendable {
     }
 
     private func display(_ image: CVImageBuffer) {
+        lastImage = image
+        guard let sample = Self.sample(of: image) else { return }
+        if renderer.status == .failed { renderer.flush() }
+        renderer.enqueue(sample)
+        for mirror in mirrors {
+            if mirror.status == .failed { mirror.flush() }
+            mirror.enqueue(sample)
+        }
+    }
+
+    /// A frame to show at once, whatever the renderer's clock says.
+    private static func sample(of image: CVImageBuffer) -> CMSampleBuffer? {
         var description: CMVideoFormatDescription?
         CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: image, formatDescriptionOut: &description)
-        guard let description else { return }
+        guard let description else { return nil }
         var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()),
                                         decodeTimeStamp: .invalid)
         var sample: CMSampleBuffer?
         CMSampleBufferCreateReadyWithImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: image, formatDescription: description,
                                                  sampleTiming: &timing, sampleBufferOut: &sample)
-        guard let sample else { return }
+        guard let sample else { return nil }
         if let attachments = CMSampleBufferGetSampleAttachmentsArray(sample, createIfNecessary: true), CFArrayGetCount(attachments) > 0 {
             let dictionary = unsafeBitCast(CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self)
             CFDictionarySetValue(dictionary, Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
                                  Unmanaged.passUnretained(kCFBooleanTrue).toOpaque())
         }
-        if renderer.status == .failed { renderer.flush() }
-        renderer.enqueue(sample)
+        return sample
     }
 }
 

@@ -41,6 +41,9 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # The trust tutorial goes on playing in Picture in Picture while the person is in Settings.
+        UIBackgroundModes:
+          - audio
         NSCameraUsageDescription: AXe Mirror uses the camera to scan the pairing code shown on your Mac.
         NSLocalNetworkUsageDescription: AXe Mirror connects directly to your Mac when both are on the same network.
     settings:
@@ -49,8 +52,8 @@ targets:
         PRODUCT_NAME: AXe Mirror
         DEVELOPMENT_TEAM: BR6WD3M6ZD
         CODE_SIGN_STYLE: Automatic
-        MARKETING_VERSION: "1.1"
-        CURRENT_PROJECT_VERSION: "5"
+        MARKETING_VERSION: "1.2"
+        CURRENT_PROJECT_VERSION: "29"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) AXE_MIRROR

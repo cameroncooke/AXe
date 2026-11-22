@@ -6,12 +6,20 @@ import Foundation
 //
 // Control stream and video streams carry messages framed as: UInt32 length of what follows, UInt8
 // type, payload. Datagrams carry: UInt8 type, payload.
-// Host to viewer: 1 decoder configuration, 2 video frame, 3 pong, 23 session info (JSON), 24 a line
-// about the host's own network link. Viewer to host: 10 ping, 11 frame report, 12 keyframe request,
-// 13 viewer info (JSON), 30 profile (JSON), 40 touch down, up or cancel, 41 touch move, 43 hardware button.
+// Host to viewer: 1 decoder configuration, 2 video frame, 3 pong, 23 session info (JSON, with the
+// simulator's UDID and name), 24 a line about the host's own network link, 25 the simulators to
+// choose from, 27 progress of a choice, 38 which screen is shown and the hinge angle, 39 whether the
+// simulator is answering, 46 how busy the Mac is. Viewer to host:
+// 10 ping, 11 frame report, 12 keyframe request, 13 viewer info (JSON), 30 profile (JSON), 31 send the
+// simulators, 32 open or create a simulator, 34 leave the simulator, 35 shut down or delete a
+// simulator, 36 turn the simulator, 37 fold an iPhone Duo simulator, 40 touch down, up or cancel,
+// 41 touch move, 43 hardware button. Those from 25 to 39, and 46, that are not listed in this file's code are
+// in `Shared/MirrorSimulators.swift`.
 
 func mirrorNow() -> TimeInterval { ProcessInfo.processInfo.systemUptime }
-func mirrorNote(_ text: String) { FileHandle.standardError.write(Data((text + "\n").utf8)) }
+/// Writes a log line. A write that fails, as to a terminal that has been closed, is dropped: the
+/// non-throwing `write(_:)` would stop the host with an exception.
+func mirrorNote(_ text: String) { try? FileHandle.standardError.write(contentsOf: Data((text + "\n").utf8)) }
 
 extension Data {
     mutating func put<T>(_ value: T) { Swift.withUnsafeBytes(of: value) { append(contentsOf: $0) } }
