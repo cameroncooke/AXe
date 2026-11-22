@@ -105,6 +105,8 @@ final class MirrorLink: @unchecked Sendable {
     private var control: AsyncStream<Data>.Continuation?
     private var video: AsyncStream<Data>.Continuation?
     private var backlog = 0
+    private var controlNumber = 0               // counts control streams; an older one's writes no longer count
+    private var controlQueued = 0               // bytes handed to the current control stream and not yet taken by it
     private var videoNumber: UInt32 = 0
     private var videoSend: SendStream?
     private var watch: WatchHandle?
@@ -132,6 +134,9 @@ final class MirrorLink: @unchecked Sendable {
     init(queue: DispatchQueue) { self.queue = queue }
 
     var hasViewer: Bool { lock.lock(); defer { lock.unlock() }; return connection != nil }
+
+    /// Bytes of control messages handed over but not yet accepted by the QUIC stream.
+    var controlBacklog: Int { lock.lock(); defer { lock.unlock() }; return controlQueued }
 
     /// Video messages handed over but not yet accepted by the QUIC stream.
     var videoBacklog: Int { lock.lock(); defer { lock.unlock() }; return backlog }
@@ -184,6 +189,9 @@ final class MirrorLink: @unchecked Sendable {
         connectedViewer = viewer
         lastHeard = now
         control = controlInput
+        controlNumber += 1
+        let number = controlNumber
+        controlQueued = 0
         video = nil
         videoSend = nil
         backlog = 0
@@ -194,7 +202,14 @@ final class MirrorLink: @unchecked Sendable {
         }, direct: { [weak self] remote in self?.onDirectPath?(remote) }))
         queue.async { self.onConnected?() }
 
-        Task { for await data in controlData { do { try await controlSend.writeAll(buf: data) } catch { break } } }
+        Task {
+            for await data in controlData {
+                do { try await controlSend.writeAll(buf: data) } catch { break }
+                self.lock.lock()
+                if number == self.controlNumber { self.controlQueued = max(0, self.controlQueued - data.count) }
+                self.lock.unlock()
+            }
+        }
         // The client's per-frame reports arrive as datagrams: a report stuck behind a lost one on a
         // reliable stream would make this side think the client is behind when it is not.
         Task {
@@ -245,7 +260,9 @@ final class MirrorLink: @unchecked Sendable {
 
     func sendControl(_ data: Data) {
         lock.lock(); defer { lock.unlock() }
-        control?.yield(data)
+        guard let control else { return }
+        controlQueued += data.count
+        control.yield(data)
     }
 
     func sendVideo(_ data: Data) {

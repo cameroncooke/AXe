@@ -256,6 +256,16 @@ struct MirrorBuildsTests {
 
     // MARK: Installing from the viewer's own device
 
+    @Test("The host has one piece of a build in hand at a time, however fast a viewer asks")
+    func oneInHand() {
+        #expect(MirrorBuildFetch.accepted(reading: false, queued: 0))
+        // The viewer has asked again while the last piece is still being read, or still queued.
+        #expect(!MirrorBuildFetch.accepted(reading: true, queued: 0))
+        #expect(!MirrorBuildFetch.accepted(reading: false, queued: MirrorBuildFetch.largest + 40))
+        // Small replies waiting behind it, a pong or a list, do not hold a download up.
+        #expect(MirrorBuildFetch.accepted(reading: false, queued: 2_000))
+    }
+
     @Test("A piece of a build survives the trip: its ID, its place and its bytes")
     func pieces() throws {
         let piece = MirrorBuildPiece(id: buildID, offset: 5_000_000_000, bytes: Data([1, 2, 3, 255]))

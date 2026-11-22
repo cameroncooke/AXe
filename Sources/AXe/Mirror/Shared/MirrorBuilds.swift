@@ -63,6 +63,13 @@ struct MirrorBuildFetch: Codable, Equatable, Sendable {
 
     /// The most one piece may hold.
     static let largest = 512 * 1024
+
+    /// Whether the host takes a request for a piece now. A viewer asks for the next piece when it
+    /// has the last, so the host never has more than one in hand; a viewer that asks faster than
+    /// it reads would otherwise have the host read the file into memory piece after piece.
+    /// `reading` is whether a piece is being read from the disk, and `queued` the bytes handed to
+    /// the connection and not yet taken by it.
+    static func accepted(reading: Bool, queued: Int) -> Bool { !reading && queued < largest }
 }
 
 struct MirrorBuildFetchFailure: Codable, Equatable, Sendable {

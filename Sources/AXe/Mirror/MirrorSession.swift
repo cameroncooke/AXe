@@ -90,6 +90,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     private var shutMended = false              // that has been put right once since the Duo was last open
     private var offeredBuilds: [MirrorBuild]?   // the builds last sent to this viewer; nil until it asks
     private var buildsTimer: DispatchSourceTimer?
+    private var readingPiece = false            // a piece of a build is being read from the disk for this viewer
+    private var pieceNumber = 0                 // counts connections; a piece read for an older one is dropped
     private let burst = MirrorBurst()           // the screen is read more often for a moment after a fold or a turn
     private var responsiveness = MirrorResponsiveness() // whether the simulator is answering; see `noteHealth`
     /// How busy this Mac is, as the host last found it; see `hostLoadChanged`.
@@ -877,8 +879,13 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     }
 
     /// Sends a piece of a build's file: only a build this host offered this viewer, and only one
-    /// whose file the host holds. The viewer asks for the pieces in turn, so nothing piles up.
+    /// whose file the host holds. The viewer asks for the pieces in turn; one that asks for more
+    /// while the last is still being read or sent is refused, so nothing piles up.
     private func sendBuildPiece(_ request: MirrorBuildFetch) {
+        guard MirrorBuildFetch.accepted(reading: readingPiece, queued: link.controlBacklog) else {
+            send(MirrorMessage.fetchFailed, json: MirrorBuildFetchFailure(id: request.id, message: "This Mac is still sending the last piece."))
+            return
+        }
         guard let catalogue = settings.builds, let build = offeredBuilds?.first(where: { $0.id == request.id }),
               request.offset >= 0, request.length > 0 else {
             send(MirrorMessage.fetchFailed, json: MirrorBuildFetchFailure(id: request.id, message: "This Mac no longer has that build."))
@@ -886,6 +893,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         }
         let file = MirrorBuildStore(root: catalogue.folder).folder(bundleID: build.bundleID, buildID: build.id).appendingPathComponent("app.ipa")
         let length = min(request.length, MirrorBuildFetch.largest)
+        readingPiece = true
+        let number = pieceNumber
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var bytes: Data?
             if let handle = try? FileHandle(forReadingFrom: file) {
@@ -894,7 +903,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 try? handle.close()
             }
             self?.queue.async {
-                guard let self else { return }
+                // The viewer this was read for may have gone, and another connection come, meanwhile.
+                guard let self, number == self.pieceNumber else { return }
+                self.readingPiece = false
                 if let bytes {
                     if request.offset == 0 { mirrorNote("sending \(build.name) \(build.versionText) to the viewer over the connection") }
                     self.sendControl(MirrorMessage.buildPiece, MirrorBuildPiece(id: request.id, offset: request.offset, bytes: bytes).encoded)
@@ -970,6 +981,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         buildsTimer?.cancel()
         buildsTimer = nil
         offeredBuilds = nil
+        readingPiece = false
+        pieceNumber += 1
         choiceNumber += 1
         paneWidth = 0
         paneHeight = 0
