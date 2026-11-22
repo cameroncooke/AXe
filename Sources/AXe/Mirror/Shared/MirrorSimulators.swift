@@ -86,13 +86,21 @@ struct MirrorSimulatorHealth: Codable, Equatable, Sendable {
 /// of the process, one fold that timed out or did not finish, or a touch connection that did not
 /// open, and it is not answering; it is again once three reads in a row have worked and nothing
 /// else is failing.
+///
+/// Refused touches count once for each `touchSpacing`, so the moves of one swipe are one failure
+/// and not three. A process that starts in the simulator shows that it is alive, and clears what
+/// touches and folds said before: the viewer's card for a simulator that is not answering sits
+/// over the picture, where it keeps away the very touch that would otherwise have to clear it.
 struct MirrorResponsiveness: Equatable, Sendable {
     private(set) var responding = true
     private(set) var reason: String?
     private var readFailures = 0, readSuccesses = 0, touchFailures = 0, probeFailures = 0
     private var foldStuck = false, inputStuck = false
+    private var lastTouchFailure: Double?
 
     static let failuresInARow = 3
+    /// Refused touches closer together than this count as one.
+    static let touchSpacing: Double = 0.25
     /// How long the host waits for a simulator's touch connection to open before it says the
     /// simulator is not answering. A stuck simulator does not open one, and says nothing.
     static let inputDeadline: Double = 20
@@ -103,8 +111,14 @@ struct MirrorResponsiveness: Equatable, Sendable {
         return settle(why: "Its screens are not answering.")
     }
 
-    mutating func touch(ok: Bool) -> Bool {
-        touchFailures = ok ? 0 : touchFailures + 1
+    mutating func touch(ok: Bool, at time: Double = ProcessInfo.processInfo.systemUptime) -> Bool {
+        if ok {
+            touchFailures = 0
+            lastTouchFailure = nil
+        } else if lastTouchFailure.map({ time - $0 >= Self.touchSpacing }) ?? true {
+            touchFailures += 1
+            lastTouchFailure = time
+        }
         return settle(why: "It is refusing touches.")
     }
 
@@ -112,11 +126,17 @@ struct MirrorResponsiveness: Equatable, Sendable {
     /// reads are answered on the Mac's side and go on working while the simulator itself is frozen.
     mutating func probe(ok: Bool) -> Bool {
         probeFailures = ok ? 0 : probeFailures + 1
+        if ok {
+            touchFailures = 0
+            lastTouchFailure = nil
+            foldStuck = false
+        }
         return settle(why: "It is not answering at all.")
     }
 
-    /// A fold that timed out stays against the simulator until a later fold finishes: screen reads
-    /// are no sign that it is answering again, as they go on working while it is stuck.
+    /// A fold that timed out stays against the simulator until a later fold finishes or a process
+    /// starts in it: screen reads are no sign that it is answering again, as they go on working
+    /// while it is stuck.
     mutating func fold(timedOut: Bool) -> Bool {
         foldStuck = timedOut
         return settle(why: "Its hinge is not answering.")

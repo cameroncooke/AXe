@@ -161,8 +161,8 @@ struct MirrorResponsivenessTests {
     @Test("Refused touches, a process that never starts, or a fold that timed out each say so")
     func otherSignals() {
         var touches = MirrorResponsiveness()
-        _ = touches.touch(ok: false); _ = touches.touch(ok: false)
-        let touchChanged = touches.touch(ok: false)
+        _ = touches.touch(ok: false, at: 10); _ = touches.touch(ok: false, at: 10.5)
+        let touchChanged = touches.touch(ok: false, at: 11)
         #expect(touchChanged && touches.reason == "It is refusing touches.")
         var probe = MirrorResponsiveness()
         _ = probe.probe(ok: false)
@@ -192,6 +192,45 @@ struct MirrorResponsivenessTests {
         #expect(!health.responding)
         let changed = health.fold(timedOut: false)
         #expect(changed && health.responding)
+    }
+
+    @Test("One swipe's worth of refused touches is not a simulator that has stopped answering")
+    func oneBadGesture() {
+        // Three moves of one swipe, 17 ms apart, all refused: one thing went wrong, once.
+        var health = MirrorResponsiveness()
+        let changes = [health.touch(ok: false, at: 10.000), health.touch(ok: false, at: 10.017), health.touch(ok: false, at: 10.034)]
+        #expect(changes == [false, false, false] && health.responding)
+        // Refused again and again over a second is.
+        _ = health.touch(ok: false, at: 10.5)
+        let changed = health.touch(ok: false, at: 11.0)
+        #expect(changed && !health.responding && health.reason == "It is refusing touches.")
+    }
+
+    @Test("A simulator that starts a process is answering, whatever a touch or a fold said before")
+    func aliveAfterAll() {
+        // Refusing touches, with its screens reading well throughout. The card that says so sits over
+        // the picture, so the person cannot easily send the touch that would clear it.
+        var touches = MirrorResponsiveness()
+        for step in 0..<3 { _ = touches.touch(ok: false, at: Double(step)) }
+        for _ in 0..<5 { _ = touches.read(ok: true) }
+        #expect(!touches.responding)
+        let back = touches.probe(ok: true)
+        #expect(back && touches.responding && touches.reason == nil)
+        // Still refusing them: it says so again.
+        for step in 10..<13 { _ = touches.touch(ok: false, at: Double(step)) }
+        #expect(!touches.responding)
+        // The same for a fold that timed out.
+        var fold = MirrorResponsiveness()
+        _ = fold.fold(timedOut: true)
+        for _ in 0..<5 { _ = fold.read(ok: true) }
+        let unfolded = fold.probe(ok: true)
+        #expect(unfolded && fold.responding)
+        // A simulator that starts nothing stays as it was.
+        var frozen = MirrorResponsiveness()
+        for step in 0..<3 { _ = frozen.touch(ok: false, at: Double(step)) }
+        for _ in 0..<5 { _ = frozen.read(ok: true) }
+        _ = frozen.probe(ok: false)
+        #expect(!frozen.responding)
     }
 
     @Test("A touch connection that never opens says so, and opening it clears it")
