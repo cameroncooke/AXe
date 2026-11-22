@@ -74,6 +74,8 @@ final class MirrorClient: @unchecked Sendable {
     var onBuilds: (([MirrorBuild]) -> Void)?
     /// The certificate this device serves builds to iOS with, from the Mac.
     var onInstallIdentity: ((MirrorInstallIdentity) -> Void)?
+    /// The Mac could not make that certificate, and why.
+    var onInstallIdentityFailed: ((String) -> Void)?
     /// A piece of a build asked for with `fetchBuild`, or why it could not be sent.
     var onBuildPiece: ((MirrorBuildPiece) -> Void)?
     var onFetchFailed: ((MirrorBuildFetchFailure) -> Void)?
@@ -536,6 +538,9 @@ final class MirrorClient: @unchecked Sendable {
                     case MirrorMessage.installIdentity:
                         guard let identity = try? JSONDecoder().decode(MirrorInstallIdentity.self, from: payload) else { return }
                         DispatchQueue.main.async { [weak self] in self?.onInstallIdentity?(identity) }
+                    case MirrorMessage.installIdentityFailed:
+                        guard let failure = try? JSONDecoder().decode(MirrorBuildFetchFailure.self, from: payload) else { return }
+                        DispatchQueue.main.async { [weak self] in self?.onInstallIdentityFailed?(failure.message) }
                     case MirrorMessage.buildPiece:
                         guard let piece = MirrorBuildPiece(payload) else { return }
                         DispatchQueue.main.async { [weak self] in self?.onBuildPiece?(piece) }

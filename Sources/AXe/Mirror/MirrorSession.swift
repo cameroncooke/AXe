@@ -942,7 +942,10 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 let identity = try store.load()
                 self?.queue.async { self?.send(MirrorMessage.installIdentity, json: identity) }
             } catch {
-                mirrorNote("no certificate for installs: \(CLIErrorMapping.failure(for: error).message)")
+                let message = CLIErrorMapping.failure(for: error).message
+                mirrorNote("no certificate for installs: \(message)")
+                self?.onEvent?(["event": "warning", "code": "installCertificateFailed", "message": message])
+                self?.queue.async { self?.send(MirrorMessage.installIdentityFailed, json: MirrorBuildFetchFailure(id: "", message: message)) }
             }
         }
     }

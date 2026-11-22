@@ -990,6 +990,8 @@ final class StreamSession {
     @ObservationIgnored private var installIdentity: MirrorInstallIdentity?
     @ObservationIgnored private var installServer: LocalInstallServer?
     @ObservationIgnored private var askedForIdentity = false
+    /// Why the Mac could not make its certificate, in its words, when it could not.
+    @ObservationIgnored private var identityProblem: String?
     @ObservationIgnored private var fetch: (build: MirrorBuild, host: String, file: URL, handle: FileHandle)?
     @ObservationIgnored private var keepAwake = UIBackgroundTaskIdentifier.invalid
 
@@ -997,6 +999,7 @@ final class StreamSession {
     var installAuthorityName: String { installIdentity?.authorityName ?? "AXe Mirror installs" }
 
     private func gotInstallIdentity(_ identity: MirrorInstallIdentity) {
+        identityProblem = nil
         guard identity != installIdentity || installServer == nil else { return }
         installIdentity = identity
         installServer?.stop()
@@ -1163,7 +1166,12 @@ final class StreamSession {
         case .unavailable:
             // The certificate comes within a moment of the builds; ask again in case it was lost.
             client?.requestInstallIdentity()
-            installProblem = (build, "Not ready to install yet", "This device is still waiting for the Mac’s certificate. Try again in a moment.")
+            if let identityProblem {
+                // The Mac has said it cannot make one: waiting will not help, and it says why.
+                installProblem = (build, "Your Mac could not get ready to install", identityProblem)
+            } else {
+                installProblem = (build, "Not ready to install yet", "This device is still waiting for the Mac’s certificate. Try again in a moment.")
+            }
         }
     }
 
@@ -1512,6 +1520,7 @@ final class StreamSession {
         client.onHostLoad = { [weak self] load in self?.hostLoad = load }
         client.onBuilds = { [weak self] builds in self?.received(builds) }
         client.onInstallIdentity = { [weak self] identity in self?.gotInstallIdentity(identity) }
+        client.onInstallIdentityFailed = { [weak self] message in self?.identityProblem = message }
         client.onBuildPiece = { [weak self] piece in self?.gotPiece(piece) }
         client.onFetchFailed = { [weak self] failure in self?.fetchFailed(failure) }
         client.onScreen = { [weak self] screen in

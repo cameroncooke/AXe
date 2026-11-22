@@ -26,6 +26,9 @@ extension MirrorMessage {
     static let buildPiece: UInt8 = 53
     /// Host to viewer: a piece could not be sent, a `MirrorBuildFetchFailure`.
     static let fetchFailed: UInt8 = 54
+    /// Host to viewer: the certificate could not be made, a `MirrorBuildFetchFailure` with no ID
+    /// and the reason. Without it the viewer waited for a certificate that was never coming.
+    static let installIdentityFailed: UInt8 = 55
 }
 
 /// The certificate a viewer serves builds to iOS with, from the device itself.
