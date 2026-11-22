@@ -86,6 +86,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     private var foldNumber = 0                  // the newest fold asked for; an older one's result is dropped
     private var duo: FBSimulatorDuoControl?     // the Duo's hinge and the way it is held; see `MirrorFold`
     private var foldsUnderWay = 0               // folds asked for whose hinge is still being watched
+    private var foldTask: Task<Void, Never>?    // the newest of them; a newer fold cancels it
     private var shutInnerSince: TimeInterval?   // since when a shut Duo has had its inner screen lit
     private var shutMended = false              // that has been put right once since the Duo was last open
     private var offeredBuilds: [MirrorBuild]?   // the builds last sent to this viewer; nil until it asks
@@ -1407,7 +1408,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         let control = duoControl(for: simulator)
         burst.start(for: 2.5)
         foldsUnderWay += 1
-        Task { [self] in
+        foldTask = Task { [self] in
             try? await MirrorFold.perform(MirrorFold.Plan(hinge: 0), control: control, simulator: simulator)
             queue.async { self.foldsUnderWay -= 1 }
         }
@@ -1431,6 +1432,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         let control = duoControl(for: simulator)
         foldNumber += 1
         let number = foldNumber
+        // An older fold still at work is stopped where it is: this one is what the viewer wants now.
+        foldTask?.cancel()
+        foldTask = nil
         burst.start(for: 2)
         if request.posture == MirrorFoldRequest.angle {
             do { try control.setHinge(plan.hinge) } catch {
@@ -1440,7 +1444,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         }
         mirrorNote("folding: \(request.posture) at \(Int(plan.hinge))°\(plan.held.map { ", held \($0.rawValue)" } ?? "")")
         foldsUnderWay += 1
-        Task { [self] in
+        foldTask = Task { [self] in
             var late = false
             defer { queue.async { self.foldsUnderWay -= 1 } }
             do {
@@ -1500,6 +1504,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         hingeDegrees = nil
         sentScreen = nil
         foldNumber += 1
+        foldTask?.cancel()
+        foldTask = nil
         duo?.close()
         duo = nil
         shutInnerSince = nil

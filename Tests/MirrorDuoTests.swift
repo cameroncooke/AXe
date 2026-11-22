@@ -279,6 +279,27 @@ struct MirrorProblemTests {
         #expect(odd.code == MirrorProblem.other && odd.action == MirrorProblem.retry && odd.title == "Your Mac couldn’t delete “Demo”")
     }
 
+    @Test("A fold that a newer one has overtaken stops waiting at once, and so moves the hinge no more")
+    func overtakenFoldStops() async {
+        // An older fold waiting for the hinge to arrive, with five seconds to go.
+        let older = Task { () -> (arrived: Bool, took: Double) in
+            let start = ProcessInfo.processInfo.systemUptime
+            let arrived = await MirrorFold.wait(5) { false }
+            return (arrived, ProcessInfo.processInfo.systemUptime - start)
+        }
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        older.cancel()      // what the session does when the viewer asks for another fold
+        let result = await older.value
+        #expect(!result.arrived && result.took < 1)
+        // And what `perform` asks before each thing it does to the device then stops it.
+        let cancelled = Task { () -> Bool in
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            do { try Task.checkCancellation(); return false } catch { return true }
+        }
+        cancelled.cancel()
+        #expect(await cancelled.value)
+    }
+
     @Test("A viewer from before problems ignores the new fields, and a Mac from before them still decodes")
     func compatible() throws {
         let old = try JSONDecoder().decode(MirrorSimulatorProgress.self, from: Data(#"{"step":"failed","message":"simctl list failed (1)"}"#.utf8))

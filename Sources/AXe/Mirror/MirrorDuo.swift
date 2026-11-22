@@ -233,7 +233,13 @@ enum MirrorFold {
     ///
     /// A Duo that is shut and still has its inner screen lit is opened to 8 degrees and shut again,
     /// which lights the outer one, twice at most: see the measurements above.
+    ///
+    /// A plan takes up to a few seconds, and a newer fold may be asked for meanwhile. The session
+    /// cancels the older plan's task then, and a cancelled plan moves nothing more: before each
+    /// thing it would do to the device it stops (`CancellationError`). Otherwise an older plan to
+    /// shut the Duo could send its 8 degrees and its shut after a newer one had opened it.
     static func perform(_ plan: Plan, control: FBSimulatorDuoControl, simulator: FBSimulator) async throws {
+        try Task.checkCancellation()
         if plan.viaBook {
             try control.setOrientation(.portrait)
         } else if plan.heldFirst, let held = plan.held {
@@ -244,8 +250,10 @@ enum MirrorFold {
             for _ in 0..<2 {
                 guard await arrived(plan.hinge, simulator: simulator, within: 1.5) else { break }
                 if await wait(0.15, until: { await MirrorLitScreen.read(for: simulator)?.role == "outer" }) { break }
+                try Task.checkCancellation()
                 try control.setHinge(nudge)
                 _ = await arrived(nudge, simulator: simulator, within: 1.5)
+                try Task.checkCancellation()
                 try control.setHinge(plan.hinge)
             }
         }
@@ -253,6 +261,7 @@ enum MirrorFold {
         if plan.viaBook {
             _ = await wait(1.5) { await MirrorLitScreen.read(for: simulator)?.role == "inner" }
         }
+        try Task.checkCancellation()
         try control.setOrientation(held)
     }
 
@@ -267,9 +276,12 @@ enum MirrorFold {
         }
     }
 
-    private static func wait(_ seconds: Double, until condition: () async -> Bool) async -> Bool {
+    /// Whether `condition` comes true within `seconds`, looking every 30 ms. False at once when
+    /// the task has been cancelled: nobody is waiting for the answer.
+    static func wait(_ seconds: Double, until condition: () async -> Bool) async -> Bool {
         let deadline = ProcessInfo.processInfo.systemUptime + seconds
         while true {
+            if Task.isCancelled { return false }
             if await condition() { return true }
             guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
             try? await Task.sleep(nanoseconds: 30_000_000)
