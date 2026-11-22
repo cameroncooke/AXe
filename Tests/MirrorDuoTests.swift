@@ -300,6 +300,15 @@ struct MirrorProblemTests {
         #expect(await cancelled.value)
     }
 
+    @Test("A viewer whose simulator another device shut down, deleted or restarted is told which, by name")
+    func takenAway() {
+        let down = MirrorProblem.takenAway(name: "Demo", action: MirrorSimulatorAction.shutDown)
+        #expect(down.code == MirrorProblem.takenAway && down.title == "“Demo” was shut down from another device" && down.action == MirrorProblem.refresh)
+        let gone = MirrorProblem.takenAway(name: "Demo", action: MirrorSimulatorAction.delete)
+        #expect(gone.title == "“Demo” was deleted from another device" && gone.action == nil)
+        #expect(MirrorProblem.takenAway(name: "Demo", action: MirrorSimulatorAction.restart).title == "“Demo” was restarted from another device")
+    }
+
     @Test("A viewer from before problems ignores the new fields, and a Mac from before them still decodes")
     func compatible() throws {
         let old = try JSONDecoder().decode(MirrorSimulatorProgress.self, from: Data(#"{"step":"failed","message":"simctl list failed (1)"}"#.utf8))

@@ -272,6 +272,7 @@ struct MirrorProblem: Codable, Equatable, Sendable {
     static let cannotCreate = "cannotCreate"       // that name, device or iOS version cannot be used
     static let noSpace = "noSpace"                 // the Mac's disk is full
     static let foldFailed = "foldFailed"
+    static let takenAway = "takenAway"             // another device shut it down, deleted it or restarted it
     static let other = "other"
 
     /// What the viewer can offer: `retry` does the same thing again, `restart` restarts the
@@ -285,6 +286,20 @@ struct MirrorProblem: Codable, Equatable, Sendable {
     var message: String
     var action: String?
     var detail: String?
+
+    /// What a viewer is told when another paired device does something to the simulator it is
+    /// watching: `action` is a `MirrorSimulatorAction`. Without this the picture froze and, after
+    /// a while, the viewer said only that the simulator was not responding.
+    static func takenAway(name: String, action: String) -> MirrorProblem {
+        switch action {
+        case MirrorSimulatorAction.delete:
+            return MirrorProblem(code: takenAway, title: "“\(name)” was deleted from another device", message: "It is no longer on your Mac.", action: nil, detail: nil)
+        case MirrorSimulatorAction.restart:
+            return MirrorProblem(code: takenAway, title: "“\(name)” was restarted from another device", message: "Open it again once it has started.", action: refresh, detail: nil)
+        default:
+            return MirrorProblem(code: takenAway, title: "“\(name)” was shut down from another device", message: "Open it again to start it.", action: refresh, detail: nil)
+        }
+    }
 
     /// The problem behind a failure. `doing` is what the Mac was asked for: `list`, `open`, `create`,
     /// `shutDown`, `delete`, `restart` or `fold`. `errorCode` and `technical` are the Mac's own error;

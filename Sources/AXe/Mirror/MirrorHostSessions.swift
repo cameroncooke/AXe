@@ -155,6 +155,10 @@ final class MirrorHostSessions: @unchecked Sendable {
             self?.onEvent?(event)
         }
         session.onFatal = { [weak self] in self?.onFatal?($0) }
+        // Two viewers may be watching one simulator: what one does to it, the other is told.
+        session.onManaging = { [weak self, weak session] udid, action, done in
+            for other in self?.all() ?? [] where other !== session { other.simulatorManagedElsewhere(udid: udid, action: action, done: done) }
+        }
         session.link.onDirectPath = { [weak self] remote in self?.endpoint.directPathSelected(remote) }
         session.start()
         session.hostLoadChanged(hostLoad, tell: false)

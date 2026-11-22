@@ -107,6 +107,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     private var inputFailures = 0               // attempts in a row that failed
     /// One event for the command to print: a name and its fields.
     var onEvent: (([String: String]) -> Void)?
+    /// This viewer is about to shut down, delete or restart a simulator (its UDID, then the
+    /// `MirrorSimulatorAction`), and, with `done`, has finished. The host tells its other viewers.
+    var onManaging: ((_ udid: String, _ action: String, _ done: Bool) -> Void)?
 
     private var surface: IOSurface?
     private var lastSeed: UInt32 = 0
@@ -1210,6 +1213,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                     throw CLIError(errorDescription: "That simulator is no longer on this Mac.", code: .commandFailed)
                 }
                 _ = managed.changed(to: [listed.name])
+                let known = [MirrorSimulatorAction.shutDown, MirrorSimulatorAction.delete, MirrorSimulatorAction.restart].contains(request.action)
+                if known { onManaging?(listed.udid, request.action, false) }
+                defer { if known { onManaging?(listed.udid, request.action, true) } }
                 switch request.action {
                 case MirrorSimulatorAction.shutDown:
                     try await MirrorSimulatorControl.shutDown(listed)
@@ -1250,6 +1256,30 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 mirrorNote("simulator \(request.action) failed: \(failed.message ?? "")")
                 queue.async { self.send(MirrorMessage.progress, json: failed) }
             }
+        }
+    }
+
+    /// Another viewer of this Mac is shutting down, deleting or restarting a simulator. If it is
+    /// the one this viewer is watching, this viewer is told so and sent back to the list: left
+    /// alone, its picture froze and it was told only, seconds later, that the simulator was not
+    /// responding. With `done`, a viewer at the list is sent the list as it now is.
+    func simulatorManagedElsewhere(udid: String, action: String, done: Bool) {
+        queue.async {
+            guard self.settings.choosesSimulator else { return }
+            if done {
+                if self.link.hasViewer, self.simulator == nil || self.awaitingChoice { self.sendSimulatorList() }
+                return
+            }
+            guard let simulator = self.simulator, UUID(uuidString: simulator.udid) == UUID(uuidString: udid) else { return }
+            let name = simulator.name
+            self.choiceNumber += 1      // a choice of this simulator still under way is dropped with it
+            self.release()
+            self.awaitingChoice = true
+            guard self.link.hasViewer else { return }
+            let problem = MirrorProblem.takenAway(name: name, action: action)
+            mirrorNote("\(name) was taken from this viewer by another: \(action)")
+            self.send(MirrorMessage.progress, json: MirrorSimulatorProgress(step: "failed", udid: udid, name: name, message: problem.title, problem: problem, doing: "open"))
+            self.sendSimulatorList()
         }
     }
 
