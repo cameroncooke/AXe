@@ -102,9 +102,12 @@ struct MirrorRelaysTests {
     func givenList() async {
         let dead = "https://relay.invalid"
         let allowed = await MirrorRelays.choose(explicit: nil, record: "v=1 \(dead) public")
-        #expect(allowed == .init(relays: [], source: "--relay-list, none of ours answered, public relays"))
+        #expect(allowed.relays == [] && allowed.source == "--relay-list, none of ours answered, public relays")
+        // A viewer looking for a Mac to pair with still tries ours, then the public ones.
+        #expect(allowed.pairingRelays(public: ["https://public.example"]) == [dead, "https://public.example"])
         let refused = await MirrorRelays.choose(explicit: nil, record: "v=1 \(dead)")
-        #expect(refused == .init(relays: [dead], source: "--relay-list, none answered"))
+        #expect(refused.relays == [dead] && refused.source == "--relay-list, none answered")
+        #expect(refused.pairingRelays(public: ["https://public.example"]) == [dead])
     }
 
     @Test("The printed event names the relays, or says public")
@@ -117,6 +120,38 @@ struct MirrorRelaysTests {
     @Test("A relay named on the command line is used alone, without a lookup")
     func explicitRelay() async {
         let choice = await MirrorRelays.choose(explicit: "https://relay.example.com")
-        #expect(choice == .init(relays: ["https://relay.example.com"], source: "--relay-url"))
+        #expect(choice.relays == ["https://relay.example.com"] && choice.source == "--relay-url" && choice.isNamed)
+        #expect(choice.pairingRelays(public: ["https://public.example"]) == ["https://relay.example.com"])
+    }
+
+    @Test("A viewer looks for a Mac showing a code on every relay it could be on, not only its own pick")
+    func pairingLooksEverywhere() {
+        // Two equally near relays: this side's seed kept eu1, and the Mac's may have kept eu2.
+        let choice = MirrorRelays.Choice(relays: [eu1, us1], source: "published list", everyRelay: [eu1, "https://eu2.relay.axe-cli.com", us1], allowsPublic: true)
+        #expect(choice.pairingRelays(public: ["https://public.example"]) == [eu1, "https://eu2.relay.axe-cli.com", us1, "https://public.example"])
+        // A relay the scanned code named is tried first, and listed once.
+        #expect(choice.pairingRelays(first: us1, public: []) == [us1, eu1, "https://eu2.relay.axe-cli.com"])
+    }
+
+    @Test("The first dial to get through is used at once, and one that gets through later is closed")
+    func firstOfSeveral() async {
+        final class Late: @unchecked Sendable {
+            private let lock = NSLock()
+            private var values: [Int] = []
+            func add(_ value: Int) { lock.withLock { values.append(value) } }
+            var all: [Int] { lock.withLock { values } }
+        }
+        let late = Late()
+        let start = ProcessInfo.processInfo.systemUptime
+        let first = await MirrorTimeout.first(of: [
+            { try? await Task.sleep(nanoseconds: 2_000_000_000); return nil },      // a relay the Mac is not on: times out
+            { try? await Task.sleep(nanoseconds: 100_000_000); return 2 },          // the Mac's relay
+            { try? await Task.sleep(nanoseconds: 400_000_000); return 3 },
+        ] as [@Sendable () async -> Int?]) { late.add($0) }
+        #expect(first == 2 && ProcessInfo.processInfo.systemUptime - start < 1)
+        try? await Task.sleep(nanoseconds: 600_000_000)
+        #expect(late.all == [3])
+        // Nobody anywhere: the answer is nil, once every dial has given up.
+        #expect(await MirrorTimeout.first(of: [{ nil }, { nil }] as [@Sendable () async -> Int?]) == nil)
     }
 }

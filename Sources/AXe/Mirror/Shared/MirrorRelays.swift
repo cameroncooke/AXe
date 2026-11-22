@@ -31,6 +31,24 @@ enum MirrorRelays {
         /// Our relays in order of preference. Empty means iroh's public relays.
         var relays: [String]
         var source: String
+        /// Every relay of ours the other side of a pairing may be listening on: the ones that
+        /// answer, nearest first, then the rest. `relays` keeps one of each group of equally near
+        /// relays, chosen by this side's own seed, and the other side's seed may choose another of
+        /// that group. Whoever looks for the other side must look on all of them.
+        var everyRelay: [String] = []
+        /// Whether the other side may be on iroh's public relays instead, as it is when none of
+        /// ours answered it.
+        var allowsPublic = true
+
+        /// True when the relay was named on the command line, and so is on no list a viewer has.
+        var isNamed: Bool { source == "--relay-url" }
+
+        /// Where a viewer looks for a Mac that is showing a pairing code: `first`, when the code
+        /// came with a relay of its own, then every relay of ours, then the public ones.
+        func pairingRelays(first: String? = nil, public publicRelays: [String]) -> [String] {
+            var seen = Set<String>()
+            return ([first].compactMap { $0 } + everyRelay + relays + (allowsPublic ? publicRelays : [])).filter { seen.insert($0).inserted }
+        }
 
         /// The line `axe mirror` prints for it.
         var event: [String: String] {
@@ -86,7 +104,7 @@ enum MirrorRelays {
     /// built-in list when it cannot be read) ordered by `order`. When none of ours answers and the
     /// list allows it, iroh's public relays are used. `record` stands in for the published record.
     static func choose(explicit: String?, seed: String = "", record: String? = nil) async -> Choice {
-        if let explicit, !explicit.isEmpty { return Choice(relays: [explicit], source: "--relay-url") }
+        if let explicit, !explicit.isEmpty { return Choice(relays: [explicit], source: "--relay-url", everyRelay: [explicit], allowsPublic: false) }
         var list = builtIn
         var source = "built-in list"
         if let record {
@@ -97,10 +115,11 @@ enum MirrorRelays {
         }
         let latency = await measure(list.own)
         let ordered = order(list.own, latency: latency, seed: seed)
-        if !ordered.isEmpty { return Choice(relays: ordered, source: source) }
-        if list.allowsPublic { return Choice(relays: [], source: source + ", none of ours answered, public relays") }
+        let every = list.own.filter { latency[$0] != nil }.sorted { (latency[$0] ?? 0) < (latency[$1] ?? 0) } + list.own.filter { latency[$0] == nil }
+        if !ordered.isEmpty { return Choice(relays: ordered, source: source, everyRelay: every, allowsPublic: list.allowsPublic) }
+        if list.allowsPublic { return Choice(relays: [], source: source + ", none of ours answered, public relays", everyRelay: every, allowsPublic: true) }
         // Nothing answered and the public relays are not allowed: offer ours anyway, in case they return.
-        return Choice(relays: list.own, source: source + ", none answered")
+        return Choice(relays: list.own, source: source + ", none answered", everyRelay: every, allowsPublic: false)
     }
 
     /// Whether a running host with no viewer connected should choose its relays again now.

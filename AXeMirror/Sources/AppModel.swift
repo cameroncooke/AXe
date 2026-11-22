@@ -30,6 +30,9 @@ final class AppModel {
     private(set) var config = MirrorConfig.builtIn
     /// Our relays in order of preference; empty means iroh's public relays.
     private(set) var relays: [String] = MirrorRelays.builtIn.own
+    /// Every relay a Mac showing a pairing code may be on: all of ours, then the public ones. The
+    /// Mac's own choice among equally near relays need not be this device's.
+    private var pairingRelays: [String] = MirrorRelays.builtIn.own + AppModel.publicRelays
     private(set) var settingsLoaded = false
 
     let identity: Data
@@ -68,6 +71,7 @@ final class AppModel {
         async let published = Task.detached { MirrorConfig.load() }.value
         let (choice, loaded) = await (chosen, published)
         relays = choice.relays
+        pairingRelays = choice.pairingRelays(public: Self.publicRelays)
         if overrides.config == nil { config = loaded }
         settingsLoaded = true
     }
@@ -83,7 +87,7 @@ final class AppModel {
     func pair(code: String) async -> Result<PairedHost, PairFailure> {
         await loadSettings()
         let name = UIDevice.current.name
-        let result = await MirrorPairClient.pair(code: code, name: name, viewerSecret: identity, relays: relays)
+        let result = await MirrorPairClient.pair(code: code, name: name, viewerSecret: identity, relays: pairingRelays)
         switch result {
         case .success(let reply):
             let host = PairedHost(id: reply.hostId, name: reply.name, homeRelay: reply.homeRelay, relays: reply.relays, paired: Date())

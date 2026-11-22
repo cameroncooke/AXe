@@ -289,7 +289,10 @@ struct MirrorPairCommand: AsyncParsableCommand {
             } else {
                 print("Scan this with the viewer app, or type the code. It works once, for ten minutes.\n")
                 for line in MirrorQRCode.lines(for: shown.link) ?? [] { print("  " + line) }
-                print("\n  Code: \(MirrorPairingCode.display(shown.code))\n\nWaiting for the viewer. Press Ctrl+C to cancel.")
+                print("\n  Code: \(MirrorPairingCode.display(shown.code))\n")
+                // A relay named here is on no list the app has: only the QR code can tell it where to look.
+                if relays.isNamed { print("This Mac is on a relay of its own (\(shown.relay)): scan the QR code. The code typed by hand will not find it.\n") }
+                print("Waiting for the viewer. Press Ctrl+C to cancel.")
             }
         }
         if json {
@@ -331,7 +334,7 @@ struct MirrorTestPairCommand: AsyncParsableCommand {
         let secret = try MirrorIdentity.secret(at: URL(fileURLWithPath: keyFile))
         let relays = await MirrorRelays.choose(explicit: relayURL, record: relayList)
         let start = Date()
-        switch await MirrorPairClient.pair(code: code, name: name, viewerSecret: secret, relays: relays.relays) {
+        switch await MirrorPairClient.pair(code: code, name: name, viewerSecret: secret, relays: relays.pairingRelays(public: MirrorPairClient.publicRelays)) {
         case .success(let reply):
             MirrorHost.emit(["event": "paired", "hostId": reply.hostId, "name": reply.name, "homeRelay": reply.homeRelay,
                              "relays": reply.relays.joined(separator: " "), "seconds": String(format: "%.1f", Date().timeIntervalSince(start))])

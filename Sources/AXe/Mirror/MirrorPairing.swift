@@ -21,7 +21,7 @@ enum MirrorPairHost {
             throw CLIError(errorDescription: "Could not reach a relay to pair through. Check this Mac's internet connection.", code: .commandFailed)
         }
         let expires = Date().addingTimeInterval(lifetime)
-        shown(Shown(code: code, link: MirrorPairingCode.link(code), expires: expires, relay: relay))
+        shown(Shown(code: code, link: MirrorPairingCode.link(code, relay: relays.isNamed ? relay : nil), expires: expires, relay: relay))
         let invitation = Invitation(MirrorInvitation(code: code, expires: expires))
         let reply = { @Sendable (request: MirrorPairRequest) in
             MirrorPairReply(requestId: request.requestId, hostId: hostId, name: MirrorViewers.clean(hostName),

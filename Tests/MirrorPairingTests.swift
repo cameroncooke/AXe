@@ -51,6 +51,14 @@ struct MirrorPairingTests {
         #expect(MirrorPairingCode.fromScan(MirrorPairingCode.link(code)) == code)
         #expect(MirrorPairingCode.fromScan("7k3qm-9xw2b") == code)
         #expect(MirrorPairingCode.fromScan("https://example.com/#nothing") == nil)
+        // A Mac on a relay of its own choosing says so in the link, and the code is read as before.
+        let named = MirrorPairingCode.link(code, relay: "https://relay.example.com:8443/")
+        #expect(named == "https://axe-cli.com/pair?relay=https://relay.example.com:8443/#7K3QM9XW2B")
+        #expect(MirrorPairingCode.fromScan(named) == code && MirrorPairingCode.relay(fromScan: named) == "https://relay.example.com:8443/")
+        #expect(MirrorPairingCode.relay(fromScan: MirrorPairingCode.link(code)) == nil && MirrorPairingCode.relay(fromScan: "7k3qm-9xw2b") == nil)
+        // Only a relay's address is taken from a link, and only from a link of ours.
+        #expect(MirrorPairingCode.relay(fromScan: "https://axe-cli.com/pair?relay=javascript:alert(1)#7K3QM9XW2B") == nil)
+        #expect(MirrorPairingCode.relay(fromScan: "https://example.com/pair?relay=https://relay.example.com#7K3QM9XW2B") == nil)
     }
 
     @Test("Both sides derive the same key from a code, and another code gives another key")

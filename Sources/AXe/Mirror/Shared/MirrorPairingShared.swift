@@ -59,11 +59,28 @@ enum MirrorPairingCode {
 
     /// What the QR code holds. The part after `#` never reaches a web server, and the address lets
     /// the phone's own camera lead to the app once the site is set up for it.
-    static func link(_ code: String) -> String { "https://axe-cli.com/pair#\(code)" }
+    ///
+    /// `relay` is given when the Mac listens on a relay of its own choosing (`--relay-url`), which
+    /// is on no list a viewer could look it up in: the link then carries it, so that a viewer that
+    /// scans the code knows where to look. A code typed by hand cannot carry it.
+    static func link(_ code: String, relay: String? = nil) -> String {
+        guard let relay, var parts = URLComponents(string: "https://axe-cli.com/pair") else { return "https://axe-cli.com/pair#\(code)" }
+        parts.queryItems = [URLQueryItem(name: "relay", value: relay)]
+        parts.fragment = code
+        return parts.string ?? "https://axe-cli.com/pair#\(code)"
+    }
 
     /// The code out of a scanned link, or out of plain text.
     static func fromScan(_ text: String) -> String? {
         normalise(text.split(separator: "#", maxSplits: 1).count == 2 ? String(text.split(separator: "#", maxSplits: 1)[1]) : text)
+    }
+
+    /// The relay a scanned link names, when it names one: see `link(_:relay:)`.
+    static func relay(fromScan text: String) -> String? {
+        guard let parts = URLComponents(string: text.trimmingCharacters(in: .whitespacesAndNewlines)), parts.host == "axe-cli.com",
+              let relay = parts.queryItems?.first(where: { $0.name == "relay" })?.value,
+              let url = URL(string: relay), url.scheme == "https" || url.scheme == "http", url.host?.isEmpty == false else { return nil }
+        return relay
     }
 
     /// The 32-byte key of the temporary endpoint both sides derive from a normalised code. Slow on
@@ -184,19 +201,32 @@ final class MirrorUnannouncedPreset: Preset {
 enum MirrorPairClient {
     enum Failure: Error, Equatable { case badCode, notFound, refused, badReply }
 
+    /// iroh's public relays, where a Mac listens when none of ours answered it.
+    static var publicRelays: [String] { RelayMode.defaultMode().relayMap().urls() }
+
     /// Presents `text` (a typed code or a scanned link) as the viewer whose key is `viewerSecret`.
-    /// `relays` are tried in turn: the Mac is on one of them.
+    /// The Mac is on one of `relays`, and which one this side cannot know: its own choice among
+    /// equally near relays is made by its own seed. So all of them are tried at once, and the
+    /// first to reach the Mac is used; the wait is one dial, however many relays there are. A
+    /// relay named in a scanned link is tried with them.
     static func pair(code text: String, name: String, viewerSecret: Data, relays: [String], dialSeconds: TimeInterval = 10) async -> Result<MirrorPairReply, Failure> {
         guard let code = MirrorPairingCode.fromScan(text),
               let target = try? SecretKey.fromBytes(bytes: MirrorPairingCode.endpointSecret(for: code)).public() else { return .failure(.badCode) }
-        let candidates = relays.isEmpty ? RelayMode.defaultMode().relayMap().urls() : relays
+        var candidates = relays.isEmpty ? publicRelays : relays
+        if let named = MirrorPairingCode.relay(fromScan: text), !candidates.contains(named) { candidates.insert(named, at: 0) }
         guard let endpoint = try? await Endpoint.bind(options: EndpointOptions(
-            preset: MirrorUnannouncedPreset(relayURLs: relays), secretKey: viewerSecret, alpns: [])) else { return .failure(.notFound) }
+            preset: MirrorUnannouncedPreset(relayURLs: candidates), secretKey: viewerSecret, alpns: [])) else { return .failure(.notFound) }
         defer { Task { try? await endpoint.close() } }
         let request = MirrorPairRequest(requestId: UUID().uuidString, code: code, name: name)
-        for relay in candidates {
-            let address = EndpointAddr(id: target, relayUrl: relay, addresses: [])
-            guard let connection = await MirrorTimeout.finishes(within: dialSeconds, { try? await endpoint.connect(addr: address, alpn: MirrorPairWire.alpn) }) ?? nil else { continue }
+        let dials = candidates.map { relay in
+            { @Sendable () async -> Connection? in
+                let address = EndpointAddr(id: target, relayUrl: relay, addresses: [])
+                return await MirrorTimeout.finishes(within: dialSeconds, { try? await endpoint.connect(addr: address, alpn: MirrorPairWire.alpn) }) ?? nil
+            }
+        }
+        // A dial that gets through after another already has is closed again.
+        let reached = await MirrorTimeout.first(of: dials) { late in try? late.close(errorCode: MirrorClose.stopped, reason: Data()) }
+        if let connection = reached {
             let reply = await MirrorTimeout.finishes(within: 10) { () -> MirrorPairReply? in
                 guard let stream = try? await connection.openBi(), let frame = try? MirrorPairWire.frame(request),
                       (try? await stream.send().writeAll(buf: frame)) != nil,
@@ -223,6 +253,39 @@ enum MirrorTimeout {
             let first = FirstResult(continuation)
             Task { first.give(await work()) }
             Task { try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000)); first.give(nil) }
+        }
+    }
+
+    /// The first result that is not nil, as soon as it comes, or nil once every piece of work has
+    /// come back with nothing. A result that arrives after the first is handed to `late`.
+    static func first<Value: Sendable>(of works: [@Sendable () async -> Value?], late: @escaping @Sendable (Value) -> Void = { _ in }) async -> Value? {
+        guard !works.isEmpty else { return nil }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Value?, Never>) in
+            let race = Race(continuation, count: works.count, late: late)
+            for work in works { Task { race.finished(await work()) } }
+        }
+    }
+
+    private final class Race<Value: Sendable>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<Value?, Never>?
+        private var waitingFor: Int
+        private let late: @Sendable (Value) -> Void
+        init(_ continuation: CheckedContinuation<Value?, Never>, count: Int, late: @escaping @Sendable (Value) -> Void) {
+            self.continuation = continuation
+            waitingFor = count
+            self.late = late
+        }
+        func finished(_ value: Value?) {
+            let (answer, spare): (CheckedContinuation<Value?, Never>?, Value?) = lock.withLock {
+                waitingFor -= 1
+                guard let waiting = continuation else { return (nil, value) }
+                guard value != nil || waitingFor == 0 else { return (nil, nil) }
+                continuation = nil
+                return (waiting, nil)
+            }
+            answer?.resume(returning: value)
+            if let spare { late(spare) }
         }
     }
 
