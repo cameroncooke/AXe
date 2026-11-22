@@ -1466,7 +1466,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         // An older fold still at work is stopped where it is: this one is what the viewer wants now.
         foldTask?.cancel()
         foldTask = nil
-        burst.start(for: 2)
+        // Lighting the inner screen can take a shut and a second opening: up to about six seconds.
+        burst.start(for: plan.lightsInner ? 6 : 2)
         if request.posture == MirrorFoldRequest.angle {
             do { try control.setHinge(plan.hinge) } catch {
                 mirrorNote("could not move the hinge: \(CLIErrorMapping.failure(for: error).message)")

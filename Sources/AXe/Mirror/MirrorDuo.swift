@@ -142,11 +142,24 @@ struct MirrorLitScreen: Equatable, Sendable {
 /// - A hinge message takes 0.33 s to arrive wherever it starts, and the lit screen changes as it
 ///   gets there. A message for the way it is held shows in the display report in 0.03 to 0.04 s,
 ///   a half turn included. Sent together they take 0.33 s.
-/// - Held upright, like a book, the outer screen is upright and the inner one wide; opening from
-///   closed lights the inner screen from 18 degrees. Held on its left side, like a laptop, the inner
-///   screen is tall, and stays lit down to 30 degrees when folded from open; opened from closed held
-///   that way the outer screen stays lit at any angle short of flat, and turning the device then
-///   does not light the inner one.
+/// - Held upright, like a book, the outer screen is upright and the inner one wide. Held on its
+///   left side, like a laptop, the inner screen is tall.
+///
+/// Measured again on an iOS 27.3 Duo simulator (22 November 2026), each angle reached in one
+/// message from a settled start and read once the lit screen had not changed for 1.5 s, held
+/// upright, on its left side and on its right side alike (the same to the degree):
+///
+/// - Opened from closed: the outer screen up to 82 degrees, the inner one from 83, twice over.
+///   Opened in a finger's steps of 4 degrees every 80 ms it is the same.
+/// - Folded down from flat: the inner screen down to 88 degrees, the outer one from 87. From 120 the
+///   inner one stays lit to 86. So from `innerFrom`, 90 degrees, the inner screen is lit however the
+///   hinge got there, and below it the inner screen can be dark. The earlier note that a Duo held on
+///   its left side keeps its inner screen lit down to 30 degrees was not borne out.
+/// - The inner screen lights about 1.2 s after the hinge message.
+/// - Once the outer screen has settled with the hinge part open, opening further keeps it lit up to
+///   120 degrees, and only from 150 does the inner one light. Shutting it, waiting until the hinge
+///   reads shut (about 1.9 s from a cold connection) and opening it in one message lit the inner
+///   screen in 11 of 11. Opened again before the hinge read shut, it did not in 5 of 5.
 /// - Closed and on the home screen, the outer screen stays upright however the device is held. A
 ///   device left on its right side and then opened has its inner screen at 180 degrees.
 /// - Shut from half open, where it had stood a second, the Duo kept its inner screen lit and its
@@ -165,7 +178,13 @@ enum MirrorFold {
         var viaBook = false
         /// The device is turned before the hinge moves.
         var heldFirst = false
+        /// The fold ends with the inner screen lit: half open or more, short of flat.
+        var lightsInner = false
     }
+
+    /// From this hinge angle up a Duo has its inner screen lit, whether opened from closed or folded
+    /// down from flat; the viewer's 3D Duo rests nowhere between closed and here.
+    static let innerFrom = 90.0
 
     /// - Closed: held upright, so its outer screen is upright in any app and the next opening is a
     ///   book's. It is turned before it shuts: the inner screen, which is going dark, does the
@@ -173,19 +192,20 @@ enum MirrorFold {
     ///   lights the outer screen on its side and then turns it, which the viewer sees.
     /// - Open flat: held for the picture's shape asked for, if one is.
     /// - Book: held upright. Tabletop: on its left side, by way of a book when the outer screen is
-    ///   lit, which is the only way the inner one lights short of flat.
+    ///   lit. Either, at `innerFrom` or more, ends with the inner screen lit.
     /// - A bare angle: the hinge alone.
     static func plan(_ request: MirrorFoldRequest, outerLit: Bool) -> Plan {
         let hinge = request.hingeDegrees
+        let inner = hinge >= innerFrom && hinge < MirrorLitScreen.openFlat
         switch request.posture {
         case MirrorFoldRequest.angle:
             return Plan(hinge: hinge)
         case MirrorFoldRequest.closed:
             return Plan(hinge: 0, held: .portrait, heldFirst: true)
         case MirrorFoldRequest.book:
-            return Plan(hinge: hinge, held: .portrait)
+            return Plan(hinge: hinge, held: .portrait, lightsInner: inner)
         case MirrorFoldRequest.tabletop:
-            return Plan(hinge: hinge, held: .landscapeLeft, viaBook: outerLit)
+            return Plan(hinge: hinge, held: .landscapeLeft, viaBook: outerLit, lightsInner: inner)
         default:
             return Plan(hinge: hinge, held: request.orientation.flatMap { held(forPicture: $0, role: "inner") })
         }
@@ -245,7 +265,11 @@ enum MirrorFold {
         } else if plan.heldFirst, let held = plan.held {
             try control.setOrientation(held)
         }
-        try control.setHinge(plan.hinge)
+        if plan.lightsInner {
+            try await open(toInner: plan.hinge, control: control, simulator: simulator)
+        } else {
+            try control.setHinge(plan.hinge)
+        }
         if plan.hinge <= MirrorLitScreen.shut {
             for _ in 0..<2 {
                 guard await arrived(plan.hinge, simulator: simulator, within: 1.5) else { break }
@@ -267,6 +291,41 @@ enum MirrorFold {
 
     /// How far a shut Duo is opened, in degrees, to make iOS light its outer screen.
     static let nudge = 8.0
+
+    /// Opens the hinge to `degrees`, at `innerFrom` or more, with the inner screen lit. A Duo part
+    /// open on its outer screen keeps it lit when opened further, so it is shut first and opened
+    /// in one message once the hinge reads shut. A Duo that otherwise ends on its outer screen, as
+    /// one folded down from flat to near half open can, is shut and opened again the same way, once.
+    static func open(toInner degrees: Double, control: FBSimulatorDuoControl, simulator: FBSimulator) async throws {
+        let before = await MirrorLitScreen.readAnswer(for: simulator, hinged: true)
+        let stuck = before.screen?.role == "outer" && (before.hinge ?? 0) > MirrorLitScreen.shut
+        if stuck {
+            mirrorNote("part open on its outer screen: shutting it and opening it to \(Int(degrees))°, to light the inner one")
+            try await shutFully(control: control, simulator: simulator)
+        }
+        try Task.checkCancellation()
+        try control.setHinge(degrees)
+        guard !stuck, !(await wait(innerWait) { await MirrorLitScreen.read(for: simulator)?.role == "inner" }) else { return }
+        try Task.checkCancellation()
+        mirrorNote("opened to \(Int(degrees))° on its outer screen: shutting it and opening it again, to light the inner one")
+        try await shutFully(control: control, simulator: simulator)
+        try Task.checkCancellation()
+        try control.setHinge(degrees)
+    }
+
+    /// How long a hinge message has to light the inner screen before the Duo is shut and opened
+    /// again: about twice the 1.2 s it takes.
+    static let innerWait = 2.5
+
+    /// Shuts the hinge and waits until it reads shut and still, three seconds at most.
+    static func shutFully(control: FBSimulatorDuoControl, simulator: FBSimulator) async throws {
+        try Task.checkCancellation()
+        try control.setHinge(0)
+        _ = await wait(3) {
+            guard let hinge = try? await FBSimulatorHingeReader.read(for: simulator) else { return false }
+            return hinge.sensedDegrees <= MirrorLitScreen.shut && hinge.velocityDegreesPerSecond == 0
+        }
+    }
 
     /// Whether the hinge gets to within two degrees of `degrees` in time.
     static func arrived(_ degrees: Double, simulator: FBSimulator, within seconds: Double) async -> Bool {

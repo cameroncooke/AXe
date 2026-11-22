@@ -246,6 +246,27 @@ def main():
     e2e.check("closed, a drag to the left opens the host part way, its inner screen lit", 20 <= degrees <= 170 and host_is("inner", "landscape"), host_state())
     shot("part-open-lit")
 
+    # 3b. The 3D Duo rests only where a screen is in use: closed, or open from 90 degrees. Below 90
+    # iOS lights the outer screen, facing away (22 November 2026). Let go between, it goes to the
+    # nearer: about 50 to 75 degrees goes on to half open, with the host's inner screen lit, and a
+    # quarter of the width is about 90. The host is never left part open on its outer screen.
+    seen = len(e2e.events(host_log))
+    tap_fold_button("stream.fold.0")
+    expect_fold("the Closed button closes the host", "closed", seen, lit="outer")
+    time.sleep(2)
+    enter_fold()
+    seen = len(e2e.events(host_log))
+    drag(x + w * 0.5, y + h * 0.5, x + w * 0.5 - w * 0.22, y + h * 0.5)
+    time.sleep(0.5)
+    print(f"note: the 3D Duo after the short drag: {(viewer.find(identifier='stream.foldModel') or {}).get('AXValue')}", flush=True)
+    try:
+        e2e.wait_for("the host to fold like a book", lambda: folded_after(seen, "book"), 60)
+        e2e.wait_for("the inner screen", lambda: host_is("inner", "landscape"), 15)
+        degrees = (displays(axe, host_udid).get("hinge") or {}).get("degrees", 0)
+        e2e.check("closed, a short drag opens the host to half open, its inner screen lit", 88 <= degrees <= 170, host_state())
+    except TimeoutError:
+        e2e.failed("closed, a short drag opens the host to half open, its inner screen lit", host_state())
+
     # 4. The Open button; the simulator's inner screen is on the 3D Duo before it goes back to the picture.
     enter_fold()
     seen = len(e2e.events(host_log))
@@ -266,6 +287,32 @@ def main():
     tap_picture("open, inner screen")
     said = (viewer.find(identifier="stream.screen") or {}).get("AXLabel") or ""
     e2e.check("the app says which screen is lit and that it is open", "Inner" in said and "Open" in said, said)
+
+    # 4b. Folded part way down from flat, the Duo still ends where a screen is in use.
+    x, y, w, h = picture_frame()
+    enter_fold()
+    seen = len(e2e.events(host_log))
+    if w >= h:
+        drag(x + w * 0.85, y + h * 0.5, x + w * 0.52, y + h * 0.5)
+    else:
+        drag(x + w * 0.5, y + h * 0.15, x + w * 0.5, y + h * 0.45)
+    time.sleep(0.5)
+    print(f"note: the 3D Duo after folding part way down: {(viewer.find(identifier='stream.foldModel') or {}).get('AXValue')}", flush=True)
+    try:
+        e2e.wait_for("the host to fold", lambda: folded_after(seen), 40)
+        time.sleep(4)
+        found = displays(axe, host_udid)
+        role = (found.get("activeScreen") or {}).get("role")
+        degrees = (found.get("hinge") or {}).get("degrees", 0)
+        usable = (role == "outer" and degrees <= 5) or (role == "inner" and degrees >= 88)
+        e2e.check("folded part way down, the host ends closed or open on its inner screen, never part open on its outer one", usable, host_state())
+    except TimeoutError:
+        e2e.failed("folded part way down, the host ends closed or open on its inner screen, never part open on its outer one", host_state())
+    enter_fold()
+    seen = len(e2e.events(host_log))
+    tap_fold_button("stream.fold.180")
+    expect_fold("and the Open button opens it flat again", "open", seen, lit="inner")
+    back_to_picture()
 
     # 5. Pushing the halves together closes it; Done goes back at once.
     x, y, w, h = picture_frame()
@@ -322,6 +369,12 @@ def main():
     seen = len(e2e.events(host_log))
     tap_fold_button("stream.fold.90")
     e2e.wait_for("the host to fold half open", lambda: folded_after(seen), 40)
+    # Folded down from flat to 90 degrees iOS can light the outer screen; the host lights the inner.
+    try:
+        e2e.wait_for("the inner screen", lambda: host_is("inner", "landscape") or host_is("inner", "portrait"), 15)
+        e2e.passed("Half open from flat lights the host's inner screen", host_state())
+    except TimeoutError:
+        e2e.failed("Half open from flat lights the host's inner screen", host_state())
     time.sleep(2.5)
     seen = len(e2e.events(host_log))
     tap_fold_button("stream.fold.0")
@@ -376,6 +429,30 @@ def main():
     seen = len(e2e.events(host_log))
     tap_fold_button("stream.fold.180")
     expect_fold("and it opens from there", "open", seen, lit="inner")
+    back_to_picture()
+
+    # 5d. Part open on its outer screen, a Duo keeps it lit when opened further, up to about 150
+    # degrees (22 November 2026). Folded down to 60 here, as an agent might, Half open still lights
+    # the inner screen.
+    e2e.run([axe, "hinge", "set", "60", "--udid", host_udid], check=False)
+    try:
+        e2e.wait_for("the outer screen at 60 degrees", lambda: active_role() == "outer", 15)
+    except TimeoutError:
+        print(f"note: folded to 60 degrees, the host kept its {active_role()} screen lit", flush=True)
+    time.sleep(2)
+    enter_fold()
+    seen = len(e2e.events(host_log))
+    tap_fold_button("stream.fold.90")
+    try:
+        e2e.wait_for("the host to fold half open", lambda: folded_after(seen), 40)
+        e2e.wait_for("the inner screen", lambda: active_role() == "inner", 15)
+        e2e.passed("part open on its outer screen, Half open lights the inner one", host_state())
+    except TimeoutError:
+        e2e.failed("part open on its outer screen, Half open lights the inner one", host_state())
+    enter_fold()
+    seen = len(e2e.events(host_log))
+    tap_fold_button("stream.fold.180")
+    expect_fold("and it opens flat from there", "open", seen, lit="inner")
     back_to_picture()
 
     # 6. The viewer's own fold lays out the app; it does not fold the host.

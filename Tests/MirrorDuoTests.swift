@@ -101,10 +101,14 @@ struct MirrorDuoTests {
         #expect(MirrorFold.plan(MirrorFoldRequest(posture: "open", orientation: "portrait"), outerLit: true) == MirrorFold.Plan(hinge: 180, held: .landscapeLeft))
         #expect(MirrorFold.plan(MirrorFoldRequest(posture: "open"), outerLit: true) == MirrorFold.Plan(hinge: 180))
         // A book is upright. A laptop is on its left side, by way of a book when the outer screen is lit.
-        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "book", degrees: 100), outerLit: true) == MirrorFold.Plan(hinge: 100, held: .portrait))
-        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "tabletop", degrees: 100), outerLit: true) == MirrorFold.Plan(hinge: 100, held: .landscapeLeft, viaBook: true))
+        // Either, from half open short of flat, ends with its inner screen lit.
+        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "book", degrees: 100), outerLit: true) == MirrorFold.Plan(hinge: 100, held: .portrait, lightsInner: true))
+        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "book", degrees: 90), outerLit: true).lightsInner)
+        #expect(!MirrorFold.plan(MirrorFoldRequest(posture: "book", degrees: 80), outerLit: true).lightsInner)
+        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "tabletop", degrees: 100), outerLit: true) == MirrorFold.Plan(hinge: 100, held: .landscapeLeft, viaBook: true, lightsInner: true))
         #expect(MirrorFold.plan(MirrorFoldRequest(posture: "tabletop", degrees: 60), outerLit: false) == MirrorFold.Plan(hinge: 60, held: .landscapeLeft))
-        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "angle", degrees: 60), outerLit: false) == MirrorFold.Plan(hinge: 60))
+        #expect(MirrorFold.plan(MirrorFoldRequest(posture: "angle", degrees: 100), outerLit: true) == MirrorFold.Plan(hinge: 100))
+        #expect(!MirrorFold.plan(MirrorFoldRequest(posture: "open"), outerLit: true).lightsInner)
     }
 
     @Test("A Duo is bent short of flat")
