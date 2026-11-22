@@ -43,8 +43,21 @@ struct MirrorConfig: Equatable, Sendable {
         return config
     }
 
-    /// The published settings, or the built-in ones when the record cannot be read.
-    static func load() -> MirrorConfig {
-        MirrorRelays.lookup(recordName).compactMap(parse).first ?? builtIn
+    /// The published settings, or nil when the record cannot be read.
+    static func published() -> MirrorConfig? {
+        MirrorRelays.lookup(recordName).compactMap(parse).first
     }
+
+    /// The published settings, or the built-in ones when the record cannot be read.
+    static func load() -> MirrorConfig { published() ?? builtIn }
+
+    /// Whether to read the settings now. Once they have been read they are kept for the run. If
+    /// the record could not be read, it is tried again, but no more than once in `retryAfter`: it
+    /// used to be read again on every call for as long as the settings equalled the built-in
+    /// ones, which they also do when that is what is published, so every pairing and every return
+    /// to the list of Macs paid for a DNS lookup and a round of relay timings.
+    static func shouldRead(loaded: Bool, wasRead: Bool, sinceLastTry: TimeInterval) -> Bool {
+        !loaded || (!wasRead && sinceLastTry >= retryAfter)
+    }
+    static let retryAfter: TimeInterval = 60
 }

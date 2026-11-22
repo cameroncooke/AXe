@@ -32,6 +32,16 @@ struct MirrorConfigTests {
         #expect(MirrorConfig.parse(record) == nil)
     }
 
+    @Test("The published settings are read once, and tried again only a minute after a failed read")
+    func readsOnce() {
+        #expect(MirrorConfig.shouldRead(loaded: false, wasRead: false, sinceLastTry: 0))
+        // Read: kept for the run, however often it is asked for, even when they equal the built-in ones.
+        #expect(!MirrorConfig.shouldRead(loaded: true, wasRead: true, sinceLastTry: 3_600))
+        // Not readable: not again at once, but again after a minute.
+        #expect(!MirrorConfig.shouldRead(loaded: true, wasRead: false, sinceLastTry: 5))
+        #expect(MirrorConfig.shouldRead(loaded: true, wasRead: false, sinceLastTry: 61))
+    }
+
     @Test("A demo drops touches that start at the top or bottom edge, and only those")
     func demoEdges() {
         #expect(MirrorDemo.blocksTouch(downAt: 0.0))

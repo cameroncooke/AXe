@@ -65,16 +65,22 @@ final class AppModel {
     /// Reads the relay list and the configuration record. Both fall back to built-in values, so the
     /// app works when DNS does not.
     func loadSettings() async {
-        guard !settingsLoaded || config == .builtIn else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        guard MirrorConfig.shouldRead(loaded: settingsLoaded, wasRead: settingsRead, sinceLastTry: now - lastSettingsTry) else { return }
+        lastSettingsTry = now
         let seed = MirrorRelays.seed(for: identity)
         async let chosen = MirrorRelays.choose(explicit: nil, seed: seed)
-        async let published = Task.detached { MirrorConfig.load() }.value
+        async let published = Task.detached { MirrorConfig.published() }.value
         let (choice, loaded) = await (chosen, published)
         relays = choice.relays
         pairingRelays = choice.pairingRelays(public: Self.publicRelays)
-        if overrides.config == nil { config = loaded }
+        if overrides.config == nil, let loaded { config = loaded }
+        settingsRead = loaded != nil
         settingsLoaded = true
     }
+    /// Whether the published settings could be read, and when that was last tried.
+    private var settingsRead = false
+    private var lastSettingsTry = -Double.infinity
 
     func destination(for host: PairedHost) -> StreamDestination {
         let candidates = ([host.homeRelay].filter { !$0.isEmpty } + host.relays + relays + Self.publicRelays).uniqued()
