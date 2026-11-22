@@ -996,6 +996,11 @@ struct LocalInstallSetup: View {
                         .font(.subheadline)
                         .accessibilityIdentifier("local.setup.check")
                 }
+                if let hint = session.setupHint {
+                    Label(hint, systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityIdentifier("local.setup.hint")
+                }
                 Text("Set up installs, once").font(.title.weight(.bold))
                 Text(explanation)
                     .font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -1059,6 +1064,10 @@ struct LocalInstallSetup: View {
                         Button("Check Again") { session.checkLocalInstall() }
                             .buttonStyle(.borderless)
                             .accessibilityIdentifier("local.setup.check")
+                    }
+                    if let hint = session.setupHint {
+                        Label(hint, systemImage: "wifi.exclamationmark").font(.footnote).foregroundStyle(.orange)
+                            .accessibilityIdentifier("local.setup.hint")
                     }
                 }
             }

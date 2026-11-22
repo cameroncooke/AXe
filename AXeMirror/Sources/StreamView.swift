@@ -983,6 +983,10 @@ final class StreamSession {
         case unavailable, notTrusted, ready(String)
     }
     private(set) var localInstall = LocalInstall.unavailable
+    /// Why this device's own server could not be reached, when that is not a matter of trust: the
+    /// names that should lead back to this device do not, on this network. Nil while the only
+    /// thing missing is the person's trust, which the steps on the setup screen are about.
+    private(set) var setupHint: String?
     /// The build being fetched from the Mac over the connection, and how far it has got.
     private(set) var fetching: (id: String, received: Int, size: Int)?
     /// The build iOS's installer has taken from this device, and how much of it.
@@ -1036,20 +1040,38 @@ final class StreamSession {
                 self.installServer?.onFetched = { [weak self] id, what in self?.takenByIOS = (id, what) }
             }
             guard let port = self?.installServer?.securePort else { return }
+            var failures: [URLError.Code] = []
             for name in identity.names {
                 guard let url = URL(string: "https://\(name):\(port)/healthz") else { continue }
                 var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 4)
                 request.httpMethod = "GET"
                 let session = URLSession(configuration: .ephemeral)
-                let answered = ((try? await session.data(for: request))?.1 as? HTTPURLResponse)?.statusCode == 200
+                var answered = false
+                do {
+                    answered = (try await session.data(for: request).1 as? HTTPURLResponse)?.statusCode == 200
+                } catch {
+                    failures.append((error as? URLError)?.code ?? .unknown)
+                }
                 session.finishTasksAndInvalidate()
                 if answered {
                     self?.localInstall = .ready(name)
+                    self?.setupHint = nil
                     return
                 }
             }
             if self?.installServer != nil { self?.localInstall = .notTrusted }
+            self?.setupHint = Self.setupHint(for: failures)
         }
+    }
+
+    /// What to say when no name reached this device's server. A certificate that is not trusted
+    /// yet is the usual reason and needs no saying: the steps are on the screen. When instead
+    /// none of the names could be found or connected to, the network is not leading them back to
+    /// this device, as some company and hotel networks do not, and no amount of trusting helps.
+    static func setupHint(for failures: [URLError.Code]) -> String? {
+        let network: Set<URLError.Code> = [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .timedOut, .notConnectedToInternet, .networkConnectionLost]
+        guard !failures.isEmpty, failures.allSatisfy(network.contains) else { return nil }
+        return "This network is in the way: it does not lead back to this device. Try another Wi-Fi, or mobile data."
     }
 
     /// Opens the authority's certificate in Safari, which is the only way iOS takes one. This app
