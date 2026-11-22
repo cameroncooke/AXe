@@ -157,16 +157,27 @@ enum Identity {
         var lookup = query
         lookup[kSecReturnData as String] = true
         var found: CFTypeRef?
-        if SecItemCopyMatching(lookup as CFDictionary, &found) == errSecSuccess, let data = found as? Data, data.count == 32 { return data }
+        let status = SecItemCopyMatching(lookup as CFDictionary, &found)
         var bytes = [UInt8](repeating: 0, count: 32)
         _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        let key = Data(bytes)
-        var item = query
-        item[kSecValueData as String] = key
-        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        SecItemDelete(query as CFDictionary)
-        SecItemAdd(item as CFDictionary, nil)
-        return key
+        let fresh = Data(bytes)
+        switch MirrorViewerKey.decide(status: status, found: found as? Data, missing: errSecItemNotFound) {
+        case .use(let key):
+            return key
+        case .temporary:
+            // Not readable just now. The key that is there is left alone: replacing it would
+            // unpair every Mac, for the sake of a Keychain that will answer next time.
+            return fresh
+        case .create:
+            var item = query
+            item[kSecValueData as String] = fresh
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            if SecItemAdd(item as CFDictionary, nil) == errSecDuplicateItem {
+                // Something is there that is not a key: put this one in its place.
+                SecItemUpdate(query as CFDictionary, [kSecValueData as String: fresh] as CFDictionary)
+            }
+            return fresh
+        }
     }
 }
 

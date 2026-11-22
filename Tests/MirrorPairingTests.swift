@@ -113,6 +113,19 @@ struct MirrorPairingTests {
         #expect(calls == 0)
     }
 
+    @Test("A viewer's key is replaced only when the Keychain says there is none, never because it could not be read")
+    func viewerKey() {
+        let key = Data(repeating: 7, count: 32)
+        let missing = Int32(-25300), locked = Int32(-25308)     // errSecItemNotFound, errSecInteractionNotAllowed
+        #expect(MirrorViewerKey.decide(status: 0, found: key, missing: missing) == .use(key))
+        #expect(MirrorViewerKey.decide(status: missing, found: nil, missing: missing) == .create)
+        // Before the first unlock after a restart, and any other failure: the key is left alone.
+        #expect(MirrorViewerKey.decide(status: locked, found: nil, missing: missing) == .temporary)
+        #expect(MirrorViewerKey.decide(status: -34018, found: nil, missing: missing) == .temporary)
+        // Something that is not a key is replaced.
+        #expect(MirrorViewerKey.decide(status: 0, found: Data(repeating: 7, count: 5), missing: missing) == .create)
+    }
+
     @Test("Messages are framed with their length and capped at 4 KiB")
     func framing() throws {
         let frame = try MirrorPairWire.frame(request(code))
