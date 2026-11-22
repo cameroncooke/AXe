@@ -94,6 +94,24 @@ struct AgentModePublicErrorProjectionTests {
             response(failure: .inputFailed, count: 2, quarantined: true)).code == "cleanupUncertain")
     }
 
+    /// Xcode 26 has no DTUHID touch service (#101): say so, not that the display changed.
+    @Test("A missing touch service before input is inputUnavailable, not displayChanged")
+    func missingTouchServiceIsInputUnavailable() {
+        var native = response(failure: .setupFailed)
+        native.errorCode = CLIError.Code.inputUnavailable.rawValue
+        let failure = AgentModePublicErrorProjection.nativeFailure(native)
+        #expect(failure.code == "inputUnavailable" && failure.message.contains("DTUHID"))
+        var sent = response(failure: .inputFailed, count: 1)
+        sent.errorCode = CLIError.Code.inputUnavailable.rawValue
+        #expect(AgentModePublicErrorProjection.nativeFailure(sent).code != "inputUnavailable")
+        #expect(AgentModePublicErrorProjection.nativeFailure(response(failure: .setupFailed)).code == "displayChanged")
+        // Non-AX input (swipe, key, type) arrives as nativeActionFailed with the same evidence.
+        var swipe = response()
+        swipe.errorCode = CLIError.Code.inputUnavailable.rawValue
+        #expect(AgentModePublicErrorProjection.project(AgentModeFailure("nativeActionFailed", "x"), native: swipe).code == "inputUnavailable")
+        #expect(AgentModePublicErrorProjection.project(AgentModeFailure("nativeActionFailed", "x"), native: response()).code == "nativeActionFailed")
+    }
+
     @Test("Public batch failure retains partial delivery, cleanup, quarantine and no-replay evidence")
     func failedBatchEvidenceIsNotCompactedAway() throws {
         let native = response(failure: .inputFailed, count: 2, cleanup: "uncertain", quarantined: true)

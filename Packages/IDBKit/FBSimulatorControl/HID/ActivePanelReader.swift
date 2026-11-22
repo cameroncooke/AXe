@@ -30,7 +30,7 @@ public enum ActivePanelReader {
         // The guest's own CoreDevice display report, read in-process. A lit inactive panel that
         // matches the hinge is read again until it has stayed unchanged for longer than a fold takes
         // (FBSimulatorLitInactivePolicy); a close's 3 s dwell ends first and reads as ordinary.
-        var response = try await FBSimulatorDisplayInfoReader.read(for: simulator)
+        var response = try await FBSimulatorDisplayInfoReader.read(for: simulator, hostCatalog: before)
         let settleDeadline = started + FBSimulatorLitInactivePolicy.steadySeconds + 1
         var verdict = FBSimulatorLitInactiveVerdict.ordinary
         while true {
@@ -40,7 +40,7 @@ public enum ActivePanelReader {
             }
             guard verdict == .settling, ProcessInfo.processInfo.systemUptime < settleDeadline else { break }
             try await Task.sleep(nanoseconds: 100_000_000)
-            response = try await FBSimulatorDisplayInfoReader.read(for: simulator)
+            response = try await FBSimulatorDisplayInfoReader.read(for: simulator, hostCatalog: before)
         }
         let readback = try FBSimulatorDisplayInfoReader.discovery(response, simulatorUDID: simulatorID,
             expectedCatalog: catalog, acceptSteadyLitInactive: verdict == .steady)

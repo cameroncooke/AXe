@@ -31,6 +31,10 @@ public struct FBSimulatorDisplayInfo: Sendable {
 public enum FBSimulatorLegacyDisplay {
   public static let hostName = "PurpleMain"
   public static let uuid = UUID(uuidString: "5E1F0B6A-26D5-4C0E-9A7B-3D2C1F0E9A26")!
+  /// The host screen ID and guest display ID of that display.
+  public static let screenID: UInt32 = 1
+  /// CoreSimulator product family IDs of iPhone (1) and iPad (2), the families with that display.
+  static let productFamilyIDs: Set<Int32> = [1, 2]
   /// The guest report has no backlight state to give for this display; "unknown" is all it says.
   public static let backlightState = "notReported"
 }
@@ -131,7 +135,8 @@ public enum FBSimulatorDisplayDiscovery {
       screenID: properties.screenID,
       uniqueID: properties.uniqueId,
       name: properties.name,
-      deviceName: properties.deviceName,
+      // CoreSimulator 1051 (Xcode 26) has no deviceName; calling it raises an exception (#101).
+      deviceName: properties.responds(to: #selector(getter: SimScreenProperties.deviceName)) ? properties.deviceName : nil,
       nativePixelSize: pixelSize,
       scale: scale,
       propertiesSeed: properties.seed,

@@ -5,6 +5,12 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Agent mode, `axe displays` and `--input-mode selected` no longer fail at once with `observationFailed` or `readFailed` on a Mac with only Xcode 26. AXe read the simulator's touch screens from the list in its device type's `capabilities.plist`, and the device types Xcode 26 installs have no such list; an iPhone or iPad device type without one now has one built-in screen. A simulator running a runtime before iOS 27, the only kind Xcode 26 runs and always a single-screen device, also no longer has its display report read from the simulator's CoreDevice service, which on such a Mac is Xcode 26's: AXe takes that one screen's size and scale from the host and treats it as portrait, as the plain input commands already did. `axe displays` on an iOS 26.5 simulator is about 35 ms faster as a result. AXe also no longer crashes reading the screens on such a Mac, whose CoreSimulator has no screen device name. Tested on macOS 26.6.2 with only Xcode 26.5 (17F42) and iOS 26.5 ([#101](https://github.com/cameroncooke/AXe/issues/101)).
+- Agent input, `--input-mode selected` and the coordinate gestures (`pinch`, `rotate`, `double-tap`, two-finger) now work on a Mac with only Xcode 26. They send through the DTUHID touch service, which Xcode 26 does not have; on such a simulator they now take the Indigo input the plain commands use, inside the same session and with the same checks before each event. Simulators with DTUHID, every simulator under Xcode 27, take exactly the same route as before. Input only DTUHID can send, such as a gesture with a system-edge hint, still fails with `inputUnavailable` and says why. Measured on macOS 26.6.2 with Xcode 26.5: agent tap, swipe and focus-and-type, selected tap, and pinch, rotate, double-tap and two-finger swipe ([#101](https://github.com/cameroncooke/AXe/issues/101)).
+
 ## [v2.1.1] - 2026-11-19
 
 ### Fixed

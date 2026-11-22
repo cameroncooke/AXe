@@ -1,4 +1,4 @@
-import FBSimulatorControl
+@testable import FBSimulatorControl
 import Foundation
 import Testing
 import XPC
@@ -89,6 +89,30 @@ struct FBSimulatorDisplayInfoReaderTests {
     let twoPanels = reply(duoRows(coverActive: true).map(withoutID))
     for value in [mixed, twoPanels] {
       #expect(throws: (any Error).self) { _ = try FBSimulatorDisplayInfoReader.decode(value) }
+    }
+  }
+
+  /// Runtimes before iOS 27 take the host's one legacy display and never read the guest report (#101).
+  @Test func legacyRuntimeScreenComesFromTheHostCatalogue() throws {
+    func host(_ id: UInt32, _ name: String?, _ w: Double, _ h: Double, scale: Double) -> FBSimulatorDisplayInfo {
+      FBSimulatorDisplayInfo(screenID: id, uniqueID: name, name: nil, deviceName: nil,
+        nativePixelSize: CGSize(width: w, height: h), scale: scale, propertiesSeed: 0, rawScreenType: 0,
+        rawUIOrientation: 0, rawPowerState: 1, rawBacklightState: nil, backlightBrightnessFactor: nil)
+    }
+    let main = host(1, FBSimulatorLegacyDisplay.hostName, 1206, 2622, scale: 3)
+    let row = try FBSimulatorDisplayInfoReader.legacyRow([main, host(2, "TVOut", 720, 480, scale: 1)])
+    #expect(row.uniqueID == FBSimulatorLegacyDisplay.uuid && row.integrated && row.primary && row.active == nil)
+    #expect(row.currentOrientation == .rot0 && row.pointScale == 3)
+    #expect(row.backlightState == FBSimulatorLegacyDisplay.backlightState)
+    let readback = try discover([row], catalog: [entry(1, FBSimulatorLegacyDisplay.uuid, 1206, 2622)])
+    #expect(readback.snapshot.selectionBasis == .verifiedSingleIntegratedPanel)
+    #expect(readback.snapshot.activePanel.boundsWidth == 1206 && readback.snapshot.activePanel.boundsHeight == 2622)
+
+    // No legacy display, two of them, another screen ID, or a fractional scale: no screen is assumed.
+    for catalogue in [[host(1, UUID().uuidString, 1206, 2622, scale: 3)], [main, main],
+                      [host(3, FBSimulatorLegacyDisplay.hostName, 1206, 2622, scale: 3)],
+                      [host(1, FBSimulatorLegacyDisplay.hostName, 1206, 2622, scale: 2.5)]] {
+      #expect(throws: FBSimulatorContextError.self) { _ = try FBSimulatorDisplayInfoReader.legacyRow(catalogue) }
     }
   }
 
