@@ -837,6 +837,12 @@ Not needed for the release; noted so they are not lost.
 
 - Send the car picture's strokes through `axe batch`. The picture player runs one `axe` command per stroke and per swatch tap, about 290 in all. `batch` accepts `draw` and `tap` steps on simulators and devices, so each run of "tap a swatch, draw several strokes" could go out as one batch, with the tool changes left as separate commands because they read the screen. Estimated saving: about 30 s of a 5 to 7 minute device run, not measured. The player would also have to work out which strokes landed when a batch stops on a failed step. The owner decided on 10 November to leave it out for now.
 
+AXe Mirror, from the review of 22 November. Nothing here is broken; in each case the better fix is bigger or riskier than the problem. The owner decided on 22 November not to fix these for now.
+
+- The phone makes its own install key. Today the Mac makes the install certificate and sends each paired device the same key for the three local names. The certificate's name limit already stops that key vouching for any other site. A key made on the phone and never shared would be cleaner, but it means certificate signing in the app, a changed setup flow and a full retest of installs on a real device.
+- A separate, low-priority stream for build downloads. Build pieces travel on the control stream, which outranks video, so on a slow link the picture stutters while a build downloads and recovers afterwards. Moving them touches the most delicate code in the product and needs an experiment on a throttled link first.
+- Signed settings. The app reads a small settings record from plain DNS, so a hostile network could fake it, for example to show "Update needed". That network could block the connection anyway. The options are a signature published in DNS with each change, or reading the record over HTTPS from two resolvers that must agree.
+
 ## Decisions
 
 Decisions made without the owner, with the reason.
