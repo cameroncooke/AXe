@@ -955,8 +955,11 @@ final class StreamSession {
     @ObservationIgnored private var listExpected = true
     @ObservationIgnored private var choiceWatch: Task<Void, Never>?
     /// How long the Mac may take to say it has started on a choice. It says so at once; a long
-    /// boot is reported as it goes and does not count against this.
-    static let choiceAnswerLimit: UInt64 = 20
+    /// boot is reported as it goes and does not count against this. The first thing the Mac does
+    /// is read its list of simulators, for which it allows itself 30 seconds before it says the
+    /// Mac was slow to answer: this is longer than that, so that the Mac's own word comes first.
+    /// At 20 seconds the app said the Mac had not answered while the Mac was still at work.
+    static let choiceAnswerLimit: UInt64 = 35
     /// The steps the choice under way goes through, in order: some of creating, booting, opening.
     private(set) var plan: [String] = []
     /// Simulators the Mac is shutting down or deleting for this viewer, by UDID, with which of the two.
