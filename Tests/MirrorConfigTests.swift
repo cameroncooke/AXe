@@ -85,6 +85,31 @@ struct MirrorConfigTests {
         #expect(!MirrorViewerRules.isThisDevice(nil))
     }
 
+    @Test("The Info screen gives the iOS version with its build, and the screen in points with its scale")
+    func simulatorFacts() {
+        #expect(MirrorViewerRules.versionLine(os: "iOS 27.3", build: "24D5040f") == "iOS 27.3 (24D5040f)")
+        #expect(MirrorViewerRules.versionLine(os: "iOS 26.5", build: "") == "iOS 26.5")
+        #expect(MirrorViewerRules.versionLine(os: "", build: "24D5040f") == "")       // an older Mac names neither
+        #expect(MirrorViewerRules.screenLine(width: 402, height: 874, scale: 3) == "402 × 874 points, 3x")
+        #expect(MirrorViewerRules.screenLine(width: 820, height: 1180, scale: 2) == "820 × 1180 points, 2x")
+        #expect(MirrorViewerRules.screenLine(width: 402, height: 874, scale: 0) == "402 × 874 points")
+        #expect(MirrorViewerRules.screenLine(width: 402, height: 874, scale: .nan) == "402 × 874 points")
+        #expect(MirrorViewerRules.screenLine(width: 0, height: 874, scale: 3) == nil)
+    }
+
+    @Test("The top bar drops the Direct or Relay badge when it would leave the simulator's name too little room")
+    func topBarRoute() {
+        // A 402-point iPhone: Copy ID, Rotate and Info leave room for the badge; a Duo simulator's Fold does not.
+        #expect(MirrorViewerLayout.topBarShowsRoute(width: 402, buttons: 3, withKeys: false))
+        #expect(!MirrorViewerLayout.topBarShowsRoute(width: 402, buttons: 4, withKeys: false))
+        // A 393-point iPhone has room with two buttons and not with three.
+        #expect(MirrorViewerLayout.topBarShowsRoute(width: 393, buttons: 2, withKeys: false))
+        #expect(!MirrorViewerLayout.topBarShowsRoute(width: 393, buttons: 3, withKeys: false))
+        // A wide screen with the simulator's keys in the bar as well.
+        #expect(MirrorViewerLayout.topBarShowsRoute(width: 820, buttons: 5, withKeys: true))
+        #expect(!MirrorViewerLayout.topBarShowsRoute(width: 600, buttons: 5, withKeys: true))
+    }
+
     @Test("The app waits longer for the Mac than the Mac allows itself, so the Mac's own word comes first")
     func whoSpeaksFirst() {
         #expect(Double(MirrorViewerRules.choiceAnswerSeconds) > MirrorViewerRules.macListSeconds)

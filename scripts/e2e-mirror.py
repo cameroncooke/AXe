@@ -12,7 +12,8 @@ What it proves, in order:
   3. taps on the picture arrive on the host's simulator, in the right place relative to each other;
      rotating from the app turns the simulator and the stream, and taps still land the right way round
   4. on a host started without --udid, the app lists the Mac's simulators; a running one opens,
-     its ID can be copied, one that is shut down is booted, and a new one is created; Close goes
+     its ID can be copied and its Info screen names its device and iOS version, one that is shut
+     down is booted, and a new one is created; Close goes
      back to the list and asks whether to leave the simulator running or shut it down, the list's
      Close leaves the Mac, and a simulator can be deleted
      a simulator deleted on the Mac since the list was read and then chosen is reported in plain
@@ -744,6 +745,23 @@ def main():
     wait_for("the ID on the clipboard", lambda: run(["xcrun", "simctl", "pbpaste", viewer_udid]).stdout.strip() != "nothing yet", 10)
     copied = run(["xcrun", "simctl", "pbpaste", viewer_udid]).stdout.strip()
     check("the app copies the simulator's ID", copied == host_udid, copied)
+    # Info says what this simulator is: its device, its iOS version to the build, and its ID.
+    try:
+        installed = json.loads(run(["xcrun", "simctl", "list", "runtimes", "-j"]).stdout)["runtimes"]
+        ios = next(r for r in installed if r["identifier"] == runtime)
+        host_name = next(d["name"] for devices in by_runtime.values() for d in devices if d["udid"] == host_udid)
+        viewer.tap_id("stream.details")
+        wait_for("the simulator's Info screen", lambda: viewer.find(identifier="info.done"), 10)
+        time.sleep(0.8)     # the sheet is still coming up
+        run(["xcrun", "simctl", "io", viewer_udid, "screenshot", os.path.join(work, "viewer-info.png")], check=False)
+        said = {key: (viewer.find(identifier=f"info.{key}") or {}).get("AXLabel") or "" for key in ("name", "device", "version", "udid")}
+        check("Info names the simulator, its device, its iOS version with the build, and its ID",
+              host_name in said["name"] and "iPhone" in said["device"] and ios["name"] in said["version"]
+              and ios["buildversion"] in said["version"] and host_udid in said["udid"], f"{said['device']}; {said['version']}")
+        viewer.tap_id("info.done")
+        wait_for("the Info screen to go", lambda: viewer.find(identifier="info.done") is None, 10)
+    except (TimeoutError, RuntimeError, StopIteration, KeyError) as error:
+        failed("Info names the simulator, its device, its iOS version with the build, and its ID", str(error))
     run(["xcrun", "simctl", "io", viewer_udid, "screenshot", os.path.join(work, "viewer-chosen.png")], check=False)
 
     # 4b. Close goes back to the list, leaving the first one running; a simulator that is shut down is booted and shown.

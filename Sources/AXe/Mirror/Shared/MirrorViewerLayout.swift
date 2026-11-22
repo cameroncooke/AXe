@@ -54,6 +54,20 @@ enum MirrorViewerLayout {
         return best
     }
 
+    /// Whether the top bar has room for the badge that says how the Mac is reached ("Direct" or
+    /// "Relay") beside the simulator's name. `buttons` is how many round buttons the bar holds, and
+    /// `withKeys` whether Home, App Switcher and Lock are in it too. The name keeps `leastName`
+    /// points; when the badge would leave it less, the badge goes, and the simulator's Info screen
+    /// says how the Mac is reached. It depends on the screen and the simulator alone, so the
+    /// badge does not come and go while a simulator is on screen.
+    static func topBarShowsRoute(width: CGFloat, buttons: Int, withKeys: Bool) -> Bool {
+        // Margins, Close, the gaps either side of the name, each button with its gap, and the keys.
+        let taken = 28 + 36 + 24 + CGFloat(buttons) * 48 + (withKeys ? 196 : 0)
+        return width - taken - routeBadge >= leastName
+    }
+    static let routeBadge: CGFloat = 76
+    static let leastName: CGFloat = 90
+
     /// Whether a column at the side leaves a bigger picture than bars above and below. Equal
     /// sizes keep the bars, which have room for the Mac's name and the frame rate.
     static func controlsAtSide(pane: CGSize, video: CGSize) -> Bool {

@@ -29,6 +29,8 @@ struct StreamScreen: View {
     @State private var leaving = false
     /// The Mac's builds to install, as a sheet over the picture: for a Mac with no menu to go to.
     @State private var showsBuilds = false
+    /// What there is to know about the simulator on screen, as a sheet over the picture (`SimulatorInfoSheet`).
+    @State private var showsDetails = false
     /// Where the person is in the Mac's menu (`MacHub`). Kept here so that leaving a simulator
     /// comes back to the screen it was opened from.
     @State private var hubPath: [HubPlace] = []
@@ -51,7 +53,7 @@ struct StreamScreen: View {
                 ?? (side ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0)))
             layout {
                 // The Mac's menu and the screens behind it bring their own bar, with the way out.
-                if fold == nil, !side, !session.showsHub { topBar(withKeys: placement == .singleBar) }
+                if fold == nil, !side, !session.showsHub { topBar(withKeys: placement == .singleBar, width: proxy.size.width) }
                 ZStack {
                     Color.black
                     StreamSurface(session: session)
@@ -113,6 +115,11 @@ struct StreamScreen: View {
             }
         }
         .sheet(isPresented: $showsBuilds) { BuildsSheet(session: session, macName: destination.title) }
+        .sheet(isPresented: $showsDetails) { SimulatorInfoSheet(session: session, macName: destination.title) }
+        // The sheet is about the simulator on screen: it goes when that does.
+        .onChange(of: live) { _, live in
+            if !live { showsDetails = false }
+        }
         .animation(.easeOut(duration: 0.25), value: session.announcedBuild?.id)
         // Leaving a simulator is a choice: it can go on running on the Mac, or be shut down.
         .confirmationDialog("Leave \(session.showing?.name ?? "the simulator")?", isPresented: $leaving, titleVisibility: .visible) {
@@ -191,6 +198,18 @@ struct StreamScreen: View {
         !destination.isDemo && session.state == .connected && !session.builds.isEmpty && session.showing?.canChoose == false
     }
 
+    /// True while there is a simulator on screen to say something about. A demo's visitor is told
+    /// nothing of the Mac's simulators.
+    private var offersDetails: Bool {
+        !destination.isDemo && session.state == .connected && !session.choosing && session.showing != nil
+    }
+
+    /// How many round buttons the bars hold for the simulator on screen: see `simulatorButtons`.
+    private var simulatorButtonCount: Int {
+        guard let showing = session.showing, !session.choosing, session.state == .connected else { return 0 }
+        return [offersAppsHere, !showing.udid.isEmpty, showing.canRotate, showing.hasHinge, offersDetails].filter { $0 }.count
+    }
+
     /// Which simulator this is, how the stream is doing, the simulator's buttons and the ways out.
     private func deckControls(fills: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -220,6 +239,10 @@ struct StreamScreen: View {
                 if let showing = session.showing, !showing.udid.isEmpty {
                     deckKey("Copy ID", systemImage: "doc.on.doc", small: true, action: copyID)
                         .accessibilityIdentifier("stream.copyID")
+                }
+                if offersDetails {
+                    deckKey("Info", systemImage: "info.circle", small: true) { showsDetails = true }
+                        .accessibilityIdentifier("stream.details")
                 }
                 if session.showing?.canRotate == true {
                     rotateMenu {
@@ -605,8 +628,8 @@ struct StreamScreen: View {
         }
     }
 
-    /// Copy the simulator's ID, and go back to the Mac's simulators when the Mac lets this viewer
-    /// choose. Shown while a simulator is on screen.
+    /// The Mac's apps where it has no menu, copy the simulator's ID, turn it, fold it, and what
+    /// there is to know about it. Shown while a simulator is on screen.
     @ViewBuilder
     private var simulatorButtons: some View {
         if let showing = session.showing, !session.choosing, session.state == .connected {
@@ -634,6 +657,10 @@ struct StreamScreen: View {
                         .frame(width: 36, height: 36)
                         .background(session.folding ? Color.white : Color.white.opacity(0.14), in: Circle())
                 }
+            }
+            if offersDetails {
+                roundButton("Simulator info", systemImage: "info") { showsDetails = true }
+                    .accessibilityIdentifier("stream.details")
             }
         }
     }
@@ -720,8 +747,10 @@ struct StreamScreen: View {
     }
 
     /// Close, the simulator's name and state, and its buttons; with `withKeys`, Home, App Switcher
-    /// and Lock as well, for a pane wide enough to need no bar below.
-    private func topBar(withKeys: Bool) -> some View {
+    /// and Lock as well, for a pane wide enough to need no bar below. How the Mac is reached is
+    /// said at the end where that leaves the name room (`MirrorViewerLayout.topBarShowsRoute`), and
+    /// on the simulator's Info screen always.
+    private func topBar(withKeys: Bool, width: CGFloat) -> some View {
         HStack(spacing: 12) {
             closeButton
             VStack(alignment: .leading, spacing: 1) {
@@ -741,7 +770,8 @@ struct StreamScreen: View {
                     controlButton("Lock", systemImage: "lock.fill") { session.client?.pressButton(3) }
                 }
             }
-            if session.state == .connected, !session.stats.route.isEmpty {
+            if session.state == .connected, !session.stats.route.isEmpty,
+               MirrorViewerLayout.topBarShowsRoute(width: width, buttons: simulatorButtonCount, withKeys: withKeys && showsKeys) {
                 Text(session.stats.route)
                     .font(.caption.weight(.semibold))
                     .padding(.horizontal, 10)

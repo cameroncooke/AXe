@@ -54,6 +54,9 @@ final class MirrorClient: @unchecked Sendable {
         var model = ""              // the kind of device, such as "iPad Air 11-inch (M4)"; empty from an older Mac
         var canRotate = false       // the Mac turns the simulator when asked
         var hasHinge = false        // an iPhone Duo: the Mac folds it when asked and says which screen is shown
+        var os = ""                 // its iOS version, such as "iOS 27.3"; empty from an older Mac
+        var osBuild = ""            // that version's build, such as "24D5040f"
+        var scale = 0.0             // its screen's pixels to a point; 0 from an older Mac
         var isIPad: Bool { model.hasPrefix("iPad") }
     }
 
@@ -586,7 +589,9 @@ final class MirrorClient: @unchecked Sendable {
         guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
         let showing = Showing(udid: json["udid"] as? String ?? "", name: json["name"] as? String ?? "",
                               canChoose: json["chooser"] as? Bool ?? false, model: json["model"] as? String ?? "",
-                              canRotate: json["rotates"] as? Bool ?? false, hasHinge: json["hinge"] as? Bool ?? false)
+                              canRotate: json["rotates"] as? Bool ?? false, hasHinge: json["hinge"] as? Bool ?? false,
+                              os: json["os"] as? String ?? "", osBuild: json["osBuild"] as? String ?? "",
+                              scale: (json["scale"] as? NSNumber)?.doubleValue ?? 0)
         watching = showing.udid.isEmpty ? nil : showing.udid
         decodedInWindow = 0
         bytesInWindow = 0

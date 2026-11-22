@@ -1018,6 +1018,10 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             info["udid"] = simulator.udid
             info["name"] = simulator.name
             info["model"] = simulator.device.deviceType?.name ?? ""
+            // For the viewer's Info screen: which iOS this is, to its build, and the screen's scale.
+            info["os"] = simulator.device.runtime?.name ?? ""
+            info["osBuild"] = simulator.device.runtime?.buildVersionString ?? ""
+            if let scale = simulator.screenInfo?.scale { info["scale"] = Double(scale) }
             info["rotates"] = true      // this host takes rotation requests
             info["hinge"] = hasHinge    // an iPhone Duo: this host takes fold requests and sends screen states
         }

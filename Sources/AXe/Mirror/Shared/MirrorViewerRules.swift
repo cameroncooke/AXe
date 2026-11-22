@@ -61,6 +61,23 @@ enum MirrorViewerRules {
         return parts.count == 4 && parts.allSatisfy { UInt8($0) != nil } && parts[0] == "127"
     }
 
+    /// The simulator's iOS version as its Info screen says it: the runtime's name with its build
+    /// in brackets, "iOS 27.3 (24D5040f)". A Mac that names no build gives the name alone, and
+    /// one from before either was sent gives nothing.
+    static func versionLine(os: String, build: String) -> String {
+        let os = os.trimmingCharacters(in: .whitespaces), build = build.trimmingCharacters(in: .whitespaces)
+        return build.isEmpty || os.isEmpty ? os : "\(os) (\(build))"
+    }
+
+    /// The simulator's screen as its Info screen says it: its size in points, upright, and its
+    /// scale when the Mac sent one: "402 × 874 points, 3x". Nil without a size.
+    static func screenLine(width: Double, height: Double, scale: Double) -> String? {
+        guard width.isFinite, height.isFinite, width >= 1, height >= 1 else { return nil }
+        let size = "\(Int(width.rounded())) × \(Int(height.rounded())) points"
+        guard scale.isFinite, scale >= 1, scale <= 8 else { return size }
+        return scale == scale.rounded() ? "\(size), \(Int(scale))x" : "\(size), \(String(format: "%.1f", scale))x"
+    }
+
     /// How long the app waits for the Mac to say it has started on a choice, in seconds. The Mac
     /// first reads its list of simulators and allows itself `macListSeconds` for that before it
     /// says the Mac was slow: the app must wait longer, so that the Mac's own word comes first.
