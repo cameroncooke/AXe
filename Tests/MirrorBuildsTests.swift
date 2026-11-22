@@ -256,6 +256,31 @@ struct MirrorBuildsTests {
 
     // MARK: Installing from the viewer's own device
 
+    @Test("A package that unpacks to far more than its size is refused before it is unpacked")
+    func refusesWhatUnpacksTooLarge() throws {
+        #expect(MirrorBuildInspector.unpackedSize(inSummary: "2 files, 52428800 bytes uncompressed, 50895 bytes compressed:  99.9%\n") == 52_428_800)
+        #expect(MirrorBuildInspector.unpackedSize(inSummary: "not a zip") == nil)
+        // 50 MB of nothing, which packs into 50 KB.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-unpack-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("Payload"), withIntermediateDirectories: true)
+        try Data(count: 50 * 1024 * 1024).write(to: folder.appendingPathComponent("Payload/big"))
+        let zip = Process()
+        zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+        zip.arguments = ["-qr", "big.ipa", "Payload"]
+        zip.currentDirectoryURL = folder
+        try zip.run()
+        zip.waitUntilExit()
+        let ipa = folder.appendingPathComponent("big.ipa")
+        #expect(((try FileManager.default.attributesOfItem(atPath: ipa.path)[.size] as? Int) ?? 0) < 200_000)
+        do {
+            _ = try MirrorBuildInspector.inspect(ipa: ipa, largestUnpacked: 10 * 1024 * 1024)
+            Issue.record("a package that unpacks to five times the limit was inspected")
+        } catch {
+            #expect(CLIErrorMapping.failure(for: error).message.contains("more than AXe will unpack"), "\(CLIErrorMapping.failure(for: error).message)")
+        }
+    }
+
     @Test("The host has one piece of a build in hand at a time, however fast a viewer asks")
     func oneInHand() {
         #expect(MirrorBuildFetch.accepted(reading: false, queued: 0))

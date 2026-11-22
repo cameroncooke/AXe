@@ -20,8 +20,13 @@ struct MirrorBuildInspection: Equatable, Sendable {
 /// with no reason given, so it is refused here, with the reason.
 enum MirrorBuildInspector {
     static let largestPackage: Int64 = 4 * 1024 * 1024 * 1024
+    /// The most a package may unpack to. An app is seldom a third smaller packed than unpacked; a
+    /// few kilobytes of zip can claim terabytes.
+    static let largestUnpacked: Int64 = 12 * 1024 * 1024 * 1024
+    /// Unpacking stops when the disk it writes to has less room than this left.
+    static let roomToLeave: Int64 = 2 * 1024 * 1024 * 1024
 
-    static func inspect(ipa: URL, requiredDevices: [String] = []) throws -> MirrorBuildInspection {
+    static func inspect(ipa: URL, requiredDevices: [String] = [], largestUnpacked: Int64 = MirrorBuildInspector.largestUnpacked) throws -> MirrorBuildInspection {
         let size = (try? FileManager.default.attributesOfItem(atPath: ipa.path)[.size] as? NSNumber)?.int64Value
         guard let size, size > 0 else { throw refused("There is no IPA at \(ipa.path).") }
         guard size <= largestPackage else { throw refused("The IPA is larger than 4 GB.") }
@@ -29,7 +34,7 @@ enum MirrorBuildInspector {
         try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: scratch) }
         let package = scratch.appendingPathComponent("package", isDirectory: true)
-        try unpack(ipa, into: package)
+        try unpack(ipa, into: package, largestUnpacked: largestUnpacked)
 
         let payload = package.appendingPathComponent("Payload", isDirectory: true)
         let apps = ((try? FileManager.default.contentsOfDirectory(at: payload, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "app" }
@@ -79,9 +84,24 @@ enum MirrorBuildInspector {
         CLIError(errorDescription: message, code: .invalidArguments)
     }
 
+    /// What a package says it unpacks to, in bytes, from the last line of `unzip -Z -t`:
+    /// "2 files, 52428800 bytes uncompressed, 50895 bytes compressed:  99.9%".
+    static func unpackedSize(inSummary summary: String) -> Int64? {
+        let words = summary.split(whereSeparator: { $0 == " " || $0 == "\n" })
+        guard let at = words.firstIndex(of: "bytes"), at > 0, words.count > at + 1, words[at + 1].hasPrefix("uncompressed") else { return nil }
+        return Int64(words[at - 1])
+    }
+
     /// Unpacks the IPA, refusing one that would write outside the folder or that holds links: an
-    /// app bundle for a device has neither.
-    private static func unpack(_ ipa: URL, into folder: URL) throws {
+    /// app bundle for a device has neither. One that says it unpacks to more than `largestUnpacked`
+    /// is refused before anything is written, and unpacking stops if the disk runs short of room
+    /// all the same, so that no package can fill the Mac's disk before it is refused.
+    private static func unpack(_ ipa: URL, into folder: URL, largestUnpacked: Int64) throws {
+        let summary = String(decoding: try tool("/usr/bin/unzip", ["-Z", "-t", ipa.path], saying: "The file is not an IPA."), as: UTF8.self)
+        guard let unpacked = unpackedSize(inSummary: summary) else { throw refused("The file is not an IPA.") }
+        guard unpacked <= largestUnpacked else {
+            throw refused("The IPA unpacks to \(ByteCountFormatter.string(fromByteCount: unpacked, countStyle: .file)), which is more than AXe will unpack.")
+        }
         let listing = String(decoding: try tool("/usr/bin/unzip", ["-Z1", ipa.path], saying: "The file is not an IPA."), as: UTF8.self)
         let names = listing.split(separator: "\n", omittingEmptySubsequences: true)
         guard !names.isEmpty, names.count <= 50_000 else { throw refused("The IPA has no files, or too many.") }
@@ -92,7 +112,7 @@ enum MirrorBuildInspector {
             }
         }
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        _ = try tool("/usr/bin/unzip", ["-q", "-o", ipa.path, "-d", folder.path], saying: "The IPA could not be unpacked.")
+        _ = try tool("/usr/bin/unzip", ["-q", "-o", ipa.path, "-d", folder.path], saying: "The IPA could not be unpacked.", leavingRoomOn: folder)
         if let walker = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isSymbolicLinkKey]) {
             for case let item as URL in walker where (try? item.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true {
                 throw refused("The IPA holds a symbolic link.")
@@ -155,7 +175,9 @@ enum MirrorBuildInspector {
 
     /// Runs one of the system's signing tools. Its own words are not passed on: they can hold
     /// device and signing details, and `saying` is what the person needs.
-    private static func tool(_ path: String, _ arguments: [String], saying: String) throws -> Data {
+    /// With `leavingRoomOn`, the tool is stopped if the disk that folder is on gets down to
+    /// `roomToLeave`: a package can unpack to more than it says.
+    private static func tool(_ path: String, _ arguments: [String], saying: String, leavingRoomOn folder: URL? = nil) throws -> Data {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments
@@ -163,8 +185,22 @@ enum MirrorBuildInspector {
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         do { try process.run() } catch { throw CLIError(errorDescription: "\(path) could not be run: \(error.localizedDescription)", code: .commandFailed) }
+        let outOfRoom = MirrorLastValue()
+        if let folder {
+            DispatchQueue.global(qos: .utility).async {
+                while process.isRunning {
+                    if let room = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityKey]).volumeAvailableCapacity, Int64(room) < roomToLeave {
+                        _ = outOfRoom.changed(to: ["full"])
+                        process.terminate()
+                        return
+                    }
+                    Thread.sleep(forTimeInterval: 0.25)
+                }
+            }
+        }
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
+        if outOfRoom.current != nil { throw refused("The IPA was not unpacked: this Mac's disk is nearly full.") }
         guard process.terminationStatus == 0 else { throw refused(saying) }
         return data
     }
