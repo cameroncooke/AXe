@@ -959,7 +959,7 @@ final class StreamSession {
     /// is read its list of simulators, for which it allows itself 30 seconds before it says the
     /// Mac was slow to answer: this is longer than that, so that the Mac's own word comes first.
     /// At 20 seconds the app said the Mac had not answered while the Mac was still at work.
-    static let choiceAnswerLimit: UInt64 = 35
+    static let choiceAnswerLimit = MirrorViewerRules.choiceAnswerSeconds
     /// The steps the choice under way goes through, in order: some of creating, booting, opening.
     private(set) var plan: [String] = []
     /// Simulators the Mac is shutting down or deleting for this viewer, by UDID, with which of the two.
@@ -1085,18 +1085,8 @@ final class StreamSession {
                 }
             }
             if self?.installServer != nil { self?.localInstall = .notTrusted }
-            self?.setupHint = Self.setupHint(for: failures)
+            self?.setupHint = MirrorViewerRules.setupHint(for: failures)
         }
-    }
-
-    /// What to say when no name reached this device's server. A certificate that is not trusted
-    /// yet is the usual reason and needs no saying: the steps are on the screen. When instead
-    /// none of the names could be found or connected to, the network is not leading them back to
-    /// this device, as some company and hotel networks do not, and no amount of trusting helps.
-    static func setupHint(for failures: [URLError.Code]) -> String? {
-        let network: Set<URLError.Code> = [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost, .timedOut, .notConnectedToInternet, .networkConnectionLost]
-        guard !failures.isEmpty, failures.allSatisfy(network.contains) else { return nil }
-        return "This network is in the way: it does not lead back to this device. Try another Wi-Fi, or mobile data."
     }
 
     /// Opens the authority's certificate in Safari, which is the only way iOS takes one. This app
@@ -1128,7 +1118,7 @@ final class StreamSession {
         // Only the build being installed and the one handed to iOS last are kept on the device.
         let keeping = Set([build.id, lastHanded].compactMap { $0 })
         Task.detached {
-            LocalInstallServer.tidy(keeping: keeping)
+            MirrorViewerRules.tidyBuilds(keeping: keeping, in: caches)
             let kept = build.sha256.map { FileManager.default.fileExists(atPath: file.path) && LocalInstallServer.digest(of: file) == $0 } ?? false
             await MainActor.run { [weak self] in
                 guard let self, self.fetch == nil, self.fetching?.id == build.id else { return }
@@ -1679,7 +1669,7 @@ final class StreamSession {
             // showing the simulator then, and going back to the list would hide it. The list
             // takes the screen only when this device is choosing, or the Mac has let its
             // simulator go: on a new connection, or because another device took it away.
-            guard self.choosing || self.listExpected || self.showing == nil else { return }
+            guard MirrorViewerRules.listTakesScreen(choosing: self.choosing, expected: self.listExpected, showingSimulator: self.showing != nil) else { return }
             self.listExpected = false
             self.client?.stoppedWatching()
             self.stopFolding()

@@ -32,6 +32,54 @@ struct MirrorConfigTests {
         #expect(MirrorConfig.parse(record) == nil)
     }
 
+    @Test("A list of simulators takes the screen only when the app is choosing or the Mac has let its simulator go")
+    func lateList() {
+        // Watching a simulator, and a list arrives that answers a refresh made before it was opened.
+        #expect(!MirrorViewerRules.listTakesScreen(choosing: false, expected: false, showingSimulator: true))
+        // At the list, on a new connection, after another device took the simulator, or with nothing shown.
+        #expect(MirrorViewerRules.listTakesScreen(choosing: true, expected: false, showingSimulator: true))
+        #expect(MirrorViewerRules.listTakesScreen(choosing: false, expected: true, showingSimulator: true))
+        #expect(MirrorViewerRules.listTakesScreen(choosing: false, expected: false, showingSimulator: false))
+    }
+
+    @Test("The setup says the network is in the way only when no name could be reached at all")
+    func setupHint() {
+        // Not trusted yet: the names lead here, and the certificate is refused. Nothing to add to the steps.
+        #expect(MirrorViewerRules.setupHint(for: [.serverCertificateUntrusted, .serverCertificateUntrusted, .serverCertificateUntrusted]) == nil)
+        #expect(MirrorViewerRules.setupHint(for: [.cannotFindHost, .serverCertificateUntrusted]) == nil)
+        #expect(MirrorViewerRules.setupHint(for: []) == nil)
+        // A network that will not resolve the names to this device.
+        let hint = MirrorViewerRules.setupHint(for: [.cannotFindHost, .dnsLookupFailed, .cannotConnectToHost])
+        #expect(hint?.contains("network is in the way") == true)
+    }
+
+    @Test("A pong with a time that is not a number, or a round trip no connection has, is dropped")
+    func pong() throws {
+        let good = try #require(MirrorViewerRules.clockSample(sent: 100, hostTime: 203.52, received: 100.04))
+        #expect(abs(good.roundTrip - 0.04) < 1e-9 && abs(good.offset - 103.5) < 1e-9)
+        #expect(MirrorViewerRules.clockSample(sent: .nan, hostTime: 203.5, received: 100.04) == nil)
+        #expect(MirrorViewerRules.clockSample(sent: 100, hostTime: .infinity, received: 100.04) == nil)
+        #expect(MirrorViewerRules.clockSample(sent: 100.5, hostTime: 203.5, received: 100.04) == nil)      // answered before it was asked
+        #expect(MirrorViewerRules.clockSample(sent: -1e300, hostTime: 203.5, received: 100.04) == nil)
+    }
+
+    @Test("Installing a build removes the others the device kept, and only builds")
+    func tidiesBuilds() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-cache-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        for name in ["build-aaa.ipa", "build-bbb.ipa", "build-ccc.ipa", "notes.txt", "other.ipa"] {
+            try Data("x".utf8).write(to: folder.appendingPathComponent(name))
+        }
+        #expect(MirrorViewerRules.tidyBuilds(keeping: ["bbb", "ccc"], in: folder) == 1)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == ["build-bbb.ipa", "build-ccc.ipa", "notes.txt", "other.ipa"])
+    }
+
+    @Test("The app waits longer for the Mac than the Mac allows itself, so the Mac's own word comes first")
+    func whoSpeaksFirst() {
+        #expect(Double(MirrorViewerRules.choiceAnswerSeconds) > MirrorViewerRules.macListSeconds)
+    }
+
     @Test("The published settings are read once, and tried again only a minute after a failed read")
     func readsOnce() {
         #expect(MirrorConfig.shouldRead(loaded: false, wasRead: false, sinceLastTry: 0))

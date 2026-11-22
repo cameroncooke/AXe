@@ -661,8 +661,8 @@ final class MirrorClient: @unchecked Sendable {
         // The Mac echoes the time this device sent, and adds its own. Numbers that are not
         // numbers, or a round trip no connection has, are dropped: turned into a whole number of
         // milliseconds for the figures on screen, one of them stopped the app.
-        guard sent.isFinite, hostTime.isFinite, (0...60).contains(received - sent) else { return }
-        clockSamples.append((received - sent, hostTime - (sent + received) / 2))
+        guard let sample = MirrorViewerRules.clockSample(sent: sent, hostTime: hostTime, received: received) else { return }
+        clockSamples.append(sample)
         if clockSamples.count > 20 { clockSamples.removeFirst() }
         if let best = clockSamples.min(by: { $0.roundTrip < $1.roundTrip }) {
             offset = best.offset

@@ -86,7 +86,7 @@ enum MirrorSimulatorControl {
     // MARK: Acting on simulators
 
     static func list() async throws -> MirrorSimulatorList {
-        try list(fromSimctl: await simctl(["list", "--json"], timeout: 30))
+        try list(fromSimctl: await simctl(["list", "--json"], timeout: MirrorViewerRules.macListSeconds))
     }
 
     /// Creates a simulator and returns it. The device and the runtime must be a pair from the list
