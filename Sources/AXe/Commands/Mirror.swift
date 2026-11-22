@@ -222,7 +222,7 @@ struct MirrorStartCommand: AsyncParsableCommand {
             settings.avoidLocalNetwork = true
             settings.assumeLocalNetworkBlocked = assumeLocalNetworkBlocked
             MirrorHost.emit(["event": "warning", "code": "localNetworkBlocked", "message": MirrorLocalNetwork.advice])
-            FileHandle.standardError.write(Data(("Warning: " + MirrorLocalNetwork.advice + "\n").utf8))
+            mirrorNote("Warning: " + MirrorLocalNetwork.advice)
         }
         settings.viewers = allowUnpaired || demo ? nil : MirrorViewers(url: viewersFile.map { URL(fileURLWithPath: $0) } ?? MirrorViewers.defaultURL)
         settings.delayRule = delayRule
@@ -515,11 +515,16 @@ enum MirrorHost {
         if let message = fatal.current?.first { throw CLIError(errorDescription: message, code: .commandFailed) }
     }
 
-    static func emit(_ event: [String: String]) {
+    /// Prints one event as a line. Events come from several threads, one for each viewer's session
+    /// and more, and a line longer than a pipe takes in one piece (512 bytes) could be written in
+    /// two, with another thread's line between them: whoever reads the events would then be given
+    /// two lines that are not JSON. One line is written at a time.
+    static func emit(_ event: [String: String], to output: FileHandle = .standardOutput) {
         guard var line = try? JSONSerialization.data(withJSONObject: event, options: [.sortedKeys, .withoutEscapingSlashes]) else { return }
         line.append(0x0A)
-        try? FileHandle.standardOutput.write(contentsOf: line)
+        emitLock.withLock { try? output.write(contentsOf: line) }
     }
+    private static let emitLock = NSLock()
 }
 #endif
 
@@ -659,7 +664,7 @@ struct MirrorBuildCommand: AsyncParsableCommand {
         store.clean(olderThan: Date().addingTimeInterval(-MirrorBuildJob.keepFailedFor))
         let job = try MirrorBuildJob(store: store, project: project, workspace: workspace, scheme: scheme, configuration: configuration,
                                      teamID: teamID, exportOptions: exportOptions, allowProvisioningUpdates: allowProvisioningUpdates)
-        if !json { FileHandle.standardError.write(Data("Archiving \(scheme). Logs are in \(job.folder.path)\n".utf8)) }
+        if !json { mirrorNote("Archiving \(scheme). Logs are in \(job.folder.path)") }
         let ipa = try job.run()
         let build = try store.publish(ipa: ipa, notes: notes, requiredDevices: devices)
         // Published: the store has its own copy of the IPA, and the archive is hundreds of megabytes.
@@ -748,7 +753,7 @@ struct MirrorBuildsCommand: AsyncParsableCommand {
             }
         }
         if left.count > 0, cleaned == nil {
-            FileHandle.standardError.write(Data("\(left.count) build folder\(left.count == 1 ? "" : "s") left behind, \(megabytes(left.bytes)). axe mirror builds --clean removes them.\n".utf8))
+            mirrorNote("\(left.count) build folder\(left.count == 1 ? "" : "s") left behind, \(megabytes(left.bytes)). axe mirror builds --clean removes them.")
         }
         #else
         throw CLIError(errorDescription: "axe mirror needs an Apple silicon Mac.", code: .commandFailed)

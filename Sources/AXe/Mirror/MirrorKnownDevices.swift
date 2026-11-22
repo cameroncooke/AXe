@@ -21,9 +21,11 @@ enum MirrorKnownDevices {
         process.arguments = ["devicectl", "list", "devices", "--json-output", file.path]
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return [] }
+        // Set before it runs: a process that ends at once would otherwise never be heard of, and
+        // the wait below would last its full fifteen seconds.
         let done = DispatchSemaphore(value: 0)
         process.terminationHandler = { _ in done.signal() }
+        guard (try? process.run()) != nil else { return [] }
         guard done.wait(timeout: .now() + 15) == .success else { process.terminate(); return [] }
         guard let data = try? Data(contentsOf: file) else { return [] }
         return parse(data)

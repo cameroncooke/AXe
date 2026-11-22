@@ -178,6 +178,32 @@ struct MirrorSimulatorControlTests {
         #expect(try Axe.parseAsRoot(["mirror", "pair", "--relay-url", "https://relay.example.com"]) is MirrorPairCommand)
     }
 
+    #if AXE_MIRROR
+    @Test("Events printed from several threads at once come out one whole line at a time")
+    func eventsDoNotInterleave() throws {
+        let pipe = Pipe()
+        final class Collected: @unchecked Sendable { var data = Data() }
+        let collected = Collected()
+        let reading = DispatchGroup()
+        reading.enter()
+        DispatchQueue.global().async {
+            collected.data = pipe.fileHandleForReading.readDataToEndOfFile()
+            reading.leave()
+        }
+        // Eight sessions' worth of events, each line four times what a pipe takes in one piece.
+        let long = String(repeating: "x", count: 2_000)
+        DispatchQueue.concurrentPerform(iterations: 8) { thread in
+            for index in 0..<200 { MirrorHost.emit(["event": "test", "thread": String(thread), "index": String(index), "message": long], to: pipe.fileHandleForWriting) }
+        }
+        try pipe.fileHandleForWriting.close()
+        reading.wait()
+        let lines = collected.data.split(separator: 0x0A)
+        #expect(lines.count == 1_600)
+        let broken = lines.filter { (try? JSONSerialization.jsonObject(with: Data($0))) == nil }
+        #expect(broken.isEmpty, "\(broken.count) lines are not JSON")
+    }
+    #endif
+
     @Test("A demo needs the app its visitors are kept inside")
     func demoNeedsItsApp() throws {
         // Without one there is nothing to keep a stranger out of the rest of the simulator.
