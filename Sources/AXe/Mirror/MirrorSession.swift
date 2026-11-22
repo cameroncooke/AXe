@@ -110,6 +110,10 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     private var lastEncodeStart: TimeInterval = 0
     private var encodeScheduled = false
     private var forceKey = true
+    /// The screen as it is now has not reached the viewer: a frame was skipped or lost. It is sent
+    /// again without waiting for the screen to change, which on a still screen it never does.
+    private var owed = false
+    private var owedCheck = false           // a look at `owed` is scheduled
     private var encoder: VTCompressionSession?
     private var transfer: VTPixelTransferSession?
     private var pool: CVPixelBufferPool?
@@ -449,7 +453,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
 
         // A callback can arrive before the surface content changes; look again shortly.
         let seed = IOSurfaceGetSeed(surface)
-        if seed == lastSeed, !forceKey {
+        if seed == lastSeed, !forceKey, !owed {
             if recheck < 3 {
                 queue.asyncAfter(deadline: .now() + 0.003) { [self] in encode(recheck: recheck + 1) }
             } else {
@@ -457,8 +461,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             }
             return
         }
-        // Skip, rather than queue, when the link has not taken earlier frames.
-        guard link.videoBacklog <= 2 else { return }
+        // Skip, rather than queue, when the link has not taken earlier frames. The screen is then
+        // ahead of what was sent, and may not change again: look once more shortly.
+        guard link.videoBacklog <= 2 else { oweFrame(after: 0.05); return }
         // Skip while the viewer is far behind, so a slow link costs frames and not a growing delay.
         // Encoding resumes from the current screen when the viewer's reports catch up.
         if let oldest = unacked.first, let sent = frames[oldest]?.encodeDone, sent > 0 {
@@ -466,11 +471,15 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             if age > 3 {
                 unacked.removeAll()     // reports stopped coming; do not wait for them forever
             } else if settings.maxLagMs > 0, age > settings.maxLagMs / 1000 {
+                // Its report restarts the encoding. Reports are datagrams and can be lost, so
+                // this is looked at again without one.
                 waitingOnViewer = true
                 damageTime = nil
+                oweFrame(after: 0.5)
                 return
             }
         }
+        owed = false
         lastSeed = seed
         let start = mirrorNow()
         let captured = damageTime ?? start
@@ -479,17 +488,18 @@ final class MirrorSession: NSObject, @unchecked Sendable {
 
         var unmanagedSource: Unmanaged<CVPixelBuffer>?
         CVPixelBufferCreateWithIOSurface(kCFAllocatorDefault, surface, nil, &unmanagedSource)
-        guard let source = unmanagedSource?.takeRetainedValue() else { return }
+        // A frame that cannot be made is owed: `lastSeed` already says this screen was dealt with.
+        guard let source = unmanagedSource?.takeRetainedValue() else { oweFrame(after: 0.1); return }
         var destination: CVPixelBuffer?
         CVPixelBufferPoolCreatePixelBuffer(nil, pool, &destination)
-        guard let destination else { return }
+        guard let destination else { oweFrame(after: 0.1); return }
         if let rotator, let unrotatedPool {
             var scaled: CVPixelBuffer?
             CVPixelBufferPoolCreatePixelBuffer(nil, unrotatedPool, &scaled)
             guard let scaled, VTPixelTransferSessionTransferImage(transfer, from: source, to: scaled) == noErr,
-                  VTPixelRotationSessionRotateImage(rotator, scaled, destination) == noErr else { return }
+                  VTPixelRotationSessionRotateImage(rotator, scaled, destination) == noErr else { oweFrame(after: 0.1); return }
         } else {
-            guard VTPixelTransferSessionTransferImage(transfer, from: source, to: destination) == noErr else { return }
+            guard VTPixelTransferSessionTransferImage(transfer, from: source, to: destination) == noErr else { oweFrame(after: 0.1); return }
         }
 
         let wantKey = forceKey
@@ -510,12 +520,31 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                                         presentationTimeStamp: CMTime(seconds: start, preferredTimescale: 1_000_000),
                                         duration: .invalid, frameProperties: properties, infoFlagsOut: nil) { [weak self] status, _, sample in
             let done = mirrorNow()
-            guard status == noErr, let sample, let self else { return }
+            guard let self else { return }
+            guard status == noErr, let sample else {
+                // The encoder dropped the frame, as its rate control may: the viewer has not got it.
+                self.queue.async { if generation == self.videoGeneration { self.oweFrame(after: 0.05) } }
+                return
+            }
             self.queue.async {
                 // A frame encoded for a stream that has since been replaced would arrive ahead of the new keyframe.
                 guard generation == self.videoGeneration else { return }
                 self.send(sample: sample, frameID: frameID, encodeDone: done)
             }
+        }
+    }
+
+    /// Notes that the screen as it is now did not reach the viewer, and looks again after `delay`:
+    /// by then the link may have room, the viewer may have caught up, or the encoder may take it.
+    /// One look is scheduled at a time, and each look that fails schedules the next.
+    private func oweFrame(after delay: TimeInterval) {
+        owed = true
+        guard !owedCheck else { return }
+        owedCheck = true
+        queue.asyncAfter(deadline: .now() + delay) { [self] in
+            owedCheck = false
+            guard streaming, owed else { return }
+            encode(recheck: 3)
         }
     }
 
@@ -1003,6 +1032,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         sessionStarted = false
         unacked.removeAll()
         waitingOnViewer = false
+        owed = false
         resizeWork?.cancel()
         resizeWork = nil
     }
