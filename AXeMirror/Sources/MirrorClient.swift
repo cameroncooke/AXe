@@ -61,6 +61,8 @@ final class MirrorClient: @unchecked Sendable {
     var onStats: ((Stats) -> Void)?
     var onVideoSize: ((CGSize) -> Void)?
     var onShowing: ((Showing) -> Void)?
+    /// A frame of the simulator now shown is on screen already: called right after `onShowing`.
+    var onPicture: (() -> Void)?
     /// The Mac's simulators: it is waiting for this viewer to choose one.
     var onSimulators: ((MirrorSimulatorList) -> Void)?
     var onProgress: ((MirrorSimulatorProgress) -> Void)?
@@ -588,7 +590,14 @@ final class MirrorClient: @unchecked Sendable {
         watching = showing.udid.isEmpty ? nil : showing.udid
         decodedInWindow = 0
         bytesInWindow = 0
-        DispatchQueue.main.async { [weak self] in self?.onShowing?(showing) }
+        // The stream's first frame travels on another stream and can be here already. It is the
+        // only frame a still screen sends, so the session is told there is a picture: counting
+        // frames from now on, it would wait for one that is not coming.
+        let pictureIsHere = lastImage != nil
+        DispatchQueue.main.async { [weak self] in
+            self?.onShowing?(showing)
+            if pictureIsHere { self?.onPicture?() }
+        }
     }
 
     /// The Mac's list of simulators. Whether it means the Mac is waiting for a choice, or only

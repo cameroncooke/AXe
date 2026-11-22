@@ -1643,6 +1643,7 @@ final class StreamSession {
             self.unansweredSince = nil
             self.stopFolding()
         }
+        client.onPicture = { [weak self] in self?.pictureSeen = true }
         client.onHealth = { [weak self] health in
             guard let self else { return }
             self.health = health.responding ? nil : health
