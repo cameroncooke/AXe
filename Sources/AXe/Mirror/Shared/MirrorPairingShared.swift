@@ -122,6 +122,8 @@ struct MirrorPairReply: Codable, Equatable {
 enum MirrorPairWire {
     static let alpn = Data("axe-mirror-pair/1".utf8)
     static let limit = 4096
+    /// What the viewer writes once it has the Mac's answer: one byte.
+    static let received = Data([0x01])
     struct TooLong: Error {}
 
     static func frame<Message: Encodable>(_ message: Message) throws -> Data {
@@ -224,22 +226,32 @@ enum MirrorPairClient {
                 return await MirrorTimeout.finishes(within: dialSeconds, { try? await endpoint.connect(addr: address, alpn: MirrorPairWire.alpn) }) ?? nil
             }
         }
-        // A dial that gets through after another already has is closed again.
-        let reached = await MirrorTimeout.first(of: dials) { late in try? late.close(errorCode: MirrorClose.stopped, reason: Data()) }
-        if let connection = reached {
+        // The Mac stores this viewer before it answers, so an answer lost on the way leaves the Mac
+        // paired with a viewer that thinks it was refused. The same request is therefore made a
+        // second time before "no" is believed: the Mac gives the viewer it accepted the same
+        // answer again, and waits a little for it to ask (`MirrorPairHost`).
+        var reachedOnce = false
+        for _ in 0..<2 {
+            // A dial that gets through after another already has is closed again.
+            guard let connection = await MirrorTimeout.first(of: dials, late: { late in try? late.close(errorCode: MirrorClose.stopped, reason: Data()) }) else { break }
+            reachedOnce = true
             let reply = await MirrorTimeout.finishes(within: 10) { () -> MirrorPairReply? in
                 guard let stream = try? await connection.openBi(), let frame = try? MirrorPairWire.frame(request),
                       (try? await stream.send().writeAll(buf: frame)) != nil,
                       let header = try? await stream.recv().readExact(size: 4), let length = MirrorPairWire.length(header: header),
-                      let body = try? await stream.recv().readExact(size: UInt32(length)) else { return nil }
-                return try? JSONDecoder().decode(MirrorPairReply.self, from: body)
+                      let body = try? await stream.recv().readExact(size: UInt32(length)),
+                      let reply = try? JSONDecoder().decode(MirrorPairReply.self, from: body) else { return nil }
+                // Tells the Mac its answer arrived, so that it need not wait for the question again.
+                try? await stream.send().writeAll(buf: MirrorPairWire.received)
+                try? await stream.send().finish()
+                return reply
             } ?? nil
             try? connection.close(errorCode: MirrorClose.stopped, reason: Data())
-            // Reaching the endpoint proves the code named a pairing in progress; no answer means the Mac said no.
-            guard let reply else { return .failure(.refused) }
+            guard let reply else { continue }
             return reply.v == 1 && reply.requestId == request.requestId && !reply.hostId.isEmpty ? .success(reply) : .failure(.badReply)
         }
-        return .failure(.notFound)
+        // Reaching the endpoint proves the code named a pairing in progress; no answer means the Mac said no.
+        return .failure(reachedOnce ? .refused : .notFound)
     }
 }
 

@@ -29,8 +29,20 @@ enum MirrorPairHost {
         }
         let paired = await MirrorTimeout.finishes(within: lifetime) { () -> MirrorViewer? in
             while let incoming = await endpoint.acceptNext() {
-                guard let connection = try? await incoming.accept().connect() else { continue }
-                if let viewer = await serve(connection, invitation: invitation, viewers: viewers, reply: reply) { return viewer }
+                guard let connection = try? await incoming.accept().connect(),
+                      let served = await serve(connection, invitation: invitation, viewers: viewers, reply: reply) else { continue }
+                if served.heard { return served.viewer }
+                // The viewer is stored, and did not say the answer reached it: the answer may have
+                // been lost. It asks again if so, and is given the same answer, for a little while.
+                _ = await MirrorTimeout.finishes(within: repeatWithin) { () -> Bool in
+                    while let incoming = await endpoint.acceptNext() {
+                        guard let connection = try? await incoming.accept().connect(),
+                              let again = await serve(connection, invitation: invitation, viewers: viewers, reply: reply) else { continue }
+                        if again.heard { return true }
+                    }
+                    return false
+                }
+                return served.viewer
             }
             return nil
         }
@@ -40,6 +52,10 @@ enum MirrorPairHost {
         }
         return viewer
     }
+
+    /// How long the Mac goes on answering after it has paired a viewer that did not say the answer
+    /// arrived. An app from before viewers said so costs `axe mirror pair` this long at its end.
+    static let repeatWithin: TimeInterval = 12
 
     /// The invitation, shared between connections that arrive together.
     private actor Invitation {
@@ -58,9 +74,12 @@ enum MirrorPairHost {
         }
     }
 
+    /// Answers one connection. Nil when it is refused; otherwise the viewer that is now paired, and
+    /// whether it said the answer reached it.
     private static func serve(_ connection: Connection, invitation: Invitation, viewers: MirrorViewers,
-                              reply: @escaping @Sendable (MirrorPairRequest) -> MirrorPairReply) async -> MirrorViewer? {
+                              reply: @escaping @Sendable (MirrorPairRequest) -> MirrorPairReply) async -> (viewer: MirrorViewer, heard: Bool)? {
         let viewer = connection.remoteId().description
+        let heard = MirrorLastValue()
         let request = await MirrorTimeout.finishes(within: 10) { () -> MirrorPairRequest? in
             guard let stream = try? await connection.acceptBi(),
                   let header = try? await stream.recv().readExact(size: 4), let length = MirrorPairWire.length(header: header),
@@ -73,6 +92,9 @@ enum MirrorPairHost {
                 guard let frame = try? MirrorPairWire.frame(made) else { return nil }
                 try? await stream.send().writeAll(buf: frame)
                 try? await stream.send().finish()
+                // An app from before viewers said so says nothing: that is waited for briefly.
+                let said = await MirrorTimeout.finishes(within: 3) { try? await stream.recv().readExact(size: 1) } ?? nil
+                if said == MirrorPairWire.received { _ = heard.changed(to: ["heard"]) }
                 return request
             }
         } ?? nil
@@ -84,7 +106,8 @@ enum MirrorPairHost {
         // The viewer closes once it has stored this Mac; give the answer a moment to arrive before closing.
         _ = await MirrorTimeout.finishes(within: 5) { await connection.closed() }
         try? connection.close(errorCode: MirrorClose.stopped, reason: Data())
-        return (try? viewers.all())?.first { $0.id == viewer }
+        guard let stored = (try? viewers.all())?.first(where: { $0.id == viewer }) else { return nil }
+        return (stored, heard.current != nil)
     }
 }
 #endif
