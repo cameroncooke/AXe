@@ -110,6 +110,16 @@ struct MirrorConfigTests {
         #expect(!MirrorViewerLayout.topBarShowsRoute(width: 600, buttons: 5, withKeys: true))
     }
 
+    @Test("A pull to refresh lasts until the Mac has answered, long enough to be seen, and not for ever")
+    func refresh() {
+        #expect(!MirrorViewerRules.refreshIsOver(waited: 0.1, answered: false, connected: true))
+        #expect(!MirrorViewerRules.refreshIsOver(waited: 0.1, answered: true, connected: true))      // answered at once: still shown
+        #expect(MirrorViewerRules.refreshIsOver(waited: 0.7, answered: true, connected: true))
+        #expect(!MirrorViewerRules.refreshIsOver(waited: 5, answered: false, connected: true))
+        #expect(MirrorViewerRules.refreshIsOver(waited: 12, answered: false, connected: true))
+        #expect(MirrorViewerRules.refreshIsOver(waited: 0.1, answered: false, connected: false))
+    }
+
     @Test("The app waits longer for the Mac than the Mac allows itself, so the Mac's own word comes first")
     func whoSpeaksFirst() {
         #expect(Double(MirrorViewerRules.choiceAnswerSeconds) > MirrorViewerRules.macListSeconds)

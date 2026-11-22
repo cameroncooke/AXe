@@ -1278,6 +1278,7 @@ final class StreamSession {
     }
 
     private func received(_ list: [MirrorBuild]) {
+        buildListsSeen += 1
         // Builds come over the connection: ask once for the certificate this device will serve
         // them to iOS with.
         if !askedForIdentity, !list.isEmpty {
@@ -1692,6 +1693,7 @@ final class StreamSession {
         }
         client.onSimulators = { [weak self] list in
             guard let self else { return }
+            self.simulatorListsSeen += 1
             self.list = list
             self.busy = [:]         // the list is sent when a shut-down or a delete is done
             // A list can arrive after a simulator has been opened: the answer to a refresh, or to
@@ -1863,6 +1865,31 @@ final class StreamSession {
         asked = .list
         choiceProblem = nil
         client?.requestSimulators()
+    }
+
+    /// How many lists of simulators and of builds the Mac has sent, so that a refresh can wait for
+    /// the next of each.
+    @ObservationIgnored private var simulatorListsSeen = 0
+    @ObservationIgnored private var buildListsSeen = 0
+
+    /// A pull to refresh, on any list of the Mac's simulators or builds: asks the Mac for its
+    /// builds again, and for its simulators too where this device is choosing one, and returns
+    /// when the Mac has answered, which is when the spinner goes (`MirrorViewerRules.refreshIsOver`).
+    /// Builds also arrive by themselves within a few seconds of being published; simulators do
+    /// not, so one booted, shut down or made on the Mac shows after a pull.
+    func refresh() async {
+        guard state == .connected else { return }
+        let simulators = choosing
+        let lists = simulatorListsSeen, buildLists = buildListsSeen
+        if simulators { refreshSimulators() }
+        client?.requestBuilds()
+        let started = Date()
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+            // A list that could not be read is an answer too: it is said at the top of the list.
+            let answered = (!simulators || simulatorListsSeen != lists || choiceProblem != nil) && buildListsSeen != buildLists
+            if MirrorViewerRules.refreshIsOver(waited: Date().timeIntervalSince(started), answered: answered, connected: state == .connected) { return }
+        }
     }
 
     /// The problem a failure carries. A Mac from before problems were sent gives only its own

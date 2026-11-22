@@ -76,6 +76,8 @@ struct MacHub: View {
                 }
                 .screenColumn()
             }
+            // Pulled down, the menu asks the Mac for its simulators and its builds again.
+            .refreshable { await session.refresh() }
             .background(Color.black)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

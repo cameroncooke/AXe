@@ -78,6 +78,16 @@ enum MirrorViewerRules {
         return scale == scale.rounded() ? "\(size), \(Int(scale))x" : "\(size), \(String(format: "%.1f", scale))x"
     }
 
+    /// Whether a pull to refresh is over. It lasts until the Mac has sent what was asked for
+    /// (`answered`), and at least `refreshShows` seconds, so that the spinner is seen to have
+    /// turned: a refresh that ended the moment it began looked as if nothing had been asked. It
+    /// gives up after `refreshWaits`, and at once when the Mac is out of reach.
+    static func refreshIsOver(waited: Double, answered: Bool, connected: Bool) -> Bool {
+        !connected || waited >= refreshWaits || (answered && waited >= refreshShows)
+    }
+    static let refreshShows: Double = 0.6
+    static let refreshWaits: Double = 12
+
     /// How long the app waits for the Mac to say it has started on a choice, in seconds. The Mac
     /// first reads its list of simulators and allows itself `macListSeconds` for that before it
     /// says the Mac was slow: the app must wait longer, so that the Mac's own word comes first.

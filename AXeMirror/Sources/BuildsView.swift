@@ -54,6 +54,7 @@ struct BuildsList: View {
 
     var body: some View {
         list(BuildApp.group(session.builds))
+            .refreshable { await session.refresh() }
             .screenColumn()
             .background(Color.black)
             .navigationTitle("Builds")
@@ -395,6 +396,8 @@ struct BuildsPlace: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        // Pulled down, an app's builds are asked for again.
+        .refreshable { await session.refresh() }
         .background(Color.black)
         // No title of its own: side by side, the build says which app it is, and the narrow
         // screens bring their own.

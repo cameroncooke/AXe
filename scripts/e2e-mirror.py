@@ -17,7 +17,7 @@ What it proves, in order:
      back to the list and asks whether to leave the simulator running or shut it down, the list's
      Close leaves the Mac, and a simulator can be deleted
      a simulator deleted on the Mac since the list was read and then chosen is reported in plain
-     words, with no tool names
+     words, with no tool names; one made on the Mac since shows after a pull to refresh
      a second paired viewer connects while the first is connected, and neither takes the other's place
   5. an unpaired viewer is refused
   6. a demo host keeps its visitor inside the sample app (another app in front is replaced)
@@ -60,6 +60,7 @@ MAC_NAME = "E2E Mac"
 SCRATCH_NAME = "AXe E2E Mirror Scratch"
 CREATED_NAME = "AXe E2E Mirror Created"
 GONE_NAME = "AXe E2E Mirror Gone"
+LATE_NAME = "AXe E2E Mirror Late"
 results = []
 children = []
 scratch = []        # simulators this run made; deleted when it ends
@@ -870,6 +871,26 @@ def main():
         wait_for("the problem to go", lambda: viewer.find(identifier="chooser.problem") is None, 10)
     except TimeoutError as error:
         failed("a failure on the Mac is said in plain words, without its tools' names", str(error))
+    # 4f. The Mac does not send its simulators again by itself: one made on the Mac while the app
+    # has the list shows after the list is pulled down. The problem brought the app back to the
+    # Simulators screen, which is pulled; the first pulls bring it to its top. A simulator that
+    # has never run is under All simulators, so that is where it is looked for.
+    try:
+        for leftover in named(LATE_NAME):
+            delete(leftover)
+        wait_for("the list of simulators", lambda: viewer.find(identifier="chooser.new"), 15)
+        late = run(["xcrun", "simctl", "create", LATE_NAME, *newest_iphone()]).stdout.strip()
+        scratch.append(late)
+        width, height = viewer.screen()
+        for _ in range(3):
+            viewer.axe_run("swipe", "--start-x", str(width / 2), "--start-y", str(height * 0.3), "--end-x", str(width / 2), "--end-y", str(height * 0.85))
+            time.sleep(1.5)
+        viewer.scroll_to("chooser.all")
+        viewer.axe_run("tap", "--id", "chooser.all")
+        wait_for("all the simulators", lambda: viewer.find(identifier="chooser.allList") or viewer.find(label="All simulators"), 15)
+        check("a simulator made on the Mac shows in the app after a pull to refresh", viewer.scroll_to("chooser.simulator." + late) is not None)
+    except (TimeoutError, RuntimeError) as error:
+        failed("a simulator made on the Mac shows in the app after a pull to refresh", str(error))
     for _ in range(3):      # from All simulators, by way of the list, to the Mac's menu
         if viewer.find(identifier="hub.simulators") is not None:
             break

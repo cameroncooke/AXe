@@ -175,7 +175,7 @@ struct SimulatorChooser: View {
                 }
             }
             .modifier(Searching(on: !beside, text: $search))
-            .refreshable { session.refreshSimulators() }
+            .refreshable { await session.refresh() }
             .confirmsDeleting($deleting, on: macName, with: session)
     }
 
@@ -598,7 +598,7 @@ struct AllSimulators: View {
         .navigationTitle("All simulators")
         .navigationBarTitleDisplayMode(.inline)
         .searchable(text: $search, prompt: "Search simulators")
-        .refreshable { session.refreshSimulators() }
+        .refreshable { await session.refresh() }
         .confirmsDeleting($deleting, on: macName, with: session)
         .accessibilityIdentifier("chooser.allList")
     }
