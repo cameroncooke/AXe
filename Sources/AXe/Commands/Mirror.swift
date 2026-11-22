@@ -50,7 +50,7 @@ enum MirrorHelp {
     ]
 
     static let usage = """
-    axe mirror [--udid <udid>] [--relay-url <relay-url>] [--demo] [--demo-app <demo-app>]
+    axe mirror [--udid <udid>] [--relay-url <relay-url>] [--demo --demo-app <demo-app>]
     axe mirror pair [--name <name>] [--json] [--relay-url <relay-url>]
     axe mirror viewers [--json]
     axe mirror unpair <viewer>
@@ -114,10 +114,10 @@ struct MirrorStartCommand: AsyncParsableCommand {
         help: ArgumentHelp("Let any viewer that knows the host ID connect. For tests only.", visibility: .hidden))
     var allowUnpaired = false
 
-    @Flag(name: .long, help: "Run as a public demo: any viewer may connect without pairing, one at a time, and is kept inside one app. Uses its own key.")
+    @Flag(name: .long, help: "Run as a public demo: any viewer may connect without pairing, one at a time, and is kept inside the app named by --demo-app. Uses its own key.")
     var demo = false
 
-    @Option(name: .customLong("demo-app"), help: "With --demo: the bundle ID of the app kept in front.")
+    @Option(name: .customLong("demo-app"), help: "With --demo, which needs it: the bundle ID of the app kept in front.")
     var demoApp: String?
 
     @Flag(name: .customLong("relay-only"),
@@ -157,6 +157,11 @@ struct MirrorStartCommand: AsyncParsableCommand {
         }
         guard demoApp == nil || demo else {
             throw ValidationError("--demo-app needs --demo.")
+        }
+        // Without an app to keep in front, a stranger would have the whole simulator: its Safari
+        // reaches this Mac's own network.
+        guard !demo || demoApp?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
+            throw ValidationError("--demo needs --demo-app: the bundle ID of the one app its visitors are kept inside.")
         }
     }
 

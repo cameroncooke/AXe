@@ -115,7 +115,7 @@ None of these is used in a normal run.
 | `-MirrorDemoRelay <URL>` | The relay that demo host listens on |
 | `-MirrorSampleHosts YES` | Fills the list with example Macs, for screenshots |
 
-For example, to try the app in a simulator against a demo host on the same Mac, start `axe mirror --udid <UDID> --demo`, take the `hostID` from its `endpoint` line, and launch the app with it:
+For example, to try the app in a simulator against a demo host on the same Mac, start `axe mirror --udid <UDID> --demo --demo-app <bundle ID>`, take the `hostID` from its `endpoint` line, and launch the app with it:
 
 ```bash
 xcrun simctl launch <VIEWER_UDID> com.cameroncooke.axemirror -MirrorDemoHost <host ID>

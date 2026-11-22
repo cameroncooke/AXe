@@ -125,4 +125,13 @@ struct MirrorSimulatorControlTests {
         #expect(hosted.simulatorUDID == "ABC")
         #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "--demo"]) }
     }
+
+    @Test("A demo needs the app its visitors are kept inside")
+    func demoNeedsItsApp() throws {
+        // Without one there is nothing to keep a stranger out of the rest of the simulator.
+        #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "--demo", "--udid", "ABC"]) }
+        #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "--demo", "--udid", "ABC", "--demo-app", " "]) }
+        let demo = try #require(try Axe.parseAsRoot(["mirror", "--demo", "--udid", "ABC", "--demo-app", "com.example.app"]) as? MirrorStartCommand)
+        #expect(demo.demo && demo.demoApp == "com.example.app")
+    }
 }
