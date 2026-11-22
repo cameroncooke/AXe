@@ -126,6 +126,39 @@ struct MirrorSimulatorControlTests {
         #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "--demo"]) }
     }
 
+    @Test("A forced shut-down kills the simulator's own processes and nothing of the user's")
+    func forcedShutDownSparesBystanders() {
+        typealias Running = MirrorSimulatorControl.RunningProcess
+        let udid = "00D041E4-1868-4C69-9FB8-CC9A5E4497C8"
+        let device = "/Users/me/Library/Developer/CoreSimulator/Devices/\(udid)"
+        let runtime = "/Library/Developer/CoreSimulator/Volumes/iOS_23A1/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 27.3.simruntime/Contents/Resources/RuntimeRoot"
+        let table = [
+            Running(pid: 100, parent: 1, executable: runtime + "/sbin/launchd_sim", started: 1),
+            Running(pid: 101, parent: 100, executable: runtime + "/usr/libexec/backboardd", started: 2),
+            Running(pid: 102, parent: 100, executable: device + "/data/Containers/Bundle/Application/A/App.app/App", started: 3),
+            Running(pid: 103, parent: 102, executable: runtime + "/usr/libexec/helper", started: 4),
+            // The user's own: a log reader and an editor with the simulator's files open, and a shell under one of them.
+            Running(pid: 200, parent: 50, executable: "/usr/bin/tail", started: 5),
+            Running(pid: 201, parent: 50, executable: "/Applications/Editor.app/Contents/MacOS/Editor", started: 6),
+            Running(pid: 202, parent: 200, executable: "/bin/zsh", started: 7),
+            Running(pid: 300, parent: 1, executable: runtime + "/usr/libexec/orphan", started: 8),
+        ]
+        // `pgrep -f` for the simulator's bootstrap file finds its launchd, and the tail reading that file.
+        let tree = MirrorSimulatorControl.simulatorTree(roots: [100, 200], in: table)
+        #expect(tree.map(\.pid) == [100, 101, 102, 103])
+        // `pgrep -f` for the simulator's folder finds the app, the orphan, the tail and the editor.
+        let strays = MirrorSimulatorControl.strays(udid: udid, matching: [102, 300, 200, 201], in: table)
+        #expect(strays.map(\.pid) == [102, 300])
+        // A process given a dead one's ID is another process: it is not in the list read before.
+        #expect(!tree.contains(Running(pid: 101, parent: 1, executable: "/usr/bin/ssh", started: 99)))
+    }
+
+    @Test("The process table names this process and what it runs from")
+    func processTable() throws {
+        let own = try #require(MirrorSimulatorControl.runningProcesses().first { $0.pid == getpid() })
+        #expect(own.parent == getppid() && own.executable.hasPrefix("/") && own.started > 1_600_000_000_000_000)
+    }
+
     @Test("A demo needs the app its visitors are kept inside")
     func demoNeedsItsApp() throws {
         // Without one there is nothing to keep a stranger out of the rest of the simulator.

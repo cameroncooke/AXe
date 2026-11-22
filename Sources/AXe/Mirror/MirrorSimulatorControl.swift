@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// What a mirror host started without `--udid` does to this Mac's simulators on a viewer's behalf:
@@ -138,13 +139,18 @@ enum MirrorSimulatorControl {
         // however the shutdown went: simctl reported a frozen simulator shut down while its
         // processes were still there, and the next boot did not finish.
         let bootstrap = "CoreSimulator/Devices/\(udid)/data/var/run/launchd_bootstrap.plist"
-        let tree = descendants(of: processes(matching: bootstrap))
+        let tree = simulatorTree(roots: processes(matching: bootstrap), in: runningProcesses())
         let stopped = (try? await simctl(["shutdown", udid], timeout: 30)) != nil
-        for pid in tree.reversed() where kill(pid, 0) == 0 { kill(pid, SIGKILL) }
+        // Half a minute may have passed: a process is killed only if it is still the one that was
+        // read, not another that has since been given its ID.
+        let now = runningProcesses()
+        for process in tree.reversed() where now.contains(process) { kill(process.pid, SIGKILL) }
         if stopped { return }
         for _ in 0..<40 {
             if try await state(of: udid) == "Shutdown" { return }
-            for pid in processes(matching: "CoreSimulator/Devices/\(udid)/") { kill(pid, SIGKILL) }
+            for process in strays(udid: udid, matching: processes(matching: "CoreSimulator/Devices/\(udid)/"), in: runningProcesses()) {
+                kill(process.pid, SIGKILL)
+            }
             try await Task.sleep(nanoseconds: 500_000_000)
         }
         throw CLIError(errorDescription: "The simulator did not stop, even when forced. Quit Simulator.app and try again.", code: .timeout)
@@ -197,31 +203,55 @@ enum MirrorSimulatorControl {
         return nil
     }
 
-    /// `roots` and every process under them, parents before children, from one `ps` listing.
-    private static func descendants(of roots: [pid_t]) -> [pid_t] {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/bin/ps")
-        process.arguments = ["-A", "-o", "pid=,ppid="]
-        let output = Pipe()
-        process.standardOutput = output
-        process.standardError = FileHandle.nullDevice
-        guard (try? process.run()) != nil else { return roots }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        var children: [pid_t: [pid_t]] = [:]
-        for line in String(decoding: data, as: UTF8.self).split(whereSeparator: \.isNewline) {
-            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
-            guard parts.count == 2, let pid = pid_t(parts[0]), let parent = pid_t(parts[1]) else { continue }
-            children[parent, default: []].append(pid)
+    /// A process as a forced shut-down sees it. `started` tells it from a later process that has
+    /// been given the same ID.
+    struct RunningProcess: Equatable, Sendable {
+        var pid: pid_t
+        var parent: pid_t
+        var executable: String
+        var started: UInt64     // microseconds since 1970
+    }
+
+    /// Every process this user can see, from the system's own tables.
+    static func runningProcesses() -> [RunningProcess] {
+        var pids = [pid_t](repeating: 0, count: 8192)
+        let filled = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        guard filled > 0 else { return [] }
+        return pids.prefix(Int(filled)).compactMap { pid in
+            var info = proc_bsdinfo()
+            guard pid > 0, proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, Int32(MemoryLayout<proc_bsdinfo>.size)) == Int32(MemoryLayout<proc_bsdinfo>.size) else { return nil }
+            var path = [CChar](repeating: 0, count: 4096)
+            guard proc_pidpath(pid, &path, UInt32(path.count)) > 0 else { return nil }
+            return RunningProcess(pid: pid, parent: pid_t(info.pbi_ppid), executable: String(cString: path),
+                                  started: info.pbi_start_tvsec * 1_000_000 + info.pbi_start_tvusec)
         }
-        var found: [pid_t] = []
-        var queue = roots
+    }
+
+    /// The simulator's own launchd among `roots`, and every process under it, parents before
+    /// children. `roots` are processes whose command line names the simulator's bootstrap file,
+    /// which also fits a `tail` or an editor someone has open on that file: only a `launchd_sim`
+    /// is taken, so nothing of the user's own is killed with the simulator.
+    static func simulatorTree(roots: [pid_t], in table: [RunningProcess]) -> [RunningProcess] {
+        var children: [pid_t: [RunningProcess]] = [:]
+        for process in table { children[process.parent, default: []].append(process) }
+        var found: [RunningProcess] = []
+        var queue = table.filter { roots.contains($0.pid) && ($0.executable as NSString).lastPathComponent == "launchd_sim" }
         while !queue.isEmpty {
-            let pid = queue.removeFirst()
-            found.append(pid)
-            queue.append(contentsOf: children[pid] ?? [])
+            let process = queue.removeFirst()
+            found.append(process)
+            queue.append(contentsOf: children[process.pid] ?? [])
         }
-        return found.filter { $0 > 1 && $0 != getpid() }
+        return found.filter { $0.pid > 1 && $0.pid != getpid() }
+    }
+
+    /// Of the processes whose command line names the simulator's folder (`matching`), the ones
+    /// that are the simulator's own: programs that run from its folder or from a simulator
+    /// runtime. A log reader, an editor or a build with a file of the simulator's open is none of them.
+    static func strays(udid: String, matching: [pid_t], in table: [RunningProcess]) -> [RunningProcess] {
+        table.filter { process in
+            guard matching.contains(process.pid), process.pid > 1, process.pid != getpid() else { return false }
+            return process.executable.contains("/CoreSimulator/Devices/\(udid)/") || process.executable.contains(".simruntime/")
+        }
     }
 
     /// The IDs of the processes whose command line contains `text`.
