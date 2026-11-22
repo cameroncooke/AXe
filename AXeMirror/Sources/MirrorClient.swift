@@ -500,6 +500,8 @@ final class MirrorClient: @unchecked Sendable {
     /// The longest message the Mac may send: one video frame. A keyframe of a large screen is a few
     /// hundred kilobytes.
     private static let messageLimit: UInt32 = 8 * 1024 * 1024
+    /// The most of one message read in one go: see `readMessages`.
+    private static let readAtOnce: UInt32 = 32 * 1024
 
     private func readMessages(from stream: RecvStream, generation current: Int, video number: UInt32? = nil) async {
         do {
@@ -507,7 +509,18 @@ final class MirrorClient: @unchecked Sendable {
                 let head = try await stream.readExact(size: 4)
                 let length = head.withUnsafeBytes { $0.loadUnaligned(as: UInt32.self) }
                 guard length >= 1, length <= Self.messageLimit else { break }
-                let body = try await stream.readExact(size: length)
+                // A long message, a piece of a build above all, is read a part at a time, and each
+                // part that arrives says the Mac is there. Read whole, a 512 KiB piece on a link
+                // slower than about 280 kbit/s took over `silenceLimit` to arrive, and a connection
+                // that was working was dropped as dead, again and again.
+                var body = Data(capacity: Int(length))
+                while body.count < Int(length) {
+                    body.append(try await stream.readExact(size: min(length - UInt32(body.count), Self.readAtOnce)))
+                    if body.count < Int(length) {
+                        let heard = Self.now()
+                        queue.async { [self] in if current == generation { lastHeard = max(lastHeard, heard) } }
+                    }
+                }
                 let received = Self.now()
                 guard let type = body.first else { continue }
                 let payload = Data(body.dropFirst())
