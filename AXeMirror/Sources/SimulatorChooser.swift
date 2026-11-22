@@ -106,7 +106,7 @@ struct SimulatorChooser: View {
                     if !tiles {
                         Section {
                             if running.isEmpty {
-                                nothingRunning(canCreate: !list.runtimes.isEmpty, any: !list.simulators.isEmpty)
+                                NothingRunning(macName: macName, canCreate: !list.runtimes.isEmpty, any: !list.simulators.isEmpty) { creating = true }
                             } else {
                                 ForEach(running) { SimulatorRow(simulator: $0, session: session, prominent: true) { deleting = $0 } }
                             }
@@ -200,16 +200,35 @@ struct SimulatorChooser: View {
 
     private static let problemID = "chooser.problem.section"
 
-    /// What the first section says when no simulator is running: that, and the two ways on.
-    private func nothingRunning(canCreate: Bool, any: Bool) -> some View {
+}
+
+/// What the first section says when no simulator is running. With simulators to start, they are
+/// right below and New is in the bar, so it only says so. With none on the Mac at all there is
+/// nothing below to tap, and making one is the way on: then, and only then, it has the button.
+private struct NothingRunning: View {
+    let macName: String
+    /// The Mac has an iOS version to make a simulator with.
+    let canCreate: Bool
+    /// The Mac has simulators, though none is running.
+    let any: Bool
+    let create: () -> Void
+
+    var body: some View {
         VStack(spacing: 10) {
             Artwork(scene: .nothingRunning, width: 190)
             Text("Nothing is running").font(.title3.weight(.semibold))
-            Text(any ? "Start a simulator below, or make a new one." : canCreate ? "\(macName) has no iOS simulators yet." : "\(macName) has no iOS simulators and no iOS runtime to make one with. Install one in Xcode.")
+            Text(any ? "Start a simulator below." : canCreate ? "\(macName) has no iOS simulators yet." : "\(macName) has no iOS simulators and no iOS runtime to make one with. Install one in Xcode.")
                 .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
-            if canCreate {
-                Button { creating = true } label: {
-                    Label("New simulator", systemImage: "plus").font(.subheadline.weight(.semibold))
+            if canCreate, !any {
+                Button(action: create) {
+                    // A stack, not a Label: in a list a Label keeps a column for its icon and tints
+                    // it with the accent colour, which on this button left a gap where the plus
+                    // was and the words off to the right of it.
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus")
+                        Text("New simulator")
+                    }
+                    .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.borderedProminent)
                 .padding(.top, 2)
