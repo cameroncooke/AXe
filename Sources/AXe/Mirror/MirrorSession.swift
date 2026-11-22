@@ -131,6 +131,10 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     private var videoGeneration = 0         // counts video stream restarts; frames encoded for an older one are dropped
     private var viewerNetwork = ""
     private var adaptTimer: DispatchSourceTimer?
+    private var lastKeyframeRequest: TimeInterval = 0   // when a keyframe the viewer asked for was last made
+    private var keyframeQueued = false
+    /// The least time between two keyframes made because the viewer asked.
+    static let keyframeSpacing: TimeInterval = 0.25
     private var blockedGesture: UInt32?     // demo only: the gesture now being dropped
     private var demoLock: MirrorDemoLock?   // demo only: keeps the visitor inside the sample app
     /// The host cannot go on: the message says why.
@@ -725,9 +729,25 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 encode(recheck: 3)
             }
         case 12:    // keyframe request
+            // A keyframe costs many times what another frame does, so a viewer gets them no faster
+            // than `keyframeSpacing`, and through the frame-rate limit like any other frame. One
+            // asked for sooner is made when its time comes.
             unacked.removeAll()
-            forceKey = true
-            encode(recheck: 3)
+            let wait = lastKeyframeRequest + Self.keyframeSpacing - mirrorNow()
+            if wait <= 0 {
+                lastKeyframeRequest = mirrorNow()
+                forceKey = true
+                scheduleEncode(recheck: 3)
+            } else if !keyframeQueued {
+                keyframeQueued = true
+                queue.asyncAfter(deadline: .now() + wait) { [self] in
+                    keyframeQueued = false
+                    guard streaming else { return }
+                    lastKeyframeRequest = mirrorNow()
+                    forceKey = true
+                    scheduleEncode(recheck: 3)
+                }
+            }
         case 13:    // viewer info: its network and the size of its pane
             guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
             if let network = json["network"] as? String, network != viewerNetwork {

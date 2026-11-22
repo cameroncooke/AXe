@@ -126,6 +126,8 @@ final class MirrorLink: @unchecked Sendable {
     private var lastHeard: TimeInterval = 0
     /// The longest control message a viewer may send. Nothing the viewer sends is near this.
     static let messageLimit = 64 * 1024
+    /// How long a connection has to open its control stream before it is closed.
+    static let handshakeSeconds: TimeInterval = 10
 
     init(queue: DispatchQueue) { self.queue = queue }
 
@@ -138,18 +140,37 @@ final class MirrorLink: @unchecked Sendable {
     /// connection this link had.
     func serve(_ connection: Connection) async throws {
         let viewer = connection.remoteId().description
-        lock.lock()
-        let now = ProcessInfo.processInfo.systemUptime
-        let occupied = self.connection != nil && connectedViewer != viewer && now - lastHeard < 5
-        let occupiedFor: TimeInterval? = occupied ? now - connectedAt : nil
-        lock.unlock()
-        if let occupiedFor, turnsAwayWhileBusy?(occupiedFor) == true {
+        /// Whether another viewer has this place now and keeps it. Asked when the connection
+        /// arrives, and again once it has opened its control stream: a connection that arrived
+        /// while the place was free and then waited would otherwise take it from whoever came since.
+        func turnedAway() -> Bool {
+            lock.lock()
+            let now = ProcessInfo.processInfo.systemUptime
+            let occupied = self.connection != nil && connectedViewer != viewer && now - lastHeard < MirrorDemo.presentWithin
+            let occupiedFor: TimeInterval? = occupied ? now - connectedAt : nil
+            lock.unlock()
+            guard let occupiedFor, turnsAwayWhileBusy?(occupiedFor) == true else { return false }
             try? connection.close(errorCode: MirrorClose.busy, reason: Data("busy".utf8))
             onNote?("turned away \(viewer): another viewer is connected")
-            return
+            return true
         }
-        let controlStream = try await connection.acceptBi()
-        _ = try await controlStream.recv().readExact(size: 1)
+        if turnedAway() { return }
+        // A connection that opens no control stream is not waited on for ever.
+        let slow = Task {
+            try? await Task.sleep(nanoseconds: UInt64(Self.handshakeSeconds * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            try? connection.close(errorCode: MirrorClose.timeout, reason: Data("no control stream".utf8))
+        }
+        let controlStream: BiStream
+        do {
+            controlStream = try await connection.acceptBi()
+            _ = try await controlStream.recv().readExact(size: 1)
+            slow.cancel()
+        } catch {
+            slow.cancel()
+            throw error
+        }
+        if turnedAway() { return }
         let controlSend = controlStream.send(), controlReceive = controlStream.recv()
         try? await controlSend.setPriority(p: 1)    // pongs must not wait behind video
         let (controlData, controlInput) = AsyncStream<Data>.makeStream()
@@ -158,9 +179,10 @@ final class MirrorLink: @unchecked Sendable {
         control?.finish()
         video?.finish()
         self.connection = connection
-        connectedAt = ProcessInfo.processInfo.systemUptime
+        let now = ProcessInfo.processInfo.systemUptime
+        connectedAt = MirrorDemo.turnStart(viewer: viewer, previousViewer: connectedViewer, previousStart: connectedAt, lastHeard: lastHeard, now: now)
         connectedViewer = viewer
-        lastHeard = connectedAt
+        lastHeard = now
         control = controlInput
         video = nil
         videoSend = nil

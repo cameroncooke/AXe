@@ -43,6 +43,17 @@ struct MirrorConfigTests {
         #expect(!MirrorDemo.blocksTouch(downAt: 0.92))
     }
 
+    @Test("A demo visitor who connects again carries on with the turn it had, and a new visitor starts one")
+    func demoTurn() {
+        // Connected at 100, last heard from at 250, connecting again at 252: the turn still began at 100,
+        // so at 280 it is over and a newcomer is let in.
+        let again = MirrorDemo.turnStart(viewer: "a", previousViewer: "a", previousStart: 100, lastHeard: 250, now: 252)
+        #expect(again == 100 && !MirrorDemo.isBusy(connectedFor: 281 - again))
+        // Another visitor, or the same one back after being gone, starts a turn of its own.
+        #expect(MirrorDemo.turnStart(viewer: "b", previousViewer: "a", previousStart: 100, lastHeard: 250, now: 252) == 252)
+        #expect(MirrorDemo.turnStart(viewer: "a", previousViewer: "a", previousStart: 100, lastHeard: 200, now: 252) == 252)
+    }
+
     @Test("The demo's lock passes touches on only while the sample app is in front")
     func demoLock() {
         var state = MirrorDemo.LockState()

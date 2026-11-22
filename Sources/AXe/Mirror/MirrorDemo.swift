@@ -21,6 +21,16 @@ enum MirrorDemo {
         return seconds < turn
     }
 
+    /// A viewer heard from this recently is still there.
+    static let presentWithin: TimeInterval = 5
+
+    /// When the turn of a visitor who has just connected began. A visitor who replaces its own
+    /// connection, as one does after a moment without signal, carries on with the turn it had:
+    /// otherwise connecting again every few minutes would keep the demo for ever.
+    static func turnStart(viewer: String, previousViewer: String, previousStart: TimeInterval, lastHeard: TimeInterval, now: TimeInterval) -> TimeInterval {
+        viewer == previousViewer && now - lastHeard < presentWithin ? previousStart : now
+    }
+
     /// The most a demo stream may use, whatever the viewer asks for.
     static let megabits = 4.0
 
