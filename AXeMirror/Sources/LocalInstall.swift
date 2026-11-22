@@ -236,6 +236,20 @@ final class LocalInstallServer: @unchecked Sendable {
         connection.send(content: message, contentContext: .finalMessage, isComplete: true, completion: .contentProcessed { _ in connection.cancel() })
     }
 
+    /// Removes the builds this device has kept, all but those whose IDs are in `keeping`. Each
+    /// install left its build in the caches folder for good; iOS empties that folder only when
+    /// the device is short of room. Returns how many went.
+    @discardableResult
+    static func tidy(keeping: Set<String>, in folder: URL? = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first) -> Int {
+        guard let folder, let files = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil) else { return 0 }
+        var removed = 0
+        for file in files where file.pathExtension == "ipa" && file.lastPathComponent.hasPrefix("build-") {
+            let id = String(file.deletingPathExtension().lastPathComponent.dropFirst("build-".count))
+            if !keeping.contains(id), (try? FileManager.default.removeItem(at: file)) != nil { removed += 1 }
+        }
+        return removed
+    }
+
     /// The SHA-256 of a file, in hex, read a megabyte at a time.
     static func digest(of file: URL) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: file) else { return nil }

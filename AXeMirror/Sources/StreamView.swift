@@ -998,6 +998,8 @@ final class StreamSession {
     @ObservationIgnored private var identityProblem: String?
     @ObservationIgnored private var fetch: (build: MirrorBuild, host: String, file: URL, handle: FileHandle)?
     /// The fetch has no connection to go on with, and carries on when there is one: see `resumeFetch`.
+    /// The build last handed to iOS, which may still be taking it from this device.
+    @ObservationIgnored private var lastHanded: String?
     @ObservationIgnored private var fetchWaits = false
     @ObservationIgnored private var fetchWatch: Task<Void, Never>?
     @ObservationIgnored private var keepAwake = UIBackgroundTaskIdentifier.invalid
@@ -1103,7 +1105,10 @@ final class StreamSession {
         // and hashing a large build takes seconds, and the screen stood still for them. Shown as
         // a fetch at nothing meanwhile, which also keeps a second tap from starting another.
         fetching = (build.id, 0, build.size ?? 0)
+        // Only the build being installed and the one handed to iOS last are kept on the device.
+        let keeping = Set([build.id, lastHanded].compactMap { $0 })
         Task.detached {
+            LocalInstallServer.tidy(keeping: keeping)
             let kept = build.sha256.map { FileManager.default.fileExists(atPath: file.path) && LocalInstallServer.digest(of: file) == $0 } ?? false
             await MainActor.run { [weak self] in
                 guard let self, self.fetch == nil, self.fetching?.id == build.id else { return }
@@ -1215,6 +1220,7 @@ final class StreamSession {
         guard let server = installServer else { return }
         let manifest = server.serve(build.id, LocalInstallServer.Served(file: file, bundleID: build.bundleID, buildNumber: build.build, title: build.name, host: host))
         guard let text = MirrorBuild.installURL(manifest: manifest), let link = URL(string: text) else { return }
+        lastHanded = build.id
         takenByIOS = nil
         stayAwake()
         open(build, link)
