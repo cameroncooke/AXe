@@ -159,6 +159,11 @@ struct MirrorSimulatorControlTests {
         #expect(own.parent == getppid() && own.executable.hasPrefix("/") && own.started > 1_600_000_000_000_000)
     }
 
+    @Test("A touch connection that fails to open is tried again: soon at first, then every half minute")
+    func inputRetries() {
+        #expect((1...6).map { MirrorSession.inputRetryDelay(afterFailures: $0) } == [2, 4, 8, 16, 30, 30])
+    }
+
     @Test("A demo needs the app its visitors are kept inside")
     func demoNeedsItsApp() throws {
         // Without one there is nothing to keep a stranger out of the rest of the simulator.

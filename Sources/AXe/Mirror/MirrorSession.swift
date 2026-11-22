@@ -101,6 +101,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
     /// This viewer's connection. The host hands it each connection the viewer makes.
     let link: MirrorLink
     private var input: MirrorInput?
+    private var inputOpening = false            // the touch connection is being opened
+    private var inputNumber = 0                 // counts attempts to open it; an older one's result is dropped
+    private var inputFailures = 0               // attempts in a row that failed
     /// One event for the command to print: a name and its fields.
     var onEvent: (([String: String]) -> Void)?
 
@@ -197,6 +200,11 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             }
             link.onConnected = { [weak self] in
                 self?.endSession()
+                // A viewer is here to touch it: do not make it wait out a retry that is counting down.
+                if let self, self.input == nil, !self.inputOpening, self.simulator != nil {
+                    self.inputFailures = 0
+                    self.startInput()
+                }
                 self?.onEvent?(["event": "viewerConnected"])
                 self?.demoLock?.visitorArrived()
             }
@@ -248,8 +256,17 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         link.close(reason: reason, code: code)
     }
 
+    /// Opens the simulator's touch connection, unless it is open or being opened. Called when a
+    /// simulator is attached, and again whenever there is still none: when the screen's surface
+    /// first arrives, when a viewer connects, and a while after an attempt has failed (2 seconds,
+    /// then twice as long each time, up to 30). Without that, one failure, or a surface that was
+    /// not there yet, left the session showing video and dropping every touch until the host was
+    /// started again.
     private func startInput() {
-        guard let surface, let simulator else { return }
+        guard let surface, let simulator, input == nil, !inputOpening else { return }
+        inputOpening = true
+        inputNumber += 1
+        let number = inputNumber
         let scale = Double(simulator.screenInfo?.scale ?? 3)
         var width = Double(IOSurfaceGetWidth(surface)) / scale, height = Double(IOSurfaceGetHeight(surface)) / scale
         let aimed = hasHinge
@@ -271,14 +288,26 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 owner.onResult = { [weak self] ok in self?.queue.async { self?.noteHealth { $0.touch(ok: ok) } } }
                 queue.async {
                     // The viewer may have moved to another simulator while this one's input was opening.
-                    guard self.simulator === simulator else { owner.close(); return }
+                    guard number == self.inputNumber, self.simulator === simulator else { owner.close(); return }
+                    self.inputOpening = false
+                    self.inputFailures = 0
                     owner.rotation = self.rotation
                     self.input = owner
                     self.noteHealth { $0.input(ready: true) }
                 }
                 mirrorNote("input ready: \(Int(width))x\(Int(height)) points\(aimed ? ", aimed at the lit screen" : "")")
             } catch {
-                mirrorNote("input unavailable: \(error)")
+                queue.async {
+                    guard number == self.inputNumber, self.simulator === simulator else { return }
+                    self.inputOpening = false
+                    self.inputFailures += 1
+                    let wait = MirrorSession.inputRetryDelay(afterFailures: self.inputFailures)
+                    mirrorNote("input unavailable: \(error); trying again in \(Int(wait)) s")
+                    self.queue.asyncAfter(deadline: .now() + wait) { [weak self] in
+                        guard let self, number == self.inputNumber, self.simulator === simulator else { return }
+                        self.startInput()
+                    }
+                }
             }
         }
         // A stuck simulator's touch connection neither opens nor fails.
@@ -286,6 +315,11 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             guard let self, self.simulator === simulator, self.input == nil else { return }
             self.noteHealth { $0.input(ready: false) }
         }
+    }
+
+    /// How long after a failed attempt to open the touch connection the next one is made.
+    static func inputRetryDelay(afterFailures failures: Int) -> TimeInterval {
+        min(30, 2 * pow(2, Double(max(1, failures) - 1)))
     }
 
     // MARK: Framebuffer callbacks (on `queue`)
@@ -319,6 +353,8 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         guard number == tapNumber else { return }
         self.surface = surface
         forceKey = true
+        // The surface was not there when the simulator was attached: its touches can be opened now.
+        if surface != nil, input == nil { startInput() }
         if sessionStarted { rebuild() }
         frameReady()
     }
@@ -1453,6 +1489,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         shutMended = false
         responsiveness = MirrorResponsiveness()
         retargetNumber += 1
+        inputNumber += 1
+        inputOpening = false
+        inputFailures = 0
         self.simulator = nil
         surface = nil
         lastSeed = 0
