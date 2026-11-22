@@ -139,11 +139,11 @@ struct PairView: View {
                 .font(.title2.weight(.bold))
                 .multilineTextAlignment(.center)
             VStack(spacing: 6) {
-                Text("To show a simulator, run this on your Mac:")
+                Text("To use its simulators from here, run this on your Mac:")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text("axe mirror --udid <UDID>")
+                Text("axe mirror")
                     .font(.body.monospaced().weight(.semibold))
                     .textSelection(.enabled)
                 Text("Then tap the Mac in the list.")
