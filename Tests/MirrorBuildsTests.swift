@@ -311,4 +311,24 @@ struct MirrorBuildsTests {
         // One nearly expired is made again.
         #expect(try store.load(now: Date(timeIntervalSince1970: made.expires - 86_400)) != made)
     }
+
+    @Test("Viewers that ask for the certificate at the same moment are given the same one")
+    func identityOnce() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-identity-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        final class Results: @unchecked Sendable {
+            private let lock = NSLock()
+            private var authorities: [Data] = []
+            func add(_ authority: Data) { lock.withLock { authorities.append(authority) } }
+            var all: [Data] { lock.withLock { authorities } }
+        }
+        let results = Results()
+        // Four viewers' first requests, each with a store of its own on the same folder, as four
+        // sessions, or four host processes, have.
+        DispatchQueue.concurrentPerform(iterations: 4) { _ in
+            if let made = try? MirrorInstallIdentityStore(folder: folder).load(macName: "Test Mac") { results.add(made.authority) }
+        }
+        #expect(results.all.count == 4)
+        #expect(Set(results.all).count == 1, "\(Set(results.all).count) different authorities were handed out")
+    }
 }

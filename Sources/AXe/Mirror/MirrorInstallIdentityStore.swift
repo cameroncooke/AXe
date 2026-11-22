@@ -1,4 +1,5 @@
 #if AXE_MIRROR
+import Darwin
 import Foundation
 
 /// Makes and keeps the certificate this host's viewers serve builds to iOS with: see
@@ -17,13 +18,23 @@ struct MirrorInstallIdentityStore {
 
     private var file: URL { folder.appendingPathComponent("identity.json") }
 
+    /// The certificate, made now if there is none worth keeping. One caller at a time, in this
+    /// process and any other: two viewers that ask together, the first time, must be given the
+    /// same one, or one of them sets its device up for an authority this Mac has already replaced.
     func load(macName: String = Host.current().localizedName ?? "this Mac", now: Date = Date()) throws -> MirrorInstallIdentity {
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        // The folder itself is what is locked, so nothing is kept in it but the certificate.
+        let lock = open(folder.path, O_RDONLY | O_CLOEXEC)
+        guard lock >= 0, flock(lock, LOCK_EX) == 0 else {
+            if lock >= 0 { close(lock) }
+            throw CLIError(errorDescription: "The certificate for installs could not be read: \(folder.path) cannot be locked.", code: .commandFailed)
+        }
+        defer { flock(lock, LOCK_UN); close(lock) }
         if let data = try? Data(contentsOf: file), let kept = try? JSONDecoder().decode(MirrorInstallIdentity.self, from: data),
            kept.expires - now.timeIntervalSince1970 > 30 * 86_400, kept.names == MirrorInstallIdentity.loopbackNames {
             return kept
         }
         let made = try Self.make(macName: macName, now: now)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         try JSONEncoder().encode(made).write(to: file, options: [.atomic])
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
         return made
