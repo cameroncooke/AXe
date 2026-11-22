@@ -45,8 +45,14 @@ final class LocalInstallServer: @unchecked Sendable {
         let tls = NWProtocolTLS.Options()
         sec_protocol_options_set_local_identity(tls.securityProtocolOptions, local)
         sec_protocol_options_set_min_tls_protocol_version(tls.securityProtocolOptions, .TLSv12)
-        guard let secure = try? NWListener(using: NWParameters(tls: tls, tcp: NWProtocolTCP.Options())),
-              let plain = try? NWListener(using: .tcp) else { return nil }
+        // Both listen on the device's own loopback and nowhere else. Only iOS on this device has any
+        // business here; left as they come, the listeners were open to everything on the Wi-Fi,
+        // and whoever knew a build's ID could fetch it.
+        let secureParameters = NWParameters(tls: tls, tcp: NWProtocolTCP.Options()), plainParameters = NWParameters.tcp
+        secureParameters.requiredInterfaceType = .loopback
+        plainParameters.requiredInterfaceType = .loopback
+        guard let secure = try? NWListener(using: secureParameters),
+              let plain = try? NWListener(using: plainParameters) else { return nil }
         self.secure = secure
         self.plain = plain
         let ready = DispatchGroup()
