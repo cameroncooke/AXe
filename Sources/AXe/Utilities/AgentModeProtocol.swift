@@ -325,6 +325,9 @@ struct AgentModeFailure: Error, Codable, Sendable, LocalizedError {
     static let missingContext = AgentModeFailure("missingContext", "AXe could not read the simulator display, so nothing was sent. Run describe-ui --agent again; if it keeps failing, check that the simulator is booted and on screen.")
     /// The visible screen no longer matches the snapshot's table.
     static let screenChanged = AgentModeFailure("screenChanged", "The screen changed after this snapshot was taken, so nothing was sent. Use the snapshot ID and refs from the capture in this reply, or run describe-ui if there is none, then act again.")
+    /// Input that only DTUHID can send, such as a system-edge gesture, on a simulator without that
+    /// service. Xcode 26's CoreSimulator has none; other input falls back to Indigo there (#101).
+    static let touchServiceUnavailable = AgentModeFailure(CLIError.Code.inputUnavailable.rawValue, "This input needs the simulator's DTUHID touch service, which Xcode 26 does not provide, so nothing was sent. Act on the capture another way, or select Xcode 27.")
     /// The next step after a batch stops early: what stands, and how to plan the rest.
     static let batchRest = "Completed steps are in the receipt and were not undone. Plan the rest from the capture in this reply; do not resend the batch."
 }

@@ -4,6 +4,7 @@ import Foundation
 /// Public agent errors use typed evidence and fixed text, never reflected errors.
 enum AgentModePublicErrorProjection {
     static func project(_ error: AgentModeFailure, native: SelectedHIDResponse?) -> AgentModeFailure {
+        if error.code == "nativeActionFailed", let native, let refusal = touchServiceRefusal(native) { return refusal }
         switch error.code {
         case "nativeActionFailed", "observationFailed", "batchObservationFailed", "batchStopped":
             return AgentModeFailure(error.code, message(code: error.code, native: native))
@@ -16,8 +17,16 @@ enum AgentModePublicErrorProjection {
     /// A native operation that failed without a typed AXe policy code. The code names the
     /// failure's cause so an agent can branch on it; the message is fixed text.
     static func nativeFailure(_ native: SelectedHIDResponse) -> AgentModeFailure {
+        if let refusal = touchServiceRefusal(native) { return refusal }
         let code = nativeCode(native)
         return AgentModeFailure(code, message(code: code, native: native))
+    }
+
+    /// A refusal before input because the simulator has no touch service, as with Xcode 26 (#101).
+    private static func touchServiceRefusal(_ native: SelectedHIDResponse) -> AgentModeFailure? {
+        guard native.errorCode == CLIError.Code.inputUnavailable.rawValue, native.enqueuedEventCount == 0,
+              native.quarantine == nil, native.cleanup == "notNeeded" else { return nil }
+        return AgentModeFailure.touchServiceUnavailable
     }
 
     private static func nativeCode(_ native: SelectedHIDResponse) -> String {

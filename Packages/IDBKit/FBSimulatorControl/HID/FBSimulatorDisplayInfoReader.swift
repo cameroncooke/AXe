@@ -1,4 +1,5 @@
 @preconcurrency import CoreSimulator
+import FBControlCore
 import Darwin
 import Foundation
 @preconcurrency import XPC
@@ -50,8 +51,14 @@ public enum FBSimulatorDisplayInfoReader {
   /// Backlight states of an illuminated display, as dtdeviceinfod reports them.
   static let litBacklightStates: Set<String> = ["activeOn", "activeDimmed"]
 
-  public static func read(for simulator: FBSimulator) async throws -> FBSimulatorDisplayInfoResponse {
+  /// `hostCatalog` is a host screen read the caller has just made. A runtime before iOS 27 builds
+  /// its one screen from it instead of reading the host again.
+  public static func read(for simulator: FBSimulator,
+                          hostCatalog: [FBSimulatorDisplayInfo]? = nil) async throws -> FBSimulatorDisplayInfoResponse {
     try Task.checkCancellation()
+    if simulator.osVersion.version.majorVersion < 27 {
+      return try await legacyRead(for: simulator, hostCatalog: hostCatalog)
+    }
     let started = ProcessInfo.processInfo.systemUptime
     let (request, version) = try makeRequest(deviceID: simulator.udid)
     let connection = try connect(simulator)
@@ -69,6 +76,38 @@ public enum FBSimulatorDisplayInfoReader {
     try Task.checkCancellation()
     return FBSimulatorDisplayInfoResponse(rows: rows, coreDeviceVersion: version,
       startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
+  }
+
+  /// A runtime before iOS 27 runs only on single-screen devices, and on a host with only Xcode 26
+  /// its display report comes from Xcode 26's guest service, which AXe does not read (#101). Its
+  /// one built-in display is the screen, so the host catalogue describes it without the report.
+  static func legacyRead(for simulator: FBSimulator,
+                         hostCatalog: [FBSimulatorDisplayInfo]?) async throws -> FBSimulatorDisplayInfoResponse {
+    let started = ProcessInfo.processInfo.systemUptime
+    let host: [FBSimulatorDisplayInfo]
+    if let hostCatalog { host = hostCatalog } else { host = try await FBSimulatorDisplayDiscovery.displays(for: simulator) }
+    try Task.checkCancellation()
+    return FBSimulatorDisplayInfoResponse(rows: [try legacyRow(host)], coreDeviceVersion: legacyVersion,
+      startedUptime: started, finishedUptime: ProcessInfo.processInfo.systemUptime)
+  }
+
+  /// Stands in for the CoreDevice version of a response built from the host catalogue.
+  public static let legacyVersion = "notRead"
+
+  /// The host's one legacy display as a portrait, primary, integrated row. The plain input commands
+  /// also treat these runtimes as portrait.
+  static func legacyRow(_ host: [FBSimulatorDisplayInfo]) throws -> FBSimulatorDisplayInfoRow {
+    let legacy = host.filter { $0.uniqueID == FBSimulatorLegacyDisplay.hostName }
+    guard legacy.count == 1, let display = legacy.first, display.screenID == FBSimulatorLegacyDisplay.screenID,
+          display.scale.rounded() == display.scale else {
+      throw FBSimulatorContextError.unavailable("The simulator does not report its one built-in display")
+    }
+    let size = display.nativePixelSize
+    return FBSimulatorDisplayInfoRow(displayID: display.screenID, uniqueID: FBSimulatorLegacyDisplay.uuid,
+      integrated: true, active: nil, primary: true, currentOrientation: .rot0, nativeOrientation: .rot0,
+      nativeWidth: size.width, nativeHeight: size.height, boundsX: 0, boundsY: 0,
+      boundsWidth: size.width, boundsHeight: size.height, pointScale: Int(display.scale),
+      backlightState: FBSimulatorLegacyDisplay.backlightState)
   }
 
   /// The active panel must be the selected one, with the selected geometry and rotation.

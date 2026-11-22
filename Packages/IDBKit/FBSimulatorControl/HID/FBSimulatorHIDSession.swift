@@ -131,8 +131,22 @@ public actor FBSimulatorHIDSession {
         // connection does, because a connection abandoned early adds to the guest's backlog. A
         // connection that is never answered gets one fresh try, after the context check.
         for attempt in 0..<2 {
-          let opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
-            displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
+          let opened: FBSimulatorDTUHIDTransport
+          do {
+            opened = try FBSimulatorDTUHIDTransport.dtuhid(for: simulator,
+              displayContext: observation.displayContext, nativeEdge: nativeEdge, ownedCleanup: true)
+          } catch FBSimulatorHIDError.dtuhidDigitizerServiceUnavailable(let underlying) {
+            guard indigoFallbackApplies(simulator: simulator, observation: observation, nativeEdge: nativeEdge) else {
+              throw FBSimulatorHIDError.dtuhidDigitizerServiceUnavailable(underlying: underlying)
+            }
+            // Xcode 26's CoreSimulator has no dtuhidd (#101). Its simulators take the plain commands'
+            // Indigo input, inside this same session, with the same checks before every event. The
+            // owner keeps no Indigo client between sessions.
+            if let transportOwner, let reservation { await transportOwner.discard(reservation.identifier) }
+            FBControlCoreGlobalConfiguration.defaultLogger.log("Selected HID has no DTUHID service; using Indigo input")
+            return FBSimulatorHIDSession(transport: try FBSimulatorIndigoHIDTransport.indigo(for: simulator),
+              observation: observation, freshnessProvider: freshnessProvider, liveProvider: liveProvider)
+          }
           transport = opened
           do {
             try await opened.prepareConnection(timeout: FBSimulatorHID.connectionReadyTimeout)
@@ -168,6 +182,20 @@ public actor FBSimulatorHIDSession {
       if let transportOwner, let reservation { await transportOwner.discard(reservation.identifier) }
       throw error
     }
+  }
+
+  /// Indigo addresses only the main screen, in portrait, with no system-edge hint. That is every
+  /// simulator a host without DTUHID can run: a single-screen device on a runtime before iOS 27.
+  static func indigoFallbackApplies(runtimeMajorVersion: Int, observation: FBSimulatorHIDSessionObservation,
+                                    nativeEdge: FBSimulatorHIDNativeEdge) -> Bool {
+    runtimeMajorVersion < 27 && observation.screenID == FBSimulatorLegacyDisplay.screenID
+      && observation.displayContext.rotation == .rot0 && nativeEdge == .none
+  }
+
+  private static func indigoFallbackApplies(simulator: FBSimulator, observation: FBSimulatorHIDSessionObservation,
+                                            nativeEdge: FBSimulatorHIDNativeEdge) -> Bool {
+    indigoFallbackApplies(runtimeMajorVersion: simulator.osVersion.version.majorVersion,
+      observation: observation, nativeEdge: nativeEdge)
   }
 
   // Internal dependency boundary also permits local transport checks without simulator input.
