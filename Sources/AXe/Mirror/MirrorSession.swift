@@ -1198,6 +1198,10 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             release()
             awaitingChoice = true
         }
+        // What the viewer had chosen when it asked. A restart opens the simulator again only if
+        // that still stands: by the time a forced shut-down is over the viewer may have opened
+        // another, or left.
+        let number = choiceNumber
         let managed = MirrorLastValue()     // the simulator's name, for the words the viewer shows if this fails
         Task { [self] in
             do {
@@ -1221,12 +1225,25 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                     try await MirrorSimulatorControl.forceShutDown(udid: listed.udid)
                     mirrorNote("shut down simulator \(listed.name) \(listed.udid) to restart it")
                     onEvent?(["event": "simulatorRestarting", "udid": listed.udid, "name": listed.name])
-                    queue.async { self.choose(MirrorSimulatorChoice(udid: listed.udid)) }
-                    return
+                    let stillWanted = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+                        queue.async {
+                            let wanted = number == self.choiceNumber
+                            if wanted { self.choose(MirrorSimulatorChoice(udid: listed.udid)) }
+                            continuation.resume(returning: wanted)
+                        }
+                    }
+                    if stillWanted { return }
+                    // The viewer has moved on. The simulator is started again all the same, since
+                    // a restart was asked for, and whatever the viewer is looking at is left alone.
+                    mirrorNote("the viewer chose again while \(listed.name) was restarting: booting it without opening it")
+                    try await MirrorSimulatorControl.boot(udid: listed.udid)
                 default:
                     throw CLIError(errorDescription: "This host does not know how to \(request.action) a simulator.", code: .commandFailed)
                 }
-                sendSimulatorList()
+                // The list as it now is, for a viewer that is still at it. One that has opened a
+                // simulator meanwhile is sent nothing: the list would take it away from what it
+                // is watching.
+                queue.async { if self.simulator == nil || self.awaitingChoice { self.sendSimulatorList() } }
             } catch {
                 let failed = self.failed(request.action, error, udid: request.udid, name: managed.current?.first)
                 mirrorNote("simulator \(request.action) failed: \(failed.message ?? "")")
