@@ -14,7 +14,8 @@ import UIKit
 ///
 /// Ways to fold it: drag a half away from the middle to open it and towards the middle to close it
 /// (closed, a drag either way opens it); spread two fingers to open it and pinch to close it; tap it
-/// when it is closed to open it flat. Dragging the space around it tilts it a little. The view reports
+/// when it is closed to open it flat. Let go, it rests only where a screen is lit: closed, or open
+/// half way or more (`usable`). Dragging the space around it tilts it a little. The view reports
 /// the angle as it changes (`onFolding`) and when the fingers lift (`onFold`); the caller folds the
 /// simulator.
 final class DuoFoldView: UIView {
@@ -468,13 +469,28 @@ final class DuoFoldView: UIView {
         }
     }
 
-    /// The fingers have lifted. A device left nearly closed or nearly flat goes the rest of the way,
-    /// as a real hinge falls shut or flat; then the angle is reported as chosen.
+    /// The fingers have lifted. A device left nearly flat goes the rest of the way, as a real hinge
+    /// falls flat, and one left where no screen would be lit goes to the nearer place where one is
+    /// (`usable`). Then the angle is reported as chosen.
     private func release() {
-        if angle < 25 { angle = 0 } else if angle > 155 { angle = 180 }
+        angle = angle > 155 ? 180 : Self.usable(angle)
         settling = true
         apply(animated: true, duration: 0.25) { [weak self] in self?.settled() }
         onFold?(angle)
+    }
+
+    /// The lowest angle at which iOS lights the inner screen however the hinge got there. Measured
+    /// on an iOS 27.3 Duo simulator (22 November 2026), held upright, on its left side and on its
+    /// right side alike: opened from closed it lights from 83 degrees; folded down from flat it stays
+    /// lit to 88 and goes dark at 87; folded down from 120 it stays lit to 86. Below, the outer screen
+    /// is lit, facing away from whoever looks at the inner one.
+    static let lowestOpen = 90.0
+
+    /// Where the device can rest with a screen in use: closed, on its outer screen, or open from
+    /// `lowestOpen` to flat, on its inner screen. An angle in between goes to whichever is nearer.
+    static func usable(_ degrees: Double) -> Double {
+        guard degrees > 0, degrees < lowestOpen else { return degrees }
+        return degrees < lowestOpen / 2 ? 0 : lowestOpen
     }
 
     /// A tap on the closed device opens it flat; there is nothing else a closed device can do.
@@ -485,16 +501,20 @@ final class DuoFoldView: UIView {
 
     /// Folds the device to an angle with an animation, as a button does, and reports it as chosen.
     func set(_ degrees: Double) {
-        angle = max(0, min(180, degrees))
+        angle = Self.usable(max(0, min(180, degrees)))
         settling = true
         apply(animated: true, duration: 0.45) { [weak self] in self?.settled() }
         onFold?(angle)
     }
 
-    /// VoiceOver: swipe up to open the hinge 15 degrees, down to close it.
+    /// VoiceOver: swipe up to open the hinge 15 degrees, down to close it. Between closed and
+    /// `lowestOpen` a step goes the whole way, the way it was going.
     override func accessibilityIncrement() { step(15) }
     override func accessibilityDecrement() { step(-15) }
-    private func step(_ by: Double) { set(angle + by) }
+    private func step(_ by: Double) {
+        let next = angle + by
+        set(next > 0 && next < Self.lowestOpen ? (by < 0 ? 0 : Self.lowestOpen) : next)
+    }
 
     private static func snap(_ a: Double) -> Double { stops.first { abs(a - $0) < 6 } ?? a }
     private static func smooth(_ t: Double) -> Double { t * t * (3 - 2 * t) }

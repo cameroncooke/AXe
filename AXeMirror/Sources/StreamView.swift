@@ -1417,8 +1417,10 @@ final class StreamSession {
     @ObservationIgnored private var foldWide: Bool?
     @ObservationIgnored private var foldSent: (degrees: Double, at: Date)?
     /// How long the simulator has to get to the angle before the 3D Duo stops waiting for it. The
-    /// hinge takes a third of a second (iOS 27.3 simulator, 21 November 2026); this is ten times that.
-    static let foldWait: TimeInterval = 3
+    /// hinge takes a third of a second (iOS 27.3 simulator, 21 November 2026), and the inner screen
+    /// lights 1.2 s after it is opened; one the Mac has to shut and open again to light it takes
+    /// about four seconds (22 November 2026).
+    static let foldWait: TimeInterval = 6
     @ObservationIgnored private var returning = false
     @ObservationIgnored private var modelSync: Task<Void, Never>?
 
@@ -1451,9 +1453,12 @@ final class StreamSession {
         surface.foldView.bottomReserve = Self.foldControlsHeight
         surface.foldView.onFold = { [weak self] degrees in self?.foldTo(degrees) }
         // While a finger is still folding, the simulator's hinge follows it: one message for each
-        // few degrees, which the simulator takes as it does a slider being dragged.
+        // few degrees, which the simulator takes as it does a slider being dragged. Only where a
+        // screen is in use (`DuoFoldView.usable`): between closed and half open the inner screen is
+        // dark, and a hinge that rests there a second keeps the outer one lit when opened further.
         surface.foldView.onFolding = { [weak self] degrees in
             guard let self else { return }
+            if DuoFoldView.usable(degrees) != degrees { return }
             if let sent = self.foldSent, abs(sent.degrees - degrees) < 4 || Date().timeIntervalSince(sent.at) < 0.08 { return }
             self.foldTo(degrees, settled: false)
         }
@@ -1566,7 +1571,7 @@ final class StreamSession {
     /// The line under the 3D Duo: how to fold it, or why the screen lit is not the one expected.
     var foldNote: String {
         if foldWanted == nil, let screen, let degrees = screen.degrees, screen.role == "outer", degrees > 20 {
-            return "iOS lights the outer screen at this angle. Open it flat for the inner screen."
+            return "iOS lights the outer screen below half open. Open it further for the inner screen."
         }
         return "Drag a half, or pinch, to fold it. Tap Done to use the simulator again."
     }
@@ -1583,7 +1588,7 @@ final class StreamSession {
         guard let wanted = foldWanted, let degrees = screen.degrees else { return true }
         if wanted <= 5 { return degrees <= 5 && screen.role == "outer" }
         if wanted >= 175 { return degrees >= 175 && screen.role == "inner" && foldWide.map { $0 == (screen.width > screen.height) } ?? true }
-        return abs(degrees - wanted) <= 5
+        return abs(degrees - wanted) <= 5 && (wanted < DuoFoldView.lowestOpen || screen.role == "inner")
     }
 
     /// Whether the picture now decoded is of the screen the Mac last named. The Mac names the screen
