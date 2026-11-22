@@ -1000,6 +1000,19 @@ final class StreamSession {
 
     private func gotInstallIdentity(_ identity: MirrorInstallIdentity) {
         identityProblem = nil
+        // The person is about to be asked to trust this authority fully. It is offered only if its
+        // own certificate limits it to the names that point at this device: then nothing signed by
+        // it for any other site is accepted by iOS, whoever holds its key, and that does not rest
+        // on the Mac's word.
+        guard MirrorCertificateLimits.isLimited(identity.authority, to: MirrorInstallIdentity.loopbackNames),
+              Set(identity.names).isSubset(of: Set(MirrorInstallIdentity.loopbackNames)) else {
+            identityProblem = "Its certificate is not limited to installs on this device. Update AXe on the Mac."
+            installServer?.stop()
+            installServer = nil
+            installIdentity = nil
+            localInstall = .unavailable
+            return
+        }
         guard identity != installIdentity || installServer == nil else { return }
         installIdentity = identity
         installServer?.stop()

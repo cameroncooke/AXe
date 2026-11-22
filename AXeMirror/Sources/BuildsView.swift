@@ -1016,7 +1016,7 @@ struct LocalInstallSetup: View {
                     }
                 }
                 .padding(.top, 4)
-                Label("Private and secure", systemImage: "lock.fill")
+                Label("Works only for installs on this device", systemImage: "lock.fill")
                     .font(.footnote.weight(.medium)).foregroundStyle(.secondary)
             }
         }
@@ -1097,7 +1097,7 @@ struct LocalInstallSetup: View {
             }
             // Said once, in a few words. Explaining how it is safe makes people wonder whether it is.
             Section {
-                Label("Private and secure", systemImage: "lock.fill")
+                Label("Works only for installs on this device", systemImage: "lock.fill")
                     .font(.footnote.weight(.medium)).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity)
                     .listRowBackground(Color.clear)
