@@ -362,6 +362,14 @@ final class MirrorClient: @unchecked Sendable {
         clockSamples = []
         Task { [self] in
             var refusal: Refusal?
+            // The connection, once there is one, so that why the Mac closed it can be read even
+            // when it closed before this side had opened its stream.
+            var reached: Connection?
+            func read(_ reason: String) {
+                // The Mac names its reason when it turns a viewer away.
+                if reason.contains("not paired") { refusal = .notPaired }
+                if reason.contains("busy") { refusal = .busy }
+            }
             do {
                 let endpoint: Endpoint
                 if let existing = queue.sync(execute: { self.endpoint }) {
@@ -379,6 +387,7 @@ final class MirrorClient: @unchecked Sendable {
                     connected = await MirrorTimeout.finishes(within: 8) { try? await endpoint.connect(addr: address, alpn: MirrorProtocol.stream) } ?? nil
                 }
                 guard let connection = connected else { throw CancellationError() }
+                reached = connection
                 let stream = try await connection.openBi()
                 let controlSend = stream.send(), controlReceive = stream.recv()
                 try await controlSend.writeAll(buf: Data([0x43]))
@@ -401,11 +410,14 @@ final class MirrorClient: @unchecked Sendable {
                 Task { for await data in outgoing { do { try await controlSend.writeAll(buf: data) } catch { break } } }
                 Task { await self.readMessages(from: controlReceive, generation: current) }
                 Task { await self.acceptVideo(on: connection, generation: current) }
-                let reason = await connection.closed()
-                // The Mac names its reason when it turns a viewer away.
-                if reason.contains("not paired") { refusal = .notPaired }
-                if reason.contains("busy") { refusal = .busy }
-            } catch {}
+                read(await connection.closed())
+            } catch {
+                // A Mac that refuses a viewer closes the connection at once. If that lands before
+                // the stream is open, opening it is what fails, and the reason was lost with the
+                // error: the app then said the Mac could not be reached, and kept trying, where
+                // it should have said this device is not paired.
+                if let reached, let reason = await MirrorTimeout.finishes(within: 1, { await reached.closed() }) { read(reason) }
+            }
             queue.async { [self] in
                 guard current == generation, !stopped else { return }
                 connection = nil
