@@ -75,6 +75,11 @@ final class MirrorHostSessions: @unchecked Sendable {
                 self.onEvent?(ready)
             }
         }
+        endpoint.onFailed = { [weak self] message in self?.onFatal?(message) }
+        endpoint.onWarning = { [weak self] code, message in
+            mirrorNote("Warning: " + message)
+            self?.onEvent?(["event": "warning", "code": code, "message": message])
+        }
         if let viewers = settings.viewers {
             endpoint.allows = { viewers.allows($0) }
             endpoint.onRefused = { [weak self] viewer in self?.onEvent?(["event": "refused", "viewer": viewer, "reason": "not paired"]) }

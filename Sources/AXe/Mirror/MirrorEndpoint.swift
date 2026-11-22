@@ -16,6 +16,7 @@ final class MirrorEndpoint: @unchecked Sendable {
     private var relayOnlyNow = false            // how the endpoint is bound at present
     private var rebinding = false
     private var idleCount = 0                   // goes up each time a viewer leaves
+    private var closing = false                 // the host is stopping: an endpoint that closes now has not failed
     /// Set when macOS keeps this process off the local network (see `MirrorLocalNetwork`). A viewer
     /// on one of this Mac's own networks then cannot hold a direct path, and trying costs it the
     /// stream: paths open, are chosen for the video and die. iroh offers no way to refuse one
@@ -36,6 +37,16 @@ final class MirrorEndpoint: @unchecked Sendable {
     var localNetworkCheck: () -> MirrorLocalNetwork.Access = { MirrorLocalNetwork.check() }
     static let directAgainAfter: TimeInterval = 60
     var onNote: ((String) -> Void)?
+    /// The endpoint cannot listen, and will not by itself: the host must stop and say why. A
+    /// host that went on running with no listener looked alive to whatever watches it, and no
+    /// viewer could connect.
+    var onFailed: ((String) -> Void)?
+    /// Something a person should know while the host carries on: a code and a sentence.
+    var onWarning: ((String, String) -> Void)?
+    /// How long the endpoint may take to reach a relay before the host says it has not.
+    static let onlineWithin: TimeInterval = 20
+    /// How many times in a row binding again is tried before the host gives up.
+    static let bindAttempts = 3
     /// Asked for every incoming connection with the viewer's endpoint ID, which iroh has verified.
     /// Nil lets every viewer in.
     var allows: ((String) -> Bool)?
@@ -57,14 +68,19 @@ final class MirrorEndpoint: @unchecked Sendable {
     /// Binds the endpoint and lets viewers in until it is closed. `first` is false when the endpoint
     /// is bound again while the host runs; the notes then differ, so that the host reports its ID
     /// and that it is ready once only.
-    private func listen(first: Bool) async {
+    private func listen(first: Bool, attempt: Int = 1) async {
         lock.lock(); let secret = self.secret, relayOnly = relayOnlyNow, relayURLs = relays; lock.unlock()
         do {
             let preset: Preset = relayOnly ? MirrorRelayOnlyPreset(relayURLs: relayURLs) : relayURLs.isEmpty ? presetN0() : MirrorOwnRelayPreset(relayURLs: relayURLs)
             let endpoint = try await Endpoint.bind(options: EndpointOptions(preset: preset, secretKey: secret, alpns: MirrorLink.alpns))
             lock.lock(); self.endpoint = endpoint; rebinding = false; lock.unlock()
             if first { onNote?("iroh endpoint \(endpoint.id().description)") }
-            await endpoint.online()
+            // Until a relay answers, no viewer can find this Mac. That is said, not waited out in silence.
+            if await MirrorTimeout.finishes(within: Self.onlineWithin, { await endpoint.online() }) == nil {
+                let relay = relayURLs.isEmpty ? "iroh's public relays" : relayURLs.joined(separator: ", ")
+                onWarning?("relayUnreachable", "No relay has answered in \(Int(Self.onlineWithin)) seconds (\(relay)), so viewers cannot find this Mac yet. Check its internet connection. The host keeps trying.")
+                await endpoint.online()
+            }
             let home = endpoint.addr().relayUrl() ?? "none"
             onNote?(first ? "iroh online, home relay \(home)" : "listening again, \(relayOnly ? "on the relay only" : "direct paths allowed"), home relay \(home)")
             // For the log only. iroh did not report a stopped relay here within two minutes, so the
@@ -80,9 +96,21 @@ final class MirrorEndpoint: @unchecked Sendable {
                     do { try await self.admit(try await incoming.accept().connect()) } catch { self.onNote?("iroh connection failed: \(error)") }
                 }
             }
+            // The endpoint takes no more connections. That is expected when the host closed it,
+            // to stop or to bind again; otherwise it is a failure nobody would hear of.
+            lock.lock(); let unexpected = self.endpoint === endpoint && !closing; lock.unlock()
+            if unexpected { onFailed?("The host stopped listening for viewers: its endpoint closed.") }
         } catch {
-            lock.lock(); rebinding = false; lock.unlock()
+            lock.lock(); rebinding = false; let closing = self.closing; lock.unlock()
             onNote?("iroh failed: \(error)")
+            guard !closing else { return }
+            if !first, attempt < Self.bindAttempts {
+                // Bound again while running, for a viewer on this Mac's own network: worth another go.
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await listen(first: false, attempt: attempt + 1)
+                return
+            }
+            onFailed?("The host could not listen for viewers: \(error)")
         }
     }
 
@@ -161,7 +189,7 @@ final class MirrorEndpoint: @unchecked Sendable {
     /// Closes the endpoint, waiting briefly for the viewers' goodbyes to leave. The host closes
     /// each viewer's connection first, so that each is told why.
     func closeAndWait() {
-        lock.lock(); let endpoint = self.endpoint; lock.unlock()
+        lock.lock(); closing = true; let endpoint = self.endpoint; lock.unlock()
         let done = DispatchSemaphore(value: 0)
         Task {
             try? await endpoint?.close()
