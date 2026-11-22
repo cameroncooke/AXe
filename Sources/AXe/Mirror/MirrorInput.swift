@@ -42,6 +42,10 @@ final class MirrorInput {
     private let interval: TimeInterval
     private let lock = NSLock()
     private var commands: AsyncStream<Command>.Continuation?
+    /// Wakes the clock when a touch arrives. With no touch in hand the clock waits on this and
+    /// uses no processor: it used to look every 4 ms for the life of the session, simulator
+    /// watched or not, viewer connected or not.
+    private var wake: AsyncStream<Void>.Continuation?
     private var newestMove: MirrorTouch?
     private var active = false
     private var closed = false          // set by `close()`; the clock task then ends
@@ -90,17 +94,21 @@ final class MirrorInput {
         Task.detached(priority: .userInitiated) { [self] in
             for await command in stream { await handle(command) }
         }
+        // Holds at most one wake-up: a touch that arrives while the clock is deciding to wait is not lost.
+        let (wakes, wake) = AsyncStream<Void>.makeStream(bufferingPolicy: .bufferingNewest(1))
+        self.wake = wake
         Task.detached(priority: .userInitiated) { [self] in
             var next = mirrorNow() + interval
+            var arrivals = wakes.makeAsyncIterator()
             while true {
-                // With no touch in hand, look again in a few milliseconds and do not spin.
+                // With no touch in hand, wait for one to arrive.
                 lock.lock()
                 let idle = !active && waiting.isEmpty && newestMove == nil
                 let over = closed
                 lock.unlock()
                 if over { return }
                 if idle {
-                    try? await Task.sleep(nanoseconds: 4_000_000)
+                    guard await arrivals.next() != nil else { return }     // closed
                     next = mirrorNow() + interval
                     continue
                 }
@@ -170,6 +178,7 @@ final class MirrorInput {
     }
 
     func receive(_ message: MirrorTouch) {
+        defer { wake?.yield() }
         // Downs and ups arrive twice, on the reliable stream and as a datagram; whichever comes first is used.
         if message.kind != 4 {
             lock.lock()
@@ -249,6 +258,7 @@ final class MirrorInput {
         closed = true
         lock.unlock()
         commands?.finish()
+        wake?.finish()
     }
 
     private func handle(_ command: Command) async {

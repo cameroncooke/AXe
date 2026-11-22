@@ -11,6 +11,9 @@ import Foundation
 /// A stall is one or more probes in a row that took over 25 ms or went unanswered.
 final class MirrorLinkHealth {
     var onReport: ((_ line: String, _ short: String) -> Void)?
+    /// Whether anyone is there to be told. With no viewer connected the router is not probed:
+    /// eight to twenty-five pings a second, all day, for nobody. Nil means always.
+    var isWanted: (() -> Bool)?
     private(set) var link = "unknown link"
     private var samples: [(at: TimeInterval, ms: Double?)] = []     // the last minute, in the order sent
     private var totals = (probes: 0, over50: 0, stalls: 0, seconds: 0.0)
@@ -59,6 +62,14 @@ final class MirrorLinkHealth {
         let began = mirrorNow()
         var nextSend = began, nextReport = began + 10
         while running {
+            if isWanted?() == false {
+                // Start afresh when a viewer comes: what was sent before the pause is not a stall.
+                waiting.removeAll()
+                Thread.sleep(forTimeInterval: 0.5)
+                nextSend = mirrorNow()
+                nextReport = max(nextReport, nextSend + 10)
+                continue
+            }
             let time = mirrorNow()
             if time >= nextSend {
                 sequence &+= 1

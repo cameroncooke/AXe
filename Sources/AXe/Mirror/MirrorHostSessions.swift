@@ -54,6 +54,7 @@ final class MirrorHostSessions: @unchecked Sendable {
             guard let self, !short.isEmpty else { return }
             for session in self.all() { session.linkHealth(short) }    // each viewer shows it under its other figures
         }
+        health.isWanted = { [weak self] in self?.hasViewer ?? false }
         health.start()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 1, repeating: 1)
