@@ -1097,14 +1097,30 @@ final class StreamSession {
     /// Fetches a build from the Mac over the connection, a piece at a time, then hands it to iOS
     /// from this device. A copy already fetched whole is used as it is.
     private func fetchAndInstall(_ build: MirrorBuild, host: String) {
-        guard fetch == nil, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        guard fetch == nil, fetching == nil, let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
         let file = caches.appendingPathComponent("build-\(build.id).ipa")
-        if let wanted = build.sha256, FileManager.default.fileExists(atPath: file.path), LocalInstallServer.digest(of: file) == wanted {
-            hand(build, file: file, host: host)
-            return
+        // Whether a copy fetched before is still whole is found out off the main thread: reading
+        // and hashing a large build takes seconds, and the screen stood still for them. Shown as
+        // a fetch at nothing meanwhile, which also keeps a second tap from starting another.
+        fetching = (build.id, 0, build.size ?? 0)
+        Task.detached {
+            let kept = build.sha256.map { FileManager.default.fileExists(atPath: file.path) && LocalInstallServer.digest(of: file) == $0 } ?? false
+            await MainActor.run { [weak self] in
+                guard let self, self.fetch == nil, self.fetching?.id == build.id else { return }
+                if kept {
+                    self.fetching = nil
+                    self.hand(build, file: file, host: host)
+                } else {
+                    self.startFetch(build, host: host, into: file)
+                }
+            }
         }
+    }
+
+    private func startFetch(_ build: MirrorBuild, host: String, into file: URL) {
         FileManager.default.createFile(atPath: file.path, contents: nil)
         guard let handle = try? FileHandle(forWritingTo: file) else {
+            fetching = nil
             installProblem = (build, "This device could not keep the build", "There may be no room for it.")
             return
         }
