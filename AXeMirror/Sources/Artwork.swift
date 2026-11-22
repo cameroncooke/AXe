@@ -45,7 +45,6 @@ struct Artwork: View {
     var width: CGFloat = 240
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var moving = false
 
     // The scenes are laid out on a canvas 280 by 190 and drawn at whatever size is asked for.
     private var unit: CGFloat { width / 280 }
@@ -107,10 +106,6 @@ struct Artwork: View {
         }
         .frame(width: width, height: u(190))
         .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 1.1).repeatForever(autoreverses: false)) { moving = true }
-        }
     }
 
     // MARK: The pieces
@@ -195,14 +190,24 @@ struct Artwork: View {
 
     /// What passes between the two: dots that travel while it does, stand still while it waits,
     /// and stop short when it is broken.
+    ///
+    /// The dots travel by the clock, one gap every `dotsTurn` seconds, and not by an animation
+    /// started when the scene appears. That animation never ended, and it took with it whatever
+    /// else was settling into place at that moment: on a screen still finding its width, the
+    /// words under the drawing slid sideways with it, over and over, in scenes with no dots at all.
     private func line(_ state: Line, tint: Color) -> some View {
-        Path { path in
-            path.move(to: CGPoint(x: u(150), y: u(40)))
-            path.addQuadCurve(to: CGPoint(x: u(state == .broken ? 170 : 206), y: u(state == .broken ? 32 : 42)), control: CGPoint(x: u(178), y: u(16)))
+        let travels = state == .flowing && !reduceMotion
+        return TimelineView(.animation(paused: !travels)) { context in
+            let turn = travels ? context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: Self.dotsTurn) / Self.dotsTurn : 0
+            Path { path in
+                path.move(to: CGPoint(x: u(150), y: u(40)))
+                path.addQuadCurve(to: CGPoint(x: u(state == .broken ? 170 : 206), y: u(state == .broken ? 32 : 42)), control: CGPoint(x: u(178), y: u(16)))
+            }
+            .stroke(state == .flowing ? tint : Color.white.opacity(0.45),
+                    style: StrokeStyle(lineWidth: u(3.2), lineCap: .round, dash: [u(1), u(9)], dashPhase: -u(10) * turn))
         }
-        .stroke(state == .flowing ? tint : Color.white.opacity(0.45),
-                style: StrokeStyle(lineWidth: u(3.2), lineCap: .round, dash: [u(1), u(9)], dashPhase: state == .flowing && moving ? -u(10) : 0))
     }
+    private static let dotsTurn: TimeInterval = 1.1
 
     /// What has happened, on a disc of its colour.
     private func badge(_ symbol: String, _ colour: Color) -> some View {
