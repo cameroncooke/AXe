@@ -97,5 +97,52 @@ struct MirrorRotationTouchTests {
         let half = MirrorInput.panelShare(x: point.x, y: point.y, rotation: 180)
         #expect(abs(half.x - 0.7) < 0.0001 && abs(half.y - 0.3) < 0.0001)
     }
+
+    private func touch(kind: UInt8, gesture: UInt32, sequence: UInt32, time: TimeInterval) -> MirrorTouch {
+        MirrorTouch(kind: kind, gesture: gesture, sequence: sequence, points: [CGPoint(x: 0.5, y: 0.5)], time: time)
+    }
+
+    @Test("Moves for a touch that never goes down do not pile up on the host")
+    func strangerCannotFillMemory() {
+        var waiting: [MirrorTouch] = [], samples: [MirrorTouch] = [], arrivals: [String] = []
+        var openAges: [UInt32: [TimeInterval]] = [:]
+        // What `MirrorInput.receive` keeps for each message, here for 100,000 of the worst kind:
+        // moves with no down, downs that never come due, and a new gesture number every time.
+        for index in 0..<100_000 {
+            let gesture = UInt32(1_000_000 - index)
+            samples.append(touch(kind: 4, gesture: 7, sequence: UInt32(index), time: Double(index)))
+            waiting.append(touch(kind: 1, gesture: gesture, sequence: 0, time: 1e9))
+            arrivals.append("line")
+            openAges[gesture, default: []].append(0.01)
+            openAges[7, default: []].append(0.01)
+            MirrorTouchLimits.bound(waiting: &waiting, samples: &samples, openAges: &openAges, arrivals: &arrivals, gesture: 7)
+        }
+        #expect(waiting.count <= MirrorTouchLimits.waiting)
+        #expect(samples.count <= MirrorTouchLimits.samples)
+        #expect(arrivals.count <= MirrorTouchLimits.arrivals)
+        #expect(openAges.count <= MirrorTouchLimits.openGestures && (openAges[7]?.count ?? 0) <= MirrorTouchLimits.agesPerGesture)
+        // The newest positions are the ones kept: they are what the replay reads.
+        #expect(samples.last?.sequence == 99_999)
+    }
+
+
+    @Test("A touch with a number that is not one is refused, and one from the future is brought back")
+    func hostileNumbers() throws {
+        func message(x: Float32, time: Double) -> Data {
+            var data = MirrorTouch.payload(kind: 4, gesture: 1, sequence: 9, points: [CGPoint(x: 0.25, y: 0.75)], time: time)
+            withUnsafeBytes(of: x) { data.replaceSubrange(10..<14, with: $0) }
+            return data
+        }
+        #expect(MirrorTouch(message(x: .nan, time: 10), received: 10) == nil)
+        #expect(MirrorTouch(message(x: .infinity, time: 10), received: 10) == nil)
+        #expect(MirrorTouch(message(x: 0.25, time: .nan), received: 10) == nil)
+        // Outside the picture is brought to its edge.
+        #expect(try #require(MirrorTouch(message(x: 7, time: 10), received: 10)).x1 == 1)
+        // A touch dated an hour ahead would never come due; it is played as if made now.
+        let ahead = try #require(MirrorTouch(message(x: 0.25, time: 3610), received: 10))
+        #expect(ahead.touchTime == 11 && ahead.x1 == 0.25 && ahead.y1 == 0.75)
+        let honest = try #require(MirrorTouch(message(x: 0.25, time: 9.96), received: 10))
+        #expect(honest.touchTime == 9.96)
+    }
 }
 #endif

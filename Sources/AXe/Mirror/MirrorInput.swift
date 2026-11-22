@@ -3,6 +3,29 @@ import CoreGraphics
 import FBSimulatorControl
 import Foundation
 
+/// The most the host holds of what a viewer has sent and it has not yet played. A viewer decides
+/// what it sends, and a demo host's viewer is a stranger: moves for a touch that never goes down,
+/// downs dated in the future and gestures that never end would otherwise be kept for ever. No
+/// honest touch comes near these: a finger held down for a minute makes 3,600 positions.
+enum MirrorTouchLimits {
+    static let waiting = 256                // downs and ups not yet due
+    static let samples = 6000               // positions; over it, the oldest go
+    static let samplesKept = 4000
+    static let openGestures = 64            // gestures whose lateness is being measured
+    static let agesPerGesture = 2000
+    static let arrivals = 8000              // lines of the arrivals log
+
+    /// Cuts each of them back to its limit. `gesture` is the one the newest message belongs to.
+    static func bound(waiting: inout [MirrorTouch], samples: inout [MirrorTouch], openAges: inout [UInt32: [TimeInterval]],
+                      arrivals: inout [String], gesture: UInt32) {
+        if waiting.count > Self.waiting { waiting.removeFirst(waiting.count - Self.waiting) }
+        if samples.count > Self.samples { samples.removeFirst(samples.count - samplesKept) }
+        if let own = openAges[gesture], own.count > agesPerGesture { openAges[gesture] = Array(own.suffix(agesPerGesture / 2)) }
+        if openAges.count > openGestures { openAges = openAges.filter { $0.key == gesture } }
+        if arrivals.count > Self.arrivals { arrivals.removeFirst(arrivals.count - Self.arrivals / 2) }
+    }
+}
+
 /// Takes the viewer's touches and plays them into the simulator.
 ///
 /// Moves are replayed a short, steady time after they happened, at the spacing they had on the
@@ -189,6 +212,7 @@ final class MirrorInput {
                 needs.append(ordered[min(ordered.count - 1, Int(Double(ordered.count) * 0.95))])
                 if needs.count > 5 { needs.removeFirst() }
             }
+            MirrorTouchLimits.bound(waiting: &waiting, samples: &samples, openAges: &openAges, arrivals: &arrivals, gesture: message.gesture)
             return
         }
         if message.recovered { return }
@@ -483,7 +507,6 @@ final class MirrorInput {
         lock.lock()
         log.append(line)
         if log.count > 4000 { log.removeFirst(2000) }
-        if arrivals.count > 8000 { arrivals.removeFirst(4000) }
         lock.unlock()
     }
 

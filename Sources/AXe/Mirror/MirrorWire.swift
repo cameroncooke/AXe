@@ -93,25 +93,37 @@ struct MirrorTouch {
         for index in 0..<min(4, (payload.count - 42) / 20) {
             let at = 42 + 20 * index
             guard main.sequence > UInt32(index + 1) else { break }
+            let ago = Double(payload.read(Float32.self, at: at + 16))
+            guard ago.isFinite, ago >= 0, [0, 4, 8, 12].allSatisfy({ payload.read(Float32.self, at: at + $0).isFinite }) else { break }
             var points = [CGPoint(x: Double(payload.read(Float32.self, at: at)), y: Double(payload.read(Float32.self, at: at + 4)))]
             if main.contacts > 1 { points.append(CGPoint(x: Double(payload.read(Float32.self, at: at + 8)), y: Double(payload.read(Float32.self, at: at + 12)))) }
             var message = MirrorTouch(kind: 4, gesture: main.gesture, sequence: main.sequence - UInt32(index + 1), points: points,
-                                       time: main.touchTime - Double(payload.read(Float32.self, at: at + 16)), received: received)
+                                       time: main.touchTime - ago, received: received)
             message.recovered = true
             earlier.append(message)
         }
         return earlier
     }
 
+    /// How far ahead of its arrival a touch may say it was made. A viewer's clock is matched to
+    /// the host's to within milliseconds, so a touch from the future is a mistake or mischief, and
+    /// one kept waiting for its time to come would wait for ever.
+    static let furthestAhead: TimeInterval = 1
+
+    /// Nil for a message that is too short or holds a number that is not one. Positions are shares
+    /// of the picture and are kept inside it; the time is the viewer's word, kept to `furthestAhead`.
     init?(_ payload: Data, received: TimeInterval) {
         guard payload.count >= 42 else { return nil }
+        let positions = [10, 14, 18, 22].map { Double(payload.read(Float32.self, at: $0)) }
+        let made = payload.read(Double.self, at: 26) + payload.read(Double.self, at: 34)
+        guard positions.allSatisfy(\.isFinite), made.isFinite else { return nil }
         kind = payload.read(UInt8.self, at: 0)
         contacts = payload.read(UInt8.self, at: 1)
         gesture = payload.read(UInt32.self, at: 2)
         sequence = payload.read(UInt32.self, at: 6)
-        x1 = Double(payload.read(Float32.self, at: 10)); y1 = Double(payload.read(Float32.self, at: 14))
-        x2 = Double(payload.read(Float32.self, at: 18)); y2 = Double(payload.read(Float32.self, at: 22))
-        touchTime = payload.read(Double.self, at: 26) + payload.read(Double.self, at: 34)
+        x1 = min(1, max(0, positions[0])); y1 = min(1, max(0, positions[1]))
+        x2 = min(1, max(0, positions[2])); y2 = min(1, max(0, positions[3]))
+        touchTime = min(made, received + Self.furthestAhead)
         self.received = received
     }
 }
