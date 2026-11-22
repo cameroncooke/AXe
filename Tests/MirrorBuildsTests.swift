@@ -312,6 +312,102 @@ struct MirrorBuildsTests {
         #expect(try store.load(now: Date(timeIntervalSince1970: made.expires - 86_400)) != made)
     }
 
+    /// Runs openssl, as the store does.
+    private func openssl(_ arguments: [String]) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
+        process.arguments = arguments
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        process.waitUntilExit()
+        #expect(process.terminationStatus == 0, "openssl \(arguments.first ?? "") failed")
+    }
+
+    /// An authority made from `configuration`, with its key kept so that the test can sign with
+    /// it, which the host never can: returns the authority and a way to make a certificate signed
+    /// by it for any name or address.
+    private func authority(_ configuration: String, in folder: URL) throws -> (certificate: SecCertificate, der: Data, sign: (String) throws -> SecCertificate) {
+        func path(_ name: String) -> String { folder.appendingPathComponent(name).path }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try configuration.write(toFile: path("authority.cnf"), atomically: true, encoding: .utf8)
+        try openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", path("authority.key"), "-out", path("authority.pem"),
+                     "-days", "30", "-sha256", "-config", path("authority.cnf")])
+        try openssl(["x509", "-in", path("authority.pem"), "-outform", "der", "-out", path("authority.cer")])
+        let der = try Data(contentsOf: URL(fileURLWithPath: path("authority.cer")))
+        let sign = { (subject: String) throws -> SecCertificate in
+            try "subjectAltName = \(subject)\nextendedKeyUsage = serverAuth\nkeyUsage = critical,digitalSignature,keyEncipherment\nbasicConstraints = CA:FALSE\n"
+                .write(toFile: path("leaf.ext"), atomically: true, encoding: .utf8)
+            try self.openssl(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", path("leaf.key"), "-out", path("leaf.csr"), "-subj", "/CN=leaf"])
+            try self.openssl(["x509", "-req", "-in", path("leaf.csr"), "-CA", path("authority.pem"), "-CAkey", path("authority.key"), "-CAcreateserial",
+                              "-out", path("leaf.der"), "-outform", "der", "-days", "30", "-sha256", "-extfile", path("leaf.ext")])
+            return try #require(SecCertificateCreateWithData(nil, try Data(contentsOf: URL(fileURLWithPath: path("leaf.der"))) as CFData))
+        }
+        return (try #require(SecCertificateCreateWithData(nil, der as CFData)), der, sign)
+    }
+
+    /// Whether the system accepts `certificate` as the server `name`, with `authority` trusted.
+    private func accepted(_ certificate: SecCertificate, as name: String, by authority: SecCertificate) -> Bool {
+        var trust: SecTrust?
+        SecTrustCreateWithCertificates([certificate] as CFArray, SecPolicyCreateSSL(true, name as CFString), &trust)
+        guard let trust else { return false }
+        SecTrustSetAnchorCertificates(trust, [authority] as CFArray)
+        SecTrustSetAnchorCertificatesOnly(trust, true)
+        return SecTrustEvaluateWithError(trust, nil)
+    }
+
+    @Test("The authority a person trusts can vouch for the device's own names and for no other site")
+    func authorityIsLimited() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-identity-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let names = MirrorInstallIdentity.loopbackNames
+        let made = try authority(MirrorInstallIdentityStore.authorityConfiguration(owner: "Test Mac", names: names), in: folder)
+        #expect(MirrorCertificateLimits.limits(ofAuthority: made.der) == .init(names: names, refusesAddresses: true))
+        #expect(MirrorCertificateLimits.isLimited(made.der, to: names))
+        // What it is for: the device serving a build to itself.
+        #expect(accepted(try made.sign("DNS:local.axe-cli.com"), as: "local.axe-cli.com", by: made.certificate))
+        // What whoever held its key could try: another site, or an address on the network.
+        #expect(!accepted(try made.sign("DNS:bank.example.com"), as: "bank.example.com", by: made.certificate))
+        #expect(!accepted(try made.sign("IP:192.168.1.1"), as: "192.168.1.1", by: made.certificate))
+    }
+
+    @Test("An authority without the limit is not taken for one with it, and one kept from before is made again")
+    func unlimitedAuthorityIsReplaced() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-identity-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let names = MirrorInstallIdentity.loopbackNames
+        // As the host made it before: an authority that may sign for anything.
+        let old = try authority("""
+        [req]
+        distinguished_name = dn
+        x509_extensions = v3
+        prompt = no
+        [dn]
+        CN = AXe Mirror installs from Test Mac
+        [v3]
+        basicConstraints = critical,CA:TRUE,pathlen:0
+        keyUsage = critical,keyCertSign
+        subjectKeyIdentifier = hash
+        """, in: folder.appendingPathComponent("old"))
+        #expect(accepted(try old.sign("DNS:bank.example.com"), as: "bank.example.com", by: old.certificate))
+        #expect(MirrorCertificateLimits.limits(ofAuthority: old.der) == nil && !MirrorCertificateLimits.isLimited(old.der, to: names))
+        // Limited, but to more than the device's own names.
+        let wide = try authority(MirrorInstallIdentityStore.authorityConfiguration(owner: "Test Mac", names: names + ["example.com"]), in: folder.appendingPathComponent("wide"))
+        #expect(!MirrorCertificateLimits.isLimited(wide.der, to: names))
+        #expect(MirrorCertificateLimits.limits(ofAuthority: Data("not a certificate".utf8)) == nil)
+        #expect(MirrorCertificateLimits.limits(ofAuthority: old.der.prefix(200)) == nil)
+        // A store that holds the old kind hands out a new, limited one.
+        let store = MirrorInstallIdentityStore(folder: folder.appendingPathComponent("store"))
+        let fresh = try store.load(macName: "Test Mac")
+        #expect(MirrorCertificateLimits.isLimited(fresh.authority, to: names))
+        var kept = fresh
+        kept.authority = old.der
+        try JSONEncoder().encode(kept).write(to: store.folder.appendingPathComponent("identity.json"))
+        let again = try store.load(macName: "Test Mac")
+        #expect(again.authority != old.der && MirrorCertificateLimits.isLimited(again.authority, to: names))
+        #expect(try store.load(macName: "Test Mac") == again)
+    }
+
     @Test("Viewers that ask for the certificate at the same moment are given the same one")
     func identityOnce() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("axe-identity-test-\(UUID().uuidString)")

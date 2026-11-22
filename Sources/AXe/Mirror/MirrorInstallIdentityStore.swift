@@ -6,6 +6,10 @@ import Foundation
 /// `MirrorInstallIdentity`. One for the host, so a viewer sets it up once for each Mac. It is made
 /// with the system's own openssl, lasts 820 days (iOS accepts no server certificate longer than
 /// 825), and is made again when it has under a month left.
+///
+/// The authority a person trusts for it can vouch only for the names that point at the device
+/// itself (`MirrorCertificateLimits`). One kept from before that was so is made again, and the
+/// viewer asks its person to trust the new one.
 struct MirrorInstallIdentityStore {
     let folder: URL
 
@@ -31,7 +35,8 @@ struct MirrorInstallIdentityStore {
         }
         defer { flock(lock, LOCK_UN); close(lock) }
         if let data = try? Data(contentsOf: file), let kept = try? JSONDecoder().decode(MirrorInstallIdentity.self, from: data),
-           kept.expires - now.timeIntervalSince1970 > 30 * 86_400, kept.names == MirrorInstallIdentity.loopbackNames {
+           kept.expires - now.timeIntervalSince1970 > 30 * 86_400, kept.names == MirrorInstallIdentity.loopbackNames,
+           MirrorCertificateLimits.isLimited(kept.authority, to: MirrorInstallIdentity.loopbackNames) {
             return kept
         }
         let made = try Self.make(macName: macName, now: now)
@@ -50,18 +55,7 @@ struct MirrorInstallIdentityStore {
         let names = MirrorInstallIdentity.loopbackNames
         // A name a person will recognise under Certificate Trust Settings; no characters openssl's file reads specially.
         let owner = macName.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" }.prefix(40)
-        try """
-        [req]
-        distinguished_name = dn
-        x509_extensions = v3
-        prompt = no
-        [dn]
-        CN = AXe Mirror installs from \(owner)
-        [v3]
-        basicConstraints = critical,CA:TRUE,pathlen:0
-        keyUsage = critical,keyCertSign
-        subjectKeyIdentifier = hash
-        """.write(toFile: path("authority.cnf"), atomically: true, encoding: .utf8)
+        try authorityConfiguration(owner: String(owner), names: names).write(toFile: path("authority.cnf"), atomically: true, encoding: .utf8)
         try """
         subjectAltName = \(names.map { "DNS:" + $0 }.joined(separator: ","))
         extendedKeyUsage = serverAuth
@@ -81,6 +75,27 @@ struct MirrorInstallIdentityStore {
                                      identity: try Data(contentsOf: URL(fileURLWithPath: path("identity.p12"))),
                                      password: password, names: names, expires: now.timeIntervalSince1970 + Double(self.days) * 86_400,
                                      authorityName: "AXe Mirror installs from \(owner)")
+    }
+
+    /// What openssl makes the authority from. It may sign for `names` and the names under them and
+    /// for nothing else: no other name, no IP address, no further authority (`pathlen:0`), and
+    /// only certificates for servers. A person switches on full trust for this authority, so
+    /// without the limits whoever held its key could pass for any site to that device.
+    static func authorityConfiguration(owner: String, names: [String]) -> String {
+        """
+        [req]
+        distinguished_name = dn
+        x509_extensions = v3
+        prompt = no
+        [dn]
+        CN = AXe Mirror installs from \(owner)
+        [v3]
+        basicConstraints = critical,CA:TRUE,pathlen:0
+        keyUsage = critical,keyCertSign
+        subjectKeyIdentifier = hash
+        nameConstraints = critical,\(names.map { "permitted;DNS:" + $0 }.joined(separator: ",")),excluded;IP:0.0.0.0/0.0.0.0,excluded;IP:0:0:0:0:0:0:0:0/0:0:0:0:0:0:0:0
+        extendedKeyUsage = serverAuth
+        """
     }
 
     private static func openssl(_ arguments: [String]) throws {

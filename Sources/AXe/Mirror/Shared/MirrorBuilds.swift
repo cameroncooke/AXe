@@ -39,7 +39,9 @@ extension MirrorMessage {
 /// other network, no server of ours in the download.
 ///
 /// The host makes the certificate, one authority and one certificate signed by it for the names in
-/// `names`, and throws the authority's key away at once, so nothing else can ever be signed by it.
+/// `names`, and throws the authority's key away at once. The authority's own certificate limits
+/// it to those names (`MirrorCertificateLimits`), which the viewer checks before it offers it to
+/// be trusted: nothing signed by it for any other site is accepted by iOS, whoever holds its key.
 /// `authority` is the authority's certificate (DER), which the person installs and trusts once;
 /// `identity` is the signed certificate with its key (PKCS #12, opened with `password`).
 struct MirrorInstallIdentity: Codable, Equatable, Sendable {
