@@ -997,6 +997,9 @@ final class StreamSession {
     /// Why the Mac could not make its certificate, in its words, when it could not.
     @ObservationIgnored private var identityProblem: String?
     @ObservationIgnored private var fetch: (build: MirrorBuild, host: String, file: URL, handle: FileHandle)?
+    /// The fetch has no connection to go on with, and carries on when there is one: see `resumeFetch`.
+    @ObservationIgnored private var fetchWaits = false
+    @ObservationIgnored private var fetchWatch: Task<Void, Never>?
     @ObservationIgnored private var keepAwake = UIBackgroundTaskIdentifier.invalid
 
     /// The name the authority's certificate has under Certificate Trust Settings.
@@ -1107,8 +1110,47 @@ final class StreamSession {
         }
         fetch = (build, host, file, handle)
         fetching = (build.id, 0, build.size ?? 0)
-        client?.fetchBuild(build.id, offset: 0)
+        if state == .connected {
+            ask(for: build.id, from: 0)
+        } else {
+            // Install was tapped while the connection was being made again. Asking now would be
+            // asking nobody, and the build would stand at 0% for ever: it is asked for when the
+            // Mac is back and has said what it offers (`resumeFetch`).
+            fetchWaits = true
+        }
     }
+
+    /// A fetch that was under way when the connection went, or was asked for while there was none,
+    /// carries on from where it stopped once the Mac is back and offers the same build: what has
+    /// arrived is kept, and the whole file is checked at the end as ever. A Mac that no longer
+    /// offers that build ends it.
+    private func resumeFetch(offered: [MirrorBuild]) {
+        guard fetchWaits, let fetch, let progress = fetching else { return }
+        fetchWaits = false
+        guard offered.contains(where: { $0.id == fetch.build.id && $0.sha256 == fetch.build.sha256 }) else {
+            dropFetch()
+            installProblem = (fetch.build, "The Mac no longer has that build", "It was removed while this device was fetching it.")
+            return
+        }
+        ask(for: fetch.build.id, from: progress.received)
+    }
+
+    /// Asks the Mac for the next piece, and notices if nothing comes of it: a Mac that neither
+    /// sends the piece nor says why would otherwise leave the build at the same percentage for
+    /// ever, with every Install button waiting on it.
+    private func ask(for id: String, from offset: Int) {
+        client?.fetchBuild(id, offset: offset)
+        fetchWatch?.cancel()
+        fetchWatch = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: Self.fetchStallLimit * 1_000_000_000)
+            guard !Task.isCancelled, let self, let fetch = self.fetch, fetch.build.id == id, self.fetching?.received == offset,
+                  !self.fetchWaits, self.state == .connected else { return }
+            self.dropFetch()
+            self.installProblem = (fetch.build, "The Mac stopped sending the build", "Nothing has arrived for a while. Try again.")
+        }
+    }
+    /// How long one piece may take, in seconds. A piece is 512 KiB, so this allows a link of 50 kbit/s.
+    static let fetchStallLimit: UInt64 = 90
 
     private func gotPiece(_ piece: MirrorBuildPiece) {
         guard let fetch, let progress = fetching, piece.id == fetch.build.id, piece.offset == progress.received else { return }
@@ -1116,7 +1158,8 @@ final class StreamSession {
         let received = progress.received + piece.bytes.count
         fetching = (progress.id, received, progress.size)
         let finished = piece.bytes.count < MirrorBuildFetch.largest || (progress.size > 0 && received >= progress.size)
-        guard finished else { client?.fetchBuild(piece.id, offset: received); return }
+        guard finished else { ask(for: piece.id, from: received); return }
+        fetchWatch?.cancel()
         try? fetch.handle.close()
         self.fetch = nil
         fetching = nil
@@ -1153,8 +1196,10 @@ final class StreamSession {
         open(build, link)
     }
 
-    /// A fetch cut short by the connection going is dropped; the next Install starts it again.
+    /// Ends a fetch and removes what had arrived of it.
     private func dropFetch() {
+        fetchWaits = false
+        fetchWatch?.cancel()
         guard let fetch else { return }
         try? fetch.handle.close()
         try? FileManager.default.removeItem(at: fetch.file)
@@ -1172,6 +1217,7 @@ final class StreamSession {
         let known = Set(builds.map(\.id))
         let arrived = list.first { !known.contains($0.id) }
         builds = list
+        resumeFetch(offered: list)
         if buildsSeen {
             // Published while this viewer was connected: somebody means it to be installed now.
             if let arrived { announcedBuild = arrived }
@@ -1521,7 +1567,8 @@ final class StreamSession {
             } else if state != .connected {
                 self.askedForBuilds = false
                 self.askedForIdentity = false
-                self.dropFetch()
+                // A fetch under way waits for the Mac to come back, with what has arrived kept.
+                if self.fetch != nil { self.fetchWaits = true }
             }
             if state != .connected {
                 self.stopFolding()
@@ -1617,6 +1664,7 @@ final class StreamSession {
     }
 
     func stop() {
+        dropFetch()
         client?.stop()
         client = nil
     }
