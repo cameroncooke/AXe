@@ -1334,7 +1334,13 @@ final class StreamSession {
     var fitsToScreen: Bool = (UserDefaults.standard.object(forKey: "MirrorFitsToScreen") as? Bool) ?? true {
         didSet {
             UserDefaults.standard.set(fitsToScreen, forKey: "MirrorFitsToScreen")
-            if fitsToScreen { turnedByHand = nil; lastFit = nil }
+            // Switched on, it fits the picture that is on screen now: it used to wait for the
+            // room or the picture to change shape first, and until then nothing happened.
+            if fitsToScreen {
+                turnedByHand = nil
+                lastFit = nil
+                if hasPicture, !folding { fit(roomIsWide: roomIsWide) }
+            }
         }
     }
     @ObservationIgnored private var turnedByHand: String?      // the simulator last turned by hand
