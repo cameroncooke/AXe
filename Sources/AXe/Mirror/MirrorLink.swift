@@ -247,15 +247,21 @@ final class MirrorLink: @unchecked Sendable {
         }
         let reason = await connection.closed()
         onNote?("iroh connection closed: \(reason)")
-        queue.async {
-            guard self.isCurrent(connection) else { return }
-            self.lock.lock()
-            self.connection = nil
-            self.control?.finish(); self.control = nil
-            self.video?.finish(); self.video = nil
-            self.videoSend = nil
-            self.lock.unlock()
-            self.onClosed?()
+        // This returns only once the session has been told. Whoever called it holds the session
+        // until then: a session the host has already let go of, as when its viewer is unpaired,
+        // would otherwise be gone before it could say that its viewer had disconnected.
+        await withCheckedContinuation { (told: CheckedContinuation<Void, Never>) in
+            queue.async {
+                defer { told.resume() }
+                guard self.isCurrent(connection) else { return }
+                self.lock.lock()
+                self.connection = nil
+                self.control?.finish(); self.control = nil
+                self.video?.finish(); self.video = nil
+                self.videoSend = nil
+                self.lock.unlock()
+                self.onClosed?()
+            }
         }
     }
 
