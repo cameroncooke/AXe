@@ -49,11 +49,7 @@ final class MirrorHostSessions: @unchecked Sendable {
 
     func start() {
         let settings = lock.withLock { self.settings }
-        health.onReport = { [weak self] line, short in
-            mirrorNote(line)
-            guard let self, !short.isEmpty else { return }
-            for session in self.all() { session.linkHealth(short) }    // each viewer shows it under its other figures
-        }
+        health.onReport = { line, _ in mirrorNote(line) }
         health.isWanted = { [weak self] in self?.hasViewer ?? false }
         health.start()
         let timer = DispatchSource.makeTimerSource(queue: queue)

@@ -229,7 +229,7 @@ final class MirrorClient: @unchecked Sendable {
     /// Presses one of the simulator's hardware buttons: 2 Home, 3 Lock. Two Home presses in one
     /// message open the app switcher.
     func pressButton(_ button: UInt8, count: UInt8 = 1) {
-        queue.async { [self] in send(43, Data([button, count])) }
+        queue.async { [self] in send(MirrorMessage.button, Data([button, count])) }
     }
 
     // MARK: Choosing a simulator
@@ -528,10 +528,10 @@ final class MirrorClient: @unchecked Sendable {
                     guard current == generation, number == nil || number == videoStreamNumber else { return }
                     lastHeard = received
                     switch type {
-                    case 1: configure(payload)
-                    case 2: decode(payload, received: received)
-                    case 3: pong(payload)
-                    case 23: showing(payload)
+                    case MirrorMessage.configuration: configure(payload)
+                    case MirrorMessage.frame: decode(payload, received: received)
+                    case MirrorMessage.pong: pong(payload)
+                    case MirrorMessage.sessionInfo: showing(payload)
                     case MirrorMessage.simulators: simulators(payload)
                     case MirrorMessage.progress:
                         guard let progress = try? JSONDecoder().decode(MirrorSimulatorProgress.self, from: payload) else { return }
@@ -621,7 +621,7 @@ final class MirrorClient: @unchecked Sendable {
         tick += 1
         var ping = Data()
         ping.put(Self.now())
-        send(10, ping)
+        send(MirrorMessage.ping, ping)
         guard tick % 2 == 0 else { return }
         sendInfo(timely: true)
         let path = connection.paths().first(where: { $0.isSelected })
@@ -661,13 +661,13 @@ final class MirrorClient: @unchecked Sendable {
             info["path"] = path.isRelay ? "relay" : "direct"
             info["pathRttMs"] = Int(path.rttMs)
         }
-        if let data = try? JSONSerialization.data(withJSONObject: info) { send(13, data, timely: timely) }
+        if let data = try? JSONSerialization.data(withJSONObject: info) { send(MirrorMessage.viewerInfo, data, timely: timely) }
     }
 
     private func requestKeyframe() {
         guard Self.now() - lastKeyRequest > 0.5 else { return }
         lastKeyRequest = Self.now()
-        send(12, Data())
+        send(MirrorMessage.keyframeRequest, Data())
     }
 
     // MARK: Touch
@@ -675,31 +675,17 @@ final class MirrorClient: @unchecked Sendable {
     private func sendTouch(kind: UInt8, fractions: [CGPoint], at time: TimeInterval) {
         if kind == 1 || kind == 5 { gesture &+= 1; touchSequence = 0; recentMoves = [] }
         touchSequence &+= 1
-        var payload = Data(capacity: 82)
-        payload.append(kind)
-        payload.append(UInt8(fractions.count))
-        payload.put(gesture)
-        payload.put(touchSequence)
-        payload.put(Float32(fractions[0].x)); payload.put(Float32(fractions[0].y))
-        let second = fractions.count > 1 ? fractions[1] : .zero
-        payload.put(Float32(second.x)); payload.put(Float32(second.y))
-        payload.put(time)
-        payload.put(offset)
+        // A move also carries the two before it, so the Mac can recover a move whose own message was lost.
+        let payload = MirrorTouch.payload(kind: kind, gesture: gesture, sequence: touchSequence, points: fractions, time: time, offset: offset,
+                                          history: kind == 4 ? recentMoves.map { (points: $0.fractions, time: $0.time) } : [])
         if kind == 4 {
-            // A move also carries the two before it, so the Mac can recover a move whose own message was lost.
-            for earlier in recentMoves {
-                payload.put(Float32(earlier.fractions[0].x)); payload.put(Float32(earlier.fractions[0].y))
-                let other = earlier.fractions.count > 1 ? earlier.fractions[1] : .zero
-                payload.put(Float32(other.x)); payload.put(Float32(other.y))
-                payload.put(Float32(time - earlier.time))
-            }
             recentMoves.insert((fractions, time), at: 0)
             if recentMoves.count > 2 { recentMoves.removeLast() }
         }
         // Moves are worthless late, so they go as datagrams. Downs and ups must arrive, so they go on
         // the reliable stream, and also as a datagram, which is usually first; the Mac uses whichever arrives.
-        send(kind == 4 ? 41 : 40, payload, timely: kind == 4)
-        if kind != 4 { send(41, payload, timely: true) }
+        send(kind == 4 ? MirrorMessage.touchMove : MirrorMessage.touch, payload, timely: kind == 4)
+        if kind != 4 { send(MirrorMessage.touchMove, payload, timely: true) }
     }
 
     // MARK: Video
@@ -810,7 +796,7 @@ final class MirrorClient: @unchecked Sendable {
         report.put(offset)
         report.put(roundTrip)
         report.put(decodedAt)
-        send(11, report, timely: true)
+        send(MirrorMessage.frameReport, report, timely: true)
     }
 
     private func display(_ image: CVImageBuffer) {
@@ -844,10 +830,3 @@ final class MirrorClient: @unchecked Sendable {
     }
 }
 
-extension Data {
-    mutating func put<T>(_ value: T) { Swift.withUnsafeBytes(of: value) { append(contentsOf: $0) } }
-
-    func read<T>(_ type: T.Type, at offset: Int) -> T {
-        withUnsafeBytes { $0.loadUnaligned(fromByteOffset: offset, as: T.self) }
-    }
-}

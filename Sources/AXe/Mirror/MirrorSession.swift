@@ -228,12 +228,6 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         }
     }
 
-    /// The Mac's own network link, as the host's probe found it: the viewer shows it under its
-    /// other figures.
-    func linkHealth(_ short: String) {
-        queue.async { self.sendControl(24, Data(short.utf8)) }
-    }
-
     /// How busy the Mac is, as the host samples it. The viewer is told when it becomes busy or
     /// stops being busy: a simulator that is slow on a busy Mac may be starved rather than stuck,
     /// and the viewer says so.
@@ -628,7 +622,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             let sets = parameterSets(of: format)
             config.put(UInt8(sets.count))
             for set in sets { config.put(UInt16(set.count)); config.append(set) }
-            out.append(mirrorMessage(type: 1, payload: config))
+            out.append(mirrorMessage(type: MirrorMessage.configuration, payload: config))
         }
         var payload = Data(capacity: length + 41)
         payload.put(frameID)
@@ -640,7 +634,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         payload.put(lastSentFrame)
         lastSentFrame = frameID
         payload.append(bytes)
-        out.append(mirrorMessage(type: 2, payload: payload))
+        out.append(mirrorMessage(type: MirrorMessage.frame, payload: payload))
 
         frame.encodeDone = encodeDone
         frame.bytes = length
@@ -784,12 +778,12 @@ final class MirrorSession: NSObject, @unchecked Sendable {
 
     private func handle(type: UInt8, payload: Data) {
         switch type {
-        case 10 where payload.count >= 8:   // ping: echo the viewer's time with ours
+        case MirrorMessage.ping where payload.count >= 8:   // echo the viewer's time with ours
             var reply = Data()
             reply.put(payload.read(Double.self, at: 0))
             reply.put(mirrorNow())
-            sendControl(3, reply)
-        case 11 where payload.count >= 8:   // frame report
+            sendControl(MirrorMessage.pong, reply)
+        case MirrorMessage.frameReport where payload.count >= 8:
             let frameID = payload.read(UInt64.self, at: 0)
             guard var frame = frames[frameID], !frame.reported else { return }
             frame.reported = true
@@ -800,7 +794,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 waitingOnViewer = false
                 encode(recheck: 3)
             }
-        case 12:    // keyframe request
+        case MirrorMessage.keyframeRequest:
             // A keyframe costs many times what another frame does, so a viewer gets them no faster
             // than `keyframeSpacing`, and through the frame-rate limit like any other frame. One
             // asked for sooner is made when its time comes.
@@ -820,7 +814,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                     scheduleEncode(recheck: 3)
                 }
             }
-        case 13:    // viewer info: its network and the size of its pane
+        case MirrorMessage.viewerInfo:      // its network and the size of its pane
             guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
             if let network = json["network"] as? String, network != viewerNetwork {
                 viewerNetwork = network
@@ -850,7 +844,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
                 resizeWork = work
                 queue.asyncAfter(deadline: .now() + 0.3, execute: work)
             }
-        case 30 where !settings.demo:   // profile chosen in the viewer: frame rate, bitrate and scale, applied at once
+        case MirrorMessage.profile where !settings.demo:    // chosen in the viewer: frame rate, bitrate and scale, applied at once
             guard let json = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
             if let fps = json["fps"] as? Double, fps >= 10, fps <= 120 { settings.fps = fps }
             if let mbps = json["mbps"] as? Double, mbps >= settings.minMbps, mbps <= 50 { settings.mbps = mbps }
@@ -859,7 +853,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             guard sessionStarted else { return }
             rebuild()
             encode(recheck: 3)
-        case 40, 41:    // touch
+        case MirrorMessage.touch, MirrorMessage.touchMove:
             let time = mirrorNow()
             if let message = MirrorTouch(payload, received: time) {
                 if settings.demo {
@@ -893,7 +887,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         case MirrorMessage.fold where !settings.demo:
             guard let request = try? JSONDecoder().decode(MirrorFoldRequest.self, from: payload) else { return }
             fold(request)
-        case 43 where payload.count >= 2 && !settings.demo:   // a hardware button pressed in the viewer: button, number of presses
+        case MirrorMessage.button where payload.count >= 2 && !settings.demo:   // pressed in the viewer: button, number of presses
             input?.press(button: payload[payload.startIndex], count: payload[payload.startIndex + 1])
         case MirrorMessage.listBuilds where !settings.demo:
             watchBuilds()
@@ -1027,7 +1021,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             info["rotates"] = true      // this host takes rotation requests
             info["hinge"] = hasHinge    // an iPhone Duo: this host takes fold requests and sends screen states
         }
-        if let data = try? JSONSerialization.data(withJSONObject: info) { sendControl(23, data) }
+        if let data = try? JSONSerialization.data(withJSONObject: info) { sendControl(MirrorMessage.sessionInfo, data) }
         sentScreen = nil
         sendScreenIfChanged()
         if !responsiveness.responding {

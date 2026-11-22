@@ -126,6 +126,27 @@ struct MirrorRotationTouchTests {
     }
 
 
+    @Test("A touch as the app builds it is the touch the host reads: one description of the message serves both")
+    func oneWireFormat() throws {
+        // A two-finger move, made at 100.25 on the viewer's clock, which runs 3.5 s behind the host's,
+        // carrying the two moves before it.
+        let points = [CGPoint(x: 0.25, y: 0.75), CGPoint(x: 0.5, y: 0.125)]
+        let earlier = [(points: [CGPoint(x: 0.24, y: 0.74), CGPoint(x: 0.49, y: 0.12)], time: 100.234),
+                       (points: [CGPoint(x: 0.23, y: 0.73), CGPoint(x: 0.48, y: 0.11)], time: 100.217)]
+        let sent = MirrorTouch.payload(kind: 4, gesture: 12, sequence: 9, points: points, time: 100.25, offset: 3.5, history: earlier)
+        let read = try #require(MirrorTouch(sent, received: 103.76))
+        #expect(read.kind == 4 && read.contacts == 2 && read.gesture == 12 && read.sequence == 9)
+        #expect(read.x1 == 0.25 && read.y1 == 0.75 && read.x2 == 0.5 && read.y2 == 0.125)
+        #expect(read.touchTime == 103.75 && read.received == 103.76)
+        let recovered = MirrorTouch.history(in: sent, received: 103.76)
+        #expect(recovered.map(\.sequence) == [8, 7] && recovered.allSatisfy { $0.recovered && $0.gesture == 12 })
+        #expect(abs(recovered[0].touchTime - 103.734) < 0.0001 && abs(recovered[1].x1 - 0.23) < 0.0001)
+        // The numbers both sides send by.
+        #expect([MirrorMessage.touch, MirrorMessage.touchMove, MirrorMessage.button, MirrorMessage.ping, MirrorMessage.pong] == [40, 41, 43, 10, 3])
+        #expect([MirrorMessage.configuration, MirrorMessage.frame, MirrorMessage.frameReport, MirrorMessage.keyframeRequest, MirrorMessage.viewerInfo,
+                 MirrorMessage.sessionInfo, MirrorMessage.profile] == [1, 2, 11, 12, 13, 23, 30])
+    }
+
     @Test("A touch with a number that is not one is refused, and one from the future is brought back")
     func hostileNumbers() throws {
         func message(x: Float32, time: Double) -> Data {
