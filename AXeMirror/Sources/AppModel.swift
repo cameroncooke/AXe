@@ -81,13 +81,18 @@ final class AppModel {
         return StreamDestination(title: host.name, target: .init(hostID: host.id, relays: candidates), isDemo: false)
     }
 
-    enum PairFailure: Error, Equatable { case badCode, notFound, refused, badReply }
+    enum PairFailure: Error, Equatable { case badCode, notFound, refused, badReply, cancelled }
 
     /// Presents a typed code or a scanned link to the Mac showing it, and stores the Mac on success.
+    /// When the task it runs in is cancelled, which is what Cancel on the pairing screen does, it
+    /// asks no Mac if it has not yet, and stores none either way: a person who cancelled must not
+    /// find a Mac in their list afterwards.
     func pair(code: String) async -> Result<PairedHost, PairFailure> {
         await loadSettings()
+        guard !Task.isCancelled else { return .failure(.cancelled) }
         let name = UIDevice.current.name
         let result = await MirrorPairClient.pair(code: code, name: name, viewerSecret: identity, relays: pairingRelays)
+        guard !Task.isCancelled else { return .failure(.cancelled) }
         switch result {
         case .success(let reply):
             let host = PairedHost(id: reply.hostId, name: reply.name, homeRelay: reply.homeRelay, relays: reply.relays, paired: Date())

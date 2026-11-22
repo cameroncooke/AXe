@@ -13,6 +13,8 @@ struct PairView: View {
     @State private var way: Way = AVCaptureDevice.default(for: .video) == nil ? .type : .scan
     @State private var typed = ""
     @State private var stage: Stage = .entering
+    /// The pairing under way, so that Cancel can stop it.
+    @State private var pairing: Task<Void, Never>?
     @FocusState private var typing: Bool
 
     var body: some View {
@@ -28,7 +30,14 @@ struct PairView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    if case .paired = stage { EmptyView() } else { Button("Cancel") { dismiss() } }
+                    if case .paired = stage {
+                        EmptyView()
+                    } else {
+                        Button("Cancel") {
+                            pairing?.cancel()
+                            dismiss()
+                        }
+                    }
                 }
             }
         }
@@ -157,8 +166,10 @@ struct PairView: View {
         guard stage != .working else { return }
         typing = false
         stage = .working
-        Task {
+        pairing = Task {
             switch await model.pair(code: text) {
+            case .failure(.cancelled):
+                break
             case .success(let host):
                 stage = .paired(host)
             case .failure(.badCode):
