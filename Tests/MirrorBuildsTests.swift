@@ -302,6 +302,18 @@ struct MirrorBuildsTests {
                 && MirrorMessage.buildPiece == 53 && MirrorMessage.fetchFailed == 54)
     }
 
+    @Test("A piece that names a place no file has is refused, not taken")
+    func pieceWithAnImpossiblePlace() {
+        var data = Data([4]) + Data("abcd".utf8)
+        data.append(contentsOf: [UInt8](repeating: 0xFF, count: 8))     // an offset of 18 million terabytes
+        data.append(Data("bytes".utf8))
+        #expect(MirrorBuildPiece(data) == nil)
+        // The largest place there can be is still read.
+        var most = Data([4]) + Data("abcd".utf8)
+        most.append(contentsOf: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x7F])
+        #expect(MirrorBuildPiece(most)?.offset == Int.max)
+    }
+
     @Test("A published build is offered with the digest the viewer checks what it fetched against")
     func offered() throws {
         let store = try store()

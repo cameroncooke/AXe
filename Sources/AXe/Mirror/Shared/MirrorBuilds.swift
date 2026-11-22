@@ -112,7 +112,9 @@ struct MirrorBuildPiece: Equatable, Sendable {
         id = String(decoding: data[start..<(start + length)], as: UTF8.self)
         var place: UInt64 = 0
         for (index, byte) in data[(start + length)..<(start + length + 8)].enumerated() { place |= UInt64(byte) << (8 * UInt64(index)) }
-        offset = Int(place)
+        // A place no file has: refused. Converted unchecked, it stopped the app.
+        guard let place = Int(exactly: place) else { return nil }
+        offset = place
         bytes = Data(data[(start + length + 8)...])
     }
 }
