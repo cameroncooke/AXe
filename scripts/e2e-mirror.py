@@ -495,6 +495,12 @@ def main():
         run(["xcrun", "simctl", "keychain", viewer_udid, "add-root-cert", certificate])
         viewer.tap_id("local.setup.check")
         wait_for("the app to find its own server trusted", lambda: viewer.find(identifier="local.setup.ready"), 30)
+        # The server iOS takes builds from is for this device alone. A simulator shares the Mac's
+        # network, so what the app listens on shows here: an address of its own, not every one ("*").
+        listening = run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-c", "AXe Mirror"], check=False).stdout
+        addresses = sorted({line.split()[-2].rsplit(":", 1)[0] for line in listening.splitlines()[1:] if "(LISTEN)" in line})
+        check("the app's own build server listens on the device alone, not on the network",
+              bool(addresses) and all(address in ("127.0.0.1", "[::1]") for address in addresses), ", ".join(addresses) or "no listener found")
         offer = viewer.find(identifier="local.setup.done") or {}
         check("with the certificate trusted, the setup offers the build that was asked for", "Held App 2.0 (5)" in (offer.get("AXLabel") or ""),
               offer.get("AXLabel") or "")
