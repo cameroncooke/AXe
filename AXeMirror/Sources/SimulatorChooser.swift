@@ -174,12 +174,14 @@ struct SimulatorChooser: View {
                     }
                 }
             }
-            .modifier(Searching(on: !beside, text: $search))
+            // With no simulators on the Mac there is nothing to search.
+            .modifier(Searching(on: !beside && !list.simulators.isEmpty, text: $search))
             .refreshable { await session.refresh() }
             .confirmsDeleting($deleting, on: macName, with: session)
     }
 
-    /// The search field, on the screen that is the simulators' own. All simulators has one too.
+    /// The search field, on the screen that is the simulators' own, while the Mac has simulators.
+    /// All simulators has one too.
     private struct Searching: ViewModifier {
         let on: Bool
         @Binding var text: String
