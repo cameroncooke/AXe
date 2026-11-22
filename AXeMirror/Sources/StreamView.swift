@@ -1154,7 +1154,15 @@ final class StreamSession {
 
     private func gotPiece(_ piece: MirrorBuildPiece) {
         guard let fetch, let progress = fetching, piece.id == fetch.build.id, piece.offset == progress.received else { return }
-        try? fetch.handle.write(contentsOf: piece.bytes)
+        do {
+            try fetch.handle.write(contentsOf: piece.bytes)
+        } catch {
+            // Most often no room. Carrying on would fetch the rest of a file that cannot be kept,
+            // and then call it damaged.
+            dropFetch()
+            installProblem = (fetch.build, "This device could not keep the build", "There may be no room for it. Free some space, then try again.")
+            return
+        }
         let received = progress.received + piece.bytes.count
         fetching = (progress.id, received, progress.size)
         let finished = piece.bytes.count < MirrorBuildFetch.largest || (progress.size > 0 && received >= progress.size)
