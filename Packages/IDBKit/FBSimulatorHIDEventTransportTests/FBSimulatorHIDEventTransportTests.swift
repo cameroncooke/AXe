@@ -77,30 +77,29 @@ final class FBSimulatorHIDEventTransportTests: XCTestCase {
     XCTAssertEqual(event.event(for: .dtuhid), event)
   }
 
-  func testDTUHIDPacesKeyboardCompositeBeforeFlush() {
-    XCTAssertEqual(
-      FBSimulatorHIDEvent.shortKeyPress(4).event(for: .dtuhid),
-      .composite([
-        .composite([
-          .keyboard(direction: .down, keyCode: 4),
-          .delay(0.01),
-          .keyboard(direction: .up, keyCode: 4),
-          .delay(0.01),
-        ]),
-        .delay(0.05),
-      ]))
+  func testDTUHIDSendsKeyboardCompositeWithoutAddedDelays() {
+    let event = FBSimulatorHIDEvent.composite([
+      .keyboard(direction: .down, keyCode: 225),
+      .keyboard(direction: .down, keyCode: 4),
+      .keyboard(direction: .up, keyCode: 4),
+      .keyboard(direction: .up, keyCode: 225),
+      .keyboard(direction: .down, keyCode: 4),
+      .keyboard(direction: .up, keyCode: 4),
+    ])
+    XCTAssertEqual(event.event(for: .dtuhid), event)
+    XCTAssertEqual(totalDelay(in: event.event(for: .dtuhid)), 0)
   }
 
-  func testDTUHIDPacesDirectKeyboardEventBeforeFlush() {
-    XCTAssertEqual(
-      FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: 4).event(for: .dtuhid),
-      .composite([
-        .composite([
-          .keyboard(direction: .down, keyCode: 4),
-          .delay(0.01),
-        ]),
-        .delay(0.05),
-      ]))
+  func testDTUHIDSendsDirectKeyboardEventUnchanged() {
+    let event = FBSimulatorHIDEvent.keyboard(direction: .down, keyCode: 4)
+    XCTAssertEqual(event.event(for: .dtuhid), event)
+  }
+
+  func testDTUHIDKeepsACallersKeyboardHold() {
+    let event = FBSimulatorHIDEvent.composite([
+      .keyboard(direction: .down, keyCode: 4), .delay(0.5), .keyboard(direction: .up, keyCode: 4),
+    ])
+    XCTAssertEqual(event.event(for: .dtuhid), event)
   }
 
   func testDTUHIDPreservesNonKeyboardEvent() {

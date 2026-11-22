@@ -220,8 +220,8 @@ struct Type: PhysicalDeviceCommand {
         logger.info().log("Performing HID event sequence for text typing")
         
         if !hidEvents.isEmpty {
-            // Keep typing in one ordered session. Indigo awaits each send, while DTUHID adds its
-            // own keyboard pacing; unconditional delays here would double-pace the DTUHID path.
+            // Keep typing in one ordered session. Each send already waits for its delivery: Indigo
+            // for its acknowledgement, DTUHID for the host enqueue and the guest barrier reply.
             try await OrdinaryBrokerInput.performKeyboard(
                 .composite(hidEvents), simulatorUDID: simulatorUDID, logger: logger, verbose: selectedOutput.verbose
             )

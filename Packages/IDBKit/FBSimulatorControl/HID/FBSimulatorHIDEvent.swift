@@ -103,20 +103,17 @@ public extension FBSimulatorHID {
 
 extension FBSimulatorHIDEvent {
   private static let dtuhidApplePayInterPressDelay: TimeInterval = 0.15
-  private static let dtuhidKeyboardEventDelay: TimeInterval = 0.01
-  private static let dtuhidKeyboardSettleDelay: TimeInterval = 0.05
 
+  /// Keyboard events are sent back to back, as upstream IDB sends them: every DTUHID send already
+  /// waits for the host enqueue and the guest's barrier reply, and the connection is held open after
+  /// the last send. A fixed wait after every key (10 ms, plus 50 ms after the sequence) is not added:
+  /// typing 30 characters took 0.17 s instead of 1.04 s without it, with exact text and no event
+  /// dropped by `dtuhidd`.
   func event(for transportType: FBSimulatorHIDTransportType) -> FBSimulatorHIDEvent {
     guard transportType == .dtuhid else {
       return self
     }
-
-    let transportEvent = addingDTUHIDKeyboardPacing(to: replacingApplePayPresses(in: self))
-    guard containsKeyboardEvent(transportEvent) else {
-      return transportEvent
-    }
-
-    return .composite([transportEvent, .delay(Self.dtuhidKeyboardSettleDelay)])
+    return replacingApplePayPresses(in: self)
   }
 
   private func replacingApplePayPresses(in event: FBSimulatorHIDEvent) -> FBSimulatorHIDEvent {
@@ -166,17 +163,6 @@ extension FBSimulatorHIDEvent {
     }
   }
 
-  private func containsKeyboardEvent(_ event: FBSimulatorHIDEvent) -> Bool {
-    switch event {
-    case .keyboard:
-      return true
-    case let .composite(events):
-      return events.contains(where: containsKeyboardEvent)
-    default:
-      return false
-    }
-  }
-
   private func isDurationOnly(_ event: FBSimulatorHIDEvent) -> Bool {
     switch event {
     case .delay:
@@ -186,23 +172,6 @@ extension FBSimulatorHIDEvent {
     default:
       return false
     }
-  }
-
-  private func addingDTUHIDKeyboardPacing(to event: FBSimulatorHIDEvent) -> FBSimulatorHIDEvent {
-    if case .keyboard = event {
-      return .composite([event, .delay(Self.dtuhidKeyboardEventDelay)])
-    }
-    guard case let .composite(events) = event else {
-      return event
-    }
-
-    let pacedEvents = events.flatMap { event -> [FBSimulatorHIDEvent] in
-      if case .keyboard = event {
-        return [event, .delay(Self.dtuhidKeyboardEventDelay)]
-      }
-      return [addingDTUHIDKeyboardPacing(to: event)]
-    }
-    return .composite(pacedEvents)
   }
 }
 
