@@ -198,6 +198,32 @@ struct MirrorBuildsTests {
         #expect(store.list().count == 4)
     }
 
+    @Test("An archive kept on purpose outlives later builds' tidying, and a job still running is never removed")
+    func keepsWhatWasAskedFor() throws {
+        let (store, _) = try stocked()
+        defer { try? FileManager.default.removeItem(at: store.root) }
+        func job(_ name: String, marker: String? = nil, holding text: String = "") throws {
+            let folder = store.jobs.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: folder.appendingPathComponent("App.xcarchive"), withIntermediateDirectories: true)
+            try Data(count: 20_000).write(to: folder.appendingPathComponent("App.xcarchive/binary"))
+            if let marker { try text.write(to: folder.appendingPathComponent(marker), atomically: true, encoding: .utf8) }
+            try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-5 * 86_400)], ofItemAtPath: folder.path)
+        }
+        func there(_ name: String) -> Bool { FileManager.default.fileExists(atPath: store.jobs.appendingPathComponent(name).path) }
+        try job("failed")
+        try job("kept", marker: ".kept")
+        try job("running", marker: ".running", holding: String(getpid()))
+        try job("crashed", marker: ".running", holding: "999999")       // its process is gone
+        // What every later `axe mirror build` does: five-day-old failures go, the kept archive stays.
+        let tidied = store.clean(olderThan: Date().addingTimeInterval(-MirrorBuildJob.keepFailedFor))
+        #expect(tidied.count == 2 && !there("failed") && !there("crashed"))
+        #expect(there("kept") && there("running"))
+        // A job being made is not something left behind.
+        #expect(store.leftovers().count == 1)
+        // `axe mirror builds --clean` removes the kept archive, and still not the job that is running.
+        #expect(store.clean().count == 1 && !there("kept") && there("running"))
+    }
+
     @Test("This Mac's devices are read from devicectl's listing, without simulators, and matched to a build by name")
     func knownDevices() throws {
         let listing = Data(#"""

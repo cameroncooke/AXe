@@ -207,7 +207,9 @@ struct MirrorPublishedBuild: Codable, Equatable, Sendable {
 ///
 /// `.jobs` beside the builds holds what `axe mirror build` needed to make one: an Xcode archive of
 /// some hundreds of megabytes, and logs. A build that succeeds removes its own; one that fails
-/// leaves it to be read, and it is removed a few days later or by `clean()`.
+/// leaves it to be read, and it is removed a few days later or by `clean()`. One kept on purpose
+/// (`--keep-archive`) is marked, and only `clean()` asked for by name removes it. A job that is
+/// still running is never removed.
 struct MirrorBuildStore: Equatable, Sendable {
     let root: URL
 
@@ -330,18 +332,36 @@ struct MirrorBuildStore: Equatable, Sendable {
 
     /// The folders builds were made in that are still here, and how much room they take.
     func leftovers() -> (count: Int, bytes: Int64) {
-        let folders = (try? FileManager.default.contentsOfDirectory(at: jobs, includingPropertiesForKeys: nil)) ?? []
+        let folders = ((try? FileManager.default.contentsOfDirectory(at: jobs, includingPropertiesForKeys: nil)) ?? []).filter { !Self.isRunning(job: $0) }
         return (folders.count, folders.reduce(0) { $0 + Self.size(of: $1) })
     }
 
-    /// Removes the folders builds were made in: all of them, or those last touched before `date`.
-    /// Returns how many went and how much room that gave back.
+    /// The file in a job's folder that says its archive was kept on purpose.
+    static let keptMarker = ".kept"
+    /// The file in a job's folder that holds the ID of the process making the build.
+    static let runningMarker = ".running"
+
+    /// Whether the process that is making this job's build is still there.
+    static func isRunning(job folder: URL) -> Bool {
+        guard let text = try? String(contentsOf: folder.appendingPathComponent(runningMarker), encoding: .utf8),
+              let pid = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 else { return false }
+        return kill(pid, 0) == 0 || errno == EPERM
+    }
+
+    /// Removes the folders builds were made in. With a `date`, which is how each new build tidies
+    /// up after old failures, only those last touched before it and not kept on purpose. Without,
+    /// which is `axe mirror builds --clean`, the kept ones too. A job that is still running is
+    /// left alone either way. Returns how many went and how much room that gave back.
     @discardableResult
     func clean(olderThan date: Date? = nil) -> (count: Int, bytes: Int64) {
         var count = 0
         var bytes: Int64 = 0
         for folder in (try? FileManager.default.contentsOfDirectory(at: jobs, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
-            if let date, let touched = try? folder.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, touched >= date { continue }
+            if Self.isRunning(job: folder) { continue }
+            if let date {
+                if FileManager.default.fileExists(atPath: folder.appendingPathComponent(Self.keptMarker).path) { continue }
+                if let touched = try? folder.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate, touched >= date { continue }
+            }
             let size = Self.size(of: folder)
             if (try? FileManager.default.removeItem(at: folder)) != nil {
                 count += 1

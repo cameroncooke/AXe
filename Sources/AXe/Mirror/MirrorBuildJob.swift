@@ -21,6 +21,8 @@ struct MirrorBuildJob {
         workingFolder = source.deletingLastPathComponent()
         folder = store.root.appendingPathComponent(".jobs", isDirectory: true).appendingPathComponent(UUID().uuidString.lowercased(), isDirectory: true)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        // Says whose this is while it is being made, so that no other command's clean-up takes it.
+        try String(getpid()).write(to: folder.appendingPathComponent(MirrorBuildStore.runningMarker), atomically: true, encoding: .utf8)
 
         var options: [String: Any] = ["method": "release-testing", "destination": "export", "thinning": "<none>", "signingStyle": "automatic"]
         if let teamID { options["teamID"] = teamID }
@@ -81,6 +83,13 @@ struct MirrorBuildJob {
     /// Removes the folder: the archive, the exported IPA and the logs.
     func discard() {
         try? FileManager.default.removeItem(at: folder)
+    }
+
+    /// Marks the folder as kept on purpose: the clean-up each later build does leaves it alone, and
+    /// only `axe mirror builds --clean` removes it.
+    func keep() throws {
+        try Data().write(to: folder.appendingPathComponent(MirrorBuildStore.keptMarker))
+        try? FileManager.default.removeItem(at: folder.appendingPathComponent(MirrorBuildStore.runningMarker))
     }
 
     /// How long a failed build's folder is kept for its logs before the next build removes it.

@@ -641,8 +641,9 @@ struct MirrorBuildCommand: AsyncParsableCommand {
         let build = try store.publish(ipa: ipa, notes: notes, requiredDevices: devices)
         // Published: the store has its own copy of the IPA, and the archive is hundreds of megabytes.
         if keepArchive {
+            try job.keep()
             try report(build, store: store, json: json, extra: ["job": job.folder.path])
-            if !json { print("The archive and logs are kept in \(job.folder.path).") }
+            if !json { print("The archive and logs are kept in \(job.folder.path) until axe mirror builds --clean removes them.") }
         } else {
             job.discard()
             try report(build, store: store, json: json)
