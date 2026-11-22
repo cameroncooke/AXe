@@ -579,11 +579,17 @@ final class MirrorClient: @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in self?.onShowing?(showing) }
     }
 
-    /// The Mac shows nothing and waits for a choice from this list.
+    /// The Mac's list of simulators. Whether it means the Mac is waiting for a choice, or only
+    /// answers a question asked before a simulator was opened, is for the session to say: it
+    /// calls `stoppedWatching()` when it is the first.
     private func simulators(_ payload: Data) {
         guard let list = try? JSONDecoder().decode(MirrorSimulatorList.self, from: payload) else { return }
-        watching = nil
         DispatchQueue.main.async { [weak self] in self?.onSimulators?(list) }
+    }
+
+    /// No simulator is being watched any more: a connection made again will not name one.
+    func stoppedWatching() {
+        queue.async { [self] in watching = nil }
     }
 
     private func send(_ type: UInt8, _ payload: Data, timely: Bool = false) {

@@ -936,6 +936,8 @@ final class StreamSession {
     @ObservationIgnored private var asked = Asked.list
     /// Whether the Mac has said anything about the choice under way; see `watchChoice`.
     @ObservationIgnored private var choiceAnswered = false
+    /// Whether the next list from the Mac means it shows no simulator: see `onSimulators`.
+    @ObservationIgnored private var listExpected = true
     @ObservationIgnored private var choiceWatch: Task<Void, Never>?
     /// How long the Mac may take to say it has started on a choice. It says so at once; a long
     /// boot is reported as it goes and does not count against this.
@@ -1601,6 +1603,7 @@ final class StreamSession {
                 if self.fetch != nil { self.fetchWaits = true }
             }
             if state != .connected {
+                self.listExpected = true        // the Mac says afresh what it shows when it is back
                 self.stopFolding()
                 self.pictureSeen = false
                 if self.progress != nil {
@@ -1615,6 +1618,7 @@ final class StreamSession {
             guard let self else { return }
             self.showing = showing
             self.choosing = false
+            self.listExpected = false
             self.choiceAnswered = true
             self.progress = nil
             self.choiceProblem = nil
@@ -1644,14 +1648,24 @@ final class StreamSession {
         client.onSimulators = { [weak self] list in
             guard let self else { return }
             self.list = list
+            self.busy = [:]         // the list is sent when a shut-down or a delete is done
+            // A list can arrive after a simulator has been opened: the answer to a refresh, or to
+            // a shut-down of another simulator, asked for a moment before. The Mac is still
+            // showing the simulator then, and going back to the list would hide it. The list
+            // takes the screen only when this device is choosing, or the Mac has let its
+            // simulator go: on a new connection, or because another device took it away.
+            guard self.choosing || self.listExpected || self.showing == nil else { return }
+            self.listExpected = false
+            self.client?.stoppedWatching()
             self.stopFolding()
             self.choosing = true
             self.pictureSeen = false
-            self.busy = [:]         // the list is sent when a shut-down or a delete is done
         }
         client.onProgress = { [weak self] progress in
             guard let self else { return }
             if progress.step != "foldFailed" { self.choiceAnswered = true }
+            // Another device shut down, deleted or restarted the simulator on screen: the list follows.
+            if progress.step == "failed", progress.problem?.code == MirrorProblem.takenAway { self.listExpected = true }
             if progress.step == "foldFailed" {
                 self.foldWanted = nil
                 self.syncFoldModel()        // whatever the simulator shows now is what the 3D Duo shows
