@@ -52,6 +52,20 @@ struct MirrorViewers: Sendable {
         }
     }
 
+    /// When the list was last written, nil when there is none. A host with viewers connected looks
+    /// at this to learn that one of them may have been removed.
+    var changed: Date? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))?[.modificationDate] as? Date
+    }
+
+    /// Of `connected`, the viewers that are no longer on the list. Empty when the list cannot be
+    /// read: a file that is damaged for a moment must not throw everyone out, and nobody new is
+    /// let in while it is.
+    func removed(among connected: [String]) -> [String] {
+        guard let paired = try? all() else { return [] }
+        return connected.filter { id in !paired.contains { $0.id == id } }
+    }
+
     /// Whether this viewer may connect. A list that cannot be read allows nobody.
     func allows(_ id: String) -> Bool {
         ((try? all()) ?? []).contains { $0.id == id }

@@ -307,9 +307,9 @@ final class MirrorLink: @unchecked Sendable {
 
     /// Closes the viewer's connection, with the reason it is told: the host stopped, or its
     /// endpoint is about to be bound again. The viewer notices at once.
-    func close(reason: String) {
+    func close(reason: String, code: Int64 = MirrorClose.stopped) {
         lock.lock(); let connection = self.connection; lock.unlock()
-        try? connection?.close(errorCode: MirrorClose.stopped, reason: Data(reason.utf8))
+        try? connection?.close(errorCode: code, reason: Data(reason.utf8))
     }
 }
 #endif

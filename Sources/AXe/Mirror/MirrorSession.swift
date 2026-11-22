@@ -226,8 +226,9 @@ final class MirrorSession: NSObject, @unchecked Sendable {
         }
     }
 
-    /// Stops streaming and closes the viewer's connection, so that it notices at once.
-    func stop() {
+    /// Stops streaming and closes the viewer's connection, so that it notices at once. `reason` and
+    /// `code` are what the viewer is told: the host stopped, or the viewer is no longer paired.
+    func stop(reason: String = "host stopped", code: Int64 = MirrorClose.stopped) {
         rotationWatch?.cancel()
         queue.sync {
             adaptTimer?.cancel()
@@ -238,7 +239,7 @@ final class MirrorSession: NSObject, @unchecked Sendable {
             encoder = nil
         }
         demoLock?.visitorLeft()
-        link.close(reason: "host stopped")
+        link.close(reason: reason, code: code)
     }
 
     private func startInput() {

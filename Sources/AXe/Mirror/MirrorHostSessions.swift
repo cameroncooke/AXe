@@ -32,6 +32,7 @@ final class MirrorHostSessions: @unchecked Sendable {
     private var hostLoad = MirrorHostLoad(busy: false, load: 0, cpu: 0)    // under `lock`
     private var loadTimer: DispatchSourceTimer?
     private var relayWatch: Task<Void, Never>?
+    private var viewersChanged: Date?                       // on `queue`: the list of paired viewers as last looked at
     /// One event for the command to print: a name and its fields. An event that comes from a
     /// viewer's session carries that viewer's ID as `viewer`, as `paired` and `refused` do, and
     /// the name it was paired under as `viewerName`.
@@ -56,7 +57,10 @@ final class MirrorHostSessions: @unchecked Sendable {
         health.start()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(deadline: .now() + 1, repeating: 1)
-        timer.setEventHandler { [weak self] in self?.sampleLoad() }
+        timer.setEventHandler { [weak self] in
+            self?.sampleLoad()
+            self?.dropUnpaired()
+        }
         timer.resume()
         loadTimer = timer
         let startedWith = simulator?.udid
@@ -152,6 +156,24 @@ final class MirrorHostSessions: @unchecked Sendable {
         sessions[key] = session
         if !key.isEmpty { mirrorNote("a session for \(name ?? viewer): \(sessions.count) viewer\(sessions.count == 1 ? "" : "s") known") }
         return session
+    }
+
+    /// Ends the session of every viewer that has been removed from the list of paired viewers, so
+    /// that `axe mirror unpair` takes a device's access away at once and not when its connection
+    /// next happens to drop: a paired viewer can delete simulators. Looked at once a second, and
+    /// the list is read only when its file has changed.
+    private func dropUnpaired() {
+        guard let viewers = lock.withLock({ settings.demo ? nil : settings.viewers }) else { return }
+        let changed = viewers.changed
+        guard changed != viewersChanged else { return }
+        viewersChanged = changed
+        let known = lock.withLock { Array(sessions.keys) }
+        for viewer in viewers.removed(among: known) {
+            guard let session = lock.withLock({ sessions.removeValue(forKey: viewer) }) else { continue }
+            mirrorNote("\(viewer) is no longer paired: closing its session")
+            session.stop(reason: "not paired", code: MirrorClose.notPaired)
+            onEvent?(["event": "unpaired", "viewer": viewer])
+        }
     }
 
     /// Keeps a long-running host on a relay that works. Every half minute, while no viewer is

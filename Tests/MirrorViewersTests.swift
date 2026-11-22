@@ -90,6 +90,24 @@ struct MirrorViewersTests {
         #expect(folder?.intValue == 0o700)
     }
 
+    @Test("A host learns which of its connected viewers have been removed, and throws nobody out over a damaged file")
+    func removedAmongConnected() throws {
+        let viewers = store()
+        #expect(viewers.changed == nil)
+        try viewers.add(id: phone, name: "Phone")
+        try viewers.add(id: tablet, name: "Tablet")
+        let written = try #require(viewers.changed)
+        #expect(viewers.removed(among: [phone, tablet]).isEmpty)
+        // `axe mirror unpair` from another process: the file changes, and the phone is off the list.
+        try FileManager.default.setAttributes([.modificationDate: written.addingTimeInterval(-10)], ofItemAtPath: viewers.url.path)
+        let before = try #require(viewers.changed)
+        #expect(try MirrorViewers(url: viewers.url).remove(matching: "Phone").count == 1)
+        #expect(viewers.changed != before)
+        #expect(viewers.removed(among: [phone, tablet]) == [phone])
+        try Data("not a list".utf8).write(to: viewers.url)
+        #expect(viewers.removed(among: [phone, tablet]).isEmpty)
+    }
+
     @Test("A damaged file allows nobody and is reported, not replaced")
     func damagedFile() throws {
         let viewers = store()

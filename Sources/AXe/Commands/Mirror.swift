@@ -359,8 +359,8 @@ struct MirrorViewersCommand: AsyncParsableCommand {
     }
 }
 
-/// Removes a paired viewer. It can no longer connect, and a session it has open is not affected
-/// until it reconnects.
+/// Removes a paired viewer. It can no longer connect, and a running host closes the session it
+/// has open within a second.
 struct MirrorUnpairCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "unpair",

@@ -595,9 +595,20 @@ def main():
         check("an event says which viewer it is about",
               bool(since) and since[0].get("viewer") == paired2.get("viewer") and since[0].get("viewerName") == paired2.get("name"),
               since[0].get("viewerName", "") if since else "")
+        # Unpaired while it is connected, the second viewer loses its session at once, not when
+        # its connection next happens to drop: a paired viewer can delete simulators.
         seen = len(events(choose_log))
-        run(["xcrun", "simctl", "terminate", second_udid, VIEWER_BUNDLE], check=False)
-        gone = wait_for("the second viewer to be gone", lambda: event(choose_log, "viewerDisconnected", after=seen), 40)
+        started = time.time()
+        run([axe, "mirror", "unpair", paired2["viewer"][:12], "--viewers-file", viewers])
+        try:
+            gone = wait_for("the unpaired viewer to be closed", lambda: event(choose_log, "viewerDisconnected", after=seen), 8)
+            check("a viewer unpaired while connected is closed within seconds",
+                  gone.get("viewer") == paired2.get("viewer") and event(choose_log, "unpaired", after=seen) is not None,
+                  f"{time.time() - started:.1f} s")
+        except TimeoutError:
+            failed("a viewer unpaired while connected is closed within seconds", "still connected after 8 s")
+            run(["xcrun", "simctl", "terminate", second_udid, VIEWER_BUNDLE], check=False)
+            gone = wait_for("the second viewer to be gone", lambda: event(choose_log, "viewerDisconnected", after=seen), 40)
         check("a viewer that leaves takes no other with it", gone.get("viewer") == paired2.get("viewer") and viewer.find(identifier="hub.builds") is not None)
     except (TimeoutError, RuntimeError) as error:
         failed("two viewers are connected at once", str(error))
