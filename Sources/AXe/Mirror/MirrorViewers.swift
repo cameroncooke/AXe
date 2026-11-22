@@ -72,14 +72,29 @@ struct MirrorViewers: Sendable {
     }
 
     /// Adds a viewer, or renames it and refreshes its date if it is already paired.
+    ///
+    /// iOS tells an app only that its device is called "iPhone" or "iPad", so two phones give the
+    /// same name. A name another viewer already has is given a number, "iPhone 2", so that each
+    /// can be told from the others in `axe mirror viewers` and in the host's events, and removed
+    /// by its name.
     @discardableResult
     func add(id: String, name: String, now: Date = Date()) throws -> MirrorViewer {
-        let viewer = MirrorViewer(id: id, name: Self.clean(name), paired: now)
+        var viewer = MirrorViewer(id: id, name: Self.clean(name), paired: now)
         try change { viewers in
             viewers.removeAll { $0.id == id }
+            viewer.name = Self.unique(viewer.name, among: viewers.map(\.name))
             viewers.append(viewer)
         }
         return viewer
+    }
+
+    /// `name`, or `name` with the lowest number from 2 that no name in `taken` has.
+    static func unique(_ name: String, among taken: [String]) -> String {
+        func isTaken(_ candidate: String) -> Bool { taken.contains { $0.caseInsensitiveCompare(candidate) == .orderedSame } }
+        guard isTaken(name) else { return name }
+        var number = 2
+        while isTaken("\(name) \(number)") { number += 1 }
+        return "\(name) \(number)"
     }
 
     /// Removes the viewers matching `text`: a whole ID, the start of an ID (at least 6 characters), or

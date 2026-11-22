@@ -39,6 +39,21 @@ struct MirrorViewersTests {
         #expect(all.last?.paired == Date(timeIntervalSince1970: 3_000))
     }
 
+    @Test("Two devices that give the same name are told apart, and each can be removed by its name")
+    func sameName() throws {
+        // What iOS lets an app say its device is called: "iPhone", on every iPhone.
+        let viewers = store()
+        let third = "41f3bb0b9d1c2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d"
+        #expect(try viewers.add(id: phone, name: "iPhone").name == "iPhone")
+        #expect(try viewers.add(id: tablet, name: "iPhone").name == "iPhone 2")
+        #expect(try viewers.add(id: third, name: "iphone").name == "iphone 3")
+        #expect(try viewers.all().map(\.name) == ["iPhone", "iPhone 2", "iphone 3"])
+        // Paired again, a device keeps the name it had, not a new number.
+        #expect(try viewers.add(id: tablet, name: "iPhone").name == "iPhone 2")
+        #expect(try viewers.remove(matching: "iPhone 2").map(\.id) == [tablet])
+        #expect(try viewers.remove(matching: "iPhone").map(\.id) == [phone])
+    }
+
     @Test("A second store on the same file sees a change at once, as the running host must")
     func sharedBetweenProcesses() throws {
         let viewers = store(), other = MirrorViewers(url: viewers.url)
@@ -72,9 +87,11 @@ struct MirrorViewersTests {
     @Test("A name or ID start that matches two viewers removes neither")
     func ambiguousRemoval() throws {
         let viewers = store()
-        try viewers.add(id: phone, name: "Phone")
-        try viewers.add(id: tablet, name: "Phone")
-        try viewers.add(id: String(phone.prefix(10)) + String(repeating: "0", count: 54), name: "Other")
+        // A list from before same-named devices were told apart: two called "Phone".
+        let other = String(phone.prefix(10)) + String(repeating: "0", count: 54)
+        try FileManager.default.createDirectory(at: viewers.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(#"{"version":1,"viewers":[{"id":"\#(phone)","name":"Phone","paired":"2026-11-01T10:00:00Z"},{"id":"\#(tablet)","name":"Phone","paired":"2026-11-02T10:00:00Z"},{"id":"\#(other)","name":"Other","paired":"2026-11-03T10:00:00Z"}]}"#.utf8)
+            .write(to: viewers.url)
         #expect(throws: CLIError.self) { try viewers.remove(matching: "phone") }
         #expect(throws: CLIError.self) { try viewers.remove(matching: String(phone.prefix(8))) }
         #expect(try viewers.all().count == 3)
