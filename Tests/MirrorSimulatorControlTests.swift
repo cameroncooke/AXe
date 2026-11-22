@@ -164,6 +164,20 @@ struct MirrorSimulatorControlTests {
         #expect((1...6).map { MirrorSession.inputRetryDelay(afterFailures: $0) } == [2, 4, 8, 16, 30, 30])
     }
 
+    @Test("A relay address that is not one is refused, not swapped for the public relays",
+          arguments: ["htps://relay.example.com", "https//relay.example.com", "relay.example.com", "https://", ""])
+    func badRelayAddress(_ address: String) {
+        #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "--relay-url", address]) }
+        #expect(throws: (any Error).self) { try Axe.parseAsRoot(["mirror", "pair", "--relay-url", address]) }
+    }
+
+    @Test("A relay's address is taken")
+    func goodRelayAddress() throws {
+        let host = try #require(try Axe.parseAsRoot(["mirror", "--relay-url", "https://relay.example.com"]) as? MirrorStartCommand)
+        #expect(host.relayURL == "https://relay.example.com")
+        #expect(try Axe.parseAsRoot(["mirror", "pair", "--relay-url", "https://relay.example.com"]) is MirrorPairCommand)
+    }
+
     @Test("A demo needs the app its visitors are kept inside")
     func demoNeedsItsApp() throws {
         // Without one there is nothing to keep a stranger out of the rest of the simulator.

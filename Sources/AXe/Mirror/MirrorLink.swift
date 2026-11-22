@@ -9,7 +9,7 @@ final class MirrorRelayOnlyPreset: Preset {
     init(relayURLs: [String] = []) { self.relayURLs = relayURLs }
     func apply(builder: EndpointBuilder) {
         builder.applyN0()
-        if !relayURLs.isEmpty, let mode = try? RelayMode.customFromUrls(urls: relayURLs) { builder.relayMode(mode: mode) }
+        if !relayURLs.isEmpty { builder.relayMode(mode: MirrorRelayChoice.mode(relayURLs)) }
         do {
             try builder.bindAddr(addr: "127.0.0.1:0")
             try builder.bindAddr(addr: "[::1]:0")
@@ -26,7 +26,17 @@ final class MirrorOwnRelayPreset: Preset {
     init(relayURLs: [String]) { self.relayURLs = relayURLs }
     func apply(builder: EndpointBuilder) {
         builder.applyN0()
-        if let mode = try? RelayMode.customFromUrls(urls: relayURLs) { builder.relayMode(mode: mode) } else { mirrorNote("bad relay address in \(relayURLs)") }
+        builder.relayMode(mode: MirrorRelayChoice.mode(relayURLs))
+    }
+}
+
+/// The relays an endpoint is given. Addresses iroh cannot use leave it with no relay at all, never
+/// with the public ones: a host told to use its own relays must not end up on somebody else's.
+enum MirrorRelayChoice {
+    static func mode(_ relayURLs: [String]) -> RelayMode {
+        if let mode = try? RelayMode.customFromUrls(urls: relayURLs) { return mode }
+        mirrorNote("bad relay address in \(relayURLs): using no relay")
+        return RelayMode.disabled()
     }
 }
 

@@ -34,6 +34,16 @@ struct MirrorCommand: AsyncParsableCommand {
 /// The help for `axe mirror` as a whole. `axe mirror --help` prints it with the host's options
 /// below it; `axe help mirror` prints it with the list of subcommands below it.
 enum MirrorHelp {
+    /// Refuses a relay address that is not one. A host given an address it could not use went on
+    /// with iroh's public relays, though --relay-url promises "this relay and no other", so a
+    /// slip of the finger sent the session through somebody else's relay without a word.
+    static func checkRelay(_ address: String?) throws {
+        guard let address else { return }
+        guard let url = URL(string: address), url.scheme == "https" || url.scheme == "http", url.host?.isEmpty == false else {
+            throw ValidationError("--relay-url takes a relay's address, such as https://relay.example.com: \"\(address)\" is not one.")
+        }
+    }
+
     static let abstract = "Show one simulator live in the AXe Mirror app on an iPhone or iPad, with touch."
 
     /// One line per thing a person can type. `MirrorHelpTests` checks that every subcommand shown
@@ -143,6 +153,7 @@ struct MirrorStartCommand: AsyncParsableCommand {
     var delayRule = "gestures"
 
     func validate() throws {
+        try MirrorHelp.checkRelay(relayURL)
         if let simulatorUDID {
             guard !simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ValidationError("--udid must not be empty.")
@@ -256,6 +267,10 @@ struct MirrorPairCommand: AsyncParsableCommand {
 
     @Option(name: .long, help: ArgumentHelp("Seconds the code stays valid. For tests.", visibility: .hidden))
     var lifetime: Double = MirrorPairingCode.lifetime
+
+    func validate() throws {
+        try MirrorHelp.checkRelay(relayURL)
+    }
 
     func run() async throws {
         #if AXE_MIRROR
