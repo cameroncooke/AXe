@@ -49,6 +49,18 @@ enum MirrorViewerRules {
         return removed
     }
 
+    /// Whether a caller of the app's own build server is the device itself: its address is a
+    /// loopback one, 127.x.x.x or ::1, as text, with or without an interface after a "%". Anything
+    /// else, and no address at all, is somebody else.
+    static func isThisDevice(_ address: String?) -> Bool {
+        guard var address = address?.lowercased(), !address.isEmpty else { return false }
+        if let scope = address.firstIndex(of: "%") { address = String(address[..<scope]) }
+        if address.hasPrefix("::ffff:") { address = String(address.dropFirst("::ffff:".count)) }     // an IPv4 caller on an IPv6 socket
+        if address == "::1" { return true }
+        let parts = address.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 4 && parts.allSatisfy { UInt8($0) != nil } && parts[0] == "127"
+    }
+
     /// How long the app waits for the Mac to say it has started on a choice, in seconds. The Mac
     /// first reads its list of simulators and allows itself `macListSeconds` for that before it
     /// says the Mac was slow: the app must wait longer, so that the Mac's own word comes first.

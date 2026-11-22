@@ -75,6 +75,16 @@ struct MirrorConfigTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == ["build-bbb.ipa", "build-ccc.ipa", "notes.txt", "other.ipa"])
     }
 
+    @Test("The app's build server answers the device itself and nobody else", arguments: [
+        ("127.0.0.1", true), ("127.4.5.6", true), ("::1", true), ("::1%lo0", true), ("::ffff:127.0.0.1", true),
+        ("192.168.1.20", false), ("10.0.0.3", false), ("fe80::1%en0", false), ("2001:db8::1", false), ("::ffff:192.168.1.20", false),
+        ("127.0.0.1.evil.example", false), ("1270.0.0.1", false), ("localhost", false), ("", false),
+    ])
+    func onlyThisDevice(_ address: String, _ allowed: Bool) {
+        #expect(MirrorViewerRules.isThisDevice(address) == allowed)
+        #expect(!MirrorViewerRules.isThisDevice(nil))
+    }
+
     @Test("The app waits longer for the Mac than the Mac allows itself, so the Mac's own word comes first")
     func whoSpeaksFirst() {
         #expect(Double(MirrorViewerRules.choiceAnswerSeconds) > MirrorViewerRules.macListSeconds)

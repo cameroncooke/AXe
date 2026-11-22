@@ -67,7 +67,9 @@ final class LocalInstallServer: @unchecked Sendable {
                 }
             }
             listener.newConnectionHandler = { [weak self] connection in
-                guard let self else { connection.cancel(); return }
+                // Only this device talks to this server. A caller from anywhere else is hung up on
+                // before a byte is read, whatever interface it came in by.
+                guard let self, MirrorViewerRules.isThisDevice(Self.address(of: connection.endpoint)) else { connection.cancel(); return }
                 connection.start(queue: self.queue)
                 self.read(connection, so: Data(), secure: isSecure)
             }
@@ -84,6 +86,18 @@ final class LocalInstallServer: @unchecked Sendable {
     func stop() {
         secure?.cancel()
         plain?.cancel()
+    }
+
+    /// The caller's address as text, "127.0.0.1" or "::1" for this device itself; nil when the
+    /// connection does not say.
+    private static func address(of endpoint: NWEndpoint) -> String? {
+        guard case .hostPort(let host, _) = endpoint else { return nil }
+        switch host {
+        case .ipv4(let address): return address.debugDescription
+        case .ipv6(let address): return address.debugDescription
+        case .name(let name, _): return name
+        @unknown default: return nil
+        }
     }
 
     /// Whether the server still takes connections. iOS closes an app's listeners when it suspends

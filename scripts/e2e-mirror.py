@@ -46,6 +46,7 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -497,10 +498,32 @@ def main():
         wait_for("the app to find its own server trusted", lambda: viewer.find(identifier="local.setup.ready"), 30)
         # The server iOS takes builds from is for this device alone. A simulator shares the Mac's
         # network, so what the app listens on shows here: an address of its own, not every one ("*").
+        # It is asked for the authority's certificate twice: as the device itself, and as a
+        # caller on the network would be seen, from this Mac's own network address.
         listening = run(["lsof", "-nP", "-iTCP", "-sTCP:LISTEN", "-a", "-c", "AXe Mirror"], check=False).stdout
-        addresses = sorted({line.split()[-2].rsplit(":", 1)[0] for line in listening.splitlines()[1:] if "(LISTEN)" in line})
-        check("the app's own build server listens on the device alone, not on the network",
-              bool(addresses) and all(address in ("127.0.0.1", "[::1]") for address in addresses), ", ".join(addresses) or "no listener found")
+        ports = sorted({int(line.split()[-2].rsplit(":", 1)[1]) for line in listening.splitlines()[1:] if "(LISTEN)" in line})
+        try:
+            probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            probe.connect(("192.0.2.1", 9))     # sends nothing: only asks which address this Mac would use
+            network_address = probe.getsockname()[0]
+            probe.close()
+        except OSError:
+            network_address = None
+
+        def served(address, port):
+            try:
+                with socket.create_connection((address, port), timeout=3) as caller:
+                    caller.sendall(b"GET /authority.cer HTTP/1.1\r\nHost: device\r\n\r\n")
+                    return caller.recv(64).startswith(b"HTTP/1.1 200")
+            except OSError:
+                return False
+        own = [port for port in ports if served("127.0.0.1", port)]
+        if network_address and not network_address.startswith("127."):
+            outside = [port for port in ports if served(network_address, port)]
+            check("the app's own build server answers the device itself and no caller from the network",
+                  bool(own) and not outside, f"as the device: {len(own)} of {len(ports)} ports answered; from {'the network address'}: {len(outside)}")
+        else:
+            check("the app's own build server answers the device itself", bool(own), "this Mac has no network address to call from")
         offer = viewer.find(identifier="local.setup.done") or {}
         check("with the certificate trusted, the setup offers the build that was asked for", "Held App 2.0 (5)" in (offer.get("AXLabel") or ""),
               offer.get("AXLabel") or "")
