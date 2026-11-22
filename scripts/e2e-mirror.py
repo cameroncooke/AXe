@@ -522,6 +522,16 @@ def main():
         go_back(viewer)
         viewer.tap_id("builds.done")
         time.sleep(1.0)
+        # A Mac that shows one simulator has no menu to keep its apps on. The note that a build
+        # was ready has gone by now, and there must still be a way to the builds.
+        try:
+            viewer.tap_id("stream.apps")
+            wait_for("the builds from the simulator's own button", lambda: viewer.find(identifier="builds.done"), 10)
+            check("a Mac started on one simulator has a way to its builds", viewer.find(identifier="builds.app.header") is not None)
+            viewer.tap_id("builds.done")
+            time.sleep(1.0)
+        except (TimeoutError, RuntimeError) as error:
+            failed("a Mac started on one simulator has a way to its builds", str(error))
     except (TimeoutError, RuntimeError) as error:
         run(["xcrun", "simctl", "io", viewer_udid, "screenshot", os.path.join(work, "viewer-builds-failed.png")], check=False)
         failed("a build is installed from the device itself", str(error))

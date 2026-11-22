@@ -184,6 +184,13 @@ struct StreamScreen: View {
         .accessibilityIdentifier("stream.deck")
     }
 
+    /// True on a Mac that shows one simulator and no menu (`axe mirror --udid`) and has builds on
+    /// offer. The Mac's menu is where its apps are, and such a Mac has none: the only way to its
+    /// builds was the passing note that one was ready, and once that had gone there was no way.
+    private var offersAppsHere: Bool {
+        !destination.isDemo && session.state == .connected && !session.builds.isEmpty && session.showing?.canChoose == false
+    }
+
     /// Which simulator this is, how the stream is doing, the simulator's buttons and the ways out.
     private func deckControls(fills: Bool) -> some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -234,6 +241,10 @@ struct StreamScreen: View {
                         .frame(maxWidth: .infinity, minHeight: 50)
                         .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                     }
+                }
+                if offersAppsHere {
+                    deckKey("Apps", systemImage: "shippingbox.fill", small: true) { showsBuilds = true }
+                        .accessibilityIdentifier("stream.apps")
                 }
                 deckKey("Close", systemImage: "xmark", small: true) { close() }
                 .accessibilityIdentifier("stream.close")
@@ -599,6 +610,10 @@ struct StreamScreen: View {
     @ViewBuilder
     private var simulatorButtons: some View {
         if let showing = session.showing, !session.choosing, session.state == .connected {
+            if offersAppsHere {
+                roundButton("Apps", systemImage: "shippingbox.fill") { showsBuilds = true }
+                    .accessibilityIdentifier("stream.apps")
+            }
             if !showing.udid.isEmpty {
                 roundButton("Copy simulator ID", systemImage: "doc.on.doc", action: copyID)
                     .accessibilityIdentifier("stream.copyID")
