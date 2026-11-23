@@ -353,6 +353,8 @@ enum SelectedAXOperation {
             if cleanup == "uncertain" { result.failure = .cleanupUncertain }
             else if count > 0 { result.failure = .inputFailed }
             let outcome = count == 0 && cleanup == "notNeeded" ? "failedBeforeInput" : "failedNoReplay"
+            // Agent replies map this to a public code; the log keeps the cause for diagnosis.
+            logger.info().log("Selected AX \(ax.kind.rawValue) ended \(outcome): \(String(reflecting: error))")
             var failed = response(request, brokerID: brokerID, result: result, observation: observation,
                 outcome: outcome, count: count, cleanup: cleanup, error: Self.publicText(error))
             // Owned admission rejections before input keep their typed code for the agent reply.

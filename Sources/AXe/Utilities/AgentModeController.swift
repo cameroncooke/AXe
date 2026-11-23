@@ -23,7 +23,7 @@ final class AgentModeController {
     /// Measures the active panel. The request's explicit display is checked by the caller.
     typealias DisplayDiscovery = @MainActor (SelectedHIDRequest) async throws -> ActivePanelIdentity
     let simulatorUDID: String
-    private let logger: AxeLogger
+    let logger: AxeLogger
     let owner: SelectedHIDOwner
     private let discoverDisplay: DisplayDiscovery
     var record: Record?
@@ -344,6 +344,10 @@ final class AgentModeController {
             // caller's current table in place. Input paths cleared it before their first event.
             if nativeFailure != nil || observedScreen || (error as? AgentModeFailure)?.code == "snapshotExpired" {
                 record = nil
+            }
+            if !(error is AgentModeFailure) {
+                // The reply keeps the generic code; the log keeps the cause for diagnosis.
+                logger.info().log("Agent request failed with an unmapped error: \(String(reflecting: error))")
             }
             let reason = error as? AgentModeFailure
                 ?? AgentModeFailure("observationFailed", "The simulator observation failed.")

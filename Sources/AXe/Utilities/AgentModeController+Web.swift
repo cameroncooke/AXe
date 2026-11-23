@@ -88,6 +88,9 @@ extension AgentModeController {
             if nativeFailure != nil || observedScreen || (error as? AgentModeFailure)?.code == "snapshotExpired" {
                 record = nil
             }
+            if !(error is AgentModeFailure) {
+                logger.info().log("Agent web request failed with an unmapped error: \(String(reflecting: error))")
+            }
             let reason = error as? AgentModeFailure
                 ?? AgentModeFailure("observationFailed", "The simulator observation failed.")
             if nativeFailure == nil, action == nil {
