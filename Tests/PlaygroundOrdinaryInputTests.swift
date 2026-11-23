@@ -7,12 +7,17 @@ let isOrdinaryPlaygroundE2EEnabled = isE2EEnabled && !isDuoPlaygroundE2EEnabled
 /// check reads the effect back from the Playground's own accessibility state.
 @Suite("Playground Ordinary Input E2E", .serialized, .enabled(if: isOrdinaryPlaygroundE2EEnabled))
 struct PlaygroundOrdinaryInputTests {
+    /// iOS 27.2 labels the back button with the menu's title; iOS 27.3 labels it "Back".
+    static let backButtonLabels: Set<String> = ["AXe Playground", "Back"]
+
     @Test("A label tap and a generated back button tap return to the menu", arguments: ["label", "generated"])
     func backNavigation(kind: String) async throws {
         let app = try OrdinaryPlaygroundSession()
         if kind == "label" {
-            _ = try await app.open("tap-test", readyID: "tap-test-screen")
-            try await app.run(["tap", "--label", "AXe Playground"])
+            let state = try await app.open("tap-test", readyID: "tap-test-screen")
+            let label = try #require(UIStateParser.findElement(in: state, withIdentifier: "BackButton")?.label)
+            try #require(Self.backButtonLabels.contains(label), "Unexpected back button label \(label).")
+            try await app.run(["tap", "--label", label])
         } else {
             let state = try await app.open("toolbar-picker-test", readyID: "toolbar-picker-test-body")
             try #require(UIStateParser.findElement(in: state, withIdentifier: "BackButton")?.type == "Button")
@@ -137,7 +142,8 @@ struct PlaygroundOrdinaryInputTests {
         let roots = try UIStateParser.parseDescribeUIRoots(output)
         let element = try #require(roots.first)
         try #require(roots.count == 1 && element.identifier == "BackButton" && element.type == "Button")
-        try #require(element.label == "AXe Playground" && element.roleDescription == "back button" && element.enabled == true)
+        try #require(element.label.map(Self.backButtonLabels.contains) == true
+            && element.roleDescription == "back button" && element.enabled == true)
         let pointFrame = try #require(element.frame)
         try #require(pointFrame.x == frame.x && pointFrame.y == frame.y
             && pointFrame.width == frame.width && pointFrame.height == frame.height)
