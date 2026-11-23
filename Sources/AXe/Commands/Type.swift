@@ -7,7 +7,7 @@ struct Type: PhysicalDeviceCommand {
     static let configuration = CommandConfiguration(
         abstract: "Type text on the simulator's keyboard layout.",
         discussion: """
-        Pass the text as an argument, with --stdin or with --file. AXe sends key presses to the focused field, choosing the keys from the simulator's own hardware keyboard layout, so German, French and other keyboards type what you pass. A character the layout has no key for, such as 日 on German, fails before anything is typed. An app keeps the layout it was launched with: after changing the simulator's keyboards, relaunch the app or name the layout with --layout. --layout us sends US key positions whatever the simulator is set to. On a physical device, which does not report the keyboard in use, --layout auto is unavailable: name the layout, or AXe sends US key positions. Physical devices and selected input take at most 256 UTF-8 bytes. With --agent, --focus taps the --ref field before typing.
+        Pass the text as an argument, with --stdin or with --file. AXe sends key presses to the focused field, choosing the keys from the simulator's own hardware keyboard layout, so German, French and other keyboards type what you pass. A character the layout has no key for, such as 日 on German, fails before anything is typed. An app keeps the layout it was launched with: after changing the simulator's keyboards, relaunch the app or name the layout with --layout. --layout us sends US key positions whatever the simulator is set to. On a physical device, which does not report the keyboard in use, --layout auto is unavailable: name the layout, or AXe sends US key positions. Without --agent, type returns once the keys are sent and reads nothing back: iOS takes about 6 ms a character, so text of a few hundred characters can still be arriving when it returns. With --agent, AXe checks that the --ref field still has focus before the first key and as typing goes on, then returns the new screen as JSON; it is slower (about 2 s for a few words, 4.5 s for 256 characters) and takes at most 256 UTF-8 bytes, as physical devices and selected input do. With --agent, --focus taps the --ref field before typing.
 
         Examples:
           axe type 'Hello, world!' --udid <UDID>
@@ -56,6 +56,7 @@ struct Type: PhysicalDeviceCommand {
             }
         }
         if agentMode.enabled {
+            try selectedKeyboard.validateFocusCheckInterval()
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
             let focusID = selectedKeyboard.focusID
             guard (agentMode.elementRef != nil) != (focusID != nil) else {
@@ -88,6 +89,7 @@ struct Type: PhysicalDeviceCommand {
             selectorKind: selectedKeyboard.focusID == nil ? nil : .id,
             selectorValue: selectedKeyboard.focusID, text: input)
         request.layout = try typingLayout()
+        request.focusCheckInterval = selectedKeyboard.focusCheckInterval
         return try AgentModeCommandAdapter.request(request, input: selectedInput)
     }
 

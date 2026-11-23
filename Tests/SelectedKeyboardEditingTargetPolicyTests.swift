@@ -78,6 +78,21 @@ struct SelectedKeyboardEditingTargetPolicyTests {
         }
     }
 
+    @Test("Focus-and-type's first key accepts the same field moved by the keyboard, never a new value")
+    func focusAndTypeAllowsTheKeyboardScroll() throws {
+        let original = try AgentModeTarget(Field().node())
+        var moved = Field(); moved.frame.y -= 15
+        try SelectedKeyboardEditingTargetPolicy.validate(moved.node(), against: original, expectedPID: Field().pid,
+            fieldTarget: .semantic(kind: .id, value: Field().AXUniqueId, elementType: "TextField"),
+            logicalSize: logicalSize, editingStarted: false, allowingMove: true)
+        var movedAndEdited = moved; movedAndEdited.AXValue = "L"
+        #expect(throws: (any Error).self) {
+            try SelectedKeyboardEditingTargetPolicy.validate(movedAndEdited.node(), against: original, expectedPID: Field().pid,
+                fieldTarget: .semantic(kind: .id, value: Field().AXUniqueId, elementType: "TextField"),
+                logicalSize: logicalSize, editingStarted: false, allowingMove: true)
+        }
+    }
+
     @Test("Owned editing cannot transfer to a different native identity or invalid focus state")
     func identityAndStateRemainStrict() throws {
         let original = try AgentModeTarget(Field().node())

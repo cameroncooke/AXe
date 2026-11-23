@@ -4,7 +4,7 @@ import Foundation
 extension AgentOutputView: ExpressibleByArgument {}
 
 struct AgentModeOptions: ParsableArguments {
-    @Flag(name: .customLong("agent"), help: "Agent mode: act on snapshot refs; print JSON results.")
+    @Flag(name: .customLong("agent"), help: "Agent mode: act on snapshot refs, check the target is unchanged before input, and print the new screen as JSON.")
     var enabled = false
 
     @Option(name: .customLong("view"), help: "Agent only: result detail; reading by default.")

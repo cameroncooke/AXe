@@ -32,11 +32,14 @@ enum SelectedKeyboardEditingTargetPolicy {
 
     static func validate(_ field: FBSimulatorAXNode, against original: AgentModeTarget,
                          expectedPID: Int32, fieldTarget: SelectedNativeTarget, logicalSize: CGSize,
-                         editingStarted: Bool) throws {
+                         editingStarted: Bool, allowingMove: Bool = false) throws {
         try validateCurrentField(field, expectedPID: expectedPID, fieldTarget: fieldTarget, logicalSize: logicalSize)
         guard editingStarted else {
-            // Before the first owned key, retain the complete snapshot target contract.
-            try original.validate(field)
+            // Before the first owned key, retain the complete snapshot target contract. Focus-and-type
+            // allows only the frame to differ: its own tap raised the keyboard, which scrolled the field
+            // 15 points up over about 0.3 s after the read it was admitted on (iPhone 17, iOS 27.3).
+            // Typing sends keys to the focused field and uses no coordinates.
+            try original.validate(field, allowingMove: allowingMove)
             return
         }
         let identityMatches: Bool

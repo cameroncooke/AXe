@@ -81,7 +81,9 @@ enum SelectedKeyboardOperation {
     }
 }
 
-/// Read again before every key down. Key up and cleanup bypass focus admission so owned keys release.
+/// Read again before the first key down, after a key that can move focus or a delay, and every focus
+/// check interval otherwise (16 by default).
+/// Key up and cleanup bypass focus admission so owned keys release.
 /// AX focus and HID delivery are separate OS operations; this is not an atomic recipient guarantee.
 @MainActor
 final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
@@ -92,6 +94,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
     private let agentAdmission: AgentModeAdmission?
     private let deadline: DispatchTime
     private(set) var result: SelectedKeyboardResult
+    private let checkedKeyDowns: Set<Int>
 
     init(simulator: FBSimulator, feed: FBSimulatorHIDNativeFreshnessProvider, request: SelectedKeyboardRequest, agentAdmission: AgentModeAdmission? = nil) throws {
         guard let expectedPID = request.expectedPID, expectedPID > 0 else {
@@ -106,9 +109,52 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
             if case .delay(let seconds) = event { return total + seconds }
             return total
         }
-        // Keep the input work allowance. Validated explicit waits have their own bound.
-        deadline = DispatchTime.now() + (8 + requestedDelay)
+        // Keep the input work allowance, plus time for the focus read before each key down: about
+        // 100 ms each on an iOS 27.3 iPhone simulator, so 8 s alone stopped a 256-byte agent type after
+        // about 100 characters. Validated explicit waits have their own bound.
+        deadline = DispatchTime.now() + (8 + requestedDelay + Self.focusReadAllowance * Double(Self.keyDowns(in: request.events)))
         result = SelectedKeyboardResult(expectedPID: request.expectedPID, focusID: request.focusID)
+        checkedKeyDowns = Self.checkedKeyDowns(in: request.events, interval: request.effectiveFocusCheckInterval)
+    }
+
+    /// Letters, digits, space, punctuation and Shift only add text; any other key (Return, Tab,
+    /// Escape, arrows, Command, Control, Option) can move focus, as can whatever a delay waits for.
+    static func onlyAddsText(_ keyCode: UInt32) -> Bool {
+        (4...39).contains(keyCode) || (44...56).contains(keyCode) || keyCode == 225 || keyCode == 229
+    }
+
+    /// The key downs, numbered from 0, that read the focused field first: the first, every `interval`
+    /// after it, and each one after a key that can move focus or after a delay. With a read only every
+    /// 16 keys, Return then a 0.3 s wait then "a" sent the "a" after focus had left the field.
+    static func checkedKeyDowns(in events: [SelectedKeyboardPrimitive], interval: Int) -> Set<Int> {
+        var checked: Set<Int> = []
+        let shortcutModifiers: Set<UInt32> = [224, 226, 227, 228, 230, 231]
+        var index = 0
+        var mayHaveMoved = true
+        var heldShortcutModifiers: Set<UInt32> = []
+        for event in events {
+            switch event {
+            case .delay: mayHaveMoved = true
+            case .up(let code): heldShortcutModifiers.remove(code)
+            case .down(let code):
+                if mayHaveMoved || index % interval == 0 { checked.insert(index) }
+                // A key pressed with Command, Control or Option held is a shortcut.
+                mayHaveMoved = !onlyAddsText(code) || !heldShortcutModifiers.isEmpty
+                if shortcutModifiers.contains(code) { heldShortcutModifiers.insert(code) }
+                index += 1
+            }
+        }
+        return checked
+    }
+
+    /// About three times the measured focus read, for a loaded Mac.
+    static let focusReadAllowance = 0.3
+
+    static func keyDowns(in events: [SelectedKeyboardPrimitive]) -> Int {
+        events.reduce(0) { count, event in
+            if case .down = event { return count + 1 }
+            return count
+        }
     }
 
     func prepare() async throws {
@@ -120,8 +166,10 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         guard observation == feed.initialObservation, keyCode <= 255, result.initialTarget != nil else {
             throw SelectedHIDFailure.invalid("Keyboard context or initial field is missing or changed")
         }
-        let field = try await readFocusedField()
-        result.lastValidatedTarget = field
+        if checkedKeyDowns.contains(result.validatedKeyDownCount) {
+            result.lastValidatedTarget = try await readFocusedField()
+            result.focusCheckedKeyDownCount = (result.focusCheckedKeyDownCount ?? 0) + 1
+        }
         result.validatedKeyDownCount += 1
         guard try JSONEncoder().encode(result).count <= SelectedAXBounds.contentBytes else {
             throw SelectedAXContentError.tooLarge
@@ -177,7 +225,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         if let target {
             try SelectedKeyboardEditingTargetPolicy.validate(field, against: target,
                 expectedPID: expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize,
-                editingStarted: result.validatedKeyDownCount > 0)
+                editingStarted: result.validatedKeyDownCount > 0, allowingMove: agentAdmission?.fieldMayMove == true)
         } else {
             try SelectedKeyboardEditingTargetPolicy.validateCurrentField(field,
                 expectedPID: expectedPID, fieldTarget: request.fieldTarget, logicalSize: logicalSize)
@@ -190,7 +238,7 @@ final class SelectedKeyboardFocusGuard: FBSimulatorHIDKeyboardAdmissionGuard {
         try Task.checkCancellation()
         let now = DispatchTime.now().uptimeNanoseconds
         guard now < deadline.uptimeNanoseconds else {
-            throw SelectedHIDFailure.invalid("Selected keyboard exceeded its eight-second input allowance and requested delays")
+            throw SelectedHIDFailure.invalid("Selected keyboard exceeded its input allowance (8 s plus 0.3 s a key) and requested delays")
         }
         return Double(deadline.uptimeNanoseconds - now) / 1_000_000_000
     }

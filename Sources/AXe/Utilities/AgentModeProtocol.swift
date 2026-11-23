@@ -19,6 +19,11 @@ struct AgentModeRequest: Codable, Sendable {
     /// The keyboard layout `text` is typed on. Nil is the fixed US table.
     var layout: TypingLayout? = nil
     var keyEvents: [SelectedKeyboardPrimitive]? = nil
+    /// Advanced: a focus read before every Nth key; nil is `SelectedKeyboardRequest.defaultFocusCheckInterval`.
+    var focusCheckInterval: Int? = nil
+    /// Set by focus-and-type on its type phase only: the field AXe just tapped may still be moving
+    /// as the keyboard scrolls it into place, so the first key accepts the same field at a new frame.
+    var fieldMayMove: Bool? = nil
     var direction: RuntimeSwipeDirection? = nil
     var distance: Double = 1
     var destination: SelectedAXPoint? = nil
@@ -482,6 +487,8 @@ struct AgentModeAdmission: Codable, Sendable {
     var selectorKind: SelectedAXRequest.SelectorKind? = nil
     var selectorValue: String? = nil
     var nativeTarget: SelectedNativeTarget? = nil
+    /// See `AgentModeRequest.fieldMayMove`.
+    var fieldMayMove: Bool? = nil
 
     func validateContext(_ observation: FBSimulatorHIDSessionObservation) throws {
         guard context == SelectedHIDContext(observation) else {
@@ -551,11 +558,11 @@ struct AgentModeTarget: Codable, Sendable {
         }
     }
 
-    func validate(_ node: FBSimulatorAXNode, allowingValueChange: Bool = false) throws {
+    func validate(_ node: FBSimulatorAXNode, allowingValueChange: Bool = false, allowingMove: Bool = false) throws {
         let fresh = try AgentModeTarget(node)
         try validateNativeIdentity(node)
         guard type == fresh.type, identifier == fresh.identifier, label == fresh.label, pid == fresh.pid,
-              frame == fresh.frame, allowingValueChange || value == fresh.value else {
+              allowingMove || frame == fresh.frame, allowingValueChange || value == fresh.value else {
             throw AgentModeFailure("targetChanged", "Your target changed or moved after this snapshot was taken, so nothing was sent. \(AgentModeFailure.actFromCapture)")
         }
     }

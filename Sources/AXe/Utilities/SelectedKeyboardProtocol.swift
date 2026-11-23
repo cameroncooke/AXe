@@ -9,6 +9,14 @@ struct SelectedKeyboardRequest: Codable, Sendable {
     let expectedPID: Int32?
     let fieldTarget: SelectedNativeTarget
     let events: [SelectedKeyboardPrimitive]
+    /// Read the focused field before every Nth key down, from the first; nil is the default.
+    var focusCheckInterval: Int? = nil
+
+    /// One focus read every 16 keys: 256 characters took 22.5 s with a read before every key and about
+    /// 5 s with one every 16 (iPhone 17, iOS 27.3). A focus change mid-type stops within 16 keys.
+    static let defaultFocusCheckInterval = 16
+    static let focusCheckIntervals = 1...256
+    var effectiveFocusCheckInterval: Int { focusCheckInterval ?? Self.defaultFocusCheckInterval }
 
     var focusID: String? { fieldTarget.semanticID }
 
@@ -17,21 +25,27 @@ struct SelectedKeyboardRequest: Codable, Sendable {
             fieldTarget: .semantic(kind: .id, value: focusID, elementType: "TextField"), events: events)
     }
 
-    init(expectedPID: Int32?, fieldTarget: SelectedNativeTarget, events: [SelectedKeyboardPrimitive]) {
+    init(expectedPID: Int32?, fieldTarget: SelectedNativeTarget, events: [SelectedKeyboardPrimitive],
+         focusCheckInterval: Int? = nil) {
         self.expectedPID = expectedPID
         self.fieldTarget = fieldTarget
         self.events = events
+        self.focusCheckInterval = focusCheckInterval
     }
 
     /// The same request bound to one process; every focus read then requires it.
     func bound(to pid: Int32) -> SelectedKeyboardRequest {
-        SelectedKeyboardRequest(expectedPID: pid, fieldTarget: fieldTarget, events: events)
+        SelectedKeyboardRequest(expectedPID: pid, fieldTarget: fieldTarget, events: events,
+            focusCheckInterval: focusCheckInterval)
     }
 
     func validate() throws {
         try fieldTarget.validate()
         if let expectedPID, expectedPID <= 0 {
             throw SelectedHIDFailure.invalid("Selected keyboard requires a positive PID")
+        }
+        if let focusCheckInterval, !Self.focusCheckIntervals.contains(focusCheckInterval) {
+            throw SelectedHIDFailure.invalid("The focus check interval must be 1...256 keys")
         }
         switch fieldTarget {
         case let .semantic(kind, value, type):
@@ -184,5 +198,8 @@ struct SelectedKeyboardResult: Codable, Sendable {
     let focusID: String?
     var initialTarget: FBSimulatorAXNode?
     var lastValidatedTarget: FBSimulatorAXNode?
+    /// Key downs admitted, whether or not a focus read came before them.
     var validatedKeyDownCount = 0
+    /// Key downs that had a focus read before them: the first, then every focus check interval.
+    var focusCheckedKeyDownCount: Int? = nil
 }

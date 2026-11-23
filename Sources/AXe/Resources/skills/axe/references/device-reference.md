@@ -135,8 +135,8 @@ Semantic press, native `CheckBox` only: `tap --semantic-press --id <ID>` with se
 Keyboard (`type`, `key`, `key-sequence`, `key-combo`) with `--focus-id <exact-field-ID>` and optional `--expected-pid`:
 
 - First focus the field explicitly and inspect it: an enabled, visible, focused `TextField`.
-- Checked before every key down; key-up cleanup needs no focus.
-- Text: US key positions unless `--layout <name>` names the device's keyboard layout (`British`, `German`); `--layout auto` is simulator-only. At most 256 UTF-8 bytes. Sequences: at most 1024 events and 20 s requested delay, within a shared 8-second admission budget.
+- Checked before the first key down, after Return, Tab, other non-character keys, shortcuts and delays, and every 16th key otherwise (`--focus-check-interval` changes the 16; advanced); key-up cleanup needs no focus.
+- Text: US key positions unless `--layout <name>` names the device's keyboard layout (`British`, `German`); `--layout auto` is simulator-only. At most 256 UTF-8 bytes. Sequences: at most 1024 events and 20 s requested delay, within an admission budget of 8 s plus 0.3 s a key.
 - Not atomic OS recipient control.
 
 Slider:

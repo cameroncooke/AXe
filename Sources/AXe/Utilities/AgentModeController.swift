@@ -542,9 +542,22 @@ final class AgentModeController {
                     }
                     // One read, published at once, after every action including a swipe. A screen
                     // still in transition, or content still decelerating, is caught by the next
-                    // action's admission, which re-reads and retries inside its own call.
-                    let first = try await read()
-                    return (first.0, first.1)
+                    // action's admission, which re-reads and retries inside its own call. Typing is
+                    // read again until the field has the text: see `AgentTypedTextSettle`.
+                    var latest = try await read()
+                    if mode.kind == .typeText, let typed = mode.text, !typed.isEmpty {
+                        let deadline = now + AgentTypedTextSettle.timeLimit(for: typed)
+                        var previous: String?? = nil
+                        var value = AgentTypedTextSettle.focusedValue(in: latest.1, pid: pid)
+                        while !AgentTypedTextSettle.isSettled(typed: typed, previous: previous, current: value),
+                              now < deadline {
+                            try await Task.sleep(for: AgentTypedTextSettle.interval)
+                            latest = try await PhaseTimer.measure("agent.typeSettle") { try await read() }
+                            previous = .some(value)
+                            value = AgentTypedTextSettle.focusedValue(in: latest.1, pid: pid)
+                        }
+                    }
+                    return (latest.0, latest.1)
                 }
                 afterContext = refreshed.0
                 afterSnapshot = refreshed.1

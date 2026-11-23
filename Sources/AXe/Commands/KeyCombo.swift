@@ -32,6 +32,7 @@ struct KeyCombo: PhysicalDeviceCommand {
     func validate() throws {
         try agentMode.validate()
         if agentMode.enabled {
+            try selectedKeyboard.validateFocusCheckInterval()
             try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedKeyboard.expectedPID)
             guard agentMode.elementRef != nil, selectedKeyboard.focusID == nil else {
                 throw ValidationError("Agent key-combo requires --snapshot-id and --ref for an already focused TextField, with no --focus-id.")
@@ -64,7 +65,8 @@ struct KeyCombo: PhysicalDeviceCommand {
         let events = try KeyboardPrimitives.from(selectedKeyboardEvent())
         return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .keyCombo,
             expectedPID: selectedKeyboard.expectedPID, snapshotID: agentMode.snapshotID,
-            ref: agentMode.elementRef, keyEvents: events), input: selectedInput)
+            ref: agentMode.elementRef, keyEvents: events,
+            focusCheckInterval: selectedKeyboard.focusCheckInterval), input: selectedInput)
     }
 
     func validateOnDevice(inBatch: Bool) throws {

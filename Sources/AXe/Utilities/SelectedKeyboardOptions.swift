@@ -7,12 +7,24 @@ struct SelectedKeyboardOptions: ParsableArguments {
     var expectedPID: Int32?
     @Option(name: .customLong("focus-id"), help: "ID of the focused TextField (required when selected).")
     var focusID: String?
+    @Option(name: .customLong("focus-check-interval"), help: ArgumentHelp(
+        "Advanced, agent or selected: read the focused field before every Nth key, 1...256 (default 16). Lower it only when text went to another field partway; 1 checks every key and is far slower.",
+        valueName: "keys", visibility: .hidden))
+    var focusCheckInterval: Int?
+
+    /// Agent and selected input only; checked by both validation paths.
+    func validateFocusCheckInterval() throws {
+        if let focusCheckInterval, !SelectedKeyboardRequest.focusCheckIntervals.contains(focusCheckInterval) {
+            throw ValidationError("--focus-check-interval takes 1...256 keys.")
+        }
+    }
 
     func validate(input: SelectedInputOptions) throws {
         try input.validate()
+        try validateFocusCheckInterval()
         guard input.mode == .selected else {
-            guard expectedPID == nil, focusID == nil else {
-                throw ValidationError("--expected-pid and --focus-id require --input-mode selected.")
+            guard expectedPID == nil, focusID == nil, focusCheckInterval == nil else {
+                throw ValidationError("--expected-pid, --focus-id and --focus-check-interval require --input-mode selected or --agent.")
             }
             return
         }
@@ -30,8 +42,10 @@ struct SelectedKeyboardOptions: ParsableArguments {
         guard input.mode == .selected, let focusID else {
             throw ValidationError("Missing selected keyboard field identity.")
         }
-        let request = try input.baseRequest(payload: .keyboard(SelectedKeyboardRequest(expectedPID: expectedPID,
-            focusID: focusID, events: try KeyboardPrimitives.from(event))))
+        var keyboard = SelectedKeyboardRequest(expectedPID: expectedPID,
+            focusID: focusID, events: try KeyboardPrimitives.from(event))
+        keyboard.focusCheckInterval = focusCheckInterval
+        let request = try input.baseRequest(payload: .keyboard(keyboard))
         try request.validate()
         return request
     }

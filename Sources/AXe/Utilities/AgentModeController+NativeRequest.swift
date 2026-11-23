@@ -70,6 +70,7 @@ extension AgentModeController {
             admission.selectorKind = kind
             admission.selectorValue = value
         }
+        if mode.kind == .typeText, mode.fieldMayMove == true { admission.fieldMayMove = true }
         switch mode.kind {
         case .describe, .read, .focusAndType: throw AgentModeFailure("invalidAction", "A description or reference read is not an input action.")
         case .tap:
@@ -133,7 +134,8 @@ extension AgentModeController {
                 throw AgentModeFailure("unsupportedKeyTarget", "Keyboard input requires a chosen focused native field.")
             }
             try SelectedKeyboardFocusPolicy.validate(node, expectedPID: pid, fieldTarget: chosenTarget)
-            plannedKeyboard = SelectedKeyboardRequest(expectedPID: pid, fieldTarget: chosenTarget, events: events)
+            plannedKeyboard = SelectedKeyboardRequest(expectedPID: pid, fieldTarget: chosenTarget, events: events,
+                focusCheckInterval: mode.focusCheckInterval)
         case .typeText:
             guard let node, let chosenTarget, let text = mode.text, !text.isEmpty,
                   text.utf8.count <= SelectedKeyboardRequest.maximumTextBytes else {
@@ -141,7 +143,8 @@ extension AgentModeController {
             }
             try SelectedKeyboardFocusPolicy.validate(node, expectedPID: pid, fieldTarget: chosenTarget)
             plannedKeyboard = SelectedKeyboardRequest(expectedPID: pid, fieldTarget: chosenTarget,
-                events: try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text, layout: mode.layout)))
+                events: try KeyboardPrimitives.from(SelectedKeyboardRequest.textEvent(text, layout: mode.layout)),
+                focusCheckInterval: mode.focusCheckInterval)
         case .swipe:
             guard let node, let ref = mode.ref, let cached, let direction = mode.direction,
                   let original = cached.snapshot.elements.first(where: { $0.ref == ref }) else {

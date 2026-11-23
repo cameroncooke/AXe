@@ -282,7 +282,7 @@ Opaque (native identity) input:
 - A displayed frame or path never substitutes for native identity.
 - Does not authorize slider adjustments, AXPress or pinch. Scrolling needs an advertised scroll ref with fresh hit/ancestry checks.
 - Native-ID batch steps need real app IDs, never object UIDs.
-- Typing: an anonymous focused field can use its unique native object; a present duplicated or malformed field ID keeps its refusal. Before each key DOWN, AXe reads the exact current field and checks focus. No implicit focus is added. `--focus-id` is exact-ID only.
+- Typing: an anonymous focused field can use its unique native object; a present duplicated or malformed field ID keeps its refusal. AXe reads the exact current field and checks focus before the first key DOWN, before the key after any key that can move focus (Return, Tab, Escape, arrows, a key pressed with Command, Control or Option) or after a delay, and every 16th key otherwise. A focus change in the middle of plain text stops within 16 keys; the returned capture shows what the field holds. No implicit focus is added. `--focus-id` is exact-ID only.
 
 Opaque `tap --tap-style physical`:
 
@@ -444,7 +444,8 @@ Use on a current tap-capable native TextField with a unique typed field ID or co
 - The field's frame may change when the keyboard appears; the new frame must be finite, positive and inside the same display. The tap may change value or selection; the actual post-focus value becomes the exact typing baseline.
 - Sibling index and parent-container changes do not change field identity; parent paths and container object IDs are not typing-recipient authority. Still bound: the chosen field authority (semantic or opaque, kept by the broker), observed field object ID/PID, type, actual focus, uniqueness, full display context and other identity/state facts.
 - No label or coordinate fallback, no typing through a tap-only alias. Duplicated or malformed field IDs refuse.
-- Native object ID/PID evidence is kept across the pre-tap and post-focus (full rebaseline) reads when available. Later semantic per-key reads check the exact typed ID, owner, focus and context but not the incidental object ID; anonymous fields keep native per-key identity checks.
+- Native object ID/PID evidence is kept across the pre-tap and post-focus (full rebaseline) reads when available. Later semantic focus reads check the exact typed ID, owner, focus and context but not the incidental object ID; anonymous fields keep native identity checks. The first key accepts the field at a new frame (the keyboard scrolls it into place) but not a new value.
+- Advanced, not for normal use: `--focus-check-interval <1...256>` sets how many keys pass between focus reads (default 16). Lower it only when text went to another field partway through; `1` reads before every key and makes long text several times slower.
 - One broker reservation spans the command; native input leases are per phase.
 - Reply: the batch receipt shape with two phases, tap then type. Check both and the replacement capture. If typing failed after focus, the focus tap is still an input effect. A failed final observation keeps completed receipts and requires a refresh. Never resubmit either phase. Key cleanup and quarantine apply as usual.
 
