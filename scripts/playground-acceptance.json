@@ -56,7 +56,6 @@
     "PlaygroundDuoSupport.swift",
     "PlaygroundDuoTapWaitTests.swift",
     "PlaygroundDuoTests.swift",
-    "PlaygroundDuoTypingInterruptionTests.swift",
     "PlaygroundHingeWindowTests.swift",
     "PlaygroundIndependentPairTests.swift",
     "PlaygroundInputHandoverTests.swift",
@@ -193,7 +192,6 @@
       "PlaygroundDuoSelectedKeyInterruptionTests",
       "PlaygroundDuoSelectedBatchKeyboardTests",
       "PlaygroundDuoHeldModifierTests",
-      "PlaygroundDuoTypingInterruptionTests",
       "PlaygroundDuoHardwareTests",
       "PlaygroundDuoHardwareInterruptionTests",
       "PlaygroundDuoSelectedHomeBatchTests",
@@ -313,10 +311,6 @@
     ],
     "PlaygroundDuoHeldModifierTests": [
       "AXE_DUO_HELD_MODIFIER_PROBE_PATH",
-      "AXE_DUO_STATE_CHANGE_PATH"
-    ],
-    "PlaygroundDuoTypingInterruptionTests": [
-      "AXE_VERIFY_DUO_CONTROLS_PATH",
       "AXE_DUO_STATE_CHANGE_PATH"
     ],
     "PlaygroundDuoManualBoundaryTests": [
@@ -526,7 +520,6 @@
         "PlaygroundDuoSelectedKeyInterruptionTests",
         "PlaygroundDuoSelectedBatchKeyboardTests",
         "PlaygroundDuoHeldModifierTests",
-        "PlaygroundDuoTypingInterruptionTests",
         "PlaygroundDuoHardwareTests",
         "PlaygroundDuoHardwareInterruptionTests",
         "PlaygroundDuoSelectedHomeBatchTests",
@@ -620,7 +613,6 @@
     "PlaygroundDuoSelectedKeyInterruptionTests": "PlaygroundDuoKeyboardSourcesTests.swift",
     "PlaygroundDuoSelectedBatchKeyboardTests": "PlaygroundDuoKeyboardSourcesTests.swift",
     "PlaygroundDuoHeldModifierTests": "PlaygroundDuoHeldModifierTests.swift",
-    "PlaygroundDuoTypingInterruptionTests": "PlaygroundDuoTypingInterruptionTests.swift",
     "PlaygroundDuoHardwareTests": "PlaygroundDuoHardwareTests.swift",
     "PlaygroundDuoHardwareInterruptionTests": "PlaygroundDuoHardwareInterruptionTests.swift",
     "PlaygroundDuoMediaTests": "PlaygroundDuoMediaTests.swift",

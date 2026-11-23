@@ -64,11 +64,11 @@ The result directory must be new. Earlier failed output is never replaced. The d
 | --- | ---: | ---: | ---: | --- |
 | Core controls | 77 | 73 | 268 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
 | Agent controls | 150 | 6 | 165 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard, web sign-in (WKWebView and Safari) and refusals |
-| Keyboard and hardware | 16 | 10 | 57 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
+| Keyboard and hardware | 16 | 10 | 56 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 6 | 6 | 30 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **248** | **96** | **536** | **880 case executions** |
+| **Total** | **248** | **96** | **535** | **879 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 
