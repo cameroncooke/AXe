@@ -156,18 +156,21 @@ enum MirrorSimulatorControl {
         throw CLIError(errorDescription: "The simulator did not stop, even when forced. Quit Simulator.app and try again.", code: .timeout)
     }
 
-    /// Whether the simulator starts a process within a few seconds. It takes about 0.2 s on one that
+    /// Whether the simulator starts a process within a few seconds. It takes about 0.25 s on one that
     /// is running well; a frozen simulator never does.
+    /// The process is the simulator's own `launchctl`, which every runtime has. `/usr/bin/true` is in
+    /// no runtime: Xcode 27.3 runs the Mac's copy, but Xcode 27.0 answers "Invalid or missing Program"
+    /// in 0.09 s, and a healthy iOS 27.0 simulator was then said not to be answering at all.
     /// Its output goes nowhere: simctl hands its own to the process it starts in the simulator, and
     /// in a frozen one that process never exits, so a pipe read here would never end.
     static func answers(udid: String) async -> Bool {
         let process = Process()
         if let simctlPath {
             process.executableURL = URL(fileURLWithPath: simctlPath)
-            process.arguments = ["spawn", udid, "/usr/bin/true"]
+            process.arguments = ["spawn", udid, "launchctl", "managername"]
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl", "spawn", udid, "/usr/bin/true"]
+            process.arguments = ["simctl", "spawn", udid, "launchctl", "managername"]
         }
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
