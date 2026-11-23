@@ -182,7 +182,8 @@ struct SelectedHIDPath: Codable, Sendable {
                 throw SelectedHIDFailure.invalid("Explicit legacy edge inset requires a path span at least as large as delta.")
             }
             return .swipe(points.startX, yStart: points.startY, xEnd: points.endX, yEnd: points.endY,
-                          delta: delta, duration: duration)
+                          delta: Self.fingerDelta(delta, from: CGPoint(x: points.startX, y: points.startY),
+                              to: CGPoint(x: points.endX, y: points.endY), duration: duration), duration: duration)
         }
         let stroke = strokePoints
         if kind == .draw {
@@ -197,7 +198,8 @@ struct SelectedHIDPath: Codable, Sendable {
                     .map(\.event))
             }
             return .swipe(stroke[0].x, yStart: stroke[0].y, xEnd: stroke[1].x, yEnd: stroke[1].y,
-                          delta: delta, duration: duration)
+                          delta: Self.fingerDelta(delta, from: stroke[0], to: stroke[1], duration: duration),
+                          duration: duration)
         }
         let moves = steps ?? TouchStroke.moveCount(duration: duration)
         return .composite(TouchStroke.primitives(through: stroke, duration: duration, moves: moves,
@@ -222,9 +224,19 @@ struct SelectedHIDPath: Codable, Sendable {
         return result
     }
 
+    /// The spacing a swipe uses: `delta` at most, and close enough for a move every 20 ms, as a finger
+    /// gives. With sparse moves, the iOS 27.3 Duo outer screen leaves the whole first move out of a pan's
+    /// translation: 4 moves of 40 points panned 120 of 160, and a one-move agent swipe scrolled nothing.
+    static func fingerDelta(_ delta: Double, from start: CGPoint, to end: CGPoint, duration: Double) -> Double {
+        let distance = hypot(end.x - start.x, end.y - start.y)
+        guard distance > 0, duration.isFinite, duration > 0 else { return delta }
+        return min(delta, distance / Double(TouchStroke.moveCount(duration: duration)))
+    }
+
     /// A swipe that ends at rest, for the routes that send one event: at least eight moves, so the
     /// easing has small last movements even when `delta` is a large part of the path.
     static func restingSwipe(from start: CGPoint, to end: CGPoint, duration: Double, delta: Double) -> [SelectedHIDPrimitive] {
+        let delta = fingerDelta(delta, from: start, to: end, duration: duration)
         let moves = ceil(hypot(end.x - start.x, end.y - start.y) / max(delta, 1))
         return swipe(from: start, to: end, duration: duration, count: Int(min(1000, max(8, moves))), endsAtRest: true)
     }
@@ -272,7 +284,7 @@ struct SelectedHIDPath: Codable, Sendable {
         let count: Int
         if let steps { count = steps }
         else {
-            let countValue = ceil(distance / delta!)
+            let countValue = ceil(distance / Self.fingerDelta(delta!, from: start, to: end, duration: duration))
             guard countValue.isFinite, countValue <= 1000 else {
                 throw SelectedHIDFailure.invalid("Selected path exceeds 1000 movement steps")
             }

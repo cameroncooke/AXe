@@ -54,7 +54,7 @@ struct EdgeInsetTests {
         let events = try payload.primitives(logicalSize: CGSize(width: 951, height: 669)).map(\.event)
         assertEnds(events, expected)
         let contacts = events.filter { if case .delay = $0 { return false }; return true }
-        #expect(contacts.count == (preset == .swipeFromLeftEdge || preset == .swipeFromRightEdge ? 21 : 15))
+        #expect(contacts.count == (preset == .swipeFromLeftEdge || preset == .swipeFromRightEdge ? 21 : 17))
     }
 
     @Test(arguments: [GesturePreset.swipeFromLeftEdge, .swipeFromRightEdge, .swipeFromTopEdge, .swipeFromBottomEdge])
@@ -116,10 +116,10 @@ struct EdgeInsetTests {
         } catch {
             #expect(Gesture.message(for: error) == expectedError)
         }
-        // The selected builder safely keeps one movement step for the same short span.
+        // The selected builder still moves a short span, a move every 20 ms over the 0.3 s default.
         let selected = try Gesture.parse(arguments + ["--udid", udid] + selection).selectedPath()
         let points = try selected.primitives(logicalSize: CGSize(width: 101, height: 101))
-        #expect(points.filter { $0.kind != .delay }.count == 3)
+        #expect(points.filter { $0.kind != .delay }.count == 17)
         #expect(points.compactMap(\.x).allSatisfy(\.isFinite) && points.compactMap(\.y).allSatisfy(\.isFinite))
     }
 

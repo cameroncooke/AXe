@@ -58,7 +58,8 @@ struct PlaygroundDuoMotionOptionsTests {
         let before = try current.documents.read()
         let receipt = try await current.selected(["swipe", "--start-x", String(start.0), "--start-y", String(start.1),
             "--end-x", String(end.0), "--end-y", String(end.1), "--duration", "0.4", "--delta", "10"])
-        try #require(receipt.enqueuedEventCount == 10 && receipt.outcome == "enqueuedAndDrained")
+        // Down, a move every 20 ms over 0.4 s (closer than the 10-point delta), up.
+        try #require(receipt.enqueuedEventCount == 22 && receipt.outcome == "enqueuedAndDrained")
         let after = try await current.documents.waitFor("the prior tabletop 80-point swipe and release") {
             $0.count("pan") == before.count("pan") + 1 && $0.activeWindowTouches == 0
                 && $0.recognizerTrace.last(where: { $0.name == "pan" })?.state == 3

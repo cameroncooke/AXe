@@ -12,7 +12,9 @@ struct OrdinaryPathEventTests {
 
     @Test func swipeIsOneNativeSwipeEvent() throws {
         let path = SelectedHIDPath(kind: .swipe, startX: 10, startY: 20, endX: 200, endY: 400, duration: 1, delta: 50, generator: .ordinary)
-        #expect(try path.event(logicalSize: size) == .swipe(10, yStart: 20, xEnd: 200, yEnd: 400, delta: 50, duration: 1))
+        // A move every 20 ms: 50 moves over 1 s, closer together than the 50-point delta.
+        let spacing = (190.0 * 190.0 + 380.0 * 380.0).squareRoot() / 50
+        #expect(try path.event(logicalSize: size) == .swipe(10, yStart: 20, xEnd: 200, yEnd: 400, delta: spacing, duration: 1))
         #expect(path.responseTimeoutMilliseconds == 121_000)
         #expect(SelectedHIDPath(kind: .swipe, startX: 10, startY: 20, endX: 200, endY: 400, duration: 1, delta: 50)
             .responseTimeoutMilliseconds == nil)
@@ -20,7 +22,7 @@ struct OrdinaryPathEventTests {
         let request = SelectedHIDRequest(version: SelectedHIDRequest.version, requestID: UUID(), screenID: 3,
             screenUUID: UUID(), operation: .complete, token: nil, payload: .path(path))
         #expect(try request.completeEvent(logicalSize: size) == .swipe(10, yStart: 20, xEnd: 200, yEnd: 400,
-            delta: 50, duration: 1))
+            delta: spacing, duration: 1))
     }
 
     @Test func dragHoldsMovesEvenlyAndReleases() throws {

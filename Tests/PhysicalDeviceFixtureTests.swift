@@ -457,7 +457,7 @@ struct PhysicalPathTimingTests {
         let swipe = SelectedHIDPath(kind: .swipe, startX: 100, startY: 800, endX: 100, endY: 200,
                                     duration: 0.5, delta: 100)
         let plan = try Self.steps(swipe)
-        #expect(plan.count == 8)
+        #expect(plan.count == 27) // down, a move every 20 ms, up
         #expect(abs(plan.reduce(0) { $0 + $1.delayAfter } - 0.5) < 1e-9)
     }
 

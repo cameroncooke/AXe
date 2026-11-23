@@ -154,7 +154,9 @@ struct BrokerBoundPlainInputTests {
             try path.validate()
             let points = preset.coordinates(screenWidth: 402, screenHeight: 874, edgeInset: inset, distance: distance)
             #expect(try path.event(logicalSize: size) == .swipe(points.startX, yStart: points.startY,
-                xEnd: points.endX, yEnd: points.endY, delta: preset.defaultDelta, duration: preset.defaultDuration))
+                xEnd: points.endX, yEnd: points.endY, delta: SelectedHIDPath.fingerDelta(preset.defaultDelta,
+                    from: CGPoint(x: points.startX, y: points.startY), to: CGPoint(x: points.endX, y: points.endY),
+                    duration: preset.defaultDuration), duration: preset.defaultDuration))
         }
     }
 

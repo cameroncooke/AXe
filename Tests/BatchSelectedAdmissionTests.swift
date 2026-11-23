@@ -77,14 +77,14 @@ struct BatchSelectedAdmissionTests {
             Issue.record("Expected the legacy mergeable gesture"); return
         }
         let events = try #require(event.subEvents)
-        #expect(events.count == 21)
+        #expect(events.count == 55)
         #expect(events.first == .touch(direction: .down, x: 195, y: 522))
         #expect(events.last == .touch(direction: .up, x: 195, y: 322))
         let delays = events.compactMap { event -> TimeInterval? in
             if case let .delay(seconds) = event { return seconds }
             return nil
         }
-        #expect(delays.count == 10)
+        #expect(delays.count == 27) // a move every 20 ms over 0.5 s, plus the two IDB adds
         #expect(abs(delays.reduce(0, +) - 0.5) < 0.000001)
     }
 

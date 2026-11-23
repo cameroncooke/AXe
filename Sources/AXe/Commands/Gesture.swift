@@ -269,7 +269,7 @@ struct Gesture: PhysicalDeviceCommand {
     @Option(name: .customLong("duration"), help: "Seconds the motion takes, above 0 to 10 (default 0.5 scroll, 0.3 edge, 0.6 pinch, rotate, two-finger-swipe).")
     var duration: Double?
     
-    @Option(name: .customLong("delta"), help: "Distance between touch samples in points, up to 200 (default 25 scroll, 50 edge, 5 pinch, rotate, two-finger-swipe).")
+    @Option(name: .customLong("delta"), help: "Distance between touch samples in points, up to 200 (default 25 scroll, 50 edge, 5 pinch, rotate, two-finger-swipe). Scroll and edge swipes also sample at least every 20 ms.")
     var delta: Double?
     
     @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the gesture, 0 to 10.")
@@ -396,7 +396,9 @@ struct Gesture: PhysicalDeviceCommand {
                 events += SelectedHIDPath.restingSwipe(from: CGPoint(x: startX, y: startY), to: CGPoint(x: endX, y: endY),
                     duration: duration, delta: delta).map(\.event)
             } else {
-                events.append(.swipe(startX, yStart: startY, xEnd: endX, yEnd: endY, delta: delta, duration: duration))
+                events.append(.swipe(startX, yStart: startY, xEnd: endX, yEnd: endY,
+                    delta: SelectedHIDPath.fingerDelta(delta, from: CGPoint(x: startX, y: startY),
+                        to: CGPoint(x: endX, y: endY), duration: duration), duration: duration))
             }
             if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
             return events.count == 1 ? events[0] : .composite(events)

@@ -31,7 +31,7 @@ struct Swipe: PhysicalDeviceCommand {
     @Option(name: .customLong("duration"), help: "Seconds the swipe takes (default 1).")
     var duration: Double?
     
-    @Option(name: .customLong("delta"), help: "Distance between touch samples in points (default 50).")
+    @Option(name: .customLong("delta"), help: "Largest distance between touch samples in points (default 50). Samples also come at least every 20 ms.")
     var delta: Double?
     
     @Option(name: .customLong("pre-delay"), help: "Seconds to wait before the swipe, 0 to 10.")
@@ -279,7 +279,9 @@ struct Swipe: PhysicalDeviceCommand {
             events += SelectedHIDPath.restingSwipe(from: CGPoint(x: start.x, y: start.y), to: CGPoint(x: end.x, y: end.y),
                 duration: duration, delta: delta).map(\.event)
         } else {
-            events.append(.swipe(start.x, yStart: start.y, xEnd: end.x, yEnd: end.y, delta: delta, duration: duration))
+            events.append(.swipe(start.x, yStart: start.y, xEnd: end.x, yEnd: end.y,
+                delta: SelectedHIDPath.fingerDelta(delta, from: CGPoint(x: start.x, y: start.y),
+                    to: CGPoint(x: end.x, y: end.y), duration: duration), duration: duration))
         }
         if let postDelay, postDelay > 0 { events.append(.delay(postDelay)) }
         return events.count == 1 ? events[0] : .composite(events)

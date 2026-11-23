@@ -210,7 +210,8 @@ final class SimulatorAgentExecutor {
                 yStart: physicalPoints[0].y,
                 xEnd: physicalPoints[1].x,
                 yEnd: physicalPoints[1].y,
-                delta: 50,
+                delta: SelectedHIDPath.fingerDelta(50, from: CGPoint(x: physicalPoints[0].x, y: physicalPoints[0].y),
+                    to: CGPoint(x: physicalPoints[1].x, y: physicalPoints[1].y), duration: 0.5),
                 duration: 0.5
             ),
             in: session,
