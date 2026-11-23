@@ -336,6 +336,8 @@ enum SelectedAXOperation {
                 if let validation = await target.validationReceipt() { result.validation = SelectedAXValidation(validation) }
                 if let rejected = await target.rejectedHitReceipt() {
                     result.rejectedHit = SelectedAXRejectedHit(rejected)
+                    let hits = rejected.roots.map { "\($0.type ?? "?") '\($0.label ?? "")' \($0.frame.map { "\($0)" } ?? "no frame") pid \($0.pid ?? 0)" }
+                    logger.info().log("Selected AX target rejected (\(rejected.reason)), hit PID \(rejected.hitPID) for \(rejected.expectedPID): \(hits.joined(separator: "; "))")
                     // HID may wrap the thrown error as text; the owned receipt retains its type.
                     result.failure = .targetRejected
                 }
