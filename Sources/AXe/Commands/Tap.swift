@@ -19,7 +19,7 @@ struct Tap: PhysicalDeviceCommand {
         """
     )
 
-    @Flag(name: .customLong("semantic-press"), help: "Press the native CheckBox or Button with this --id through accessibility. A CheckBox must change value; a Button is confirmed by the app accepting the press. Simulators need --input-mode selected; physical devices take a CheckBox only.")
+    @Flag(name: .customLong("semantic-press"), help: "Press the native CheckBox or Button with this --id through accessibility. A CheckBox must change value; a Button is confirmed by the app accepting the press. Simulators need --input-mode selected, or --agent with a --ref or --id; physical devices take a CheckBox only.")
     var semanticPress = false
 
     @Option(name: .customShort("x"), help: "X coordinate of the tap in points.")
@@ -235,8 +235,17 @@ struct Tap: PhysicalDeviceCommand {
 
     private func validateAgent() throws {
         try AgentModeCommandAdapter.validateContext(input: selectedInput, expectedPID: selectedAX.expectedPID)
-        guard !semanticPress, waitTimeout == 0, pollInterval == nil else {
-            throw ValidationError("Agent tap does not accept semantic press or polling overrides.")
+        guard waitTimeout == 0, pollInterval == nil else {
+            throw ValidationError("Agent tap does not accept polling overrides.")
+        }
+        if semanticPress {
+            guard (agentMode.elementRef != nil) != (elementID != nil), elementLabel == nil, elementValue == nil,
+                  labelContains == nil, labelRegex == nil, selectorFrame == nil, pointX == nil, pointY == nil,
+                  elementType == nil, tapStyle == nil, preDelay == nil, postDelay == nil else {
+                throw ValidationError("Agent --semantic-press requires one --ref or one exact --id, and no coordinates, other selectors, style or delays.")
+            }
+            if agentMode.elementRef != nil { try agentMode.requireSnapshot() }
+            return
         }
         let selectors = [elementID, elementLabel, elementValue, labelContains, labelRegex].compactMap { $0 }
         let hasPoint = pointX != nil || pointY != nil
@@ -266,6 +275,11 @@ struct Tap: PhysicalDeviceCommand {
     }
 
     func agentRequest() throws -> SelectedHIDRequest {
+        if semanticPress {
+            return try AgentModeCommandAdapter.request(AgentModeRequest(kind: .press,
+                expectedPID: selectedAX.expectedPID, snapshotID: agentMode.snapshotID, ref: agentMode.elementRef,
+                selectorKind: elementID == nil ? nil : .id, selectorValue: elementID), input: selectedInput)
+        }
         let extended = try extendedAgentSelector()
         let selectorKind: SelectedAXRequest.SelectorKind?
         if extended != nil { selectorKind = nil }

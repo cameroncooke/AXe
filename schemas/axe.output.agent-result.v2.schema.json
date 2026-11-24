@@ -207,6 +207,7 @@
         "sliderEndpoint",
         "sliderPercentage",
         "pinch",
+        "press",
         "complete"
       ]
     },

@@ -159,7 +159,7 @@
     },
     "actionKind": {
       "enum": ["describe", "read", "tap", "typeText", "focusAndType", "swipe", "drag", "hold", "doubleTap", "keyPress",
-        "keyCombo", "keySequence", "sliderEndpoint", "sliderPercentage", "pinch", "complete"]
+        "keyCombo", "keySequence", "sliderEndpoint", "sliderPercentage", "pinch", "press", "complete"]
     },
     "actionReceipt": {
       "description": "Transport evidence for one action. It is not proof of the app's response.",

@@ -4,7 +4,7 @@ import FBSimulatorControl
 
 struct AgentModeRequest: Codable, Sendable {
     static let maximumRows = 12_288
-    enum Kind: String, Codable, Sendable { case describe, read, tap, typeText, focusAndType, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, sliderPercentage, pinch, complete }
+    enum Kind: String, Codable, Sendable { case describe, read, tap, typeText, focusAndType, swipe, drag, hold, doubleTap, keyPress, keyCombo, keySequence, sliderEndpoint, sliderPercentage, pinch, press, complete }
     let kind: Kind
     var expectedPID: Int32? = nil
     var snapshotID: UUID? = nil
@@ -101,6 +101,15 @@ struct AgentModeRequest: Codable, Sendable {
             try pinch.selected(at: .zero, duration: duration, preDelay: preDelay, postDelay: postDelay).validate()
         } else if pinch != nil {
             throw AgentModeFailure("mixedPayload", "Reference pinch geometry applies only to an agent pinch.")
+        }
+        if kind == .press {
+            // One accessibility press on a chosen control: no point, text, keys or timing.
+            guard (ref != nil && snapshotID != nil) != (selectorKind == .id && selectorValue != nil),
+                  point == nil, tapSelector == nil, text == nil, keyEvents == nil, direction == nil,
+                  tapStyle == nil, doubleTapTiming == nil, sliderEndpoint == nil, sliderPercentage == nil,
+                  destination == nil, steps == nil, pinch == nil, preDelay == 0, postDelay == 0 else {
+                throw AgentModeFailure("invalidPress", "An agent press requires one snapshot/ref or one exact --id, without coordinates, other selectors, payloads or delays.")
+            }
         }
         if kind == .sliderPercentage {
             guard let sliderPercentage, sliderPercentage.isFinite, (0...100).contains(sliderPercentage) else {

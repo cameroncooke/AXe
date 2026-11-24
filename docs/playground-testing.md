@@ -63,12 +63,12 @@ The result directory must be new. Earlier failed output is never replaced. The d
 | Group | iPhone | iPad | Duo | Main behaviour |
 | --- | ---: | ---: | ---: | --- |
 | Core controls | 77 | 73 | 268 | Find, tap, long press, double tap, two-finger tap, type, scroll, scroll until visible, swipe, drag and drag hold, draw, PencilKit ink and tool picker, Control Centre, pinch, switches, sliders, retained contacts and batches |
-| Agent controls | 151 | 6 | 166 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard, web sign-in (WKWebView and Safari) and refusals |
+| Agent controls | 152 | 6 | 167 | RS/1, selectors, references, cache, keys, gestures, sliders, clipboard, web sign-in (WKWebView and Safari) and refusals |
 | Keyboard and hardware | 16 | 10 | 56 | Text sources, editing, delays, held keys/modifiers, hardware buttons and release |
 | Capture and recording | 6 | 6 | 30 | PNG, video and streams on ordinary and selected screens, follow-active recording and cleanup |
 | Hinge and app layouts | 1 | 1 | 19 | Hinge/rotation, moved controls, inset windows and interrupted touch input |
 | Lifecycle, last | 0 | 0 | 1 | Shutdown only the selected Duo and check the other guests |
-| **Total** | **249** | **96** | **536** | **881 case executions** |
+| **Total** | **250** | **96** | **537** | **883 case executions** |
 
 The focus-and-type suites belong to both the agent and keyboard groups and run once in a full run.
 

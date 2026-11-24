@@ -121,6 +121,18 @@ extension AgentModeController {
                 expectedPID: pid,
                 endpoint: endpoint, selectorKind: selector.kind, selectorValue: selector.value,
                 preDelay: 0, postDelay: 0, elementType: node.type, percentage: endpoint == nil ? percentage : nil)
+        case .press:
+            // The accessibility press finds its target by exact ID in a fresh tree of its own, so the
+            // chosen control must have one. Its native role is checked there: a CheckBox or a Button.
+            guard let node else {
+                throw AgentModeFailure("missingPressTarget", "The press target is unavailable.")
+            }
+            guard let identifier = node.identifier, !identifier.isEmpty,
+                  let selector = try? snapshot.uniqueSelector(for: node), selector.kind == .id else {
+                throw AgentModeFailure("pressNeedsID", "An accessibility press finds its control by a unique accessibility ID, and this one has none, so nothing was sent. Tap it, or tap a point inside it with -x and -y.")
+            }
+            plannedAX = SelectedAXRequest(kind: .semanticPress, expectedPID: pid, endpoint: nil,
+                selectorKind: .id, selectorValue: selector.value, preDelay: 0, postDelay: 0)
         case .sliderEndpoint:
             guard let node, node.type == "Slider", let endpoint = mode.sliderEndpoint else {
                 throw AgentModeFailure("missingSliderTarget", "The fresh slider target or endpoint is unavailable.")
