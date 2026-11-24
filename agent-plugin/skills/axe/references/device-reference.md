@@ -126,10 +126,11 @@ Selector taps (HID, strict target validation):
 - `tap --value <text>`: case-sensitive text match after trimming surrounding whitespace (`true` ≠ `TRUE`, `1.0` ≠ `1`). Not with coordinates, another selector or `--semantic-press`.
 - Tap routes on other devices are unchanged.
 
-Semantic press, native `CheckBox` only: `tap --semantic-press --id <ID>` with selected options.
+Semantic press, native `CheckBox` or `Button`: `tap --semantic-press --id <ID>` with selected options. Physical devices take a `CheckBox` only.
 
 - Coordinates, labels, values, delays and explicit styles reject. Needs the inspected host image; no HID or mouse fallback.
-- Success: `switchValueChangedObserved`, a fresh same-target Boolean change within the original 8-second budget. Reply and delivery stay separate.
+- CheckBox success: `switchValueChangedObserved`, a fresh same-target Boolean change within the original 8-second budget. Reply and delivery stay separate.
+- Button success: `buttonPressAccepted`, one accepted native AXPress reply on the same target, as a VoiceOver double-tap sends. A button has no value to read back, so this confirms delivery, not the app's response: check the screen. Use it when a row exposes one Button whose action sits on a part of it a centre tap misses.
 - Verify app callbacks: zero AXe HID does not mean zero guest touches.
 
 Keyboard (`type`, `key`, `key-sequence`, `key-combo`) with `--focus-id <exact-field-ID>` and optional `--expected-pid`:

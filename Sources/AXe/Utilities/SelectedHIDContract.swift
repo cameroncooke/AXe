@@ -31,7 +31,7 @@ enum SelectedHIDContract {
             return ("sliderFailed", "The slider did not report a complete endpoint result")
         case .semanticPress where !semanticPressConfirmed(response, for: ax):
             return ("semanticPressUnconfirmed",
-                "The switch value change was not confirmed. Check the switch before another action; the press was not repeated")
+                "The press was not confirmed. Check the control before another action; the press was not repeated")
         default:
             return nil
         }
@@ -61,21 +61,31 @@ enum SelectedHIDContract {
         }
     }
 
-    /// One accepted native press on the requested switch in the bound app, read back with a changed value.
+    /// One accepted native press on the requested control in the bound app. A switch must also read
+    /// back with a changed value; a button has no value, so its accepted reply is the confirmation.
     private static func semanticPressConfirmed(_ response: SelectedHIDResponse, for ax: SelectedAXRequest) -> Bool {
-        guard response.outcome == "switchValueChangedObserved", response.enqueuedEventCount == 0,
+        guard response.enqueuedEventCount == 0,
               response.cleanup == "notNeeded", let actual = response.ax, actual.failure == nil,
               let pid = actual.expectedPID, pid > 0, ax.expectedPID == nil || ax.expectedPID == pid,
-              let press = actual.press, press.outcome == "switchValueChangedObserved",
+              let press = actual.press, press.outcome == response.outcome,
               press.delivery == "nativeReplyAccepted", press.failure == nil,
               press.translatorCallAttempted, press.callbackCount == 1, press.sendCount == 1,
               press.reply?.nativeResponsePresent == true, press.reply?.error == "0", press.reply?.value == true,
-              let before = press.stateBefore, let after = press.stateAfter, before != after,
-              let reads = press.readbackCount, (1...4).contains(reads),
               let target = press.target, target.identifier == ax.selectorValue, target.pid == pid else {
             return false
         }
-        return true
+        switch press.targetRole {
+        case "CheckBox":
+            guard press.outcome == "switchValueChangedObserved",
+                  let before = press.stateBefore, let after = press.stateAfter, before != after,
+                  let reads = press.readbackCount, (1...4).contains(reads) else { return false }
+            return true
+        case "Button":
+            return press.outcome == "buttonPressAccepted"
+                && press.stateBefore == nil && press.stateAfter == nil && press.readbackCount == nil
+        default:
+            return false
+        }
     }
 }
 
