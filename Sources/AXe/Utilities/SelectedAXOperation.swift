@@ -154,15 +154,15 @@ enum SelectedAXOperation {
                     expectedPID: expectedPID, identifier: identifier, observation: live.initialObservation,
                     freshnessProvider: live)
                 result.press = receipt
-                let valueChanged = receipt.outcome == "switchValueChangedObserved"
-                if !valueChanged { result.failure = .pressFailed }
+                let confirmed = receipt.outcome == "switchValueChangedObserved" || receipt.outcome == "buttonPressAccepted"
+                if !confirmed { result.failure = .pressFailed }
                 // AXe sends no HID here. The native action can still cause guest touch events.
                 // An uncertain semantic send keeps the common lease.
                 let semanticCleanup = receipt.delivery == "uncertain" ? "uncertain" : "notNeeded"
                 await live.closeAndWait()
                 return response(request, brokerID: brokerID, result: result, observation: observation,
                     outcome: receipt.outcome, count: 0, cleanup: semanticCleanup,
-                    error: valueChanged ? nil : receipt.failure ?? "Semantic switch value change not observed; no replay")
+                    error: confirmed ? nil : receipt.failure ?? "Semantic press not confirmed; no replay")
             }
             if ax.kind == .sliderEndpoint {
                 guard let selectorValue = ax.selectorValue, let endpoint = ax.endpoint else {

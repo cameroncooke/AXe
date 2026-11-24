@@ -70,6 +70,21 @@ enum FBAXPressImage {
   }
 }
 
+/// The native roles a semantic press accepts. A CheckBox is confirmed by its value changing. A Button
+/// has no value, so one accepted native reply is its whole confirmation.
+enum FBAXSemanticPressRole: String {
+  case checkBox = "CheckBox"
+  case button = "Button"
+
+  init?(axRole: String?) {
+    switch axRole {
+    case NSAccessibility.Role.checkBox.rawValue: self = .checkBox
+    case NSAccessibility.Role.button.rawValue: self = .button
+    default: return nil
+    }
+  }
+}
+
 /// The same bounded exact-ID search runs before and after the provider await.
 /// Closures read typed native children in production; no platform handle escapes the worker.
 enum FBAXPressTreeSelection {
@@ -129,6 +144,7 @@ final class FBAXSemanticPressSelection {
   private let display: UInt32
   private let originalRawData: Data?
   private let translationIdentity: ObjectIdentifier
+  let role: FBAXSemanticPressRole
   let target: FBSimulatorAXPressTarget
 
   init(root: FBAXPlatformElement, request: FBAXTranslationRequest, dispatcher: FBAXTranslationDispatcher,
@@ -150,6 +166,9 @@ final class FBAXSemanticPressSelection {
           return typed
         }
       })
+    guard let role = FBAXSemanticPressRole(axRole: native.axRole()) else {
+      throw FBAXPressError.rejected("Semantic target is not a native CheckBox or Button")
+    }
     let candidateTranslation = native.translation
     let candidateRawData = candidateTranslation?.rawElementData
     guard let translation = candidateTranslation, translation.pid == pid, translation.objectID > 0,
@@ -167,7 +186,8 @@ final class FBAXSemanticPressSelection {
     self.budget = budget; self.routing = routing; self.identifier = identifier; self.pid = pid
     self.rootContext = rootContext; self.display = display; self.originalRawData = candidateRawData
     self.translationIdentity = ObjectIdentifier(translation)
-    target = try Self.read(native, request: request, identifier: identifier, pid: pid,
+    self.role = role
+    target = try Self.read(native, request: request, identifier: identifier, role: role, pid: pid,
       context: rootContext, display: display, budget: budget, routing: routing)
   }
 
@@ -177,14 +197,14 @@ final class FBAXSemanticPressSelection {
   }
 
   private static func read(_ native: AXPMacPlatformElement, request: FBAXTranslationRequest,
-    identifier: String, pid: Int32, context: UInt32, display: UInt32,
+    identifier: String, role: FBAXSemanticPressRole, pid: Int32, context: UInt32, display: UInt32,
     budget: FBAXAcquisitionBudget, routing: FBAXIdentityRoutingRecorder) throws -> FBSimulatorAXPressTarget {
     try budget.check(); try Task.checkCancellation()
     guard let translation = native.translation, translation.pid == pid,
           translation.bridgeDelegateToken == request.token,
-          native.axIdentifier() == identifier, native.axRole() == NSAccessibility.Role.checkBox.rawValue,
+          native.axIdentifier() == identifier, FBAXSemanticPressRole(axRole: native.axRole()) == role,
           native.axIsEnabled(), !native.axIsHidden() else {
-      throw FBAXPressError.rejected("Semantic CheckBox target changed or is unavailable")
+      throw FBAXPressError.rejected("Semantic \(role.rawValue) target changed or is unavailable")
     }
     let frame = native.axFrame()
     guard [frame.minX, frame.minY, frame.width, frame.height].allSatisfy(\.isFinite),
@@ -221,7 +241,7 @@ final class FBAXSemanticPressSelection {
   }
 
   private func requireCurrentIdentity() throws {
-    guard try Self.read(native, request: request, identifier: identifier, pid: pid,
+    guard try Self.read(native, request: request, identifier: identifier, role: role, pid: pid,
       context: rootContext, display: display, budget: budget, routing: routing) == target,
       let translation = native.translation, ObjectIdentifier(translation) == translationIdentity,
       translation.rawElementData == originalRawData else {
@@ -238,7 +258,7 @@ final class FBAXSemanticPressSelection {
   }
 
   func send(provider: any FBSimulatorHIDLiveFreshnessProvider,
-    observation: FBSimulatorHIDSessionObservation, expectedState: Bool) throws -> FBSimulatorAXPressReceipt {
+    observation: FBSimulatorHIDSessionObservation, expectedState: Bool?) throws -> FBSimulatorAXPressReceipt {
     try requireCurrentIdentity()
     guard let translation = native.translation,
       let translator = request.translator, translator.supportsDelegateTokens,
@@ -256,8 +276,13 @@ final class FBAXSemanticPressSelection {
       try provider.validateCurrentRevision(expected: observation)
     }
     guard request.semanticPressGate == nil else { throw FBAXPressError.rejected("Semantic action already armed") }
-    guard try readBooleanState() == expectedState else {
-      throw FBAXPressError.rejected("Semantic CheckBox value changed before action; no input")
+    // A CheckBox must still hold the value it was read with. A Button has none, so only its identity is checked.
+    if role == .checkBox {
+      guard try readBooleanState() == expectedState else {
+        throw FBAXPressError.rejected("Semantic CheckBox value changed before action; no input")
+      }
+    } else {
+      try requireCurrentIdentity()
     }
     request.semanticPressGate = gate
     defer { request.semanticPressGate = nil }
@@ -274,6 +299,7 @@ final class FBAXSemanticPressSelection {
       }
     } catch { gate.stop(error); receipt = gate.snapshot() }
     receipt.target = target
+    receipt.targetRole = role.rawValue
     return receipt
   }
 }
@@ -311,6 +337,7 @@ extension FBSimulatorAXWorker {
       let selected = try handle.semanticPressSelection(identifier: identifier, pid: expectedPID,
         rootContext: context, display: observation.axDisplayID, budget: budget, routing: routing)
       receipt.target = selected.target
+      receipt.targetRole = selected.role.rawValue
       let size = observation.displayContext.logicalSize
       guard CGRect(origin: .zero, size: size).contains(selected.target.frame) else {
         throw FBAXPressError.rejected("Semantic target frame is outside the selected panel")
@@ -336,12 +363,17 @@ extension FBSimulatorAXWorker {
         return current
       }
       let finalSelection = try selection(from: finalRoot)
-      let before = try finalSelection.readBooleanState()
+      // A Button has no value to read before the press or to wait for after it.
+      let before: Bool? = try finalSelection.role == .checkBox ? finalSelection.readBooleanState() : nil
       receipt.stateBefore = before
       // The fresh tree's unique target stays owned until the one send returns.
       receipt = try finalSelection.send(provider: provider, observation: observation, expectedState: before)
       receipt.stateBefore = before
       guard receipt.outcome == "nativeReplyAccepted" else { return receipt }
+      if finalSelection.role == .button {
+        receipt.outcome = "buttonPressAccepted"
+        return receipt
+      }
       receipt.readbackCount = 0
       // Read-only samples share the original eight-second transaction budget.
       // A native reply does not authorize a second action, even when no change is seen.

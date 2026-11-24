@@ -16,6 +16,7 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
     private let pad = DuoControlsPad()
     private let slider = UISlider()
     private let toggle = UISwitch()
+    private let mergedRow = DuoControlsMergedRow()
     private let field = UITextField()
     private let observer = DuoControlsTouchObserver()
     private let targets = DuoControlsTargets()
@@ -119,6 +120,9 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
         let switchRow = UIStackView(arrangedSubviews: [label("Switch control", id: "feature.switchLabel"), toggle])
         switchRow.spacing = 12
         content.addArrangedSubview(switchRow)
+        mergedRow.onAction = { [weak self] in self?.increment("mergedRowAction") }
+        mergedRow.heightAnchor.constraint(equalToConstant: 38).isActive = true
+        content.addArrangedSubview(mergedRow)
         field.borderStyle = .roundedRect
         field.placeholder = "Type or edit text"
         field.accessibilityIdentifier = "feature.text"
@@ -138,7 +142,7 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
         content.addArrangedSubview(canvas)
         targets.onChange = { [weak self] name in self?.increment(name) }
         content.addArrangedSubview(targets)
-        frameViews = [view, outer, summary, mainScroll, tap, pad, slider, toggle, field, listScroll, canvas, targets]
+        frameViews = [view, outer, summary, mainScroll, tap, pad, slider, toggle, mergedRow, field, listScroll, canvas, targets]
         observer.cancelsTouchesInView = false
         observer.delaysTouchesBegan = false
         observer.delaysTouchesEnded = false
@@ -394,4 +398,41 @@ final class DuoControlsController: UIViewController, UIGestureRecognizerDelegate
             summary.text = (summary.text ?? "") + "\nLog write failed: \(error.localizedDescription)"
         }
     }
+}
+
+/// A row exposed as one accessibility Button, its action on a trailing button, as list rows in many
+/// apps are built. A tap at the row's centre misses that button; AXPress, as VoiceOver sends, runs it.
+final class DuoControlsMergedRow: UIView {
+    var onAction: (() -> Void)?
+    private let action = UIButton(type: .system)
+
+    init() {
+        super.init(frame: .zero)
+        let name = UILabel()
+        name.text = "Ada Lovelace"
+        action.setTitle("Call", for: .normal)
+        action.addTarget(self, action: #selector(pressed), for: .touchUpInside)
+        let stack = UIStackView(arrangedSubviews: [name, UIView(), action])
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        isAccessibilityElement = true
+        accessibilityIdentifier = "feature.mergedRow"
+        accessibilityLabel = "Ada Lovelace, Call"
+        accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func accessibilityActivate() -> Bool {
+        action.sendActions(for: .touchUpInside)
+        return true
+    }
+
+    @objc private func pressed() { onAction?() }
 }

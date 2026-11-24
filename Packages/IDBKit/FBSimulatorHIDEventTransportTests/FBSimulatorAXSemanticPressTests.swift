@@ -13,6 +13,12 @@ struct FBSimulatorAXSemanticPressTests {
       requestType: requestType, actionType: actionType, attributeType: 0, clientType: 2, parametersEmpty: true)
   }
 
+  @Test func onlyNativeCheckBoxAndButtonRolesArePressable() {
+    #expect(FBAXSemanticPressRole(axRole: "AXCheckBox") == .checkBox)
+    #expect(FBAXSemanticPressRole(axRole: "AXButton") == .button)
+    #expect(FBAXSemanticPressRole(axRole: "AXStaticText") == nil)
+  }
+
   @Test func exactActionAdmitsOnlyOneSend() throws {
     let request = NSObject(); let translation = NSObject()
     let expected = binding(request, translation)

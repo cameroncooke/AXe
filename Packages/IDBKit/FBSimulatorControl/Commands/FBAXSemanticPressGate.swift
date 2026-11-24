@@ -37,6 +37,8 @@ public struct FBSimulatorAXPressReceipt: Codable, Sendable {
   public var reply: FBSimulatorAXPressReply?
   public var failure: String?
   public var target: FBSimulatorAXPressTarget?
+  /// "CheckBox" or "Button": the native role of the pressed target.
+  public var targetRole: String?
   public var stateBefore: Bool?
   public var stateAfter: Bool?
   public var readbackCount: Int?

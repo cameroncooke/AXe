@@ -19,7 +19,7 @@ struct Tap: PhysicalDeviceCommand {
         """
     )
 
-    @Flag(name: .customLong("semantic-press"), help: "Press the native CheckBox with this --id through accessibility and confirm its value changed. Simulators need --input-mode selected.")
+    @Flag(name: .customLong("semantic-press"), help: "Press the native CheckBox or Button with this --id through accessibility. A CheckBox must change value; a Button is confirmed by the app accepting the press. Simulators need --input-mode selected; physical devices take a CheckBox only.")
     var semanticPress = false
 
     @Option(name: .customShort("x"), help: "X coordinate of the tap in points.")
