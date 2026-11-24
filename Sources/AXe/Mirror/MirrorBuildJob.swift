@@ -86,7 +86,7 @@ struct MirrorBuildJob {
     }
 
     /// Marks the folder as kept on purpose: the clean-up each later build does leaves it alone, and
-    /// only `axe mirror builds --clean` removes it.
+    /// only `axe remote builds --clean` removes it.
     func keep() throws {
         try Data().write(to: folder.appendingPathComponent(MirrorBuildStore.keptMarker))
         try? FileManager.default.removeItem(at: folder.appendingPathComponent(MirrorBuildStore.runningMarker))

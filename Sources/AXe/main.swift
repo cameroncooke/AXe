@@ -53,6 +53,7 @@ struct Axe: AsyncParsableCommand {
             Screenshot.self,
             Batch.self,
             Serve.self,
+            RemoteCommand.self,
             MirrorCommand.self,
             SliderReadWorkerCommand.self,
             HIDBrokerCommand.self,
@@ -166,7 +167,7 @@ struct Axe: AsyncParsableCommand {
 
     /// Prints a parse failure and exits, as `exit(withError:)` does, but without the name of a
     /// default subcommand that is kept out of help. The parser's last line would otherwise send the
-    /// reader to `axe mirror start --help`, a name nothing else mentions.
+    /// reader to `axe remote start --help`, a name nothing else mentions.
     private static func exitAfterParseFailure(_ error: Error) -> Never {
         let text = fullMessage(for: error)
         let shown = withoutHiddenDefaultNames(text)
@@ -215,7 +216,7 @@ struct Axe: AsyncParsableCommand {
     }
 
     /// The full command path without the root, for example `hinge set` or `settings status-bar show`.
-    /// A hidden default subcommand is left out: the mirror host is `mirror`, as the user typed it.
+    /// A hidden default subcommand is left out: the host is `remote`, as the user typed it.
     static func commandPath(of command: ParsableCommand) -> String {
         let target = ObjectIdentifier(type(of: command))
         func path(below parent: ParsableCommand.Type) -> [String]? {
@@ -227,8 +228,8 @@ struct Axe: AsyncParsableCommand {
             return nil
         }
         guard let words = path(below: Axe.self), !words.isEmpty else {
-            // The mirror host is the one command reached through a hidden default.
-            return command is MirrorStartCommand ? MirrorCommand._commandName : "axe"
+            // The host is the one command reached through a hidden default.
+            return command is MirrorStartCommand ? RemoteCommand._commandName : "axe"
         }
         return words.joined(separator: " ")
     }

@@ -22,7 +22,7 @@ let idbPrivateHeaderSearchFlags = [
 // unsafe flags to its generated test runner, leaving a bare `-I` that consumes the next option.
 ].map { "-I\($0.path)" }
 
-// `axe mirror` carries its stream over iroh. The prebuilt iroh library is Apple silicon only and
+// `axe remote` carries its stream over iroh. The prebuilt iroh library is Apple silicon only and
 // needs macOS 14.5, so a build with AXE_WITHOUT_MIRROR set (the Intel slice) leaves it out and
 // gets a command that says so.
 let includeMirror = ProcessInfo.processInfo.environment["AXE_WITHOUT_MIRROR"] == nil

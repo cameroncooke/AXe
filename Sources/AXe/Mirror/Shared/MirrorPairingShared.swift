@@ -8,7 +8,7 @@ import IrohLib
 
 // Pairing puts one viewer on this Mac's list (`MirrorViewers`) and tells the viewer this Mac's ID.
 //
-// `axe mirror pair` shows a one-time code, as text and as a QR code. Both sides turn the code into
+// `axe remote pair` shows a one-time code, as text and as a QR code. Both sides turn the code into
 // the same temporary iroh key. The Mac listens with that key on a relay; the viewer works out the
 // key's public ID and dials it through the same relay. Nothing has to be looked up anywhere, so
 // pairing needs no server beyond the relay. Inside that connection the viewer sends the code, iroh
@@ -199,7 +199,7 @@ final class MirrorUnannouncedPreset: Preset {
 }
 
 /// The viewer's half of pairing, as the viewer app must do it. Here it serves the tests and the
-/// hidden `axe mirror test-pair` command.
+/// hidden `axe remote test-pair` command.
 enum MirrorPairClient {
     enum Failure: Error, Equatable { case badCode, notFound, refused, badReply }
 

@@ -165,7 +165,7 @@ final class MirrorHostSessions: @unchecked Sendable {
     }
 
     /// Ends the session of every viewer that has been removed from the list of paired viewers, so
-    /// that `axe mirror unpair` takes a device's access away at once and not when its connection
+    /// that `axe remote unpair` takes a device's access away at once and not when its connection
     /// next happens to drop: a paired viewer can delete simulators. Looked at once a second, and
     /// the list is read only when its file has changed.
     private func dropUnpaired() {

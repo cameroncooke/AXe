@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end check of `axe mirror` with a simulator that stops answering.
+"""End-to-end check of `axe remote` with a simulator that stops answering.
 
 A throwaway iPhone simulator is opened from the AXe Mirror app on a host started without --udid,
 then frozen on purpose: every process under the simulator's own launchd is paused. It proves:
@@ -91,7 +91,7 @@ def main():
     key, viewers = os.path.join(work, "host.key"), os.path.join(work, "viewers.json")
     identity = ["--key-file", key, "--viewers-file", viewers]
     pair_log = os.path.join(work, "pair.log")
-    pairing = e2e.start([axe, "mirror", "pair", "--json", "--name", "Frozen E2E Mac", *identity], pair_log, os.path.join(work, "pair.err"))
+    pairing = e2e.start([axe, "remote", "pair", "--json", "--name", "Frozen E2E Mac", *identity], pair_log, os.path.join(work, "pair.err"))
     code = e2e.wait_for("the pairing code", lambda: e2e.event(pair_log, "code"), 40)["code"]
     viewer.tap_id("home.pair")
     viewer.tap_id("pair.code")
@@ -102,7 +102,7 @@ def main():
     viewer.tap_label("Done")
 
     host_log, host_err = os.path.join(work, "host.log"), os.path.join(work, "host.err")
-    e2e.start([axe, "mirror", "--no-builds", *identity], host_log, host_err)
+    e2e.start([axe, "remote", "--no-builds", *identity], host_log, host_err)
     e2e.wait_for("the host to be ready", lambda: e2e.event(host_log, "ready"), 60)
     viewer.tap_id("home.connect")
     e2e.open_simulators(viewer)

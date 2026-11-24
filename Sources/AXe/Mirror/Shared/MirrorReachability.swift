@@ -8,7 +8,7 @@ enum MirrorUnreachable: String, Equatable {
     /// None of the relays answers: this network blocks them, or the relay service is down. Every
     /// connection starts through a relay, so nothing can be reached without one.
     case relay
-    /// The relays answer and the Mac does not: it is asleep, offline or not running `axe mirror`.
+    /// The relays answer and the Mac does not: it is asleep, offline or not running `axe remote`.
     case host
 
     /// The reason, from the two things a viewer can check itself. A host with no relays of ours is

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end check of `axe mirror` with an iPhone Duo on both sides.
+"""End-to-end check of `axe remote` with an iPhone Duo on both sides.
 
 One iPhone Duo simulator hosts and runs the AXe Playground. A second iPhone Duo simulator runs the
 AXe Mirror app, which AXe drives. Folding and turning the viewer is done with `axe hinge set` and
@@ -138,7 +138,7 @@ def main():
     key, viewers = os.path.join(work, "host.key"), os.path.join(work, "viewers.json")
     identity = ["--key-file", key, "--viewers-file", viewers]
     pair_log = os.path.join(work, "pair.log")
-    pairing = e2e.start([axe, "mirror", "pair", "--json", "--name", "Duo E2E Mac", *identity], pair_log, os.path.join(work, "pair.err"))
+    pairing = e2e.start([axe, "remote", "pair", "--json", "--name", "Duo E2E Mac", *identity], pair_log, os.path.join(work, "pair.err"))
     code = e2e.wait_for("the pairing code", lambda: e2e.event(pair_log, "code"), 40)["code"]
     viewer.tap_id("home.pair")
     viewer.tap_id("pair.code")
@@ -149,7 +149,7 @@ def main():
     viewer.tap_label("Done")
 
     host_log, host_err = os.path.join(work, "host.log"), os.path.join(work, "host.err")
-    e2e.start([axe, "mirror", "--udid", host_udid, "--no-builds", *identity], host_log, host_err)
+    e2e.start([axe, "remote", "mirror", "--udid", host_udid, "--no-builds", *identity], host_log, host_err)
     e2e.wait_for("the host to be ready", lambda: e2e.event(host_log, "ready"), 60)
     viewer.tap_id("home.connect")
     e2e.wait_for("the stream to start", lambda: e2e.event(host_log, "streaming"), 40)

@@ -214,13 +214,13 @@ struct MirrorBuildsTests {
         try job("kept", marker: ".kept")
         try job("running", marker: ".running", holding: String(getpid()))
         try job("crashed", marker: ".running", holding: "999999")       // its process is gone
-        // What every later `axe mirror build` does: five-day-old failures go, the kept archive stays.
+        // What every later `axe remote build` does: five-day-old failures go, the kept archive stays.
         let tidied = store.clean(olderThan: Date().addingTimeInterval(-MirrorBuildJob.keepFailedFor))
         #expect(tidied.count == 2 && !there("failed") && !there("crashed"))
         #expect(there("kept") && there("running"))
         // A job being made is not something left behind.
         #expect(store.leftovers().count == 1)
-        // `axe mirror builds --clean` removes the kept archive, and still not the job that is running.
+        // `axe remote builds --clean` removes the kept archive, and still not the job that is running.
         #expect(store.clean().count == 1 && !there("kept") && there("running"))
     }
 

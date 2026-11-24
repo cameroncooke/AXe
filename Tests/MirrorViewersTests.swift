@@ -115,7 +115,7 @@ struct MirrorViewersTests {
         try viewers.add(id: tablet, name: "Tablet")
         let written = try #require(viewers.changed)
         #expect(viewers.removed(among: [phone, tablet]).isEmpty)
-        // `axe mirror unpair` from another process: the file changes, and the phone is off the list.
+        // `axe remote unpair` from another process: the file changes, and the phone is off the list.
         try FileManager.default.setAttributes([.modificationDate: written.addingTimeInterval(-10)], ofItemAtPath: viewers.url.path)
         let before = try #require(viewers.changed)
         #expect(try MirrorViewers(url: viewers.url).remove(matching: "Phone").count == 1)

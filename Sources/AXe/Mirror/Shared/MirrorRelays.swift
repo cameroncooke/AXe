@@ -4,7 +4,7 @@ import dnssd
 import Foundation
 // Shared with the AXe Mirror app: this file is compiled into the Mac's `axe` and into the viewer.
 
-/// Which relays `axe mirror` may use, and how one is chosen.
+/// Which relays `axe remote` may use, and how one is chosen.
 ///
 /// A relay introduces the two devices to each other and carries their traffic when they cannot
 /// connect directly. The list of relays is published as a DNS TXT record, so that one can be added
@@ -50,7 +50,7 @@ enum MirrorRelays {
             return ([first].compactMap { $0 } + everyRelay + relays + (allowsPublic ? publicRelays : [])).filter { seen.insert($0).inserted }
         }
 
-        /// The line `axe mirror` prints for it.
+        /// The line `axe remote` prints for it.
         var event: [String: String] {
             ["event": "relays", "source": source, "relays": relays.isEmpty ? "public" : relays.joined(separator: " ")]
         }

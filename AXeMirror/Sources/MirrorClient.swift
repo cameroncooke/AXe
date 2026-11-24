@@ -5,14 +5,14 @@ import IrohLib
 import Network
 import VideoToolbox
 
-/// One connection to a Mac running `axe mirror`: it receives the simulator's screen as video and
+/// One connection to a Mac running `axe remote`: it receives the simulator's screen as video and
 /// sends touches and button presses back.
 ///
 /// The Mac is dialled by its ID through a relay. iroh starts the connection there and moves it to a
 /// direct path when the two devices can reach each other. Video arrives on one-way streams; the Mac
 /// replaces the stream with a new one, starting at a keyframe, whenever this side has fallen behind.
 ///
-/// A Mac started with `axe mirror` and no `--udid` shows no simulator until this side chooses one:
+/// A Mac started with `axe remote` and no `--udid` shows no simulator until this side chooses one:
 /// it sends its list (`onSimulators`), and `choose` opens, boots or creates one. See
 /// `MirrorSimulatorList`.
 /// Everything here runs on one private queue; the callbacks are delivered on the main queue.

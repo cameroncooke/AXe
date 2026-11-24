@@ -48,13 +48,13 @@ enum MirrorPairHost {
         }
         try? await endpoint.close()
         guard let viewer = paired ?? nil else {
-            throw CLIError(errorDescription: "Nobody used the code before it expired. Run axe mirror pair again for a new one.", code: .commandFailed)
+            throw CLIError(errorDescription: "Nobody used the code before it expired. Run axe remote pair again for a new one.", code: .commandFailed)
         }
         return viewer
     }
 
     /// How long the Mac goes on answering after it has paired a viewer that did not say the answer
-    /// arrived. An app from before viewers said so costs `axe mirror pair` this long at its end.
+    /// arrived. An app from before viewers said so costs `axe remote pair` this long at its end.
     static let repeatWithin: TimeInterval = 12
 
     /// The invitation, shared between connections that arrive together.

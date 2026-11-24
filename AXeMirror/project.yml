@@ -13,7 +13,7 @@ targets:
     sources:
       - Sources
       - Resources
-      # The protocol files the app shares with the Mac's axe mirror command.
+      # The protocol files the app shares with the Mac's axe remote command.
       - path: ../Sources/AXe/Mirror/Shared
     dependencies:
       - package: IrohFFI
@@ -53,7 +53,7 @@ targets:
         DEVELOPMENT_TEAM: BR6WD3M6ZD
         CODE_SIGN_STYLE: Automatic
         MARKETING_VERSION: "1.2"
-        CURRENT_PROJECT_VERSION: "38"
+        CURRENT_PROJECT_VERSION: "39"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_VERSION: "5.0"
         SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) AXE_MIRROR

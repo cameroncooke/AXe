@@ -6,7 +6,7 @@ import Foundation
 ///
 /// macOS asks the user to allow each app, and a command inherits the answer of the terminal it runs
 /// in. A process without the permission (a terminal that was never allowed, a launch agent) can
-/// still reach the router and the internet, so `axe mirror` comes online and looks healthy, but
+/// still reach the router and the internet, so `axe remote` comes online and looks healthy, but
 /// every packet to a device on the same network is refused with "No route to host". A viewer on
 /// the same network then cannot hold a direct path: it flaps between half-open paths and the
 /// relay, and the stream is slow and laggy. Measured on 19 November 2026 with a demo host run by a
@@ -175,7 +175,7 @@ enum MirrorLocalNetwork {
     static let advice = """
     macOS is not letting this process talk to devices on your local network, so a viewer on the same \
     network cannot connect directly: it will go through the relay, which is slower. Allow the app you run \
-    axe from (your terminal) in System Settings > Privacy & Security > Local Network; axe mirror notices \
+    axe from (your terminal) in System Settings > Privacy & Security > Local Network; axe remote notices \
     when the next viewer on your network connects.
     """
 }

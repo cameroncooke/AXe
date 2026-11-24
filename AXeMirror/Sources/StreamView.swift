@@ -191,7 +191,7 @@ struct StreamScreen: View {
         .accessibilityIdentifier("stream.deck")
     }
 
-    /// True on a Mac that shows one simulator and no menu (`axe mirror --udid`) and has builds on
+    /// True on a Mac that shows one simulator and no menu (`axe remote mirror --udid`) and has builds on
     /// offer. The Mac's menu is where its apps are, and such a Mac has none: the only way to its
     /// builds was the passing note that one was ready, and once that had gone there was no way.
     private var offersAppsHere: Bool {
@@ -860,7 +860,7 @@ struct StreamScreen: View {
             unreachable(reason, retrying: retrying)
         case .refused(.notPaired):
             notice(art: .notPaired, title: "This device is no longer paired",
-                   detail: "On your Mac, run axe mirror pair, then pair again here.") {
+                   detail: "On your Mac, run axe remote pair, then pair again here.") {
                 Button("Pair again") { dismiss(); onPairAgain() }.buttonStyle(.borderedProminent)
             }
         case .refused(.busy):
@@ -930,7 +930,7 @@ struct StreamScreen: View {
         case .host:
             return ["1. Check that the Mac is awake and online.",
                     "2. In a terminal on it, start the host:",
-                    "$ axe mirror",
+                    "$ axe remote",
                     "You then choose a simulator here. This screen connects by itself once the host is running."]
         }
     }

@@ -80,7 +80,7 @@ iroh and iroh-ffi
 https://github.com/n0-computer/iroh
 https://github.com/n0-computer/iroh-ffi
 
-Used by the `axe mirror` command and by the AXe Mirror app.
+Used by the `axe remote` command and by the AXe Mirror app.
 
 Copyright 2025 N0, INC.
 

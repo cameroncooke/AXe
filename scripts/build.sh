@@ -259,7 +259,7 @@ function invoke_xcodebuild() {
   return $exit_code
 }
 
-# Runs `swift build` for one architecture. iroh, which `axe mirror` needs, ships for
+# Runs `swift build` for one architecture. iroh, which `axe remote` needs, ships for
 # Apple silicon only, so the Intel slice is built without the mirror feature:
 # Package.swift leaves iroh out when AXE_WITHOUT_MIRROR is set. The arm64 slice is
 # always built with it, whatever the caller's environment says.

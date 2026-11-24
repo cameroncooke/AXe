@@ -89,11 +89,11 @@ axe stream-video --udid <UDID> --fps 30 --format ffmpeg | \
 ## Mirror to an iPhone or iPad
 
 ```bash
-axe mirror pair              # no --udid: one-time code and QR code for the AXe Mirror app
-axe mirror --udid <UDID>     # host the simulator until Ctrl+C
+axe remote pair                   # no --udid: one-time code and QR code for the AXe Mirror app
+axe remote mirror --udid <UDID>   # host the simulator until Ctrl+C
 ```
 
-- For a person to see and touch the simulator from a phone or tablet. `axe mirror` is long-running and prints one JSON line per event: [mirror-reference.md](mirror-reference.md).
+- For a person to see and touch the simulator from a phone or tablet. `axe remote` is long-running and prints one JSON line per event: [mirror-reference.md](mirror-reference.md).
 
 ## Clipboard staging
 

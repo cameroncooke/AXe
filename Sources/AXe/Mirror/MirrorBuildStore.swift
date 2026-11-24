@@ -236,12 +236,12 @@ struct MirrorPublishedBuild: Codable, Equatable, Sendable {
 }
 
 /// The builds AXe keeps for its viewers to install: one folder for each, `<bundle ID>/<build ID>`,
-/// holding `app.ipa` and `metadata.json`. `axe mirror publish` and `axe mirror build` put builds
+/// holding `app.ipa` and `metadata.json`. `axe remote publish` and `axe remote build` put builds
 /// here, and a host offers them (`MirrorBuildCatalogue`) and sends one to a viewer that asks for
 /// it. A build's app is never changed once it is here: publishing again makes another. Its notes
 /// can be corrected.
 ///
-/// `.jobs` beside the builds holds what `axe mirror build` needed to make one: an Xcode archive of
+/// `.jobs` beside the builds holds what `axe remote build` needed to make one: an Xcode archive of
 /// some hundreds of megabytes, and logs. A build that succeeds removes its own; one that fails
 /// leaves it to be read, and it is removed a few days later or by `clean()`. One kept on purpose
 /// (`--keep-archive`) is marked, and only `clean()` asked for by name removes it. A job that is
@@ -314,7 +314,7 @@ struct MirrorBuildStore: Equatable, Sendable {
     func find(matching text: String) throws -> MirrorPublishedBuild {
         let wanted = list().filter { $0.buildID.hasPrefix(text.lowercased()) }
         guard !text.isEmpty, wanted.count == 1, let build = wanted.first else {
-            throw CLIError(errorDescription: wanted.isEmpty ? "No build's ID starts with \"\(text)\". Run axe mirror builds to see them." : "\(wanted.count) builds' IDs start with \"\(text)\". Give more of the ID.", code: .invalidArguments)
+            throw CLIError(errorDescription: wanted.isEmpty ? "No build's ID starts with \"\(text)\". Run axe remote builds to see them." : "\(wanted.count) builds' IDs start with \"\(text)\". Give more of the ID.", code: .invalidArguments)
         }
         return build
     }
@@ -386,7 +386,7 @@ struct MirrorBuildStore: Equatable, Sendable {
 
     /// Removes the folders builds were made in. With a `date`, which is how each new build tidies
     /// up after old failures, only those last touched before it and not kept on purpose. Without,
-    /// which is `axe mirror builds --clean`, the kept ones too. A job that is still running is
+    /// which is `axe remote builds --clean`, the kept ones too. A job that is still running is
     /// left alone either way. Returns how many went and how much room that gave back.
     @discardableResult
     func clean(olderThan date: Date? = nil) -> (count: Int, bytes: Int64) {

@@ -3,7 +3,7 @@ import Foundation
 import Testing
 @testable import AXe
 
-/// Pairs a viewer with a host through the real relay, the way the AXe Mirror app and `axe mirror
+/// Pairs a viewer with a host through the real relay, the way the AXe Mirror app and `axe remote
 /// pair` do. It needs the network, so it runs only when asked for:
 ///
 ///     AXE_MIRROR_E2E=1 swift test --filter MirrorPairingRelayTests

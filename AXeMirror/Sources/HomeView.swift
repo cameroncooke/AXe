@@ -119,8 +119,8 @@ struct HomeView: View {
         VStack(spacing: tight ? 10 : 18) {
             VStack(alignment: .leading, spacing: tight ? 8 : 14) {
                 step(1, "Install AXe on your Mac.", detail: "axe-cli.com")
-                step(2, "Run this in Terminal:", detail: "axe mirror pair")
-                step(3, "Scan the code it shows, then start the host:", detail: "axe mirror")
+                step(2, "Run this in Terminal:", detail: "axe remote pair")
+                step(3, "Scan the code it shows, then start the host:", detail: "axe remote")
             }
             .padding(tight ? 12 : 18)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -209,7 +209,7 @@ struct HomeView: View {
             Button("Forget This Mac", role: .destructive) { model.remove(host) }
             Button("Cancel", role: .cancel) {}
         } message: { _ in
-            Text("This device will have to be paired again before it can connect. On the Mac, axe mirror unpair removes this device from its list.")
+            Text("This device will have to be paired again before it can connect. On the Mac, axe remote unpair removes this device from its list.")
         }
     }
 
@@ -242,7 +242,7 @@ struct HomeView: View {
             .buttonBorderShape(.capsule)
             .controlSize(.large)
             .padding(.top, 4)
-            Text("Start the host on your Mac with **axe mirror**, then tap Connect.")
+            Text("Start the host on your Mac with **axe remote**, then tap Connect.")
                 .font(.footnote).foregroundStyle(.secondary).padding(.leading, 6).padding(.top, 2)
         }
     }

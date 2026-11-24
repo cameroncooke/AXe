@@ -13,7 +13,7 @@ struct MirrorViewer: Codable, Equatable, Sendable {
 /// The list of paired viewers, kept in a file beside the host key and readable by the user alone.
 ///
 /// The host reads the file again for every incoming connection, so a viewer paired or removed by
-/// another `axe mirror` command takes effect at once, without restarting the host. Changes are made
+/// another `axe remote` command takes effect at once, without restarting the host. Changes are made
 /// under a lock file and written by replacing the file, so a reader never sees half a list and two
 /// commands changing it at the same moment do not lose each other's change.
 struct MirrorViewers: Sendable {
@@ -75,7 +75,7 @@ struct MirrorViewers: Sendable {
     ///
     /// iOS tells an app only that its device is called "iPhone" or "iPad", so two phones give the
     /// same name. A name another viewer already has is given a number, "iPhone 2", so that each
-    /// can be told from the others in `axe mirror viewers` and in the host's events, and removed
+    /// can be told from the others in `axe remote devices` and in the host's events, and removed
     /// by its name.
     @discardableResult
     func add(id: String, name: String, now: Date = Date()) throws -> MirrorViewer {
@@ -108,7 +108,7 @@ struct MirrorViewers: Sendable {
             if matches.isEmpty {
                 matches = viewers.filter { (wanted.count >= 6 && $0.id.hasPrefix(wanted.lowercased())) || $0.name.caseInsensitiveCompare(wanted) == .orderedSame }
                 guard matches.count <= 1 else {
-                    throw CLIError(errorDescription: "\"\(wanted)\" matches \(matches.count) paired viewers. Use the ID shown by axe mirror viewers.", code: .commandFailed)
+                    throw CLIError(errorDescription: "\"\(wanted)\" matches \(matches.count) paired devices. Use the ID shown by axe remote devices.", code: .commandFailed)
                 }
             }
             removed = matches

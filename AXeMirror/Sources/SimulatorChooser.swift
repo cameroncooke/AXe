@@ -1,7 +1,7 @@
 import SwiftUI
 import UIKit
 
-/// The Mac's simulators, behind the Simulators door of `MacHub`: a Mac started with `axe mirror`
+/// The Mac's simulators, behind the Simulators door of `MacHub`: a Mac started with `axe remote`
 /// and no `--udid` waits for one to be chosen.
 ///
 /// The screen is ordered by what a person most often comes for. First, the simulators that are

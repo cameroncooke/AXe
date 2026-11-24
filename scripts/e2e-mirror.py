@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end check of `axe mirror` with the real AXe Mirror app.
+"""End-to-end check of `axe remote` with the real AXe Mirror app.
 
 Two simulators on this Mac play the two parts. One is the host's simulator and runs the AXe
 Playground. The other runs the AXe Mirror app, which AXe itself drives: it types the pairing code,
@@ -337,7 +337,7 @@ def main():
 
     # 1. Pairing with a typed code.
     pair_log = os.path.join(work, "pair.log")
-    pairing = start([axe, "mirror", "pair", "--json", "--name", MAC_NAME, *identity], pair_log, os.path.join(work, "pair.err"))
+    pairing = start([axe, "remote", "pair", "--json", "--name", MAC_NAME, *identity], pair_log, os.path.join(work, "pair.err"))
     code = wait_for("the pairing code", lambda: event(pair_log, "code"), 40)["code"]
     viewer.tap_id("home.pair")
     viewer.tap_id("pair.code")
@@ -345,7 +345,7 @@ def main():
     viewer.tap_id("pair.submit")
     paired = wait_for("the viewer to pair", lambda: event(pair_log, "paired"), 40)
     pairing.wait(timeout=15)
-    listed = json.loads(run([axe, "mirror", "viewers", "--json", "--viewers-file", viewers]).stdout)["viewers"]
+    listed = json.loads(run([axe, "remote", "devices", "--json", "--viewers-file", viewers]).stdout)["viewers"]
     check("a viewer pairs with a typed code and is listed", len(listed) == 1 and listed[0]["id"] == paired["viewer"], paired.get("name", ""))
     viewer.tap_label("Done")
     wait_for("the list of Macs", lambda: viewer.find(label="Your Macs"), 15)
@@ -357,7 +357,7 @@ def main():
     builds_dir = os.path.join(work, "builds")
     os.makedirs(builds_dir)
     install_identity = os.path.join(work, "install-identity")
-    hosting = start([axe, "mirror", "--udid", host_udid, "--builds", builds_dir, "--install-identity", install_identity, *identity], host_log, host_err)
+    hosting = start([axe, "remote", "mirror", "--udid", host_udid, "--builds", builds_dir, "--install-identity", install_identity, *identity], host_log, host_err)
     ready = wait_for("the host to be ready", lambda: event(host_log, "ready"), 60)
     viewer.tap_id("home.connect")
     wait_for("the viewer to connect", lambda: event(host_log, "viewerConnected"), 40)
@@ -593,7 +593,7 @@ def main():
                        "minimum_os": "17.5", "expires_at": "2099-01-01T00:00:00Z", "device_count": 1, "sha256": hashlib.sha256(package).hexdigest(),
                        "published_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "size_bytes": len(package), "notes": notes}, handle)
     choose_log, choose_err = os.path.join(work, "choose.log"), os.path.join(work, "choose.err")
-    choosing = start([axe, "mirror", "--builds", builds_dir, "--install-identity", install_identity, *identity], choose_log, choose_err)
+    choosing = start([axe, "remote", "--builds", builds_dir, "--install-identity", install_identity, *identity], choose_log, choose_err)
     chooser_ready = wait_for("the choosing host to be ready", lambda: event(choose_log, "ready"), 60)
     check("a host started without --udid is ready and names no simulator", "udid" not in chooser_ready)
     time.sleep(1.0)     # the stream screen is still sliding away
@@ -615,7 +615,7 @@ def main():
         run(["xcrun", "simctl", "install", second_udid, viewer_app])
         run(["xcrun", "simctl", "launch", "--terminate-running-process", second_udid, VIEWER_BUNDLE])
         pair2_log = os.path.join(work, "pair2.log")
-        pairing2 = start([axe, "mirror", "pair", "--json", "--name", MAC_NAME, *identity], pair2_log, os.path.join(work, "pair2.err"))
+        pairing2 = start([axe, "remote", "pair", "--json", "--name", MAC_NAME, *identity], pair2_log, os.path.join(work, "pair2.err"))
         code2 = wait_for("the second pairing code", lambda: event(pair2_log, "code"), 40)["code"]
         second.tap_id("home.pair")
         second.tap_id("pair.code")
@@ -640,7 +640,7 @@ def main():
         # its connection next happens to drop: a paired viewer can delete simulators.
         seen = len(events(choose_log))
         started = time.time()
-        run([axe, "mirror", "unpair", paired2["viewer"][:12], "--viewers-file", viewers])
+        run([axe, "remote", "unpair", paired2["viewer"][:12], "--viewers-file", viewers])
         try:
             gone = wait_for("the unpaired viewer to be closed", lambda: event(choose_log, "viewerDisconnected", after=seen), 8)
             check("a viewer unpaired while connected is closed within seconds",
@@ -902,9 +902,9 @@ def main():
 
     # 5. An unpaired viewer is refused.
     host_log, host_err = os.path.join(work, "host-again.log"), os.path.join(work, "host-again.err")
-    hosting = start([axe, "mirror", "--udid", host_udid, "--no-builds", *identity], host_log, host_err)
+    hosting = start([axe, "remote", "mirror", "--udid", host_udid, "--no-builds", *identity], host_log, host_err)
     wait_for("the host to be ready again", lambda: event(host_log, "ready"), 60)
-    run([axe, "mirror", "unpair", paired["viewer"][:12], "--viewers-file", viewers])
+    run([axe, "remote", "unpair", paired["viewer"][:12], "--viewers-file", viewers])
     time.sleep(1.0)     # the stream screen is still sliding away
     seen = len(events(host_log))
     viewer.tap_id("home.connect")
@@ -918,7 +918,7 @@ def main():
 
     # 6. A demo host keeps its visitor inside the sample app.
     demo_log, demo_err = os.path.join(work, "demo.log"), os.path.join(work, "demo.err")
-    demo = start([axe, "mirror", "--udid", host_udid, "--demo", "--demo-app", PLAYGROUND_BUNDLE, "--key-file", os.path.join(work, "demo.key")],
+    demo = start([axe, "remote", "mirror", "--udid", host_udid, "--demo", "--demo-app", PLAYGROUND_BUNDLE, "--key-file", os.path.join(work, "demo.key")],
                  demo_log, demo_err)
     demo_ready = wait_for("the demo host to be ready", lambda: event(demo_log, "ready"), 60)
     demo_id = event(demo_log, "endpoint")["hostID"]

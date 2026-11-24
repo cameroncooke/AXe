@@ -2,7 +2,7 @@ import AVFoundation
 import SwiftUI
 import UIKit
 
-/// Pairs this device with a Mac: scan the QR code that `axe mirror pair` shows, or type its code.
+/// Pairs this device with a Mac: scan the QR code that `axe remote pair` shows, or type its code.
 struct PairView: View {
     let model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -50,7 +50,7 @@ struct PairView: View {
                     Text("On your Mac, run")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Text("axe mirror pair")
+                    Text("axe remote pair")
                         .font(.title3.monospaced().weight(.semibold))
                         .textSelection(.enabled)
                     Text("It shows a QR code and a ten-character code. Either works once, for ten minutes.")
@@ -143,7 +143,7 @@ struct PairView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
-                Text("axe mirror")
+                Text("axe remote")
                     .font(.body.monospaced().weight(.semibold))
                     .textSelection(.enabled)
                 Text("Then tap the Mac in the list.")
@@ -173,11 +173,11 @@ struct PairView: View {
             case .success(let host):
                 stage = .paired(host)
             case .failure(.badCode):
-                stage = .failed("That is not a pairing code. Scan the QR code from axe mirror pair, or type its ten characters.")
+                stage = .failed("That is not a pairing code. Scan the QR code from axe remote pair, or type its ten characters.")
             case .failure(.notFound):
-                stage = .failed("No Mac is showing that code, or it could not be reached. Codes last ten minutes; run axe mirror pair again and check both devices are online.")
+                stage = .failed("No Mac is showing that code, or it could not be reached. Codes last ten minutes; run axe remote pair again and check both devices are online.")
             case .failure(.refused), .failure(.badReply):
-                stage = .failed("Your Mac did not accept the code. It may have been used already; run axe mirror pair again.")
+                stage = .failed("Your Mac did not accept the code. It may have been used already; run axe remote pair again.")
             }
         }
     }

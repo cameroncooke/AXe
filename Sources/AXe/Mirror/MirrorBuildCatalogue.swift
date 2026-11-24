@@ -2,7 +2,7 @@
 import Foundation
 
 /// The builds a host offers its viewers to install: every build in a store laid out as AXe's own
-/// is (`MirrorBuildStore`), newest first. `axe mirror publish` and `axe mirror build` put them
+/// is (`MirrorBuildStore`), newest first. `axe remote publish` and `axe remote build` put them
 /// there.
 ///
 /// A build has no address. The viewer asks for it over the connection it is paired on, the host

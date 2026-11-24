@@ -98,7 +98,7 @@ struct BuildsList: View {
                     VStack(spacing: 8) {
                         Artwork(scene: .noBuilds, width: 200)
                         Text("No builds yet").font(.title3.weight(.semibold))
-                        Text("Builds published on \(macName) with axe mirror build show up here, ready to install.")
+                        Text("Builds published on \(macName) with axe remote build show up here, ready to install.")
                             .font(.subheadline).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity)
@@ -289,7 +289,7 @@ struct HubApps: View {
                     line
                 }
                 if apps.isEmpty {
-                    Text("No builds yet. Builds published on \(macName) with axe mirror build show up here.")
+                    Text("No builds yet. Builds published on \(macName) with axe remote build show up here.")
                         .font(.footnote).foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(16)
@@ -793,7 +793,7 @@ struct BuildDetail: View {
                 }
                 .foregroundStyle(.primary)
             } footer: {
-                Text("The build ID is what axe mirror builds lists on the Mac. Tap it to copy.")
+                Text("The build ID is what axe remote builds lists on the Mac. Tap it to copy.")
             }
         }
         .listStyle(.insetGrouped)
