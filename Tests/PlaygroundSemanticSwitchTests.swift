@@ -6,6 +6,27 @@ struct PlaygroundSemanticSwitchTests {
     @Test("Semantic switch activation reports and causes a real state change")
     func switchValueChange() async throws { try await verifySemanticSwitch(position: .outer0, tabletop: false) }
 
+    @Test("An agent tap misses a row exposed as one Button; an agent press runs its action and returns the screen")
+    func agentPressOnMergedRow() async throws {
+        let session = try await PlaygroundAgentFeatureSession.open(caseName: "semantic-button-agent")
+        try await session.show("feature.showText")
+        let before = try session.document.read()
+        // The tap is a real touch at the row's centre, which is empty space beside the trailing button.
+        let tapped = try await session.command(["tap"] + (try session.contextArguments(try await session.capture(), identifier: "feature.mergedRow")))
+        try #require(tapped.exitCode == 0)
+        try await Task.sleep(nanoseconds: 700_000_000)
+        try #require(try session.document.read().count("mergedRowAction") == before.count("mergedRowAction"))
+        let pressed = try await session.command(["tap", "--semantic-press"]
+            + (try session.contextArguments(try await session.capture(), identifier: "feature.mergedRow")))
+        try #require(pressed.exitCode == 0)
+        let reply = try session.decodeAgent(pressed.output)
+        try #require(!reply.didError && reply.data.capture != nil)
+        try #require(pressed.output.contains("\"kind\":\"press\"") && pressed.output.contains("\"outcome\":\"buttonPressAccepted\""))
+        _ = try await session.document.waitFor("one merged row action") {
+            $0.count("mergedRowAction") == before.count("mergedRowAction") + 1
+        }
+    }
+
     @Test("Semantic press runs the action of a row exposed as one Button")
     func mergedRowButtonPress() async throws {
         let session = try await PlaygroundAgentFeatureSession.open(caseName: "semantic-button")

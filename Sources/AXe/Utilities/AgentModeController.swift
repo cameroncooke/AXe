@@ -498,7 +498,7 @@ final class AgentModeController {
         switch kind {
         case .swipe, .drag, .pinch, .hold, .doubleTap, .complete: return true
         case .describe, .read, .tap, .typeText, .focusAndType, .keyPress, .keyCombo, .keySequence,
-             .sliderEndpoint, .sliderPercentage: return false
+             .sliderEndpoint, .sliderPercentage, .press: return false
         }
     }
 

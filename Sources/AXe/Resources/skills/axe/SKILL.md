@@ -81,6 +81,15 @@ axe type 'London' --agent --view navigation --focus --udid <UDID> --snapshot-id 
 - For a named control that may move (a scrolling list, after an animation), use a selector, which finds it on the current screen: `axe tap --agent --view navigation --udid <UDID> --label 'Save' --element-type Button`.
 - Selectors: exact `--id`, `--label` or `--value`, or `--label-contains` and `--label-regex '^(Save|Done)$'`, narrowed with `--element-type` and `--frame 'minY=400'`. A selector must match exactly one control. Use only IDs and labels seen in a capture.
 
+## Step 7b: A tap that does nothing
+
+A tap is a real touch at the control's centre. Some rows are one Button with the real action on a small button at one edge ("Ada Lovelace, Call"): the centre is empty space, the tap succeeds and the returned screen is unchanged.
+
+- Only then, press it through accessibility, as VoiceOver does: `axe tap --agent --semantic-press --view navigation --udid <UDID> --snapshot-id <SNAPSHOT_ID> --ref e12` (or `--id <ID>`).
+- It sends no touch and works on a Button or CheckBox with an accessibility ID, on a simulator. Other controls refuse and send nothing.
+- `buttonPressAccepted` means the app took the press, not that anything happened: check the returned capture.
+- Never press first. A tap does what a finger does; a press can run an action no finger could reach.
+
 ## Step 8: Handle refusals
 
 A refusal sent nothing: the reply has no `action`, or `action.outcome` is `failedBeforeInput` with `enqueuedEventCount: 0`. Plan from the capture it usually carries. If the screen or target changed but it is still the same control, AXe already re-read and retried (`action.retried: true`); `targetCovered` and `busy` are not retried. The identical command gets the same answer, so change something first:

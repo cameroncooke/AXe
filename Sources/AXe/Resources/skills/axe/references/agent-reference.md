@@ -177,6 +177,7 @@ Gesture and path guards have their own typed codes (for example `swipeHitChanged
 - Never replay completed, partial or uncertain input. Nothing is replayed or rolled back automatically.
 - Boot, display, hinge, rotation and geometry checks run during input; owned touches and keys are released when input is interrupted.
 - A ref, identity or hit failure never falls back to coordinates, semantic selectors or AXPress.
+- AXPress is sent only when asked: `tap --agent --semantic-press` with one `--ref` (and its snapshot) or one exact `--id`, on a simulator. The control needs a unique accessibility ID (`pressNeedsID` otherwise) and a native Button or CheckBox role. The reply's action is `press` with `buttonPressAccepted` or `switchValueChangedObserved`, zero HID events and the replacement capture.
 - Reads and input are separate OS operations: there is no atomic recipient guarantee.
 - Only `tap` and `type` run inside `batch`; every other agent action rejects batch use.
 
