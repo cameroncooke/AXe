@@ -144,7 +144,9 @@ export const Duo: React.FC<{
   inner: React.ReactNode;
   outer: React.ReactNode;
   innerOverlay?: React.ReactNode;
-}> = ({screenH, angle, rotateX = 0, rotateY = 0, rotateZ = 0, inner, outer, innerOverlay}) => {
+  /** The sheen across each half. It starts again at the hinge, which shows as a seam on a bright screen. */
+  glare?: boolean;
+}> = ({screenH, angle, rotateX = 0, rotateY = 0, rotateZ = 0, inner, outer, innerOverlay, glare = true}) => {
   const innerW = (screenH * 951) / 669;
   const halfW = innerW / 2;
   const bezel = screenH * 0.02;
@@ -194,7 +196,7 @@ export const Duo: React.FC<{
         }}
       />
       <div style={{position: 'absolute', inset: 0, background: `rgba(0,0,0,${side === 'left' ? shade * 0.28 : shade * 0.08})`}} />
-      <Glare radius={0} />
+      {glare && <Glare radius={0} />}
     </div>
   );
 

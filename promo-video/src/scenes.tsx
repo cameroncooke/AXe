@@ -4,6 +4,7 @@ import {C, Chip, Eyebrow, Fade, FONT, Footnote, GRAD, inOut, Line, MONO, Ripple,
 import {Duo, Phone} from './hardware';
 import agentLog from './agent-log.json';
 import car from './car.json';
+import {useVersionless} from './edition';
 
 const H1: React.CSSProperties = {fontFamily: FONT, fontWeight: 600, fontSize: 104, lineHeight: 1.02, letterSpacing: '-0.035em', color: C.text};
 const SUB: React.CSSProperties = {fontFamily: FONT, fontWeight: 400, fontSize: 34, lineHeight: 1.35, color: C.sub, letterSpacing: '-0.01em'};
@@ -17,6 +18,7 @@ const SUB: React.CSSProperties = {fontFamily: FONT, fontWeight: 400, fontSize: 3
  */
 const Lockup: React.FC<{h: number; word: React.CSSProperties; two: React.CSSProperties}> = ({h, word, two}) => {
   const fs = (h * (276 / 315)) / 0.715; // 0.7 em plus the round digits' overshoot
+  if (useVersionless()) return <Img src={staticFile('axe-text.png')} style={{height: h, display: 'block', ...word}} />;
   return (
     <div style={{display: 'flex', alignItems: 'flex-end', gap: h * 0.16}}>
       <Img src={staticFile('axe-text.png')} style={{height: h, display: 'block', ...word}} />
@@ -46,6 +48,7 @@ const Lockup: React.FC<{h: number; word: React.CSSProperties; two: React.CSSProp
 export const INTRO = 5.0; // every scene length is a whole number of beats at 120 BPM (0.5 s)
 export const Intro: React.FC = () => {
   const t = useT();
+  const now = useVersionless();
   const icon = tw(t, 0.15, 1.5);
   const glow = 0.5 + 0.5 * Math.sin(t * 2.2);
   const two = tw(t, 1.0, 2.0);
@@ -70,7 +73,7 @@ export const Intro: React.FC = () => {
           />
         </div>
         <div style={{position: 'absolute', top: 760, width: '100%', display: 'flex', justifyContent: 'center'}}>
-          <Rise text="iOS automation. Rebuilt from the tap up." at={2.0} style={{...SUB, fontSize: 44, color: C.text, justifyContent: 'center'}} />
+          <Rise text={now ? 'iOS automation for simulators, devices and agents.' : 'iOS automation. Rebuilt from the tap up.'} at={2.0} style={{...SUB, fontSize: 44, color: C.text, justifyContent: 'center'}} />
         </div>
       </AbsoluteFill>
     </Scene>
@@ -248,6 +251,7 @@ const Stat: React.FC<{at: number; name: string; now: string; was: string; plain?
 export const Speed: React.FC = () => {
   const t = useT();
   const go = 2.0;
+  const now = useVersionless();
   return (
     <Scene dur={SPEED}>
       <div style={{position: 'absolute', left: 120, top: 110}}>
@@ -259,14 +263,32 @@ export const Speed: React.FC = () => {
           One <span style={{fontFamily: MONO, color: C.text}}>axe tap</span>, played back in real time:
         </div>
       </Fade>
-      <Lane label="v1.8.0" secs={1.0} start={go} y={470} value="~1 s" />
-      <Lane label="v2.0" secs={0.08} start={go} y={560} hero value="0.08 s" />
+      {now ? (
+        <Lane label="axe tap" secs={0.08} start={go} y={515} hero value="0.08 s" />
+      ) : (
+        <>
+          <Lane label="v1.8.0" secs={1.0} start={go} y={470} value="~1 s" />
+          <Lane label="v2.0" secs={0.08} start={go} y={560} hero value="0.08 s" />
+        </>
+      )}
       <div style={{position: 'absolute', left: 120, right: 120, top: 690, display: 'flex', gap: 28}}>
-        <Stat at={3.9} name="tap" now="12×" was="faster" plain />
-        <Stat at={4.15} name="drag" now="0.9 s" was="2.5 s" />
-        <Stat at={4.4} name="describe-ui" now="0.3 s" was="1.1–1.9 s" />
+        {now ? (
+          <>
+            <Stat at={3.9} name="tap" now="0.08 s" was="a tap" plain />
+            <Stat at={4.15} name="drag" now="0.9 s" was="a drag" plain />
+            <Stat at={4.4} name="describe-ui" now="0.3 s" was="the whole screen" plain />
+          </>
+        ) : (
+          <>
+            <Stat at={3.9} name="tap" now="12×" was="faster" plain />
+            <Stat at={4.15} name="drag" now="0.9 s" was="2.5 s" />
+            <Stat at={4.4} name="describe-ui" now="0.3 s" was="1.1–1.9 s" />
+          </>
+        )}
       </div>
-      <Footnote at={4.8}>Single commands, v2.0.0 against v1.8.0, measured on an iPhone 18 Pro simulator.</Footnote>
+      <Footnote at={4.8}>
+        {now ? 'Single commands, measured on an iPhone 18 Pro simulator.' : 'Single commands, v2.0.0 against v1.8.0, measured on an iPhone 18 Pro simulator.'}
+      </Footnote>
       <div style={{display: 'none'}}>{t}</div>
     </Scene>
   );
@@ -496,6 +518,7 @@ const PAINT0 = 4.9; // scene seconds over which the painting plays
 const PAINT1 = 11.4;
 export const Device: React.FC = () => {
   const t = useT();
+  const now = useVersionless();
   const p = tw(t, PAINT0, PAINT1, 0, 1, (x) => x);
   const src = car.a + (car.b - car.a) * p;
   const speed = Math.round((car.b - car.a) / (PAINT1 - PAINT0));
@@ -526,8 +549,8 @@ export const Device: React.FC = () => {
   return (
     <Scene dur={DEVICE}>
       <div style={{position: 'absolute', left: 120, top: 84, width: 1100}}>
-        <Eyebrow at={0.1}>New in 2.0</Eyebrow>
-        <Rise text="Now on real devices." at={0.2} style={H1} gradientWords={['real', 'devices.']} />
+        <Eyebrow at={0.1}>{now ? 'Physical devices' : 'New in 2.0'}</Eyebrow>
+        <Rise text={now ? 'On real devices, too.' : 'Now on real devices.'} at={0.2} style={H1} gradientWords={['real', 'devices,', 'devices.']} />
         <Fade at={0.9} style={{marginTop: 20}}>
           <div style={SUB}>Your iPhone. Your iPad. The same commands, precise enough to paint.</div>
         </Fade>
@@ -608,19 +631,28 @@ const TILES: Tile[] = [
   {c: '7 / 10', r: '6 / 7', title: 'Plugin marketplaces', sub: 'Claude Code and Codex: the AXe skill updates with each release'},
   {c: '10 / 13', r: '6 / 7', title: 'Every --help rewritten', sub: 'Examples and one-line options'},
 ];
+/** The tour's board: the same layout, with two tiles swapped for things added since 2.0. */
+const TILES_NOW: Tile[] = TILES.map((tile) => {
+  if (tile.title === 'Control Centre') return {c: tile.c, r: tile.r, mono: 'axe serve', sub: 'One process, one command per line', tone: 'cyan'};
+  if (tile.title === 'Every --help rewritten') return {c: tile.c, r: tile.r, title: 'Any keyboard layout', sub: 'Text arrives as typed, on any layout'};
+  return tile;
+});
 export const BENTO = 9.0;
 export const Bento: React.FC = () => {
   const t = useT();
+  const now = useVersionless();
+  const tiles = now ? TILES_NOW : TILES;
   return (
     <Scene dur={BENTO}>
       <div style={{position: 'absolute', left: 70, top: 44, right: 70, display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', opacity: tw(t, 0, 0.5)}}>
         <div style={{fontFamily: FONT, fontWeight: 600, fontSize: 44, letterSpacing: '-0.03em', color: C.text}}>
-          And there’s more in <span style={{backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>AXe 2.0</span>
+          {now ? 'And there’s ' : 'And there’s more in '}
+          <span style={{backgroundImage: GRAD, WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent'}}>{now ? 'much more' : 'AXe 2.0'}</span>
         </div>
         <div style={{fontFamily: MONO, fontSize: 20, color: C.muted, letterSpacing: '0.16em'}}>FULL CHANGELOG · AXE-CLI.COM</div>
       </div>
       <div style={{position: 'absolute', left: 70, right: 70, top: 124, bottom: 46, display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gridTemplateRows: 'repeat(6, 1fr)', gap: 16}}>
-        {TILES.map((tile, i) => {
+        {tiles.map((tile, i) => {
           // Tiles arrive in a diagonal sweep from the top left.
           const col = parseInt(tile.c, 10), row = parseInt(tile.r, 10);
           const at = 0.25 + (col + row * 2) * 0.045;
@@ -683,6 +715,7 @@ export const Bento: React.FC = () => {
 export const OUTRO = 6.4;
 export const Outro: React.FC = () => {
   const t = useT();
+  const now = useVersionless();
   const glow = 0.5 + 0.5 * Math.sin(t * 2.2);
   const cmd = 'brew install cameroncooke/axe/axe';
   const n = Math.round(tw(t, 1.9, 2.8, 0, cmd.length, (x) => x));
@@ -697,7 +730,7 @@ export const Outro: React.FC = () => {
           <Lockup h={130} word={{opacity: tw(t, 0.3, 1.2)}} two={{opacity: tw(t, 0.5, 1.4)}} />
         </div>
         <div style={{position: 'absolute', top: 560, width: '100%', display: 'flex', justifyContent: 'center'}}>
-          <Rise text="Simulators. The iPhone Duo. Real devices." at={0.9} style={{...SUB, fontSize: 46, color: C.text, justifyContent: 'center'}} />
+          <Rise text={now ? 'Simulators. Real devices. Your agent, anywhere.' : 'Simulators. The iPhone Duo. Real devices.'} at={0.9} style={{...SUB, fontSize: 46, color: C.text, justifyContent: 'center'}} />
         </div>
         <div style={{position: 'absolute', top: 690, width: '100%', display: 'flex', justifyContent: 'center', opacity: tw(t, 1.7, 2.2)}}>
           <div style={{fontFamily: MONO, fontSize: 36, color: C.text, padding: '24px 40px', borderRadius: 20, background: 'rgba(12,16,23,0.85)', border: '1px solid rgba(34,211,238,0.35)', boxShadow: '0 0 50px rgba(34,211,238,0.12)', whiteSpace: 'pre'}}>
