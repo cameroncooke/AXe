@@ -608,6 +608,17 @@ fi
 
 HEAD_SHA=$(git rev-parse HEAD)
 
+# A retry releases the same commit as the attempt that failed, so that attempt's run is still
+# listed for this commit. Note the runs that exist before the push and never watch one of them.
+KNOWN_RUN_IDS="[]"
+if ! $DRY_RUN; then
+  KNOWN_RUN_IDS=$(gh run list --workflow "$WORKFLOW_FILE" --limit 30 --json databaseId,headSha 2>/dev/null \
+    | jq -c "[.[] | select(.headSha == \"$HEAD_SHA\") | .databaseId]" 2>/dev/null || true)
+  if [[ -z "$KNOWN_RUN_IDS" ]]; then
+    KNOWN_RUN_IDS="[]"
+  fi
+fi
+
 echo ""
 echo "Pushing to origin..."
 run git push origin "$BRANCH"
@@ -634,7 +645,7 @@ for attempt in $(seq 1 30); do
   if [[ -z "$RUN_JSON" ]]; then
     RUN_JSON="[]"
   fi
-  RUN_ID=$(echo "$RUN_JSON" | jq -r ".[] | select(.headSha == \"$HEAD_SHA\") | .databaseId" | head -n1)
+  RUN_ID=$(echo "$RUN_JSON" | jq -r --argjson known "$KNOWN_RUN_IDS" ".[] | select(.headSha == \"$HEAD_SHA\") | select(.databaseId as \$id | \$known | index(\$id) | not) | .databaseId" | head -n1)
   if [[ -z "$RUN_ID" && "$WORKFLOW_IDENTIFIER" == "$WORKFLOW_FILE" && "$FALLBACK_USED" == "false" ]]; then
     WORKFLOW_IDENTIFIER="$WORKFLOW_NAME"
     FALLBACK_USED=true
