@@ -95,6 +95,44 @@ public enum FBSimulatorDisplayDiscovery {
     return selected
   }
 
+  /// The host UI orientation of one screen, or nil when the runtime reports no such screen or no
+  /// properties for it. It reads that one value and makes none of the checks a full snapshot makes.
+  /// Enumeration registers no screen callbacks, so nothing stays behind in the simulator's render
+  /// server when the caller exits. `SimulatorKit.SimDeviceScreen` registers callbacks it never
+  /// removes, and the render server of Xcode 27.2 and earlier calls them on every frame (#106).
+  public static func rawUIOrientation(for simulator: FBSimulator, screenID: UInt32,
+                                      timeout: TimeInterval = 3) async throws -> UInt32? {
+    guard timeout.isFinite, timeout > 0, timeout <= 30 else {
+      throw FBSimulatorError.describe("Screen orientation timeout must be in (0, 30] seconds").build()
+    }
+    let deadline = ProcessInfo.processInfo.systemUptime + timeout
+    try Task.checkCancellation()
+    guard let io = simulator.device.io, let ports = io.ioPorts() else {
+      throw FBSimulatorError.describe("Simulator IO ports are unavailable").build()
+    }
+    for port in ports {
+      guard let adapter = port.descriptor as? any SimScreenAdapter,
+        adapter.responds(to: #selector(SimScreenAdapter.enumerateScreens(withCompletionQueue:completionHandler:)))
+      else { continue }
+      let remaining = deadline - ProcessInfo.processInfo.systemUptime
+      guard remaining > 0 else { throw FBSimulatorError.describe("Screen orientation read timed out").build() }
+      let result = FBSimulatorBoundedResult<UInt32?>()
+      let orientation = try await result.value(timeout: remaining, operation: "Screen orientation read") { finish in
+        adapter.enumerateScreens(withCompletionQueue: DispatchQueue.global(qos: .userInitiated)) { screens, error in
+          if let error { finish(.failure(error)); return }
+          for screen in screens ?? [] where screen.responds(to: #selector(getter: SimScreen.screenProperties)) {
+            guard let properties = screen.screenProperties, properties.screenID == screenID else { continue }
+            finish(.success(properties.uiOrientation))
+            return
+          }
+          finish(.success(nil))
+        }
+      }
+      if let orientation { return orientation }
+    }
+    return nil
+  }
+
   private static func snapshots(from adapter: any SimScreenAdapter, timeout: TimeInterval) async throws -> [FBSimulatorDisplayInfo] {
     let result = FBSimulatorBoundedResult<[FBSimulatorDisplayInfo]>()
     return try await result.value(timeout: timeout, operation: "Display enumeration") { finish in

@@ -5,6 +5,12 @@ All notable changes to the AXe iOS testing framework will be documented in this 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed `tap`, `touch`, `swipe`, `drag`, `draw`, `slider` and the matching batch steps leaving screen callbacks registered in the simulator's render server each time they read the simulator's orientation. With Xcode 27.2 and earlier the render server retried every one of them on each changed frame after `axe` had exited, so a long run of taps against an animating app grew `SimRenderServer` without bound. The orientation is now read without registering anything ([#106](https://github.com/cameroncooke/AXe/issues/106)).
+
 ## [v2.2.0] - 2026-11-25
 
 ### One command for your Mac: `axe remote`

@@ -22,93 +22,27 @@ struct SimulatorOrientationReader {
                 return nil
             }
 
-            guard let device = sendObject(simulator, selector: "device") else {
-                logger.info().log("Orientation probe: simulator device unavailable")
+            // The built-in screen's properties, read through the runtime's screen adapter. This
+            // must not create a SimulatorKit.SimDeviceScreen: that registers screen callbacks which
+            // outlive this process in the simulator's render server (#106).
+            guard let rawOrientation = try await FBSimulatorDisplayDiscovery.rawUIOrientation(
+                for: simulator,
+                screenID: builtInScreenID
+            ) else {
+                logger.info().log("Orientation probe: uiOrientation unavailable")
                 return nil
             }
 
-            return readOrientation(from: device, logger: logger)
+            logger.info().log("Orientation probe: uiOrientation=\(rawOrientation)")
+            return mapUIOrientation(rawOrientation)
         } catch {
             logger.info().log("Orientation probe failed: \(error)")
             return nil
         }
     }
 
-    private static func readOrientation(from device: AnyObject, logger: AxeLogger) -> SimulatorOrientation? {
-        guard let screenClass = NSClassFromString("SimulatorKit.SimDeviceScreen") as? NSObject.Type else {
-            logger.info().log("Orientation probe: SimulatorKit.SimDeviceScreen unavailable")
-            return nil
-        }
-
-        let initSelector = NSSelectorFromString("initWithDevice:screenID:")
-        guard let allocated = allocate(screenClass) else {
-            logger.info().log("Orientation probe: SimDeviceScreen allocation failed")
-            return nil
-        }
-        guard let initMethod = allocated.method(for: initSelector) else {
-            logger.info().log("Orientation probe: initWithDevice:screenID: unavailable")
-            return nil
-        }
-
-        typealias InitFunction = @convention(c) (AnyObject, Selector, AnyObject, Int) -> AnyObject
-        let initFunction = unsafeBitCast(initMethod, to: InitFunction.self)
-        let screenDevice = initFunction(allocated, initSelector, device, 1)
-
-        guard let screen = sendObject(screenDevice, selector: "screen") else {
-            logger.info().log("Orientation probe: screen unavailable")
-            return nil
-        }
-
-        guard let properties = sendObject(screen, selector: "screenProperties") else {
-            logger.info().log("Orientation probe: screenProperties unavailable")
-            return nil
-        }
-
-        guard let rawOrientation = sendUInt32(properties, selector: "uiOrientation") else {
-            logger.info().log("Orientation probe: uiOrientation unavailable")
-            return nil
-        }
-
-        logger.info().log("Orientation probe: uiOrientation=\(rawOrientation)")
-        return mapUIOrientation(rawOrientation)
-    }
-
-    private static func allocate(_ objectClass: NSObject.Type) -> AnyObject? {
-        let selector = NSSelectorFromString("alloc")
-        guard let method = class_getClassMethod(objectClass, selector) else {
-            return nil
-        }
-
-        typealias Function = @convention(c) (AnyClass, Selector) -> AnyObject?
-        let function = unsafeBitCast(method_getImplementation(method), to: Function.self)
-        return function(objectClass, selector)
-    }
-
-    private static func sendObject(_ target: AnyObject, selector selectorName: String) -> AnyObject? {
-        let selector = NSSelectorFromString(selectorName)
-        guard let object = target as? NSObject,
-              object.responds(to: selector),
-              let method = object.method(for: selector) else {
-            return nil
-        }
-
-        typealias Function = @convention(c) (AnyObject, Selector) -> AnyObject?
-        let function = unsafeBitCast(method, to: Function.self)
-        return function(target, selector)
-    }
-
-    private static func sendUInt32(_ target: AnyObject, selector selectorName: String) -> UInt32? {
-        let selector = NSSelectorFromString(selectorName)
-        guard let object = target as? NSObject,
-              object.responds(to: selector),
-              let method = object.method(for: selector) else {
-            return nil
-        }
-
-        typealias Function = @convention(c) (AnyObject, Selector) -> UInt32
-        let function = unsafeBitCast(method, to: Function.self)
-        return function(target, selector)
-    }
+    /// The host screen ID of the simulator's built-in display.
+    private static let builtInScreenID: UInt32 = 1
 
     private static func mapUIOrientation(_ rawOrientation: UInt32) -> SimulatorOrientation? {
         switch rawOrientation {
