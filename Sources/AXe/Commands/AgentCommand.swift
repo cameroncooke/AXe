@@ -21,6 +21,8 @@ struct AgentCommand: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the booted simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Option(name: .customLong("max-steps"), help: "Most actions before stopping, 1 to 200.")
     var maximumSteps: Int = 40
 

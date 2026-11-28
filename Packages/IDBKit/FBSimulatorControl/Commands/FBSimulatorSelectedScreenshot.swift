@@ -65,7 +65,10 @@ public enum FBSimulatorSelectedScreenshotCapture {
       let output = directory.appendingPathComponent("capture.png")
       var environment = ProcessInfo.processInfo.environment
       environment["DEVELOPER_DIR"] = developer.path
-      let arguments = ["io", simulator.udid, "screenshot", "--display=\(screenID)", output.path]
+      // In the simulator's own device set, as FBAppleSimctlCommandExecutor runs simctl: without
+      // --set, simctl looks in the default set and does not find a simulator from another.
+      let setPath: String = simulator.set.deviceSet.setPath
+      let arguments = ["--set", setPath, "io", simulator.udid, "screenshot", "--display=\(screenID)", output.path]
       let command = ActivePanelChildCommand(executable: developer.appendingPathComponent("usr/bin/simctl"),
         arguments: arguments, environment: environment, directory: directory, responseURL: output,
         timeout: 10, maximumBytes: FBSelectedScreenshotRules.maximumBytes)

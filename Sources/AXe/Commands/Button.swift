@@ -63,6 +63,8 @@ struct Button: PhysicalDeviceCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Flag(name: .customLong("allow-lock"), help: "Allow the lock button on a physical device.")
     var allowLock = false
 

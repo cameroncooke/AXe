@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Simulator commands can work in a CoreSimulator device set other than the default one, as `xcrun simctl --set <path>` does. Pass `--device-set <path>`, or set `AXE_DEVICE_SET_PATH` once for a whole session; the flag wins. Finding the simulator, reading its UI, input, screenshots, video, `batch`, `serve`, agent mode and `shutdown` all use that set, and so does `axe remote`: the app lists, opens, boots and creates simulators in it. Without either nothing changes. A path that is not a directory is refused. `settings` and `clipboard copy` work in the default set only and say so when `AXE_DEVICE_SET_PATH` is set ([#107](https://github.com/cameroncooke/AXe/issues/107)).
+
 ### Fixed
 
 - Fixed `tap`, `touch`, `swipe`, `drag`, `draw`, `slider` and the matching batch steps leaving screen callbacks registered in the simulator's render server each time they read the simulator's orientation. With Xcode 27.2 and earlier the render server retried every one of them on each changed frame after `axe` had exited, so a long run of taps against an animating app grew `SimRenderServer` without bound. The orientation is now read without registering anything ([#106](https://github.com/cameroncooke/AXe/issues/106)).

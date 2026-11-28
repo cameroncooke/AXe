@@ -99,6 +99,7 @@ private enum SimulatorClipboard {
     }
 
     static func copy(udid: UUID) async throws -> ClipboardCopyOutput {
+        try SimulatorDeviceSet.requireDefault(for: "axe clipboard copy", SimulatorDeviceSet.devicectlReason)
         let bytes = try await readStdin()
         try await requireBooted(udid)
         // From this point any failure can follow a partial or completed clipboard change.
@@ -125,7 +126,7 @@ private enum SimulatorClipboard {
     }
 
     private static func requireBooted(_ udid: UUID) async throws {
-        let data = try await run(["simctl", "list", "devices", "--json"], outputLimit: 4 * 1024 * 1024)
+        let data = try await run(try SimulatorDeviceSet.simctl(["list", "devices", "--json"]), outputLimit: 4 * 1024 * 1024)
         guard let inventory = try? JSONDecoder().decode(DeviceList.self, from: data) else {
             throw CLIError(errorDescription: "Could not decode the simulator inventory.", code: .readFailed)
         }

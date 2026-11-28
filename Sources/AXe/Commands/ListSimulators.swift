@@ -8,6 +8,8 @@ struct ListSimulators: AsyncParsableCommand {
         abstract: "List every simulator with its UDID and state."
     )
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     func run() async throws {
         let logger = AxeLogger()
 

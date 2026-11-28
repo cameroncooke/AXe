@@ -343,15 +343,14 @@ struct AccessibilityFetcher {
         simulatorUDID: String,
         dependencies: AccessibilityRecoveryDependencies
     ) async throws {
-        let arguments = [
-            "simctl",
+        let arguments = try SimulatorDeviceSet.simctl([
             "spawn",
             simulatorUDID,
             "launchctl",
             "kickstart",
             "-k",
             "user/foreground/com.apple.testmanagerd",
-        ]
+        ])
         let status = try await dependencies.runProcess(
             URL(fileURLWithPath: "/usr/bin/xcrun"),
             arguments,

@@ -12,6 +12,8 @@ struct Hinge: AsyncParsableCommand {
         static let configuration = CommandConfiguration(
             abstract: "Show the hinge angle and posture.")
         @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator.") var simulatorUDID: String
+
+        @OptionGroup var deviceSet: SimulatorDeviceSetOptions
         @Option(name: .customLong("expected-boot"),
             help: ArgumentHelp("Refuse unless the simulator boot identity is PID:SECONDS:MICROSECONDS.", visibility: .hidden))
         var expectedBoot: String?
@@ -70,6 +72,8 @@ struct Hinge: AsyncParsableCommand {
                 }
             }) var degrees: Double
         @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator.") var simulatorUDID: String
+
+        @OptionGroup var deviceSet: SimulatorDeviceSetOptions
         @Option(name: .customLong("expected-boot"),
             help: ArgumentHelp("Refuse unless the simulator boot identity is PID:SECONDS:MICROSECONDS.", visibility: .hidden))
         var expectedBoot: String?

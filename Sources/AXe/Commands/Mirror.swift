@@ -181,6 +181,8 @@ struct MirrorHostOptions: ParsableArguments {
     @Flag(name: .customLong("no-builds"), help: "Offer paired devices no builds to install.")
     var noBuilds = false
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Option(name: .customLong("install-identity"), help: ArgumentHelp("Keep the certificate viewers install builds with in this folder. For tests.", visibility: .hidden))
     var installIdentityFolder: String?
 

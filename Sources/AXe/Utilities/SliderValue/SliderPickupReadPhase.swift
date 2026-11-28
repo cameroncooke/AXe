@@ -217,7 +217,7 @@ enum SliderPickupReadPhase {
             let logger = FBControlCoreLoggerFactory.systemLoggerWriting(toStderr: true, withDebugLogging: false)
             FBControlCoreGlobalConfiguration.defaultLogger = logger
             try FBSimulatorControlFrameworkLoader.xcodeFrameworks.loadPrivateFrameworks(logger)
-            let control = try FBSimulatorControl.withConfiguration(FBSimulatorControlConfiguration(deviceSetPath: nil, logger: logger, reporter: SliderPickupReadReporter()))
+            let control = try FBSimulatorControl.withConfiguration(FBSimulatorControlConfiguration(deviceSetPath: try SimulatorDeviceSet.path(), logger: logger, reporter: SliderPickupReadReporter()))
             guard let simulator = control.set.allSimulators.first(where: { UUID(uuidString: $0.udid) == udid }),
                   simulator.state == .booted else { throw SliderPickupReadError.rejected("Explicit device is not booted") }
             let reader = FBSimulatorNativeContextReader(simulator: simulator, screenID: screenID, screenUniqueID: screenUUID)

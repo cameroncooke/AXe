@@ -28,6 +28,8 @@ struct StreamVideo: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Option(help: "Stream format: mjpeg, raw, ffmpeg, bgra, or h264 on a physical device.")
     var format: OutputFormat = .mjpeg
 

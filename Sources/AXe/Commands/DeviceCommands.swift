@@ -136,6 +136,8 @@ struct Doctor: AsyncParsableCommand {
     @Option(help: "UDID of the simulator or physical device.")
     var udid: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @MainActor
     func run() async throws {
         let report: TargetReadiness

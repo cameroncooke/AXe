@@ -38,6 +38,9 @@ axe list-simulators
 ```
 
 - No `--udid`. Lists available simulators with UDID and boot state.
+- Simulators outside the default device set (made with `xcrun simctl --set <path>`): add `--device-set <path>` to `list-simulators` and to every simulator command, or export `AXE_DEVICE_SET_PATH=<path>` once. It replaces the default set for that command. Not on batch steps or serve lines: give it to `batch` or `serve` itself.
+- `axe remote` and `axe remote mirror` take `--device-set` too: the app is then offered that set's simulators only.
+- `settings` and `clipboard copy` work in the default set only: with `AXE_DEVICE_SET_PATH` set they fail with `unsupportedInDeviceSet`. Use `xcrun simctl --set <path> ui|status_bar|pbcopy` there.
 - Pass a real UDID elsewhere; an empty value never selects a device.
 
 ## Screens

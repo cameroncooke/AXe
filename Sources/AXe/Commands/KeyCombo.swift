@@ -24,6 +24,8 @@ struct KeyCombo: PhysicalDeviceCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @OptionGroup var selectedInput: SelectedInputOptions
     @OptionGroup var selectedOutput: SelectedOutputOptions
     @OptionGroup var selectedKeyboard: SelectedKeyboardOptions

@@ -83,6 +83,9 @@ struct BatchStepParser {
         if args.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
             throw ValidationError("Per-step --udid is not supported in batch steps. Use batch-level --udid.")
         }
+        if SimulatorDeviceSet.isSelected(by: args.prefix(while: { $0 != "--" })) {
+            throw ValidationError(SimulatorDeviceSet.perStepMessage)
+        }
     }
 
     private static func parseSleep(_ tokens: [String]) throws -> [BatchPrimitive] {

@@ -108,7 +108,7 @@ final class MirrorDemoLock: @unchecked Sendable {
             let process = Process()
             let pipe = Pipe()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl", "launch"] + (afresh ? ["--terminate-running-process"] : []) + [udid, app] + MirrorDemo.launchArguments
+            process.arguments = ["simctl"] + ((try? SimulatorDeviceSet.setOption()) ?? []) + ["launch"] + (afresh ? ["--terminate-running-process"] : []) + [udid, app] + MirrorDemo.launchArguments
             process.standardOutput = pipe
             process.standardError = FileHandle.nullDevice
             process.terminationHandler = { finished in

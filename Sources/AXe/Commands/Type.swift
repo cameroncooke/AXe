@@ -30,6 +30,8 @@ struct Type: PhysicalDeviceCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Flag(name: .customLong("focus"), help: "Agent only: tap the --ref TextField and wait for focus before typing.")
     var focusBeforeTyping = false
 

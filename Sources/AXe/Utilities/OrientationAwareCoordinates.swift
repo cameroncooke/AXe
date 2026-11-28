@@ -246,7 +246,10 @@ struct OrientationAwareCoordinates {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["simctl", "io", simulatorUDID, "screenshot", "--type", "png", tempURL.path]
+        guard let arguments = try? SimulatorDeviceSet.simctl(["io", simulatorUDID, "screenshot", "--type", "png", tempURL.path]) else {
+            return nil
+        }
+        process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
 

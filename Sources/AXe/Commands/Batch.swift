@@ -22,6 +22,8 @@ struct Batch: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @OptionGroup var selectedInput: SelectedInputOptions
 
     @Flag(name: .customLong("agent"), help: "Run a JSON document of 1 to 8 tap and type steps.")

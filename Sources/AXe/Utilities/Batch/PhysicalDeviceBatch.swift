@@ -32,6 +32,7 @@ enum PhysicalDeviceBatch {
         guard !options.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) else {
             throw ValidationError("Use the batch-level --udid for every step.")
         }
+        guard !SimulatorDeviceSet.isSelected(by: options) else { throw ValidationError(SimulatorDeviceSet.perStepMessage) }
         guard !options.contains("--agent") else {
             throw AutomationTarget.unsupportedOnDevice("Physical batch steps do not support agent mode.")
         }

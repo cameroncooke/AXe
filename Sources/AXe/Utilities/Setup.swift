@@ -8,7 +8,7 @@ import FBSimulatorControl
 @MainActor
 func getSimulatorSet(deviceSetPath: String?, logger: FBControlCoreLogger, reporter: FBEventReporter) async throws -> FBSimulatorSet {
     let controlConfig = FBSimulatorControlConfiguration(
-        deviceSetPath: deviceSetPath,
+        deviceSetPath: try deviceSetPath ?? SimulatorDeviceSet.path(),
         logger: logger, // Pass logger to specific configuration
         reporter: reporter
     )

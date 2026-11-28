@@ -73,6 +73,7 @@ Simulators and physical devices share one error vocabulary. The codes that matte
 | `captureFailed`, `outputFailed`, `readFailed`, `xcodeUnavailable` | Capture, output file, a state read, or the selected Xcode failed |
 | `actionOutcomeUnknown` | A shutdown or clipboard copy may have happened but could not be confirmed |
 | `unsupportedOnDevice`, `settingUnsupported` | The target does not offer this command or setting |
+| `unsupportedInDeviceSet` | The command works in the default device set only and `AXE_DEVICE_SET_PATH` selects another |
 | `unsupportedDevice` | The simulator has no built-in touch display, as on Apple TV; AXe supports iPhone and iPad simulators |
 | `commandFailed` | Anything else |
 
@@ -362,6 +363,18 @@ printf '%s' 'AXe sample' | axe clipboard copy --stdin --udid "$UDID"
 ```
 
 `shutdown` shuts down exactly one simulator by UUID through `simctl` and prints `Shut down <udid> (was Booted)` or `<udid> was already shut down`; JSON is `{udid, initialState, outcome}`. `clipboard copy` stages 1 to 65,536 UTF-8 bytes in one booted simulator's clipboard, verifies them by readback and prints `Copied N bytes to the clipboard of <udid> (sha256 …)`; JSON is `{udid, bytes, sha256}`. It does not paste. Both report `actionOutcomeUnknown` when the effect could not be confirmed. See the [clipboard reference](agent-plugin/skills/axe/references/clipboard-reference.md).
+
+## Simulators in another device set
+
+```bash
+axe list-simulators --device-set ~/sims                  # the simulators in that set
+axe tap --label "Continue" --udid "$UDID" --device-set ~/sims
+export AXE_DEVICE_SET_PATH=~/sims                         # or once, for every command in this shell
+```
+
+AXe works in CoreSimulator's default device set unless you name another: the directory you give `xcrun simctl --set <path>`. `--device-set <path>` selects it for one command and `AXE_DEVICE_SET_PATH` for every command that inherits it; the flag wins when both are given. It replaces the default set for that command; it does not add to it, so a simulator in the default set is not found while another set is selected. The path must be an existing directory: AXe refuses one that is not, where CoreSimulator would create an empty set there. In `batch` and `serve` the set belongs to the whole run, so a step or a line that carries `--device-set` is refused.
+
+Reading the UI, input, agent mode, screenshots, video, `displays`, `doctor`, `batch`, `serve` and `shutdown` all follow the selected set. So does the `axe remote` host: `axe remote --device-set <path>` offers the app that set's simulators and no others, and a simulator made in the app is made there. Two things do not, and stop with `unsupportedInDeviceSet` when `AXE_DEVICE_SET_PATH` is set: `axe settings` and `axe clipboard copy` reach the simulator through `devicectl`, which finds only simulators in the default set (`xcrun simctl --set <path> ui`, `status_bar` and `pbcopy` do those jobs there). Physical devices are not in any device set and ignore both.
 
 ## Xcode compatibility
 

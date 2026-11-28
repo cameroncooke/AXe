@@ -24,6 +24,8 @@ struct Serve: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the booted simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     func validate() throws {
         guard !simulatorUDID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw ValidationError("--udid must not be empty.")
@@ -113,6 +115,9 @@ enum ServeProtocol {
         let options = tokens[..<terminator]
         if options.contains(where: { $0 == "--udid" || $0.hasPrefix("--udid=") }) {
             return .refused(command: name, message: "Leave out --udid: serve already targets \(simulatorUDID).")
+        }
+        if SimulatorDeviceSet.isSelected(by: options) {
+            return .refused(command: name, message: SimulatorDeviceSet.perStepMessage)
         }
         if options.contains("--stdin") {
             return .refused(command: name, message: "--stdin would read serve's own input. Pass the text as an argument or with --file.")

@@ -327,7 +327,10 @@ enum DeviceSettings {
     /// checked by devicectl itself; a physical device goes through the inventory readiness checks.
     static func prepare(udid: String) async throws -> String {
         let udid = udid.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard AutomationTarget.isPhysicalInputUDID(udid) else { return udid }
+        guard AutomationTarget.isPhysicalInputUDID(udid) else {
+            try SimulatorDeviceSet.requireDefault(for: "axe settings", SimulatorDeviceSet.devicectlReason)
+            return udid
+        }
         guard let listed = try await AutomationTarget.physicalDeviceRecord(udid: udid) else { return udid }
         let device = try await CoreDeviceInventory.details(for: listed)
         if let check = DeviceInspection.inventoryChecks(for: device).first(where: { $0.status != .ready }) {

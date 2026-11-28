@@ -9,7 +9,7 @@ func getSimulatorSet(
     reporter: FBEventReporter
 ) async throws -> FBSimulatorSet {
     let configuration = FBSimulatorControlConfiguration(
-        deviceSetPath: deviceSetPath,
+        deviceSetPath: try deviceSetPath ?? SimulatorDeviceSet.path(),
         logger: logger,
         reporter: reporter
     )

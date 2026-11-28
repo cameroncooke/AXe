@@ -56,6 +56,8 @@ struct Slider: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     func validate() throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         try agentMode.validate()

@@ -15,6 +15,8 @@ struct Rotate: PhysicalDeviceCommand {
         """)
     @Argument(help: "left or right.") var direction: String
     @Option(name: .customLong("udid"), help: "UDID of the iPhone Duo simulator or physical device.") var simulatorUDID: String
+
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
     @Option(name: .customLong("screen-id"), help: "iPhone Duo: refuse unless this screen is active.") var screenID: UInt32?
     @Option(name: .customLong("screen-uuid"), help: "That screen's UUID from axe displays; pass both.") var screenUUID: String?
     @Option(name: .customLong("expected-boot"),

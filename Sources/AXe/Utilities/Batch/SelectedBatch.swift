@@ -37,6 +37,7 @@ enum SelectedBatchStep {
         }) else {
             throw ValidationError("UDID, input mode, display selection and --verbose belong at batch level.")
         }
+        guard !SimulatorDeviceSet.isSelected(by: options) else { throw ValidationError(SimulatorDeviceSet.perStepMessage) }
         // Without a batch-level pair, each step binds the screen that is active when it is admitted.
         var inherited = ["--udid", simulatorUDID, "--input-mode", "selected"]
         if let screenID = input.screenID, let screenUUID = input.screenUUID {

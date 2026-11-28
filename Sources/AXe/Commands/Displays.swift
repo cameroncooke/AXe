@@ -17,6 +17,8 @@ struct Displays: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Flag(name: .customLong("verbose"), help: "Print the full display measurements as JSON, including pixels and boot identity.")
     var verbose = false
 

@@ -138,7 +138,7 @@ enum MirrorSimulatorControl {
         // launchd and cannot be told from others. Whatever of it outlives the shutdown is killed,
         // however the shutdown went: simctl reported a frozen simulator shut down while its
         // processes were still there, and the next boot did not finish.
-        let bootstrap = "CoreSimulator/Devices/\(udid)/data/var/run/launchd_bootstrap.plist"
+        let bootstrap = SimulatorDeviceSet.folderMarker(udid: udid) + "data/var/run/launchd_bootstrap.plist"
         let tree = simulatorTree(roots: processes(matching: bootstrap), in: runningProcesses())
         let stopped = (try? await simctl(["shutdown", udid], timeout: 30)) != nil
         // Half a minute may have passed: a process is killed only if it is still the one that was
@@ -148,7 +148,7 @@ enum MirrorSimulatorControl {
         if stopped { return }
         for _ in 0..<40 {
             if try await state(of: udid) == "Shutdown" { return }
-            for process in strays(udid: udid, matching: processes(matching: "CoreSimulator/Devices/\(udid)/"), in: runningProcesses()) {
+            for process in strays(udid: udid, matching: processes(matching: SimulatorDeviceSet.folderMarker(udid: udid)), in: runningProcesses()) {
                 kill(process.pid, SIGKILL)
             }
             try await Task.sleep(nanoseconds: 500_000_000)
@@ -165,12 +165,13 @@ enum MirrorSimulatorControl {
     /// in a frozen one that process never exits, so a pipe read here would never end.
     static func answers(udid: String) async -> Bool {
         let process = Process()
+        let set = (try? SimulatorDeviceSet.setOption()) ?? []
         if let simctlPath {
             process.executableURL = URL(fileURLWithPath: simctlPath)
-            process.arguments = ["spawn", udid, "launchctl", "managername"]
+            process.arguments = set + ["spawn", udid, "launchctl", "managername"]
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl", "spawn", udid, "launchctl", "managername"]
+            process.arguments = ["simctl"] + set + ["spawn", udid, "launchctl", "managername"]
         }
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
@@ -253,7 +254,7 @@ enum MirrorSimulatorControl {
     static func strays(udid: String, matching: [pid_t], in table: [RunningProcess]) -> [RunningProcess] {
         table.filter { process in
             guard matching.contains(process.pid), process.pid > 1, process.pid != getpid() else { return false }
-            return process.executable.contains("/CoreSimulator/Devices/\(udid)/") || process.executable.contains(".simruntime/")
+            return process.executable.contains(SimulatorDeviceSet.folderMarker(udid: udid)) || process.executable.contains(".simruntime/")
         }
     }
 
@@ -322,12 +323,14 @@ enum MirrorSimulatorControl {
     /// Runs simctl and returns what it printed. Ends it at `timeout`.
     static func simctl(_ arguments: [String], timeout: TimeInterval) async throws -> Data {
         let process = Process()
+        // Every simctl call of the host works in the selected device set, as its lookups do.
+        let inSet = try SimulatorDeviceSet.setOption() + arguments
         if let simctlPath {
             process.executableURL = URL(fileURLWithPath: simctlPath)
-            process.arguments = arguments
+            process.arguments = inSet
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-            process.arguments = ["simctl"] + arguments
+            process.arguments = ["simctl"] + inSet
         }
         process.standardInput = FileHandle.nullDevice
         let output = Pipe(), errors = Pipe()

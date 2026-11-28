@@ -13,6 +13,8 @@ struct Shutdown: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator; names and booted are not accepted.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     func validate() throws {
         if AutomationTarget.isPhysicalInputUDID(simulatorUDID) { return }
         guard UUID(uuidString: simulatorUDID) != nil else {
@@ -113,7 +115,7 @@ private enum SimulatorShutdown {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["simctl"] + arguments
+        process.arguments = try SimulatorDeviceSet.simctl(arguments)
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = output
         process.standardError = errors

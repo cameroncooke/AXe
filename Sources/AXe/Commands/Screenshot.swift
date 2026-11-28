@@ -17,6 +17,8 @@ struct Screenshot: AsyncParsableCommand {
     @Option(help: "UDID of the simulator or physical device.")
     var udid: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Option(help: "PNG file path or existing directory (default: a timestamped name in the current directory).")
     var output: String?
 

@@ -20,6 +20,8 @@ struct RecordVideo: AsyncParsableCommand {
     @Option(name: .customLong("udid"), help: "UDID of the simulator or physical device.")
     var simulatorUDID: String
 
+    @OptionGroup var deviceSet: SimulatorDeviceSetOptions
+
     @Option(help: "Frames per second, 1 to 30.")
     var fps: Int = 10
 
