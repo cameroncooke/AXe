@@ -349,6 +349,27 @@ struct MirrorBuildsTests {
         #expect(try store.load(now: Date(timeIntervalSince1970: made.expires - 86_400)) != made)
     }
 
+    // The first failed outright (40 letters made a name of 65, one more than a certificate allows),
+    // which is what a CI runner with a long name showed. The others were made, with the name garbled.
+    @Test("A Mac with a long name, or one outside ASCII, still gets a certificate that carries its name",
+          arguments: [String(repeating: "a", count: 80), "Björns MacBook Pro", String(repeating: "山", count: 60), "Mac - ", "!!!"])
+    func identityNames(_ macName: String) throws {
+        let made = try MirrorInstallIdentityStore.make(macName: macName)
+        let name = try #require(made.authorityName)
+        #expect(name.count <= MirrorInstallIdentityStore.commonNameLimit)
+        #expect(name.hasPrefix(MirrorInstallIdentityStore.authorityPrefix))
+        #expect(name == name.trimmingCharacters(in: .whitespaces))
+        let authority = try #require(SecCertificateCreateWithData(nil, made.authority as CFData))
+        #expect((SecCertificateCopySubjectSummary(authority) as String?) == name)
+    }
+
+    @Test("A failure carries openssl's own reason")
+    func opensslReason() {
+        let said = "Generating a 2048 bit RSA private key\n8315003264:error:0DFFF097:asn1 encoding routines:CRYPTO_internal:string too long:/a/b.c:155:maxsize=64\n"
+        #expect(MirrorInstallIdentityStore.reason(in: said) == " (string too long)")
+        #expect(MirrorInstallIdentityStore.reason(in: "nothing useful") == "")
+    }
+
     /// Runs openssl, as the store does.
     private func openssl(_ arguments: [String]) throws {
         let process = Process()

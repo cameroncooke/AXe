@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fixed `tap`, `touch`, `swipe`, `drag`, `draw`, `slider` and the matching batch steps leaving screen callbacks registered in the simulator's render server each time they read the simulator's orientation. With Xcode 27.2 and earlier the render server retried every one of them on each changed frame after `axe` had exited, so a long run of taps against an animating app grew `SimRenderServer` without bound. The orientation is now read without registering anything ([#106](https://github.com/cameroncooke/AXe/issues/106)).
+- Fixed `axe remote` making no certificate for installing builds on a Mac whose name has 40 or more letters and digits: the certificate's name came out one character over what a certificate allows, and Install in the app failed with "openssl req failed". The name is now cut to fit. A Mac name with accented or non-Latin letters was written into the certificate garbled, and failed the same way from as few as 14 characters; it is now written as it is. A failure now says openssl's own reason.
 
 ## [v2.2.0] - 2026-11-25
 

@@ -18,6 +18,10 @@ struct MirrorInstallIdentityStore {
     }
 
     static let days = 820
+    /// What the authority's name starts with; the Mac's name follows.
+    static let authorityPrefix = "AXe Mirror installs from "
+    /// X.509 allows a common name 64 characters, and openssl makes no certificate with a longer one.
+    static let commonNameLimit = 64
     static let password = "axe-mirror"
 
     private var file: URL { folder.appendingPathComponent("identity.json") }
@@ -53,9 +57,8 @@ struct MirrorInstallIdentityStore {
         defer { try? FileManager.default.removeItem(at: scratch) }
         func path(_ name: String) -> String { scratch.appendingPathComponent(name).path }
         let names = MirrorInstallIdentity.loopbackNames
-        // A name a person will recognise under Certificate Trust Settings; no characters openssl's file reads specially.
-        let owner = macName.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" }.prefix(40)
-        try authorityConfiguration(owner: String(owner), names: names).write(toFile: path("authority.cnf"), atomically: true, encoding: .utf8)
+        let owner = owner(from: macName)
+        try authorityConfiguration(owner: owner, names: names).write(toFile: path("authority.cnf"), atomically: true, encoding: .utf8)
         try """
         subjectAltName = \(names.map { "DNS:" + $0 }.joined(separator: ","))
         extendedKeyUsage = serverAuth
@@ -63,7 +66,9 @@ struct MirrorInstallIdentityStore {
         basicConstraints = CA:FALSE
         """.write(toFile: path("leaf.ext"), atomically: true, encoding: .utf8)
         let days = String(days)
-        try openssl(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", path("authority.key"), "-out", path("authority.pem"),
+        // -utf8: the file is UTF-8. Without it openssl reads each byte as a character, so a name
+        // such as "Björns Mac" went into the certificate garbled and counted double towards the limit.
+        try openssl(["req", "-utf8", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", path("authority.key"), "-out", path("authority.pem"),
                      "-days", days, "-sha256", "-config", path("authority.cnf")])
         try openssl(["req", "-newkey", "rsa:2048", "-nodes", "-keyout", path("leaf.key"), "-out", path("leaf.csr"), "-subj", "/CN=\(names[0])"])
         try openssl(["x509", "-req", "-in", path("leaf.csr"), "-CA", path("authority.pem"), "-CAkey", path("authority.key"), "-CAcreateserial",
@@ -74,7 +79,17 @@ struct MirrorInstallIdentityStore {
         return MirrorInstallIdentity(authority: try Data(contentsOf: URL(fileURLWithPath: path("authority.cer"))),
                                      identity: try Data(contentsOf: URL(fileURLWithPath: path("identity.p12"))),
                                      password: password, names: names, expires: now.timeIntervalSince1970 + Double(self.days) * 86_400,
-                                     authorityName: "AXe Mirror installs from \(owner)")
+                                     authorityName: authorityPrefix + owner)
+    }
+
+    /// The Mac's name as the authority's name carries it: a name a person will recognise under
+    /// Certificate Trust Settings, with no characters openssl's file reads specially, and short
+    /// enough that the whole name fits a certificate. A Mac named with 40 letters or more got no
+    /// certificate at all before this was counted.
+    static func owner(from macName: String) -> String {
+        let kept = macName.filter { $0.isLetter || $0.isNumber || $0 == " " || $0 == "-" }
+            .prefix(commonNameLimit - authorityPrefix.count).trimmingCharacters(in: .whitespaces)
+        return kept.isEmpty ? "this Mac" : kept
     }
 
     /// What openssl makes the authority from. It may sign for `names` and the names under them and
@@ -88,7 +103,7 @@ struct MirrorInstallIdentityStore {
         x509_extensions = v3
         prompt = no
         [dn]
-        CN = AXe Mirror installs from \(owner)
+        CN = \(authorityPrefix)\(owner)
         [v3]
         basicConstraints = critical,CA:TRUE,pathlen:0
         keyUsage = critical,keyCertSign
@@ -98,18 +113,29 @@ struct MirrorInstallIdentityStore {
         """
     }
 
+    /// openssl's own reason from what it printed, such as " (string too long)", or nothing. Its
+    /// error lines read `<id>:error:<code>:<library>:<function>:<reason>:<file>:<line>:`.
+    static func reason(in output: String) -> String {
+        guard let line = output.split(whereSeparator: \.isNewline).first(where: { $0.contains(":error:") }) else { return "" }
+        let fields = line.split(separator: ":", omittingEmptySubsequences: false)
+        return fields.count > 5 && !fields[5].isEmpty ? " (\(fields[5]))" : ""
+    }
+
     private static func openssl(_ arguments: [String]) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/openssl")
         process.arguments = arguments
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        let errors = Pipe()
+        process.standardError = errors
         do { try process.run() } catch {
             throw CLIError(errorDescription: "The certificate for installs could not be made: /usr/bin/openssl did not run.", code: .commandFailed)
         }
+        // Read before waiting: a full pipe would stop openssl. It writes a few lines at most.
+        let said = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
-            throw CLIError(errorDescription: "The certificate for installs could not be made: openssl \(arguments.first ?? "") failed.", code: .commandFailed)
+            throw CLIError(errorDescription: "The certificate for installs could not be made: openssl \(arguments.first ?? "") failed\(reason(in: said)).", code: .commandFailed)
         }
     }
 }
